@@ -51,8 +51,8 @@ fn requires_exact_version_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-a==2.0.0 and you require package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of package-a==2.0.0 and you require package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("requires_exact_version_does_not_exist_a");
@@ -87,8 +87,8 @@ fn requires_greater_version_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.0.0 is available and you require package-a>1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a<=1.0.0 is available and you require package-a>1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("requires_greater_version_does_not_exist_a");
@@ -124,8 +124,8 @@ fn requires_less_version_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a>=2.0.0 is available and you require package-a<2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a>=2.0.0 is available and you require package-a<2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("requires_less_version_does_not_exist_a");
@@ -157,8 +157,8 @@ fn requires_package_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-a was not found in the package registry and you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-a was not found in the package registry and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("requires_package_does_not_exist_a");
@@ -194,9 +194,9 @@ fn transitive_requires_package_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-b was not found in the package registry and package-a==1.0.0 depends on package-b, we can conclude that package-a==1.0.0 cannot be used.
+                 And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("transitive_requires_package_does_not_exist_a");
@@ -281,27 +281,27 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
-              package-a==1.0.0
-              package-a>=2.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
-
-          Because only the following versions of package-c are available:
-              package-c==1.0.0
-              package-c==2.0.0
-          and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
-          And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
-              package-a<2.0.0
-              package-a>=3.0.0
-
-          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-
-          And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+                     package-a==1.0.0
+                     package-a>=2.0.0
+                 we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+                 And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+                 
+                 Because only the following versions of package-c are available:
+                     package-c==1.0.0
+                     package-c==2.0.0
+                 and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
+                 And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
+                     package-a<2.0.0
+                     package-a>=3.0.0
+                 
+                 And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
+                 And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
+                     package-b<=1.0.0
+                     package-b>=3.0.0
+                 
+                 And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
@@ -384,27 +384,27 @@ fn dependency_excludes_range_of_compatible_versions() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
-              package-a==1.0.0
-              package-a>=2.0.0
-          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
-
-          Because only the following versions of package-c are available:
-              package-c==1.0.0
-              package-c==2.0.0
-          and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
-          And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
-              package-a<2.0.0
-              package-a>=3.0.0
-
-          And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
-              package-b<=1.0.0
-              package-b>=3.0.0
-
-          And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
+                     package-a==1.0.0
+                     package-a>=2.0.0
+                 we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+                 And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+                 
+                 Because only the following versions of package-c are available:
+                     package-c==1.0.0
+                     package-c==2.0.0
+                 and package-c==1.0.0 depends on package-a<2.0.0, we can conclude that package-c<2.0.0 depends on package-a<2.0.0.
+                 And because package-c==2.0.0 depends on package-a>=3.0.0, we can conclude that all versions of package-c depend on one of:
+                     package-a<2.0.0
+                     package-a>=3.0.0
+                 
+                 And because we know from (1) that package-a<2.0.0 depends on package-b==1.0.0, we can conclude that package-a!=3.0.0, package-b!=1.0.0, all versions of package-c are incompatible.
+                 And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all versions of package-c depend on one of:
+                     package-b<=1.0.0
+                     package-b>=3.0.0
+                 
+                 And because you require package-b>=2.0.0,<3.0.0 and package-c, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only the `2.x` versions of `a` are available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`, but all available versions of `c` exclude that range of `a` so resolution fails.
@@ -457,23 +457,23 @@ fn excluded_only_compatible_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
-              package-a==1.0.0
-              package-a==2.0.0
-              package-a==3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
-          And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
-              package-a<2.0.0
-              package-a>2.0.0
-          depend on one of:
-              package-b==1.0.0
-              package-b==3.0.0
-
-          And because you require one of:
-              package-a<2.0.0
-              package-a>2.0.0
-          and package-b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of package-a are available:
+                     package-a==1.0.0
+                     package-a==2.0.0
+                     package-a==3.0.0
+                 and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+                 And because package-a==3.0.0 depends on package-b==3.0.0, we can conclude that all of:
+                     package-a<2.0.0
+                     package-a>2.0.0
+                 depend on one of:
+                     package-b==1.0.0
+                     package-b==3.0.0
+                 
+                 And because you require one of:
+                     package-a<2.0.0
+                     package-a>2.0.0
+                 and package-b>=2.0.0,<3.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only `a==1.2.0` is available since `a==1.0.0` and `a==3.0.0` require incompatible versions of `b`. The user has excluded that version of `a` so resolution fails.
@@ -509,11 +509,11 @@ fn excluded_only_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and you require one of:
-              package-a<1.0.0
-              package-a>1.0.0
-          we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and you require one of:
+                     package-a<1.0.0
+                     package-a>1.0.0
+                 we can conclude that your requirements are unsatisfiable.
     ");
 
     // Only `a==1.0.0` is available but the user excluded it.
@@ -724,10 +724,10 @@ fn extra_incompatible_with_extra() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
-          And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
-          And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
+                 And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
+                 And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
     ");
 
     // Because both `extra_b` and `extra_c` are requested and they require incompatible versions of `b`, `a` cannot be installed.
@@ -772,9 +772,9 @@ fn extra_incompatible_with_root() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
-          And because you require package-a[extra] and package-b==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a[extra]==1.0.0 is available and package-a[extra]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra] depend on package-b==1.0.0.
+                 And because you require package-a[extra] and package-b==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
@@ -951,8 +951,8 @@ fn direct_incompatible_versions() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require package-a==1.0.0 and package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require package-a==1.0.0 and package-a==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("direct_incompatible_versions_a");
@@ -991,9 +991,9 @@ fn transitive_incompatible_versions() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
-          And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-a==1.0.0 depends on package-b==1.0.0 and package-b==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+                 And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("transitive_incompatible_versions_a");
@@ -1035,9 +1035,9 @@ fn transitive_incompatible_with_root_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
-          And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a depend on package-b==2.0.0.
+                 And because you require package-a and package-b==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("transitive_incompatible_with_root_version_a");
@@ -1084,10 +1084,10 @@ fn transitive_incompatible_with_transitive() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==1.0.0, we can conclude that all versions of package-a depend on package-c==1.0.0.
-          And because package-b==1.0.0 depends on package-c==2.0.0 and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
-          And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c==1.0.0, we can conclude that all versions of package-a depend on package-c==1.0.0.
+                 And because package-b==1.0.0 depends on package-c==2.0.0 and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
+                 And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("transitive_incompatible_with_transitive_a");
@@ -1162,8 +1162,8 @@ fn local_greater_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.2.3+foo is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("local_greater_than_a");
@@ -1237,8 +1237,8 @@ fn local_less_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3+foo is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.2.3+foo is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("local_less_than_a");
@@ -1454,9 +1454,9 @@ fn local_transitive_conflicting() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
-          And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b==2.0.0+bar, we can conclude that all versions of package-a depend on package-b==2.0.0+bar.
+                 And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("local_transitive_conflicting_a");
@@ -1596,9 +1596,9 @@ fn local_transitive_greater_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
-          And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b>2.0.0, we can conclude that all versions of package-a depend on package-b>2.0.0.
+                 And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("local_transitive_greater_than_a");
@@ -1690,9 +1690,9 @@ fn local_transitive_less_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
-          And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-b<2.0.0, we can conclude that all versions of package-a depend on package-b<2.0.0.
+                 And because you require package-a and package-b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("local_transitive_less_than_a");
@@ -1856,8 +1856,8 @@ fn post_equal_not_available() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of package-a==1.2.3.post0 and you require package-a==1.2.3.post0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_equal_not_available_a");
@@ -1971,8 +1971,8 @@ fn post_greater_than_post_not_available() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post1 is available and you require package-a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a<=1.2.3.post1 is available and you require package-a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_greater_than_post_not_available_a");
@@ -2045,8 +2045,8 @@ fn post_greater_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.2.3.post1 is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_greater_than_a");
@@ -2080,8 +2080,8 @@ fn post_less_than_or_equal() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<=1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.2.3.post1 is available and you require package-a<=1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_less_than_or_equal_a");
@@ -2115,8 +2115,8 @@ fn post_less_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.2.3.post1 is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.2.3.post1 is available and you require package-a<1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_less_than_a");
@@ -2151,8 +2151,8 @@ fn post_local_greater_than_post() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a<=1.2.3.post1+local is available and you require package-a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_local_greater_than_post_a");
@@ -2187,8 +2187,8 @@ fn post_local_greater_than() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=1.2.3.post1+local is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a<=1.2.3.post1+local is available and you require package-a>1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_local_greater_than_a");
@@ -2222,8 +2222,8 @@ fn post_simple() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of package-a==1.2.3 and you require package-a==1.2.3, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("post_simple_a");
@@ -2382,10 +2382,10 @@ fn package_only_prereleases_in_range() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<=0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a<=0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
 
     // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
@@ -2871,11 +2871,11 @@ fn transitive_package_only_prereleases_in_range() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b<=0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-b<=0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+                 And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
 
     // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
@@ -2994,24 +2994,24 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-c are available:
-              package-c<=1.0.0
-              package-c>=2.0.0a5,<=2.0.0a7
-              package-c==2.0.0b1
-              package-c>=2.0.0b5
-          and package-a==1.0.0 depends on one of:
-              package-c>1.0.0,<2.0.0a5
-              package-c>2.0.0a7,<2.0.0b1
-              package-c>2.0.0b1,<2.0.0b5
-          we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: `package-c` was requested with a pre-release marker (e.g., all of:
-              package-c>1.0.0,<2.0.0a5
-              package-c>2.0.0a7,<2.0.0b1
-              package-c>2.0.0b1,<2.0.0b5
-          ), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of package-c are available:
+                     package-c<=1.0.0
+                     package-c>=2.0.0a5,<=2.0.0a7
+                     package-c==2.0.0b1
+                     package-c>=2.0.0b5
+                 and package-a==1.0.0 depends on one of:
+                     package-c>1.0.0,<2.0.0a5
+                     package-c>2.0.0a7,<2.0.0b1
+                     package-c>2.0.0b1,<2.0.0b5
+                 we can conclude that package-a==1.0.0 cannot be used.
+                 And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: `package-c` was requested with a pre-release marker (e.g., all of:
+                     package-c>1.0.0,<2.0.0a5
+                     package-c>2.0.0a7,<2.0.0b1
+                     package-c>2.0.0b1,<2.0.0b5
+                 ), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -3089,13 +3089,13 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
-          And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
-          And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
-          And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
-
-          hint: `package-c` was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 depends on package-c>=2.0.0b1, we can conclude that all versions of package-a depend on package-c>=2.0.0b1.
+                 And because only package-c<2.0.0b1 is available, we can conclude that all versions of package-a depend on package-c>3.0.0.
+                 And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
+                 And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: `package-c` was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -3213,11 +3213,11 @@ fn transitive_prerelease_and_stable_dependency() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-c==2.0.0b1 and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: `package-c` was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of package-c==2.0.0b1 and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
+                 And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: `package-c` was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -3307,20 +3307,20 @@ fn python_greater_than_current_excluded() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a==2.0.0 cannot be used.
-          And because only the following versions of package-a are available:
-              package-a<=2.0.0
-              package-a==3.0.0
-              package-a==4.0.0
-          we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
-
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
-          And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
-
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
-          And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
-          And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a==2.0.0 cannot be used.
+                 And because only the following versions of package-a are available:
+                     package-a<=2.0.0
+                     package-a==3.0.0
+                     package-a==4.0.0
+                 we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
+                 
+                 Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
+                 And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
+                 
+                 Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
+                 And because we know from (2) that package-a>=2.0.0,<4.0.0 cannot be used, we can conclude that package-a>=2.0.0 cannot be used.
+                 And because you require package-a>=2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("python_greater_than_current_excluded_a");
@@ -3377,8 +3377,8 @@ fn python_greater_than_current_many() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of package-a==1.0.0 and you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("python_greater_than_current_many_a");
@@ -3414,9 +3414,9 @@ fn python_greater_than_current_patch() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and package-a==1.0.0 depends on Python>=3.13.2, we can conclude that package-a==1.0.0 cannot be used.
-          And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.13) does not satisfy Python>=3.13.2 and package-a==1.0.0 depends on Python>=3.13.2, we can conclude that package-a==1.0.0 cannot be used.
+                 And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("python_greater_than_current_patch_a");
@@ -3451,9 +3451,9 @@ fn python_greater_than_current() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
-          And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                 And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("python_greater_than_current_a");
@@ -3526,9 +3526,9 @@ fn python_version_does_not_exist() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
-          And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.30 and package-a==1.0.0 depends on Python>=3.30, we can conclude that package-a==1.0.0 cannot be used.
+                 And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("python_version_does_not_exist_a");
@@ -3641,11 +3641,11 @@ fn no_sdist_no_wheels_with_matching_abi() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp312`), we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     ");
 
     context.assert_not_installed("no_sdist_no_wheels_with_matching_abi_a");
@@ -3680,11 +3680,11 @@ fn no_sdist_no_wheels_with_matching_platform() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     ");
 
     context.assert_not_installed("no_sdist_no_wheels_with_matching_platform_a");
@@ -3719,11 +3719,11 @@ fn no_sdist_no_wheels_with_matching_python() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`), we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp312`), we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: You require CPython 3.12 (`cp312`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     ");
 
     context.assert_not_installed("no_sdist_no_wheels_with_matching_python_a");
@@ -3759,11 +3759,11 @@ fn no_wheels_no_build() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels, we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels, we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
     ");
 
     context.assert_not_installed("no_wheels_no_build_a");
@@ -3869,11 +3869,11 @@ fn only_wheels_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution, we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
-
-          hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution, we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
     ");
 
     context.assert_not_installed("only_wheels_no_binary_a");
@@ -3978,12 +3978,12 @@ fn package_only_yanked_in_range() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
-              package-a<=0.1.0
-              package-a==1.0.0
-          and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
-          And because you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of package-a are available:
+                     package-a<=0.1.0
+                     package-a==1.0.0
+                 and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
+                 And because you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since there are other versions of `a` available, yanked versions should not be selected without explicit opt-in.
@@ -4018,9 +4018,9 @@ fn package_only_yanked() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
-          And because you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-a==1.0.0 is available and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-a cannot be used.
+                 And because you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -4193,13 +4193,13 @@ fn transitive_package_only_yanked_in_range() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-b are available:
-              package-b<=0.1
-              package-b==1.0.0
-          and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
-          And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of package-b are available:
+                     package-b<=0.1
+                     package-b==1.0.0
+                 and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
+                 And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+                 And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
@@ -4238,10 +4238,10 @@ fn transitive_package_only_yanked() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
-          And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
-          And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only package-b==1.0.0 is available and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that all versions of package-b cannot be used.
+                 And because package-a==0.1.0 depends on package-b, we can conclude that package-a==0.1.0 cannot be used.
+                 And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -4358,9 +4358,9 @@ fn transitive_yanked_and_unyanked_dependency() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because package-c==2.0.0 was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
-          And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because package-c==2.0.0 was yanked (reason: Yanked for testing) and package-a==1.0.0 depends on package-c==2.0.0, we can conclude that package-a==1.0.0 cannot be used.
+                 And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.

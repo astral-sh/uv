@@ -48,7 +48,7 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::printer::Printer;
+use crate::printer::{Printer, Stderr};
 use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
@@ -385,15 +385,12 @@ async fn build_impl(
                 }
             }
             Err(err) => {
-                #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-                #[error("Failed to build `{source}`", source = source.cyan())]
-                #[diagnostic()]
+                #[derive(Debug, Error)]
+                #[error("Failed to build `{source}`")]
                 struct Diagnostic {
                     source: String,
                     #[source]
                     cause: anyhow::Error,
-                    #[help]
-                    help: Option<String>,
                 }
 
                 let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
@@ -421,12 +418,19 @@ async fn build_impl(
                     None
                 };
 
-                let report = miette::Report::new(Diagnostic {
+                let diagnostic = Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
-                    help,
-                });
-                anstream::eprint!("{report:?}");
+                };
+                let _ = uv_warnings::write_error_chain(
+                    &diagnostic,
+                    Stderr::Enabled,
+                    "error",
+                    owo_colors::AnsiColors::Red,
+                );
+                if let Some(help) = help {
+                    let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
+                }
 
                 success = false;
             }

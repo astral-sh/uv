@@ -132,7 +132,6 @@ junction = { version = "1.2.0" }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
-miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
 nix = { version = "0.30.0", features = ["signal"] }
 open = { version = "5.3.2" }
