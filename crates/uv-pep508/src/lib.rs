@@ -40,7 +40,7 @@ pub use crate::marker::{
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
-pub use crate::unnamed::{UnnamedRequirement, UnnamedRequirementUrl};
+pub use crate::unnamed::{PathHint, UnnamedRequirement, UnnamedRequirementUrl};
 pub use crate::verbatim_url::{
     Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
     split_scheme, strip_host,
