@@ -251,17 +251,6 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
     ENV UV_TOOL_BIN_DIR=/opt/uv-bin/
     ```
 
-### Installing Python in ARM musl images
-
-While uv will attempt to [install a compatible Python version](../install-python.md) if no such
-version is available in the image, uv does not yet support installing Python for musl Linux on ARM.
-For example, if you are using an Alpine Linux base image on an ARM machine, you may need to add it
-with the system package manager:
-
-```shell
-apk add --no-cache python3~=3.12
-```
-
 ## Developing in a container
 
 When developing, it's useful to mount the project directory into a container. With this setup,
