@@ -37,6 +37,30 @@ async fn io_error_server() -> (MockServer, String) {
     (server, mock_server_uri)
 }
 
+/// Answers with a retryable HTTP status 500 for 2 times, then with a retryable connection reset
+/// IO error.
+///
+/// Tests different errors paths inside uv, which retries 3 times by default, for a total for 4
+/// requests.
+async fn mixed_error_server() -> (MockServer, String) {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with_err(connection_reset)
+        .up_to_n_times(2)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .up_to_n_times(2)
+        .mount(&server)
+        .await;
+
+    let mock_server_uri = server.uri();
+    (server, mock_server_uri)
+}
+
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn simple_http_500() {
@@ -149,6 +173,35 @@ async fn find_links_io_error() {
     ");
 }
 
+/// Check the error message for a find links index page, a non-streaming request, when the server
+/// returns different kinds of retryable errors.
+#[tokio::test]
+async fn find_links_mixed_error() {
+    let context = TestContext::new("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
+
+    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&mock_server_uri)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read `--find-links` URL: [SERVER]/
+      Caused by: Request failed after 3 retries
+      Caused by: Failed to fetch: `[SERVER]/`
+      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
+    ");
+}
+
 /// Check the direct package URL error message when the server returns HTTP status 500, a retryable
 /// error.
 #[tokio::test]
@@ -193,7 +246,7 @@ async fn direct_url_io_error() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -205,6 +258,35 @@ async fn direct_url_io_error() {
       ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
+    "#);
+}
+
+/// Check the error message for direct package URL, a streaming request, when the server returns
+/// different kinds of retryable errors.
+#[tokio::test]
+async fn direct_url_mixed_error() {
+    let context = TestContext::new("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
+
+    let tqdm_url = format!(
+        "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
+    );
+    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg(format!("tqdm @ {tqdm_url}"))
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries
+      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
