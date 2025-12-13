@@ -25,10 +25,9 @@ To use the lockfile without checking if it is up-to-date, use the `--frozen` opt
 $ uv run --frozen ...
 ```
 
-When the `UV_FROZEN` set to true, to override the frozen behavior for a single command, use
-the `--no-frozen` option. This is useful in CI, where we usually want to update the
-lockfile automatically. It also solves cases where `--frozen` and `--locked` would
-otherwise be incompatible:
+When the `UV_FROZEN` set to true, to override the frozen behavior for a single command, use the
+`--no-frozen` option. This is useful in CI, where we usually want to update the lockfile
+automatically. It also solves cases where `--frozen` and `--locked` would otherwise be incompatible:
 
 ```
 export UV_FROZEN=1
