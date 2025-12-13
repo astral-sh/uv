@@ -644,6 +644,23 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// On macOS, ensure that the Python executable is properly signed to satisfy
+    /// Gatekeeper requirements on macOS Sequoia and later.
+    ///
+    /// This applies an ad-hoc signature to the main Python executable, which clears
+    /// any cached Gatekeeper rejection for binaries with the `com.apple.provenance`
+    /// extended attribute.
+    ///
+    /// See <https://github.com/astral-sh/uv/issues/16726> for more information.
+    pub fn ensure_codesigned(&self) -> Result<(), macos_dylib::Error> {
+        if cfg!(target_os = "macos") {
+            if self.key().os().is_like_darwin() {
+                macos_dylib::adhoc_codesign(&self.executable(false))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Ensure the build version is written to a BUILD file in the installation directory.
     pub fn ensure_build_file(&self) -> Result<(), Error> {
         if let Some(ref build) = self.build {

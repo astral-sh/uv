@@ -534,7 +534,10 @@ pub(crate) async fn install(
         installation.ensure_canonical_executables()?;
         installation.ensure_build_file()?;
         if let Err(e) = installation.ensure_dylib_patched() {
-            e.warn_user(installation);
+            e.warn_user_dylib(installation);
+        }
+        if let Err(e) = installation.ensure_codesigned() {
+            e.warn_user_codesign(installation);
         }
 
         let upgradeable = (default || is_default_install)

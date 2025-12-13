@@ -294,7 +294,11 @@ impl PythonInstallation {
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {
-            e.warn_user(&installed);
+            e.warn_user_dylib(&installed);
+        }
+
+        if let Err(e) = installed.ensure_codesigned() {
+            e.warn_user_codesign(&installed);
         }
 
         Ok(Self {
