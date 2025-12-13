@@ -131,14 +131,11 @@ impl Error {
         if let Self::NetworkErrorWithRetries { retries, .. } = self {
             return retries + 1;
         }
-        // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
-        // our rust-version is high enough.
-        if let Self::NetworkMiddlewareError(_, anyhow_error) = self {
-            if let Some(RetryError::WithRetries { retries, .. }) =
+        if let Self::NetworkMiddlewareError(_, anyhow_error) = self
+            && let Some(RetryError::WithRetries { retries, .. }) =
                 anyhow_error.downcast_ref::<RetryError>()
-            {
-                return retries + 1;
-            }
+        {
+            return retries + 1;
         }
         1
     }
