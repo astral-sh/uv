@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -22,7 +23,7 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
     exclude_editable: bool,
-    exclude: &[PackageName],
+    exclude: &HashSet<PackageName>,
     strict: bool,
     python: Option<&str>,
     system: bool,
