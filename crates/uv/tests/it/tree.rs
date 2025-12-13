@@ -236,6 +236,19 @@ fn frozen() -> Result<()> {
     "###
     );
 
+    // `--no-frozen` overrides `--frozen` and shows the updated tree.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--no-frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
     Ok(())
 }
 

@@ -2578,10 +2578,34 @@ fn version_set_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
+    // Confirm --locked --no-frozen get works fine
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child1")
+        .arg("--locked").arg("--no-frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child1 1.2.3
+
+    ----- stderr -----
+    ");
+
     // Confirm --frozen get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
         .arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child2 1.1.1
+
+    ----- stderr -----
+    ");
+
+    // Confirm --no-frozen get works fine
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child2")
+        .arg("--no-frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

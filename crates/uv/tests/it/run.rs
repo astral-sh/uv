@@ -933,6 +933,18 @@ fn run_pep723_script_lock() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
+    // With a lockfile, running with `--locked` and `--no-frozen` should work.
+    uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--no-frozen").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
     // Modify the metadata.
     test_script.write_str(indoc! { r#"
         # /// script
@@ -2374,6 +2386,21 @@ fn run_frozen() -> Result<()> {
      + idna==3.6
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
+    "###);
+
+    // '--no-frozen' should override '--frozen'.
+    // So it should install the updated requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--no-frozen").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     "###);
 
     Ok(())

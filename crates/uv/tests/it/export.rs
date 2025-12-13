@@ -6074,6 +6074,17 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen").arg("--no-frozen"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    "###);
+
     Ok(())
 }
 
