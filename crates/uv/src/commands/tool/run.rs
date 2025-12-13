@@ -17,9 +17,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::Concurrency;
-use uv_configuration::Constraints;
-use uv_configuration::TargetTriple;
+use uv_configuration::{Concurrency, Constraints, GitLfsSetting, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
@@ -106,7 +104,7 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -726,7 +724,7 @@ async fn get_or_create_environment(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     isolated: bool,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
