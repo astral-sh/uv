@@ -335,7 +335,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PylockToml(path) => {
-                if !path.is_file() {
+                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 

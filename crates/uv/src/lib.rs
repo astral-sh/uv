@@ -840,7 +840,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::pip_install(
+            Box::pin(commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -892,7 +892,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
