@@ -11114,7 +11114,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
             { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
@@ -11465,7 +11465,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         sdist = { path = "tqdm-999.0.0.tar.gz" }
         "#
         );
