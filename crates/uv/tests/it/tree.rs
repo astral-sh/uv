@@ -249,6 +249,18 @@ fn frozen() -> Result<()> {
     "###
     );
 
+    // `frozen` should overrides `no-frozen` and shows the stale tree.
+    uv_snapshot!(context.filters(), context.tree().arg("--no-frozen").arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0
+
+    ----- stderr -----
+    "###
+    );
+
     Ok(())
 }
 

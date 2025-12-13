@@ -2614,6 +2614,18 @@ fn version_set_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
+    // Confirm --frozen and --no-frozen get works fine
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child2")
+        .arg("--frozen").arg("--no-frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child2 1.1.1
+
+    ----- stderr -----
+    ");
+
     // Confirm --no-sync get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child1")

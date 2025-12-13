@@ -2403,6 +2403,18 @@ fn run_frozen() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    // 'frozen' should override 'no-frozen'.
+    // So it should install the stale lockfile.
+    uv_snapshot!(context.filters(), context.run().arg("--no-frozen").arg("--frozen").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Audited 2 packages in [TIME]
+    "###);
+
     Ok(())
 }
 

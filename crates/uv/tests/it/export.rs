@@ -6085,6 +6085,99 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     "###);
 
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--no-frozen").arg("--frozen"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-5",
+          "name": "project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-3@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "urllib3-4@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-4@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-5",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
     Ok(())
 }
 

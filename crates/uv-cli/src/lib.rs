@@ -636,7 +636,8 @@ pub struct VersionArgs {
     /// Update the version without re-locking the project.
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"],
+    overrides_with = "no_frozen")]
     pub frozen: bool,
 
     /// Update the version and re-lock the project if necessary.
