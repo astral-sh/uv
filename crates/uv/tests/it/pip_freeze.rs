@@ -579,16 +579,13 @@ fn freeze_prefix() -> Result<()> {
 fn freeze_exclude() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
-
     let prefix = context.temp_dir.child("prefix");
 
     // Install packages to a prefix directory.
     context
         .pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
+        .arg("MarkupSafe")
+        .arg("tomli")
         .arg("--prefix")
         .arg(prefix.path())
         .assert()
