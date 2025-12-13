@@ -500,10 +500,28 @@ pub(crate) async fn pip_install(
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
-        // Read the `pylock.toml` from disk, and deserialize it from TOML.
-        let install_path = std::path::absolute(&pylock)?;
-        let install_path = install_path.parent().unwrap();
-        let content = fs_err::tokio::read_to_string(&pylock).await?;
+        // Read the `pylock.toml` from disk or URL, and deserialize it from TOML.
+        let (install_path, content) =
+            if pylock.starts_with("http://") || pylock.starts_with("https://") {
+                // Fetch the `pylock.toml` over HTTP(S).
+                let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
+                let client = client_builder.build();
+                let response = client
+                    .for_host(&url)
+                    .get(url::Url::from(url.clone()))
+                    .send()
+                    .await?;
+                response.error_for_status_ref()?;
+                let content = response.text().await?;
+                // Use the current working directory as the install path for remote lock files.
+                let install_path = std::env::current_dir()?;
+                (install_path, content)
+            } else {
+                let install_path = std::path::absolute(&pylock)?;
+                let install_path = install_path.parent().unwrap().to_path_buf();
+                let content = fs_err::tokio::read_to_string(&pylock).await?;
+                (install_path, content)
+            };
         let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
             format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
         })?;
@@ -537,7 +555,7 @@ pub(crate) async fn pip_install(
             .collect::<Vec<_>>();
 
         let resolution = lock.to_resolution(
-            install_path,
+            &install_path,
             marker_env.markers(),
             &extras,
             &groups,
