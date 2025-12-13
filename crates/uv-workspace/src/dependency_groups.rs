@@ -21,6 +21,9 @@ pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 #[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroup {
     pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    /// This uses `VersionSpecifiers` rather than `RequiresPythonSpecifiers` because
+    /// `FlatDependencyGroups` is an internal post-validation type. The wrapper exists for
+    /// deserialization hints which aren't relevant here.
     pub requires_python: Option<VersionSpecifiers>,
 }
 
