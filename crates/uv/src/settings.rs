@@ -3520,6 +3520,7 @@ impl PipSettings {
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
+            torch_backend: top_level_torch_backend,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -3562,6 +3563,7 @@ impl PipSettings {
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
+        let torch_backend = torch_backend.combine(top_level_torch_backend);
 
         Self {
             index_locations: IndexLocations::new(

@@ -495,5 +495,6 @@ pub fn resolver_installer_options(
             Some(no_binary_package)
         },
         no_sources: if no_sources { Some(true) } else { None },
+        torch_backend: None,
     }
 }

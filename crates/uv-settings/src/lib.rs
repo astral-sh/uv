@@ -336,6 +336,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                torch_backend,
             },
         install_mirrors:
             PythonInstallMirrors {
@@ -496,6 +497,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if no_binary_package.is_some() {
         masked_fields.push("no-binary-package");
+    }
+    if torch_backend.is_some() {
+        masked_fields.push("torch-backend");
     }
     if python_install_mirror.is_some() {
         masked_fields.push("python-install-mirror");
