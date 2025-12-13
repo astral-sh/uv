@@ -576,7 +576,7 @@ fn freeze_prefix() -> Result<()> {
 }
 
 #[test]
-fn freeze_exclude() -> Result<()> {
+fn freeze_exclude() {
     let context = TestContext::new("3.12");
 
     let prefix = context.temp_dir.child("prefix");
@@ -611,6 +611,4 @@ fn freeze_exclude() -> Result<()> {
     ----- stderr -----
     "###
     );
-
-    Ok(())
 }
