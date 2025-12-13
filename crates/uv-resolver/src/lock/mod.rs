@@ -3598,15 +3598,13 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
+        let path = relative_to_or_absolute(&path_dist.install_path, root, path_dist.url.given())
             .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
+        let path = relative_to_or_absolute(&path_dist.install_path, root, path_dist.url.given())
             .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
@@ -3615,9 +3613,9 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        let path =
+            relative_to_or_absolute(&directory_dist.install_path, root, directory_dist.url.given())
+                .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3639,8 +3637,7 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                let path = relative_to_or_absolute(&path, root, url.given())
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
@@ -3880,6 +3877,34 @@ impl TryFrom<SourceWire> for Source {
             Editable { editable } => Ok(Self::Editable(editable.into())),
             Virtual { r#virtual } => Ok(Self::Virtual(r#virtual.into())),
         }
+    }
+}
+
+/// Convert a path to a relative path, unless the original path was absolute and the relative
+/// path would require traversing outside the root directory (i.e., starts with `..`).
+///
+/// This preserves user intent: if a user specifies an absolute path (e.g., `/shared/wheels`),
+/// we keep it absolute in the lock file rather than converting to a relative path like
+/// `../../shared/wheels` which may break when used from different directory depths.
+fn relative_to_or_absolute(
+    path: &Path,
+    root: &Path,
+    given: Option<&str>,
+) -> Result<PathBuf, io::Error> {
+    // Check if the original user input was an absolute path.
+    let is_given_absolute = given.is_some_and(|g| Path::new(g).is_absolute());
+
+    match relative_to(path, root) {
+        Ok(relative) => {
+            // If the original was absolute and the relative path starts with "..",
+            // preserve the absolute path to maintain portability across directory depths.
+            if is_given_absolute && relative.starts_with("..") {
+                std::path::absolute(path)
+            } else {
+                Ok(relative)
+            }
+        }
+        Err(_) => std::path::absolute(path),
     }
 }
 
