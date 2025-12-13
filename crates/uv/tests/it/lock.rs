@@ -11114,7 +11114,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
             { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
@@ -11465,7 +11465,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         sdist = { path = "tqdm-999.0.0.tar.gz" }
         "#
         );
@@ -11765,7 +11765,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
             { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]
@@ -11775,13 +11775,14 @@ fn lock_find_links_explicit_index() -> Result<()> {
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -11867,7 +11868,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
             { path = "tqdm-1000.0.0-py3-none-any.whl" },
         ]

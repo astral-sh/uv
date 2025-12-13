@@ -3598,16 +3598,26 @@ impl Source {
     }
 
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        // For path-based distributions, always prefer relative paths.
+        // These are typically local packages that should be portable.
+        let path = to_lockfile_path(
+            &path_dist.install_path,
+            root,
+            PathPreference::PreferRelative,
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        // For path-based distributions, always prefer relative paths.
+        // These are typically local packages that should be portable.
+        let path = to_lockfile_path(
+            &path_dist.install_path,
+            root,
+            PathPreference::PreferRelative,
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
@@ -3615,9 +3625,14 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
+        // For directory sources (workspace members, editable, etc.), always prefer relative paths.
+        // These are typically local packages that should be portable.
+        let path = to_lockfile_path(
+            &directory_dist.install_path,
+            root,
+            PathPreference::PreferRelative,
+        )
+        .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable.unwrap_or(false) {
             Ok(Self::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual.unwrap_or(false) {
@@ -3639,9 +3654,16 @@ impl Source {
                 let path = url
                     .to_file_path()
                     .map_err(|()| LockErrorKind::UrlToPath { url: url.to_url() })?;
-                let path = relative_to(&path, root)
-                    .or_else(|_| std::path::absolute(&path))
+                // For index URLs (find-links), always trust the user's input.
+                // Unlike workspace members where `given` is auto-set to resolved path,
+                // index URLs always come from explicit user configuration.
+                let preference = PathPreference::from_given_trusted(url.given());
+                let path = to_lockfile_path(&path, root, preference)
                     .map_err(LockErrorKind::IndexRelativePath)?;
+                // Normalize to forward slashes for cross-platform consistency.
+                // This is needed specifically for find-links paths on Windows where
+                // `to_file_path()` returns backslashes but the lockfile stores forward slashes.
+                let path = PathBuf::from(PortablePath::from(&path).to_string());
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
             }
@@ -3881,6 +3903,100 @@ impl TryFrom<SourceWire> for Source {
             Virtual { r#virtual } => Ok(Self::Virtual(r#virtual.into())),
         }
     }
+}
+
+/// User's preference for path format in the lockfile.
+///
+/// When generating a lockfile, we need to decide whether to use relative or absolute paths.
+/// This preference is inferred from the user's original input in the configuration file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathPreference {
+    /// User explicitly specified an absolute path (e.g., `/shared/wheels`).
+    /// When the relative path requires upward traversal (`..`), preserve the absolute form.
+    PreserveAbsolute,
+    /// Prefer relative paths (default behavior).
+    PreferRelative,
+}
+
+impl PathPreference {
+    /// Infer path preference from user input that we know is trustworthy.
+    ///
+    /// Use this for sources like `IndexUrl::Path` (find-links) where `given`
+    /// always comes from explicit user configuration and is never auto-generated.
+    ///
+    /// If the user wrote an absolute path (e.g., `/shared/wheels` or `file:///shared/wheels`),
+    /// we should preserve it as absolute in the lockfile when the relative path would
+    /// require `..` traversal.
+    #[inline]
+    fn from_given_trusted(given: Option<&str>) -> Self {
+        let Some(given) = given else {
+            return Self::PreferRelative;
+        };
+
+        // Handle file:// URLs by extracting the path portion.
+        // - Unix: file:///path/to/dir -> /path/to/dir
+        // - Windows: file:///C:/path/to/dir -> C:/path/to/dir (need to strip leading /)
+        let path_str = if let Some(rest) = given.strip_prefix("file://") {
+            // On Windows, file:///C:/path becomes /C:/path after stripping file://
+            // We need to detect and handle this case.
+            #[cfg(windows)]
+            {
+                // Check if it looks like /C:/ (Windows drive letter after leading slash)
+                if rest.len() >= 3
+                    && rest.starts_with('/')
+                    && rest.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic())
+                    && rest.chars().nth(2) == Some(':')
+                {
+                    &rest[1..] // Strip the leading slash to get C:/path
+                } else {
+                    rest
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                rest
+            }
+        } else {
+            given
+        };
+
+        if Path::new(path_str).is_absolute() {
+            Self::PreserveAbsolute
+        } else {
+            Self::PreferRelative
+        }
+    }
+}
+
+/// Convert a path to a form suitable for storing in the lockfile.
+///
+/// The conversion follows these rules:
+/// 1. If the user explicitly specified an absolute path AND the relative path would
+///    start with `..`, preserve the absolute path to ensure portability across
+///    different directory depths.
+/// 2. Otherwise, use a relative path when possible.
+/// 3. Fall back to absolute path if relative path cannot be computed.
+fn to_lockfile_path(
+    path: &Path,
+    root: &Path,
+    preference: PathPreference,
+) -> Result<PathBuf, io::Error> {
+    let result = match relative_to(path, root) {
+        Ok(relative) => {
+            // Only preserve absolute path when:
+            // - User explicitly specified an absolute path, AND
+            // - Relative path requires upward traversal (starts with "..")
+            match preference {
+                PathPreference::PreserveAbsolute if relative.starts_with("..") => {
+                    std::path::absolute(path)?
+                }
+                _ => relative,
+            }
+        }
+        Err(_) => std::path::absolute(path)?,
+    };
+
+    Ok(result)
 }
 
 /// The source for a registry, which could be a URL or a relative path.
