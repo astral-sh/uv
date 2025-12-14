@@ -2391,7 +2391,6 @@ fn run_frozen() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn run_frozen_no_frozen() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2459,7 +2458,7 @@ fn run_frozen_no_frozen() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
-    
+
     Ok(())
 }
 
