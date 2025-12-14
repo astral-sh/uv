@@ -4397,9 +4397,9 @@ dependencies = [
 
 [[package]]
 name = "spdx"
-version = "0.12.0"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41cf87c0efffc158b9dde4d6e0567a43e4383adc4c949e687a2039732db2f23a"
+checksum = "35107b1c818f4e9cb9e6c4444ca560ba03b4ee1288dcecc6d7830c2023a7609e"
 dependencies = [
  "smallvec",
 ]
@@ -5649,7 +5649,7 @@ dependencies = [
  "schemars",
  "serde",
  "sha2",
- "spdx 0.12.0",
+ "spdx 0.13.2",
  "tar",
  "tempfile",
  "thiserror 2.0.17",
