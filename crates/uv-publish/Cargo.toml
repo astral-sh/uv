@@ -46,6 +46,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 url = { workspace = true }
+wiremock = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }

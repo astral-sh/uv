@@ -6498,6 +6498,7 @@ dependencies = [
  "uv-redacted",
  "uv-static",
  "uv-warnings",
+ "wiremock",
 ]
 
 [[package]]
