@@ -2388,6 +2388,63 @@ fn run_frozen() -> Result<()> {
      + sniffio==1.3.1
     "###);
 
+    Ok(())
+}
+
+
+#[test]
+fn run_frozen_no_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Update the requirements.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // 'frozen' should override 'no-frozen'.
+    // So it should install the stale lockfile.
+    uv_snapshot!(context.filters(), context.run().arg("--no-frozen").arg("--frozen").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
     // '--no-frozen' should override '--frozen'.
     // So it should install the updated requirements.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--no-frozen").arg("--").arg("python").arg("--version"), @r###"
@@ -2402,19 +2459,7 @@ fn run_frozen() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
-
-    // 'frozen' should override 'no-frozen'.
-    // So it should install the stale lockfile.
-    uv_snapshot!(context.filters(), context.run().arg("--no-frozen").arg("--frozen").arg("--").arg("python").arg("--version"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.12.[X]
-
-    ----- stderr -----
-    Audited 2 packages in [TIME]
-    "###);
-
+    
     Ok(())
 }
 

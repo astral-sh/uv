@@ -2602,10 +2602,10 @@ fn version_set_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Confirm --no-frozen get works fine
+    // Confirm --no-frozen and --frozen get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
-        .arg("--no-frozen"), @r"
+        .arg("--no-frozen").arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
