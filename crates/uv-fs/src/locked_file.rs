@@ -1,3 +1,4 @@
+use std::convert::Into;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -43,10 +44,8 @@ pub enum CreateLockedFileError {
         #[source]
         source: io::Error,
     },
-    #[error("Could not open existing file")]
-    OpenExisting(#[source] io::Error),
-    #[error("Could not create or open the file")]
-    CreateOrOpen(#[source] io::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 impl CreateLockedFileError {
@@ -54,8 +53,7 @@ impl CreateLockedFileError {
         match self {
             Self::CreateTemporary(err) => err,
             Self::PersistTemporary { source, .. } => source,
-            Self::OpenExisting(err) => err,
-            Self::CreateOrOpen(err) => err,
+            Self::Io(err) => err,
         }
     }
 }
@@ -300,7 +298,7 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
-                        .map_err(CreateLockedFileError::OpenExisting)
+                        .map_err(Into::into)
                 } else if matches!(
                     Errno::from_io_error(&err.error),
                     Some(Errno::NOTSUP | Errno::INVAL)
@@ -320,8 +318,7 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .create(true)
-                        .open(path.as_ref())
-                        .map_err(CreateLockedFileError::CreateOrOpen)?;
+                        .open(path.as_ref())?;
 
                     // We don't want to `try_set_permissions` in cases where another user's process
                     // has already created the lockfile and changed its permissions because we might
@@ -352,7 +349,7 @@ impl LockedFile {
             .write(true)
             .create(true)
             .open(path.as_ref())
-            .map_err(CreateLockedFileError::CreateOrOpen)
+            .map_err(Into::into)
     }
 }
 
