@@ -5593,7 +5593,6 @@ dependencies = [
  "uv-client",
  "uv-distribution-filename",
  "uv-extract",
- "uv-fs",
  "uv-pep440",
  "uv-platform",
  "uv-redacted",
