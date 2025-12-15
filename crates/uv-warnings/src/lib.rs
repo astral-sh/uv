@@ -144,7 +144,7 @@ mod tests {
         error: Failed to download Python 3.12
           Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
                      Server says: This endpoint only support POST requests.
-
+                     
                      For downloads, please refer to https://example.com/download/python3.13.tar.zst
           Caused by: Caused By: HTTP Error 400
         ");
