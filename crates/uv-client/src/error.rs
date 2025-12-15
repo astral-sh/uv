@@ -5,8 +5,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
 
+use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_fs::LockedFileError;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
 
@@ -339,7 +339,7 @@ pub enum ErrorKind {
     CacheWrite(#[source] std::io::Error),
 
     #[error("Failed to acquire lock on the client cache")]
-    CacheLock(#[source] LockedFileError),
+    CacheLock(#[source] CacheError),
 
     #[error(transparent)]
     Io(std::io::Error),
