@@ -92,16 +92,16 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Error if there's nothing to build.
-    uv_snapshot!(&filters, context.build(), @r###"
+    uv_snapshot!(&filters, context.build(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
-    "###);
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
+    ");
 
     // Build to a specified path.
     uv_snapshot!(&filters, context.build().arg("--out-dir").arg("out").current_dir(project.path()), @r###"
@@ -352,26 +352,26 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Error if `--wheel` is not specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      ╰─▶ Pass `--wheel` explicitly to build a wheel from a source distribution
-    "###);
+    error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      Caused by: Pass `--wheel` explicitly to build a wheel from a source distribution
+    ");
 
     // Error if `--sdist` is specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
-      ╰─▶ Building an `--sdist` from a source distribution is not supported
-    "###);
+    error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
+      Caused by: Building an `--sdist` from a source distribution is not supported
+    ");
 
     // Build the wheel from the sdist.
     uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @r###"
@@ -394,15 +394,15 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Passing a wheel is an error.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
-      ╰─▶ `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
-    "###);
+    error: Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
+      Caused by: `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
+    ");
 
     Ok(())
 }
@@ -454,7 +454,7 @@ fn build_fail() -> Result<()> {
     )?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("project"), @r###"
+    uv_snapshot!(&filters, context.build().arg("project"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -473,11 +473,11 @@ fn build_fail() -> Result<()> {
       File "<string>", line 2
         from setuptools import setup
     IndentationError: unexpected indent
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+                 hint: This usually indicates a problem with the package or the build environment.
+    "#);
 
     Ok(())
 }
@@ -790,7 +790,7 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -803,13 +803,13 @@ fn build_all_with_failure() -> Result<()> {
     [PKG] Building wheel from source distribution...
     Successfully built dist/member_a-0.1.0.tar.gz
     Successfully built dist/member_a-0.1.0-py3-none-any.whl
-      × Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+    error: Failed to build `member-b @ [TEMP_DIR]/project/packages/member_b`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+                 hint: This usually indicates a problem with the package or the build environment.
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     // project and member_a should be built, regardless of member_b build failure
     project
@@ -869,18 +869,18 @@ fn build_constraints() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `hatchling>=1.0`
-      ╰─▶ Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `hatchling>=1.0`
+      Caused by: Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
+    ");
 
     project
         .child("dist")
@@ -955,25 +955,25 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `hatchling==1.22.4`
-      ╰─▶ Hash mismatch for `hatchling==1.22.4`
-
-          Expected:
-            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-
-          Computed:
-            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `hatchling==1.22.4`
+      Caused by: Hash mismatch for `hatchling==1.22.4`
+                 
+                 Expected:
+                   sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+                   sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+                 
+                 Computed:
+                   sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+    ");
 
     project
         .child("dist")
@@ -987,25 +987,25 @@ fn build_sha() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Reject a missing hash with `--requires-hashes`.
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ Failed to install requirements from `build-system.requires`
-      ├─▶ Failed to download `hatchling==1.22.4`
-      ╰─▶ Hash mismatch for `hatchling==1.22.4`
-
-          Expected:
-            sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-            sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-
-          Computed:
-            sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to install requirements from `build-system.requires`
+      Caused by: Failed to download `hatchling==1.22.4`
+      Caused by: Hash mismatch for `hatchling==1.22.4`
+                 
+                 Expected:
+                   sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+                   sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+                 
+                 Computed:
+                   sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+    ");
 
     project
         .child("dist")
@@ -1022,18 +1022,18 @@ fn build_sha() -> Result<()> {
     let constraints = project.child("constraints.txt");
     constraints.write_str("hatchling==1.22.4")?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `hatchling`
-      ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: Failed to resolve requirements from `build-system.requires`
+      Caused by: No solution found when resolving: `hatchling`
+      Caused by: In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
+    ");
 
     project
         .child("dist")
@@ -1260,18 +1260,18 @@ fn build_hide_build_output_on_failure() -> Result<()> {
         "#})?;
 
     // With `UV_HIDE_BUILD_OUTPUT`, the output is hidden even on failure.
-    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @r###"
+    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/project`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
-    "###);
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+                 hint: This usually indicates a problem with the package or the build environment.
+    ");
 
     Ok(())
 }
@@ -1787,15 +1787,15 @@ fn build_list_files_errors() -> Result<()> {
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
-        .arg("--list"), @r###"
+        .arg("--list"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[WORKSPACE]/test/packages/anyio_local`
-      ╰─▶ Can only use `--list` with the uv backend
-    "###);
+    error: Failed to build `[WORKSPACE]/test/packages/anyio_local`
+      Caused by: Can only use `--list` with the uv backend
+    ");
     Ok(())
 }
 
@@ -1820,16 +1820,16 @@ fn build_version_mismatch() -> Result<()> {
         .arg(wrong_source_dist.path())
         .arg("--wheel")
         .arg("--out-dir")
-        .arg(context.temp_dir.path()), @r###"
+        .arg(context.temp_dir.path()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building wheel from source distribution...
-      × Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
-      ╰─▶ The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
-    "###);
+    error: Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
+      Caused by: The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
+    ");
     Ok(())
 }
 
@@ -2101,8 +2101,8 @@ fn force_pep517() -> Result<()> {
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
     uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
@@ -2113,10 +2113,10 @@ fn force_pep517() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Error: Missing source directory at: `src`
-      × Failed to build `[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
-          hint: This usually indicates a problem with the package or the build environment.
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: The build backend returned an error
+      Caused by: Call to `uv_build.build_sdist` failed (exit status: 1)
+                 hint: This usually indicates a problem with the package or the build environment.
     ");
 
     Ok(())
@@ -2171,11 +2171,12 @@ fn venv_included_in_sdist() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-      × Failed to build `[TEMP_DIR]/`
-      ├─▶ Invalid tar file
-      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
-      ╰─▶ symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
-      help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid tar file
+      Caused by: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      Caused by: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+
+    hint: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
     ");
 
     Ok(())

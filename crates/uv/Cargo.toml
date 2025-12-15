@@ -87,7 +87,6 @@ indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 h2 = { workspace = true }
-miette = { workspace = true, features = ["fancy-no-backtrace"] }
 open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }

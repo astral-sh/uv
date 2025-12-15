@@ -1012,8 +1012,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 
     ----- stderr -----
     Ignoring existing lockfile due to removal of exclude newer span
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context

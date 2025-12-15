@@ -88,12 +88,23 @@ pub fn write_error_chain(
         err.to_string().trim()
     )?;
     for source in iter::successors(err.source(), |&err| err.source()) {
-        writeln!(
-            &mut stream,
-            "  {}: {}",
-            "Caused by".color(color).bold(),
-            source.to_string().trim()
-        )?;
+        let msg = source.to_string();
+        let mut lines = msg.lines();
+        if let Some(first) = lines.next() {
+            let padding = "  ";
+            let cause = "Caused by";
+            let child_padding = " ".repeat(padding.len() + cause.len() + 2);
+            writeln!(
+                &mut stream,
+                "{}{}: {}",
+                padding,
+                cause.color(color).bold(),
+                first.trim()
+            )?;
+            for line in lines {
+                writeln!(&mut stream, "{}{}", child_padding, line.trim_end())?;
+            }
+        }
     }
     Ok(())
 }

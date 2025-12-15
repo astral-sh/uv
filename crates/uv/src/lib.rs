@@ -421,21 +421,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     anstream::ColorChoice::write_global(globals.color.into());
 
-    miette::set_hook(Box::new(|_| {
-        Box::new(
-            miette::MietteHandlerOpts::new()
-                .break_words(false)
-                .word_separator(textwrap::WordSeparator::AsciiSpace)
-                .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(
-                    std::env::var(EnvVars::UV_NO_WRAP)
-                        .map(|_| false)
-                        .unwrap_or(true),
-                )
-                .build(),
-        )
-    }))?;
-
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
     uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
 

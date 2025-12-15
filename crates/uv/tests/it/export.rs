@@ -969,16 +969,16 @@ fn requirements_txt_frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `child`
+      Caused by: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    ");
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"
     success: true
@@ -1355,18 +1355,18 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [PATH]
-      ├─▶ failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
-          --- stderr
-          Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
-          git@github.com: Permission denied (publickey).
-          fatal: Could not read from remote repository.
-
-          Please make sure you have the correct access rights
-          and the repository exists.
+    error: Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage.git@d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [PATH]
+      Caused by: failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
+      Caused by: process didn't exit successfully: [GIT_COMMAND_ERROR]
+                 --- stderr
+                 Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
+                 git@github.com: Permission denied (publickey).
+                 fatal: Could not read from remote repository.
+                 
+                 Please make sure you have the correct access rights
+                 and the repository exists.
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
@@ -5970,16 +5970,16 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `child`
+      Caused by: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    ");
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen"), @r#"
     success: true

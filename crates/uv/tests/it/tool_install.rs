@@ -421,10 +421,10 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     tool_dir
@@ -1702,27 +1702,27 @@ fn tool_install_uninstallable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `pyenv==0.0.1`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
-
-          [stdout]
-          running bdist_wheel
-          running build
-          installing to build/bdist.linux-x86_64/wheel
-          running install
-
-          [stderr]
-          # NOTE #
-          We are sorry, but this package is not installable with pip.
-
-          Please read the installation instructions at:
-     
-          https://github.com/pyenv/pyenv#installation
-          #
-
-
-          hint: This usually indicates a problem with the package or the build environment.
+    error: Failed to build `pyenv==0.0.1`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+                 
+                 [stdout]
+                 running bdist_wheel
+                 running build
+                 installing to build/bdist.linux-x86_64/wheel
+                 running install
+                 
+                 [stderr]
+                 # NOTE #
+                 We are sorry, but this package is not installable with pip.
+                 
+                 Please read the installation instructions at:
+                 
+                 https://github.com/pyenv/pyenv#installation
+                 #
+                 
+                 
+                 hint: This usually indicates a problem with the package or the build environment.
     ");
 
     // Ensure the tool environment is not created.
@@ -3099,16 +3099,16 @@ fn tool_install_preserve_environment() {
         .arg("packaging==0.0.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
-    "###);
+    error: No solution found when resolving dependencies:
+      Caused by: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+                 And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+    ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -4487,11 +4487,11 @@ fn tool_install_find_links() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
-          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
-
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+                 And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+                 
+                 hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 }
 

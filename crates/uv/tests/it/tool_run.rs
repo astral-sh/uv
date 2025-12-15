@@ -109,15 +109,15 @@ fn tool_run_at_version() {
         .arg("pytest@invalid")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to resolve tool requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/invalid
-    "###);
+    error: Failed to resolve tool requirement
+      Caused by: Distribution not found at: file://[TEMP_DIR]/invalid
+    ");
 
     let filters = context
         .filters()
@@ -1809,15 +1809,15 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
         .arg("flask")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir
-        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .as_os_str()).env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to resolve `--with` requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
-    "###);
+    error: Failed to resolve `--with` requirement
+      Caused by: Distribution not found at: file://[TEMP_DIR]/foo
+    ");
 
     Ok(())
 }
@@ -1914,15 +1914,15 @@ fn tool_run_resolution_error() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("add")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
-    "###);
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    ");
 }
 
 #[test]
@@ -2238,8 +2238,8 @@ fn tool_run_python_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Bare versions don't work either. Again we interpret them as package names.
@@ -2251,8 +2251,8 @@ fn tool_run_python_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Request a version via `-p`
@@ -2833,48 +2833,51 @@ fn tool_run_verbose_hint() {
         .arg("nonexistent-package-foo")
         .arg("--verbose")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
-      help: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
-    "###);
+    error: No solution found when resolving dependencies:
+      Caused by: Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
+
+    hint: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
+    ");
 
     // Test with -v flag
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("nonexistent-package-bar")
         .arg("-v")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
-      help: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
-    "###);
+    error: No solution found when resolving dependencies:
+      Caused by: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
+
+    hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
+    ");
 
     // Test with -vv flag
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("nonexistent-package-baz")
         .arg("-vv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
-      help: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
-    "###);
+    error: No solution found when resolving dependencies:
+      Caused by: Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
+
+    hint: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
+    ");
 
     // Test for false positives
     uv_snapshot!(context.filters(), context.tool_run()
@@ -2887,8 +2890,8 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -2956,10 +2959,10 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3442,9 +3445,9 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
-          And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12 and foo==1.0.0 depends on Python>=3.12, we can conclude that foo==1.0.0 cannot be used.
+                 And because only foo==1.0.0 is available and you require foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Unless the discovered interpreter is compatible with the request
