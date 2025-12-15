@@ -225,9 +225,6 @@ test-log = { version = "0.2.16", features = ["trace"], default-features = false 
 tokio-rustls = { version = "0.26.2", default-features = false }
 whoami = { version = "1.6.0" }
 
-[workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2", "h2", "uv-performance-memory-allocator"]
-
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
