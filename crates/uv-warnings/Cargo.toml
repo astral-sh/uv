@@ -19,3 +19,8 @@ workspace = true
 anstream = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+indoc = { workspace = true }
+insta = { workspace = true }

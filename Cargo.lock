@@ -6959,6 +6959,9 @@ name = "uv-warnings"
 version = "0.0.7"
 dependencies = [
  "anstream",
+ "anyhow",
+ "indoc",
+ "insta",
  "owo-colors",
  "rustc-hash",
 ]
