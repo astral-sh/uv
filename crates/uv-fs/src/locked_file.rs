@@ -305,7 +305,9 @@ impl LockedFile {
                 ) {
                     // Fallback in case `persist_noclobber`, which uses `renameat2` or
                     // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
-                    // with `EINVAL` and MacOS with `ENOTSUP`.
+                    // with `EINVAL` and MacOS with `ENOTSUP`. For these reasons and many others,
+                    // there isn't an ErrorKind we can use here, and in fact on MacOS `ENOTSUP` gets
+                    // mapped to `ErrorKind::Other`
 
                     // There is a race here where another process has just created the file, and we
                     // try to open it and get permission errors because the other process hasn't set
