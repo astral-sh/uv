@@ -12,7 +12,7 @@ use tracing::{debug, trace, warn};
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
-use uv_pypi_types::ResolutionMetadata;
+use uv_pypi_types::{HashDigest, ResolutionMetadata};
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -21,7 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
-pub use archive::ArchiveId;
+pub use archive::{ArchiveId, ArchiveVersion, LATEST};
 
 mod archive;
 mod by_timestamp;
@@ -29,11 +29,6 @@ mod by_timestamp;
 mod cli;
 mod removal;
 mod wheel;
-
-/// The version of the archive bucket.
-///
-/// Must be kept in-sync with the version in [`CacheBucket::to_str`].
-pub const ARCHIVE_VERSION: u8 = 0;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -364,19 +359,35 @@ impl Cache {
     }
 
     /// Persist a temporary directory to the artifact store, returning its unique ID.
+    ///
+    /// The archive is content-addressed using the provided ID. If an archive with this ID
+    /// already exists, the temporary directory is discarded and the existing archive is used.
     pub async fn persist(
         &self,
         temp_dir: impl AsRef<Path>,
         path: impl AsRef<Path>,
+        hash: HashDigest,
     ) -> io::Result<ArchiveId> {
-        // Create a unique ID for the artifact.
-        // TODO(charlie): Support content-addressed persistence via SHAs.
-        let id = ArchiveId::new();
-
         // Move the temporary directory into the directory store.
-        let archive_entry = self.entry(CacheBucket::Archive, "", &id);
-        fs_err::create_dir_all(archive_entry.dir())?;
-        uv_fs::rename_with_retry(temp_dir.as_ref(), archive_entry.path()).await?;
+        let id = ArchiveId::from(hash);
+        let archive_entry = self.bucket(CacheBucket::Archive).join(id.as_ref());
+        if let Some(parent) = archive_entry.parent() {
+            fs_err::create_dir_all(parent)?;
+        }
+        match uv_fs::rename_with_retry(temp_dir.as_ref(), &archive_entry).await {
+            Ok(()) => {}
+            Err(err)
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    || err.kind() == io::ErrorKind::DirectoryNotEmpty =>
+            {
+                debug!(
+                    "Archive already exists at {}; skipping extraction",
+                    archive_entry.display()
+                );
+                fs_err::tokio::remove_dir_all(temp_dir.as_ref()).await?;
+            }
+            Err(err) => return Err(err),
+        }
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
@@ -664,10 +675,61 @@ impl Cache {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
-                    let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains_key(&path) {
-                        debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
+
+                    // If two hex characters, it's a prefix; recurse.
+                    if entry.file_name().to_str().is_some_and(|name| {
+                        name.len() == 2 && name.chars().all(|c| c.is_ascii_hexdigit())
+                    }) {
+                        match fs_err::read_dir(entry.path()) {
+                            Ok(subentries) => {
+                                for subentry in subentries {
+                                    let subentry = subentry?;
+
+                                    // If two hex characters, it's a prefix; recurse.
+                                    if subentry.file_name().to_str().is_some_and(|name| {
+                                        name.len() == 2
+                                            && name.chars().all(|c| c.is_ascii_hexdigit())
+                                    }) {
+                                        match fs_err::read_dir(subentry.path()) {
+                                            Ok(subsubentries) => {
+                                                for subsubentry in subsubentries {
+                                                    let subsubentry = subsubentry?;
+
+                                                    let path =
+                                                        fs_err::canonicalize(subsubentry.path())?;
+                                                    if !references.contains_key(&path) {
+                                                        debug!(
+                                                            "Removing dangling cache archive: {}",
+                                                            path.display()
+                                                        );
+                                                        summary += rm_rf(path)?;
+                                                    }
+                                                }
+                                            }
+                                            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                                            Err(err) => return Err(err),
+                                        }
+                                    } else {
+                                        let path = fs_err::canonicalize(subentry.path())?;
+                                        if !references.contains_key(&path) {
+                                            debug!(
+                                                "Removing dangling cache archive: {}",
+                                                path.display()
+                                            );
+                                            summary += rm_rf(path)?;
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                            Err(err) => return Err(err),
+                        }
+                    } else {
+                        let path = fs_err::canonicalize(entry.path())?;
+                        if !references.contains_key(&path) {
+                            debug!("Removing dangling cache archive: {}", path.display());
+                            summary += rm_rf(path)?;
+                        }
                     }
                 }
             }
@@ -781,7 +843,7 @@ impl Cache {
         let link = Link::from_str(&contents)?;
 
         // Ignore stale links.
-        if link.version != ARCHIVE_VERSION {
+        if link.version != LATEST {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
                 "The link target does not exist.",
@@ -837,7 +899,7 @@ struct Link {
     /// The unique ID of the entry in the archive bucket.
     id: ArchiveId,
     /// The version of the archive bucket.
-    version: u8,
+    version: ArchiveVersion,
 }
 
 #[allow(unused)]
@@ -846,7 +908,7 @@ impl Link {
     fn new(id: ArchiveId) -> Self {
         Self {
             id,
-            version: ARCHIVE_VERSION,
+            version: ArchiveVersion::V0,
         }
     }
 }
@@ -875,10 +937,10 @@ impl FromStr for Link {
         let version = version
             .strip_prefix("archive-v")
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
-        let version = u8::from_str(version).map_err(|err| {
+        let version = ArchiveVersion::from_str(version).map_err(|()| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("failed to parse version: {err}"),
+                format!("failed to parse version: {version}"),
             )
         })?;
 
@@ -1408,15 +1470,20 @@ impl Refresh {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use crate::ArchiveId;
+    use std::str::FromStr;
+    use uv_pypi_types::{HashAlgorithm, HashDigest};
+    use uv_small_str::SmallString;
 
     use super::Link;
 
     #[test]
     fn test_link_round_trip() {
-        let id = ArchiveId::new();
+        let digest = HashDigest {
+            algorithm: HashAlgorithm::Sha256,
+            digest: SmallString::from("a".repeat(64)),
+        };
+        let id = ArchiveId::from(digest);
         let link = Link::new(id);
         let s = link.to_string();
         let parsed = Link::from_str(&s).unwrap();
@@ -1429,6 +1496,5 @@ mod tests {
         assert!(Link::from_str("archive-v0/foo").is_ok());
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
-        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

@@ -1,7 +1,7 @@
-use uv_cache::{ARCHIVE_VERSION, ArchiveId, Cache};
+use uv_cache::{ArchiveId, ArchiveVersion, LATEST};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::Hashed;
-use uv_pypi_types::{HashDigest, HashDigests};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -13,23 +13,26 @@ pub struct Archive {
     /// The filename of the wheel.
     pub filename: WheelFilename,
     /// The version of the archive bucket.
-    pub version: u8,
+    pub version: ArchiveVersion,
 }
 
 impl Archive {
-    /// Create a new [`Archive`] with the given ID and hashes.
-    pub(crate) fn new(id: ArchiveId, hashes: HashDigests, filename: WheelFilename) -> Self {
+    /// Create a new [`Archive`] with the given hashes.
+    ///
+    /// The archive ID is derived from the SHA256 hash in the hashes.
+    pub(crate) fn new(hashes: HashDigests, filename: WheelFilename) -> Self {
+        // Extract the SHA256 hash to use as the archive ID
+        let sha256 = hashes
+            .iter()
+            .find(|digest| digest.algorithm == HashAlgorithm::Sha256)
+            .expect("SHA256 hash must be present");
+        let id = ArchiveId::from(sha256.clone());
         Self {
             id,
             hashes,
             filename,
-            version: ARCHIVE_VERSION,
+            version: LATEST,
         }
-    }
-
-    /// Returns `true` if the archive exists in the cache.
-    pub(crate) fn exists(&self, cache: &Cache) -> bool {
-        self.version == ARCHIVE_VERSION && cache.archive(&self.id).exists()
     }
 }
 

@@ -1,18 +1,41 @@
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 pub use error::Error;
 use regex::Regex;
-pub use sync::*;
 use uv_static::EnvVars;
 
 mod error;
 pub mod hash;
 pub mod stream;
-mod sync;
-mod vendor;
 
 static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
 static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
+
+/// Extract the top-level directory from an unpacked archive.
+///
+/// The specification says:
+/// > A .tar.gz source distribution (sdist) contains a single top-level directory called
+/// > `{name}-{version}` (e.g. foo-1.0), containing the source files of the package.
+///
+/// This function returns the path to that top-level directory.
+pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
+    // TODO(konstin): Verify the name of the directory.
+    let top_level = fs_err::read_dir(source.as_ref())
+        .map_err(Error::Io)?
+        .collect::<std::io::Result<Vec<fs_err::DirEntry>>>()
+        .map_err(Error::Io)?;
+    match top_level.as_slice() {
+        [root] => Ok(root.path()),
+        [] => Err(Error::EmptyArchive),
+        _ => Err(Error::NonSingularArchive(
+            top_level
+                .into_iter()
+                .map(|entry| entry.file_name())
+                .collect(),
+        )),
+    }
+}
 
 /// Validate that a given filename (e.g. reported by a ZIP archive's
 /// local file entries or central directory entries) is "safe" to use.

@@ -35,12 +35,15 @@ impl HashPolicy<'_> {
     }
 
     /// Return the algorithms used in the hash policy.
+    ///
+    /// SHA256 is always included to support content-addressed archive IDs.
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
-            Self::None => vec![],
+            Self::None => vec![HashAlgorithm::Sha256],
             Self::Generate(_) => vec![HashAlgorithm::Sha256],
             Self::Validate(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
+                algorithms.push(HashAlgorithm::Sha256);
                 algorithms.sort();
                 algorithms.dedup();
                 algorithms
