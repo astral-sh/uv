@@ -5223,7 +5223,7 @@ pub struct ToolRunArgs {
     pub from: Option<String>,
 
     /// Run with the given packages installed.
-    #[arg(short = 'w', long)]
+    #[arg(short = 'w', long, value_hint = ValueHint::Other)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the given packages installed in editable mode
@@ -5418,7 +5418,7 @@ pub struct ToolInstallArgs {
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Install executables from the following packages.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::Other)]
     pub with_executables_from: Vec<comma::CommaSeparatedRequirements>,
 
     /// Constrain versions using the given requirements files.
