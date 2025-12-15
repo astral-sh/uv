@@ -3601,7 +3601,7 @@ pub struct RunArgs {
     /// When used in a project, these dependencies will be layered on top of the project environment
     /// in a separate, ephemeral environment. These dependencies are allowed to conflict with those
     /// specified by the project.
-    #[arg(long, value_hint = ValueHint::Other)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the packages listed in the given files.
@@ -5231,7 +5231,7 @@ pub struct ToolRunArgs {
     /// When used in a project, these dependencies will be layered on top of the uv tool's
     /// environment in a separate, ephemeral environment. These dependencies are allowed to conflict
     /// with those specified.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Run with the packages listed in the given files.
@@ -5414,7 +5414,7 @@ pub struct ToolInstallArgs {
     pub editable: bool,
 
     /// Include the given packages in editable mode.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
     /// Install executables from the following packages.
