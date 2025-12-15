@@ -12,8 +12,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -47,8 +47,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -1685,14 +1684,14 @@ pub(crate) async fn resolve_names(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
         .into_iter()
         .map(|spec| {
             spec.requirement
-                .augment_requirement(None, None, None, lfs, None)
+                .augment_requirement(None, None, None, lfs.into(), None)
         })
         .partition_map(|requirement| match requirement {
             UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),

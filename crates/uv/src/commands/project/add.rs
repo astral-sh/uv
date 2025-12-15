@@ -17,7 +17,8 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions,
+    SourceStrategy,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -85,7 +86,7 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
@@ -377,7 +378,7 @@ pub(crate) async fn add(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
-                    lfs,
+                    lfs.into(),
                     marker,
                 )
             })
@@ -797,7 +798,7 @@ fn edits(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
     extras: &[ExtraName],
     index: Option<&IndexName>,
     toml: &mut PyProjectTomlMut,
@@ -1231,7 +1232,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
     root: &Path,
     existing_sources: Option<&BTreeMap<PackageName, Sources>>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {

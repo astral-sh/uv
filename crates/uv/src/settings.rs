@@ -26,10 +26,10 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend, Reinstall,
-    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
+    InstallOptions, KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend,
+    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
+    Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -547,7 +547,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -630,7 +630,7 @@ impl ToolRunSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
-        let lfs = lfs.then_some(true);
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             command,
@@ -689,7 +689,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
@@ -744,7 +744,7 @@ impl ToolInstallSettings {
             .unwrap_or_default();
 
         let settings = ResolverInstallerSettings::from(options.clone());
-        let lfs = lfs.then_some(true);
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             package,
@@ -1570,7 +1570,7 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1713,7 +1713,7 @@ impl AddSettings {
             .unwrap_or_default();
 
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
-        let lfs = lfs.then_some(true);
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             lock_check: if locked {
