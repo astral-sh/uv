@@ -2,10 +2,10 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use uv_cache::LockCacheError;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
+use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
@@ -43,7 +43,7 @@ pub enum Error {
     #[error("Failed to write to the distribution cache")]
     CacheWrite(#[source] std::io::Error),
     #[error("Failed to acquire lock on the distribution cache")]
-    CacheLock(#[source] LockCacheError),
+    CacheLock(#[source] CacheError),
     #[error("Failed to deserialize cache entry")]
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
