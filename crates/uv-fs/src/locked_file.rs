@@ -243,9 +243,12 @@ impl LockedFile {
         const DESIRED_MODE: u32 = 0o666;
 
         #[allow(clippy::disallowed_types)]
-        fn try_set_permissions(file: &File) {
+        fn try_set_permissions(file: &File, path: &Path) {
             if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
-                warn!("Failed to set permissions on temporary file: {err}");
+                warn!(
+                    "Failed to set permissions on temporary file `{path}`: {err}",
+                    path = path.user_display()
+                );
             }
         }
 
@@ -266,7 +269,7 @@ impl LockedFile {
             NamedTempFile::new()
         }
         .map_err(LockedFileError::CreateTemporary)?;
-        try_set_permissions(file.as_file());
+        try_set_permissions(file.as_file(), file.path());
 
         // Try to move the file to path, but if path exists now, just open path
         match file.persist_noclobber(path.as_ref()) {
@@ -309,7 +312,7 @@ impl LockedFile {
                         .metadata()
                         .is_ok_and(|metadata| metadata.permissions().mode() != DESIRED_MODE)
                     {
-                        try_set_permissions(file.file());
+                        try_set_permissions(file.file(), path.as_ref());
                     }
                     Ok(file)
                 } else {
