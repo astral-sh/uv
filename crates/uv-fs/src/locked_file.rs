@@ -262,9 +262,12 @@ impl LockedFile {
         use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
 
+        /// The permissions the lockfile should end up with
+        const DESIRED_MODE: u32 = 0o666;
+
         #[allow(clippy::disallowed_types)]
         fn try_set_permissions(file: &File) {
-            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(0o666)) {
+            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
                 warn!("Failed to set permissions on temporary file: {err}");
             }
         }
@@ -326,7 +329,7 @@ impl LockedFile {
                     // warning.
                     if file
                         .metadata()
-                        .is_ok_and(|metadata| metadata.permissions().mode() != 0o666)
+                        .is_ok_and(|metadata| metadata.permissions().mode() != DESIRED_MODE)
                     {
                         try_set_permissions(file.file());
                     }
