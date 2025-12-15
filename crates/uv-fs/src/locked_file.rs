@@ -35,30 +35,6 @@ static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Error)]
-pub enum CreateLockedFileError {
-    #[error("Could not create temporary file")]
-    CreateTemporary(#[source] io::Error),
-    #[error("Could not persist temporary file `{}`", path.user_display())]
-    PersistTemporary {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error(transparent)]
-    Io(#[from] io::Error),
-}
-
-impl CreateLockedFileError {
-    pub fn as_io_error(&self) -> &io::Error {
-        match self {
-            Self::CreateTemporary(err) => err,
-            Self::PersistTemporary { source, .. } => source,
-            Self::Io(err) => err,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum LockedFileError {
     #[error(
         "Timeout ({}s) when waiting for lock on `{}` at `{}`, is another uv process running? You can set `{}` to increase the timeout.",
@@ -83,15 +59,19 @@ pub enum LockedFileError {
         #[source]
         source: io::Error,
     },
-    #[error("Could not open or create lock file at `{}`", path.user_display())]
-    Create {
-        path: PathBuf,
-        #[source]
-        source: CreateLockedFileError,
-    },
     #[error(transparent)]
     #[cfg(feature = "tokio")]
     JoinError(#[from] tokio::task::JoinError),
+    #[error("Could not create temporary file")]
+    CreateTemporary(#[source] io::Error),
+    #[error("Could not persist temporary file `{}`", path.user_display())]
+    PersistTemporary {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 impl LockedFileError {
@@ -101,7 +81,9 @@ impl LockedFileError {
             #[cfg(feature = "tokio")]
             Self::JoinError(_) => None,
             Self::Lock { source, .. } => Some(source),
-            Self::Create { source, .. } => Some(source.as_io_error()),
+            Self::CreateTemporary(err) => Some(err),
+            Self::PersistTemporary { source, .. } => Some(source),
+            Self::Io(err) => Some(err),
         }
     }
 }
@@ -230,10 +212,7 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(&path).map_err(|source| LockedFileError::Create {
-            path: path.as_ref().to_path_buf(),
-            source,
-        })?;
+        let file = Self::create(&path)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -254,7 +233,7 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, CreateLockedFileError> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
         #[allow(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
@@ -286,7 +265,7 @@ impl LockedFile {
         } else {
             NamedTempFile::new()
         }
-        .map_err(CreateLockedFileError::CreateTemporary)?;
+        .map_err(LockedFileError::CreateTemporary)?;
         try_set_permissions(file.as_file());
 
         // Try to move the file to path, but if path exists now, just open path
@@ -335,7 +314,7 @@ impl LockedFile {
                     Ok(file)
                 } else {
                     let temp_path = err.file.into_temp_path();
-                    Err(CreateLockedFileError::PersistTemporary {
+                    Err(LockedFileError::PersistTemporary {
                         path: <tempfile::TempPath as AsRef<Path>>::as_ref(&temp_path).to_path_buf(),
                         source: err.error,
                     })
@@ -345,7 +324,7 @@ impl LockedFile {
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, CreateLockedFileError> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
