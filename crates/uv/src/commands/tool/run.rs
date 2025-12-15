@@ -348,12 +348,7 @@ pub(crate) async fn run(
 
         Err(ProjectError::Requirements(err)) => {
             let err = anyhow::Error::from(err).context("Failed to resolve `--with` requirement");
-            let _ = uv_warnings::write_error_chain(
-                err.as_ref(),
-                Stderr::Enabled,
-                "error",
-                owo_colors::AnsiColors::Red,
-            );
+            let _ = uv_warnings::write_error_chain(err.as_ref(), Stderr::Enabled);
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),

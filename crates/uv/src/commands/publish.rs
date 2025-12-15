@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
@@ -454,8 +454,6 @@ async fn gather_credentials(
                     .context("Trusted publishing failed")
                     .as_ref(),
                 printer.stderr(),
-                "error",
-                AnsiColors::Red,
             )?;
         }
     }

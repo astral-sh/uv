@@ -1,6 +1,6 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -172,8 +172,6 @@ pub(crate) async fn upgrade(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
                 printer.stderr(),
-                "error",
-                AnsiColors::Red,
             )?;
         }
         return Ok(ExitStatus::Failure);

@@ -1,5 +1,4 @@
 use itertools::{Either, Itertools};
-use owo_colors::AnsiColors;
 use regex::Regex;
 use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
@@ -1564,13 +1563,8 @@ pub(crate) async fn find_best_python_installation(
 
                 let mut error_chain = String::new();
                 // Writing to a string can't fail with errors (panics on allocation failure)
-                uv_warnings::write_error_chain(
-                    &WrappedError(request, error),
-                    &mut error_chain,
-                    "warning",
-                    AnsiColors::Yellow,
-                )
-                .unwrap();
+                uv_warnings::write_warning_chain(&WrappedError(request, error), &mut error_chain)
+                    .unwrap();
                 anstream::eprint!("{}", error_chain);
                 previous_fetch_failed = true;
             }

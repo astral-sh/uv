@@ -424,12 +424,7 @@ async fn build_impl(
                     source: source.to_string(),
                     cause: err.into(),
                 };
-                let _ = uv_warnings::write_error_chain(
-                    &diagnostic,
-                    Stderr::Enabled,
-                    "error",
-                    owo_colors::AnsiColors::Red,
-                );
+                let _ = uv_warnings::write_error_chain(&diagnostic, Stderr::Enabled);
                 if let Some(help) = help {
                     let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
                 }

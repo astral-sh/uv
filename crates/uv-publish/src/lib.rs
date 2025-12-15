@@ -1417,7 +1417,6 @@ mod tests {
         group_files, upload,
     };
     use tokio::sync::Semaphore;
-    use uv_warnings::owo_colors::AnsiColors;
     use uv_warnings::write_error_chain;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -2076,7 +2075,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(err.as_dyn_error(), &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2104,7 +2103,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(err.as_dyn_error(), &mut capture).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
