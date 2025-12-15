@@ -402,7 +402,7 @@ impl Cache {
     }
 
     /// Populate the cache scaffold.
-    fn create_base_files(root: &PathBuf) -> Result<(), io::Error> {
+    fn create_base_files(root: &PathBuf) -> io::Result<()> {
         // Create the cache directory, if it doesn't exist.
         fs_err::create_dir_all(root)?;
 
@@ -542,7 +542,7 @@ impl Cache {
     /// Remove a package from the cache.
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+    pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
         let references = self.find_archive_references()?;
 
