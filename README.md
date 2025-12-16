@@ -268,14 +268,6 @@ Installed 43 packages in 208ms
 
 See the [pip interface documentation](https://docs.astral.sh/uv/pip/index/) to get started.
 
-## Platform support
-
-See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
-
-## Versioning policy
-
-See uv's [versioning policy](https://docs.astral.sh/uv/reference/versioning/) document.
-
 ## Contributing
 
 We are passionate about supporting contributors of all levels of experience and would love to see
@@ -291,6 +283,15 @@ It's pronounced as "you - vee" ([`/juː viː/`](https://en.wikipedia.org/wiki/He
 #### How should I stylize uv?
 
 Just "uv", please. See the [style guide](./STYLE.md#styling-uv) for details.
+
+#### What platforms does uv support?
+
+See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
+
+#### Is uv ready for production?
+
+Yes, uv is stable and widely used in production. See uv's
+[versioning policy](https://docs.astral.sh/uv/reference/versioning/) document for details.
 
 ## Acknowledgements
 
