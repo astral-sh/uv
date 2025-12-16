@@ -3970,9 +3970,9 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Installed Python 3.14.2 in [TIME]
      + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled 1052 files in [TIME]
     ");
 
     // Find the stdlib path for cpython 3.14
@@ -4012,8 +4012,8 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Python 3.14 is already installed
+    Bytecode compiled 1052 files in [TIME]
     ");
 
     // Reinstalling with --compile-bytecode should compile bytecode.
@@ -4023,9 +4023,9 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Installed Python 3.14.2 in [TIME]
      ~ cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled 1052 files in [TIME]
     ");
 
     Ok(())
@@ -4057,8 +4057,8 @@ fn python_install_compile_bytecode_existing() {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Python 3.14 is already installed
+    Bytecode compiled 1052 files in [TIME]
     ");
 }
 
@@ -4088,9 +4088,9 @@ fn python_install_compile_bytecode_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Installed Python 3.14.2 in [TIME]
      + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled 1052 files in [TIME]
     ");
 }
 
@@ -4110,11 +4110,10 @@ fn python_install_compile_bytecode_multiple() {
     ----- stdout -----
 
     ----- stderr -----
-    Bytecode compiled 1084 files for cpython-3.12.12-[PLATFORM] in [TIME]
-    Bytecode compiled 1052 files for cpython-3.14.2-[PLATFORM] in [TIME]
     Installed 2 versions in [TIME]
      + cpython-3.12.12-[PLATFORM] (python3.12)
      + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled 2136 files in [TIME]
     ");
 }
 
@@ -4137,11 +4136,10 @@ fn python_install_compile_bytecode_non_cpython() {
 
     ----- stderr -----
     warning: The stdlib path for pyodide-3.13.2-emscripten-wasm32-musl (//lib/python3.13) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.
-    Bytecode compiled 718 files for graalpy-3.12.0-[PLATFORM] in [TIME]
-    Bytecode compiled 2049 files for pypy-3.11.13-[PLATFORM] in [TIME]
     Installed 3 versions in [TIME]
      + graalpy-3.12.0-[PLATFORM] (python3.12)
      + pypy-3.11.13-[PLATFORM] (python3.11)
      + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+    Bytecode compiled 2767 files in [TIME]
     ");
 }

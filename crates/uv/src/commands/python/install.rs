@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Error, Result};
-use futures::StreamExt;
+use futures::{StreamExt, join};
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::sync::mpsc;
 use tracing::{debug, trace};
 
 use uv_cache::Cache;
@@ -196,6 +197,90 @@ pub(crate) async fn install(
     compile_bytecode: bool,
     concurrency: &Concurrency,
     cache: &Cache,
+    preview: Preview,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+    let compiler = async {
+        let mut did_compile = false;
+        let mut total_files = 0;
+        let mut total_elapsed = std::time::Duration::default();
+        while let Some(installation) = receiver.recv().await {
+            did_compile = true;
+            let (files, elapsed) = compile_stdlib_bytecode(&installation, concurrency, cache)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to bytecode-compile Python standard library for: {}",
+                        installation.key()
+                    )
+                })?;
+            total_files += files;
+            total_elapsed += elapsed;
+        }
+        Ok::<_, anyhow::Error>(did_compile.then_some((total_files, total_elapsed)))
+    };
+
+    let installer = perform_install(
+        project_dir,
+        install_dir,
+        targets,
+        reinstall,
+        upgrade,
+        bin,
+        registry,
+        force,
+        python_install_mirror,
+        pypy_install_mirror,
+        python_downloads_json_url,
+        client_builder,
+        default,
+        python_downloads,
+        no_config,
+        compile_bytecode.then_some(sender),
+        concurrency,
+        preview,
+        printer,
+    );
+
+    let (installer_result, compiler_result) = join!(installer, compiler);
+
+    if let Some((total_files, total_elapsed)) = compiler_result? {
+        let s = if total_files == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Bytecode compiled {} {}",
+                format!("{total_files} file{s}").bold(),
+                format!("in {}", elapsed(total_elapsed)).dimmed(),
+            )
+            .dimmed()
+        )?;
+    }
+
+    installer_result
+}
+
+#[allow(clippy::fn_params_excessive_bools)]
+async fn perform_install(
+    project_dir: &Path,
+    install_dir: Option<PathBuf>,
+    targets: Vec<String>,
+    reinstall: bool,
+    upgrade: PythonUpgrade,
+    bin: Option<bool>,
+    registry: Option<bool>,
+    force: bool,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
+    python_downloads_json_url: Option<String>,
+    client_builder: BaseClientBuilder<'_>,
+    default: bool,
+    python_downloads: PythonDownloads,
+    no_config: bool,
+    bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
+    concurrency: &Concurrency,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -440,19 +525,12 @@ pub(crate) async fn install(
 
     // For all satisfied installs, bytecode compile them now before any future
     // early return.
-    if compile_bytecode {
-        let mut satisfied = satisfied.clone();
-        satisfied.sort();
-        for installation in &satisfied {
-            compile_stdlib_bytecode(installation, concurrency, cache, &printer)
-                .await
-                .with_context(|| {
-                    format!(
-                        "Failed to bytecode-compile Python standard library for: {}",
-                        installation.key()
-                    )
-                })?;
-        }
+    if let Some(ref sender) = bytecode_compilation_sender {
+        satisfied
+            .iter()
+            .copied()
+            .cloned()
+            .try_for_each(|installation| sender.send(installation))?;
     }
 
     // Check if Python downloads are banned
@@ -514,15 +592,8 @@ pub(crate) async fn install(
                 };
 
                 let installation = ManagedPythonInstallation::new(path, download);
-                if compile_bytecode {
-                    compile_stdlib_bytecode(&installation, concurrency, cache, &printer)
-                        .await
-                        .with_context(|| {
-                            format!(
-                                "Failed to bytecode-compile Python standard library for: {}",
-                                installation.key()
-                            )
-                        })?;
+                if let Some(ref sender) = bytecode_compilation_sender {
+                    sender.send(installation.clone())?;
                 }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
@@ -1107,8 +1178,7 @@ async fn compile_stdlib_bytecode(
     installation: &ManagedPythonInstallation,
     concurrency: &Concurrency,
     cache: &Cache,
-    printer: &Printer,
-) -> Result<()> {
+) -> Result<(usize, std::time::Duration)> {
     let start = std::time::Instant::now();
     let interpreter = Interpreter::query(installation.executable(false), cache)
         .context("Couldn't locate the interpreter")?;
@@ -1125,7 +1195,7 @@ async fn compile_stdlib_bytecode(
                 installation.key(),
                 interpreter.stdlib().display()
             );
-            return Ok(());
+            return Ok((0, start.elapsed()));
         }
     };
 
@@ -1137,20 +1207,7 @@ async fn compile_stdlib_bytecode(
     )
     .await
     .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
-    let s = if files == 1 { "" } else { "s" };
-    writeln!(
-        printer.stderr(),
-        "{}",
-        format!(
-            "Bytecode compiled {} {} {} {}",
-            format!("{files} file{s}").bold(),
-            "for".dimmed(),
-            installation.key().bold().dimmed(),
-            format!("in {}", elapsed(start.elapsed())).dimmed(),
-        )
-        .dimmed()
-    )?;
-    Ok(())
+    Ok((files, start.elapsed()))
 }
 
 pub(crate) fn format_executables(
