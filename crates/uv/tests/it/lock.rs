@@ -9600,6 +9600,84 @@ fn lock_redact_https() -> Result<()> {
     Ok(())
 }
 
+/// Test that packages aren't unnecessarily updated when an index URL contains a username.
+#[test]
+fn lock_index_url_username_change_no_update() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create initial lockfile with exact version constraint
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.0.0"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://fakeuser@pypi.org/simple"
+
+        [tool.uv.sources]
+        anyio = { index = "test-index" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    // Verify anyio 4.0.0 is locked
+    assert!(lock.contains("name = \"anyio\""));
+    assert!(lock.contains("version = \"4.0.0\""));
+
+    // Update pyproject.toml to simulate availability of newer package with more open but still compatible constraint
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=4.0.0"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://fakeuser@pypi.org/simple"
+
+        [tool.uv.sources]
+        anyio = { index = "test-index" }
+        "#,
+    )?;
+
+    // Run `uv lock`  to update the lockfile
+    // The package should stay at 4.0.0
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock_after = context.read("uv.lock");
+
+    assert!(
+        lock_after.contains("version = \"4.0.0\""),
+        "anyio should remain at version 4.0.0, not update despite >=4.0.0 constraint"
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "git")]
 fn lock_redact_git_pep508() -> Result<()> {
