@@ -537,17 +537,17 @@ pub async fn upload(
                             PublishSendError::RedirectInvalidLocation(err).into(),
                         )
                     })?;
-                    if Realm::from(&current_registry) == Realm::from(registry) {
-                        debug!("Redirecting the request to: {}", current_registry);
-                        n_past_redirections += 1;
-                        continue;
+                    if Realm::from(&current_registry) != Realm::from(registry) {
+                        return Err(PublishError::PublishSend(
+                            group.file.clone(),
+                            current_registry.clone().into(),
+                            PublishSendError::RedirectRealmMismatch(current_registry.to_string())
+                                .into(),
+                        ));
                     }
-                    return Err(PublishError::PublishSend(
-                        group.file.clone(),
-                        current_registry.clone().into(),
-                        PublishSendError::RedirectRealmMismatch(current_registry.to_string())
-                            .into(),
-                    ));
+                    debug!("Redirecting the request to: {}", current_registry);
+                    n_past_redirections += 1;
+                    continue;
                 }
                 reporter.on_upload_complete(idx);
                 response
@@ -1201,7 +1201,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, Reporter, UploadDistribution, build_upload_request, group_files, upload,
+        FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
+        group_files, upload,
     };
     use tokio::sync::Semaphore;
     use uv_warnings::owo_colors::AnsiColors;
@@ -1218,6 +1219,44 @@ mod tests {
         }
         fn on_upload_progress(&self, _id: usize, _inc: u64) {}
         fn on_upload_complete(&self, _id: usize) {}
+    }
+
+    async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+
+        let group = UploadDistribution {
+            file,
+            raw_filename: raw_filename.to_string(),
+            filename,
+            attestations: vec![],
+        };
+
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
+            .await
+            .unwrap();
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::NoRedirect)
+            .retries(0)
+            .auth_integration(AuthIntegration::NoAuthMiddleware)
+            .build();
+
+        let download_concurrency = Arc::new(Semaphore::new(1));
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
+        upload(
+            &group,
+            &form_metadata,
+            &registry,
+            &client,
+            client.retry_policy(),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            None,
+            &download_concurrency,
+            Arc::new(DummyReporter),
+        )
+        .await
     }
 
     #[test]
@@ -1799,44 +1838,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-        let file = PathBuf::from("../../test/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
-
-        let group = UploadDistribution {
-            file,
-            raw_filename: raw_filename.to_string(),
-            filename,
-            attestations: vec![],
-        };
-
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
-
-        let client = BaseClientBuilder::default()
-            .redirect(RedirectPolicy::NoRedirect)
-            .retries(0)
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
-
-        let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final/", &mock_server.uri())).unwrap();
-        let response = upload(
-            &group,
-            &form_metadata,
-            &registry,
-            &client,
-            client.retry_policy(),
-            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            None,
-            &download_concurrency,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap();
-
-        assert!(response);
+        assert!(mock_server_upload(&mock_server).await.unwrap());
     }
 
     #[tokio::test]
@@ -1859,42 +1861,7 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
-        let file = PathBuf::from("../../test/links/").join(raw_filename);
-        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
-
-        let group = UploadDistribution {
-            file,
-            raw_filename: raw_filename.to_string(),
-            filename,
-            attestations: vec![],
-        };
-
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
-            .await
-            .unwrap();
-
-        let client = BaseClientBuilder::default()
-            .redirect(RedirectPolicy::NoRedirect)
-            .retries(0)
-            .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
-
-        let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final/", &mock_server.uri())).unwrap();
-        let err = upload(
-            &group,
-            &form_metadata,
-            &registry,
-            &client,
-            client.retry_policy(),
-            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
-            None,
-            &download_concurrency,
-            Arc::new(DummyReporter),
-        )
-        .await
-        .unwrap_err();
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
         write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
@@ -1904,8 +1871,36 @@ mod tests {
         assert_snapshot!(
             &capture,
             @r"
-        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final/
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
           Caused by: Too many redirects, only 10 redirects are allowed
+        "
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_redirect_different_realm() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", "https://different.auth.tld/final/"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @r"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
+          Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
         );
     }
