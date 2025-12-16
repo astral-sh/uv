@@ -42,7 +42,7 @@ An extremely fast Python package and project manager, written in Rust.
 - 🖥️ Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of
-[Ruff](https://github.com/astral-sh/ruff).
+[Ruff](https://github.com/astral-sh/ruff) and [ty](https://github.com/astral-sh/ty).
 
 ## Installation
 
