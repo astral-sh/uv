@@ -10,8 +10,8 @@ Released on 2025-12-16.
 ### Enhancements
 
 - Add value hints to command line arguments to improve shell completion accuracy ([#17080](https://github.com/astral-sh/uv/pull/17080))
-- Better error handling for `uv publish` ([#17096](https://github.com/astral-sh/uv/pull/17096))
-- Better rendering for multiline error messages ([#17132](https://github.com/astral-sh/uv/pull/17132))
+- Improve error handling in `uv publish` ([#17096](https://github.com/astral-sh/uv/pull/17096))
+- Improve rendering of multiline error messages ([#17132](https://github.com/astral-sh/uv/pull/17132))
 - Support redirects in `uv publish` ([#17130](https://github.com/astral-sh/uv/pull/17130))
 - Include Docker images with the alpine version, e.g., `python3.x-alpine3.23` ([#17100](https://github.com/astral-sh/uv/pull/17100))
 
