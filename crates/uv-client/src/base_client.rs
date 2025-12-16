@@ -1143,7 +1143,7 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     None
 }
 
-/// Decide whether a requests should be retried, tracking previous attempts and backoff.
+/// Per-request retry state and policy.
 pub struct RetryState {
     retry_policy: ExponentialBackoff,
     start_time: SystemTime,
