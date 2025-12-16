@@ -595,6 +595,17 @@
         }
       ]
     },
+    "torch-backend": {
+      "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,\nand will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,\nuv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently\ninstalled CUDA drivers.\n\nThis setting is only respected by `uv pip` commands.\n\nThis option is in preview and may change in any future release.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/TorchMode"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "trusted-publishing": {
       "description": "Configure trusted publishing.\n\nBy default, uv checks for trusted publishing when running in a supported environment, but\nignores it if it isn't configured.\n\nuv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.",
       "anyOf": [
@@ -1716,7 +1727,7 @@
           ]
         },
         "torch-backend": {
-          "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,\nand will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,\nuv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently\ninstalled CUDA drivers.\n\nThis option is in preview and may change in any future release.",
+          "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,\nand will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,\nuv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently\ninstalled CUDA drivers.\n\nThis setting is only respected by `uv pip` commands.\n\nThis option is in preview and may change in any future release.",
           "anyOf": [
             {
               "$ref": "#/definitions/TorchMode"
