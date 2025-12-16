@@ -28,7 +28,7 @@ Released on 2025-12-16.
 
 - Avoid panics due to reads on failed requests ([#17098](https://github.com/astral-sh/uv/pull/17098))
 - Enforce latest-version in `@latest` requests ([#17114](https://github.com/astral-sh/uv/pull/17114))
-- Explicitly set EntryType for file entries in tar ([#17043](https://github.com/astral-sh/uv/pull/17043))
+- Explicitly set `EntryType` for file entries in tar ([#17043](https://github.com/astral-sh/uv/pull/17043))
 - Ignore `pyproject.toml` index username in lockfile comparison ([#16995](https://github.com/astral-sh/uv/pull/16995))
 - Relax error when using `uv add` with `UV_GIT_LFS` set ([#17127](https://github.com/astral-sh/uv/pull/17127))
 - Support creating lock files on ExFAT on macOS ([#17115](https://github.com/astral-sh/uv/pull/17115))
