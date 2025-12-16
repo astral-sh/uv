@@ -10,7 +10,7 @@ use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use reqwest::header::{AUTHORIZATION, LOCATION};
+use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_retry::RetryPolicy;
@@ -37,7 +37,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
@@ -138,8 +138,10 @@ pub enum PublishSendError {
     RedirectRealmMismatch(String),
     #[error("Request was redirected, but no location header was provided")]
     RedirectNoLocation,
-    #[error("Request was redirected, but location header is invalid, Error: {0}")]
-    RedirectInvalidLocation(String),
+    #[error("Request was redirected, but location header is not a UTF-8 string")]
+    RedirectLocationInvalidStr(#[source] ToStrError),
+    #[error("Request was redirected, but location header is not a URL")]
+    RedirectInvalidLocation(#[source] DisplaySafeUrlError),
 }
 
 pub trait Reporter: Send + Sync + 'static {
@@ -525,14 +527,14 @@ pub async fn upload(
                             PublishError::PublishSend(
                                 group.file.clone(),
                                 current_registry.clone().into(),
-                                PublishSendError::RedirectInvalidLocation(err.to_string()).into(),
+                                PublishSendError::RedirectLocationInvalidStr(err).into(),
                             )
                         })?;
                     current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
                         PublishError::PublishSend(
                             group.file.clone(),
                             current_registry.clone().into(),
-                            PublishSendError::RedirectInvalidLocation(err.to_string()).into(),
+                            PublishSendError::RedirectInvalidLocation(err).into(),
                         )
                     })?;
                     if Realm::from(&current_registry) == Realm::from(registry) {
