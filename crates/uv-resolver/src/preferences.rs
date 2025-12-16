@@ -164,8 +164,8 @@ impl PreferenceIndex {
             Self::Any => true,
             Self::Implicit => false,
             Self::Explicit(preference) => {
-                // Preferences are stored without credentials (from lockfile), so compare
-                // against the index URL with credentials stripped.
+                // Preferences are stored in the lockfile without credentials, while the index URL
+                // in locations such as `pyproject.toml` may contain credentials.
                 *preference.url() == *index.without_credentials()
             }
         }
@@ -391,12 +391,12 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
+    /// Test that [`PreferenceIndex::matches`] correctly ignores credentials when comparing URLs.
+    ///
+    /// This is relevant for matching lockfile preferences (stored without credentials)
+    /// against index URLs from pyproject.toml (which may include usernames for auth).
     #[test]
     fn test_preference_index_matches_ignores_credentials() {
-        // Test that PreferenceIndex::matches correctly ignores credentials when comparing URLs.
-        // This is relevant for matching lockfile preferences (stored without credentials)
-        // against index URLs from pyproject.toml (which may include usernames for auth).
-
         // URL without credentials (as stored in lockfile)
         let index_without_creds = IndexUrl::from_str("https:/pypi_index.com/simple").unwrap();
 
