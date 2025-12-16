@@ -8,7 +8,9 @@ use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_cache::Cache;
-use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{
+    AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
@@ -123,6 +125,9 @@ pub(crate) async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        // Disable automatic redirect, as the streaming publish request is not cloneable.
+        // Rely on custom redirect logic instead.
+        .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
         .build();
     let oidc_client = client_builder

@@ -50,7 +50,7 @@ pub const DEFAULT_RETRIES: u32 = 3;
 /// Maximum number of redirects to follow before giving up.
 ///
 /// This is the default used by [`reqwest`].
-const DEFAULT_MAX_REDIRECTS: u32 = 10;
+pub const DEFAULT_MAX_REDIRECTS: u32 = 10;
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -104,6 +104,8 @@ pub enum RedirectPolicy {
     BypassMiddleware,
     /// Handle redirects manually, re-triggering our custom middleware for each request.
     RetriggerMiddleware,
+    /// No redirect for non-cloneable (e.g., streaming) requests with custom redirect logic.
+    NoRedirect,
 }
 
 impl RedirectPolicy {
@@ -111,6 +113,7 @@ impl RedirectPolicy {
         match self {
             Self::BypassMiddleware => reqwest::redirect::Policy::default(),
             Self::RetriggerMiddleware => reqwest::redirect::Policy::none(),
+            Self::NoRedirect => reqwest::redirect::Policy::none(),
         }
     }
 }
@@ -729,6 +732,7 @@ impl RedirectClientWithMiddleware {
         match self.redirect_policy {
             RedirectPolicy::BypassMiddleware => self.client.execute(req).await,
             RedirectPolicy::RetriggerMiddleware => self.execute_with_redirect_handling(req).await,
+            RedirectPolicy::NoRedirect => self.client.execute(req).await,
         }
     }
 
