@@ -31,7 +31,7 @@ Released on 2025-12-16.
 - Explicitly set `EntryType` for file entries in tar ([#17043](https://github.com/astral-sh/uv/pull/17043))
 - Ignore `pyproject.toml` index username in lockfile comparison ([#16995](https://github.com/astral-sh/uv/pull/16995))
 - Relax error when using `uv add` with `UV_GIT_LFS` set ([#17127](https://github.com/astral-sh/uv/pull/17127))
-- Support creating lock files on ExFAT on macOS ([#17115](https://github.com/astral-sh/uv/pull/17115))
+- Support file locks on ExFAT on macOS ([#17115](https://github.com/astral-sh/uv/pull/17115))
 - Change schema for `exclude-newer` into optional string ([#17121](https://github.com/astral-sh/uv/pull/17121))
 
 ### Documentation
