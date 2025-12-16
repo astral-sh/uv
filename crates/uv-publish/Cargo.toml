@@ -49,6 +49,7 @@ url = { workspace = true }
 wiremock = { workspace = true }
 
 [dev-dependencies]
+anstream = { workspace = true }
 insta = { workspace = true }
 fastrand = { workspace = true }
 

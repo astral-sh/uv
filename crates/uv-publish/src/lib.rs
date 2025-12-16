@@ -1194,19 +1194,20 @@ mod tests {
 
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
-
+    use thiserror::__private17::AsDynError;
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
 
-    use tokio::sync::Semaphore;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
     use crate::{
         FormMetadata, Reporter, UploadDistribution, build_upload_request, group_files, upload,
     };
+    use tokio::sync::Semaphore;
+    use uv_warnings::owo_colors::AnsiColors;
+    use uv_warnings::write_error_chain;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
 
@@ -1836,5 +1837,76 @@ mod tests {
         .unwrap();
 
         assert!(response);
+    }
+
+    #[tokio::test]
+    async fn upload_infinite_redirects() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/final/"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", format!("{}/final", &mock_server.uri())),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+
+        let group = UploadDistribution {
+            file,
+            raw_filename: raw_filename.to_string(),
+            filename,
+            attestations: vec![],
+        };
+
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
+            .await
+            .unwrap();
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::NoRedirect)
+            .retries(0)
+            .auth_integration(AuthIntegration::NoAuthMiddleware)
+            .build();
+
+        let download_concurrency = Arc::new(Semaphore::new(1));
+        let registry = DisplaySafeUrl::parse(&format!("{}/final/", &mock_server.uri())).unwrap();
+        let err = upload(
+            &group,
+            &form_metadata,
+            &registry,
+            &client,
+            client.retry_policy(),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            None,
+            &download_concurrency,
+            Arc::new(DummyReporter),
+        )
+        .await
+        .unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @r"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final/
+          Caused by: Too many redirects, only 10 redirects are allowed
+        "
+        );
     }
 }

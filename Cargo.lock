@@ -6465,6 +6465,7 @@ name = "uv-publish"
 version = "0.0.7"
 dependencies = [
  "ambient-id",
+ "anstream",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
  "astral-tokio-tar",
