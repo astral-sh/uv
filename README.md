@@ -280,7 +280,8 @@ See uv's [versioning policy](https://docs.astral.sh/uv/reference/versioning/) do
 
 We are passionate about supporting contributors of all levels of experience and would love to see
 you get involved in the project. See the
-[contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
+[contributing guide](https://github.com/astral-sh/uv?tab=contributing-ov-file#contributing) to get
+started.
 
 ## FAQ
 
