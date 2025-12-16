@@ -1152,7 +1152,8 @@ pub struct RetryState {
 }
 
 impl RetryState {
-    pub fn new(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
+    /// Initialize the [`RetryState`] and start the backoff timer.
+    pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
         Self {
             retry_policy,
             start_time: SystemTime::now(),
@@ -1168,16 +1169,21 @@ impl RetryState {
         self.total_retries
     }
 
-    /// Whether request should be retried. Waits with backoff if required.
+    /// Determines whether request should be retried and waits with backoff if it's retried.
     ///
     /// Takes the number of retries from nested layers associated with the specific `err` type as
     /// `error_retries`.
-    pub async fn should_retry(&mut self, err: &(dyn Error + 'static), error_retries: u32) -> bool {
-        // Check if the middleware already performed retries
+    ///
+    /// Returns `true` if the request should be retried.
+    pub async fn handle_retry_and_backoff(
+        &mut self,
+        err: &(dyn Error + 'static),
+        error_retries: u32,
+    ) -> bool {
+        // If the middleware performed any retries, consider them in our budget.
         self.total_retries += error_retries;
         match retryable_on_request_failure(err) {
             Some(Retryable::Transient) => {
-                // If middleware already retried, consider that in our retry budget
                 let retry_decision = self
                     .retry_policy
                     .should_retry(self.start_time, self.total_retries);

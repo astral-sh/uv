@@ -1105,7 +1105,7 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let mut retry_state = RetryState::new(
+        let mut retry_state = RetryState::start(
             *retry_policy,
             self.download_url(python_install_mirror, pypy_install_mirror)?,
         );
@@ -1125,7 +1125,10 @@ impl ManagedPythonDownload {
             match result {
                 Ok(download_result) => return Ok(download_result),
                 Err(err) => {
-                    if retry_state.should_retry(&err, err.retries()).await {
+                    if retry_state
+                        .handle_retry_and_backoff(&err, err.retries())
+                        .await
+                    {
                         continue;
                     }
                     return if retry_state.total_retries() > 0 {

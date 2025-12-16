@@ -147,13 +147,15 @@ pub enum Error {
 }
 
 impl Error {
-    /// Return the number of attempts that were made to complete this request before this error was
-    /// returned. Note that e.g. 3 retries equates to 4 attempts.
-    fn attempts(&self) -> u32 {
+    /// Return the number of retries that were made to complete this request before this error was
+    /// returned.
+    ///
+    /// Note that e.g. 3 retries equates to 4 attempts.
+    fn retries(&self) -> u32 {
         if let Self::RetriedError { retries, .. } = self {
-            return retries + 1;
+            return *retries;
         }
-        1
+        0
     }
 }
 
@@ -239,7 +241,7 @@ async fn download_and_unpack_with_retry(
     download_url: &Url,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
-    let mut retry_state = RetryState::new(*retry_policy, download_url.clone());
+    let mut retry_state = RetryState::start(*retry_policy, download_url.clone());
 
     loop {
         let result = download_and_unpack(
@@ -258,7 +260,10 @@ async fn download_and_unpack_with_retry(
         let result = match result {
             Ok(path) => Ok(path),
             Err(err) => {
-                if retry_state.should_retry(&err, err.attempts()).await {
+                if retry_state
+                    .handle_retry_and_backoff(&err, err.retries())
+                    .await
+                {
                     continue;
                 }
 

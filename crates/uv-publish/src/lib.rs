@@ -476,7 +476,7 @@ pub async fn upload(
     let mut n_past_redirections = 0;
     let max_redirects = DEFAULT_MAX_REDIRECTS;
     let mut current_registry = registry.clone();
-    let mut retry_state = RetryState::new(retry_policy, registry.clone());
+    let mut retry_state = RetryState::start(retry_policy, registry.clone());
 
     loop {
         let (request, idx) = build_upload_request(
@@ -558,7 +558,10 @@ pub async fn upload(
                 } else {
                     0
                 };
-                if retry_state.should_retry(&err, middleware_retries).await {
+                if retry_state
+                    .handle_retry_and_backoff(&err, middleware_retries)
+                    .await
+                {
                     continue;
                 }
                 return Err(PublishError::PublishSend(
