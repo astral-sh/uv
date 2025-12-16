@@ -3956,6 +3956,19 @@ fn python_install_upgrade_version_file() {
 
 #[test]
 fn python_install_compile_bytecode() -> anyhow::Result<()> {
+    fn count_files_by_ext(dir: &Path, extension: &str) -> anyhow::Result<usize> {
+        let mut count = 0;
+        let walker = WalkDir::new(dir).into_iter();
+        for entry in walker {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.metadata()?.is_file() && path.extension().is_some_and(|ext| ext == extension) {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -3989,20 +4002,9 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     .join("python3.14");
 
     // And the count should match
-    let count = {
-        let mut count = 0;
-        let walker = WalkDir::new(stdlib).into_iter();
-        for entry in walker {
-            let entry = entry?;
-            let path = entry.path();
-            if entry.metadata()?.is_file() && path.extension().is_some_and(|ext| ext == "pyc") {
-                count += 1;
-            }
-        }
-        count
-    };
-
-    insta::assert_snapshot!(count.to_string(), @"1052");
+    let pyc_count = count_files_by_ext(&stdlib, "pyc")?;
+    let py_count = count_files_by_ext(&stdlib, "py")?;
+    assert_eq!(pyc_count, py_count);
 
     // Attempting to install with --compile-bytecode should (currently)
     // unconditionally re-run the bytecode compiler
