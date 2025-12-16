@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -12,10 +13,57 @@ use uv_static::EnvVars;
 
 use crate::http_util::{
     generate_self_signed_certs, generate_self_signed_certs_with_ca,
-    start_https_mtls_user_agent_server, start_https_user_agent_server, test_cert_dir,
+    start_https_ca_user_agent_server, start_https_mtls_user_agent_server,
+    start_https_user_agent_server, test_cert_dir,
 };
 
-// SAFETY: This test is meant to run with single thread configuration
+#[tokio::test]
+async fn ssl_retry_once() -> Result<()> {
+    // Generate self-signed CA, server, and client certs
+    let (ca_cert, server_cert, _) = generate_self_signed_certs_with_ca()?;
+
+    let (server_task, addr) = start_https_ca_user_agent_server(&ca_cert, &server_cert).await?;
+    let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
+    let cache = Cache::temp()?.init()?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await;
+    let _ = server_task.await?;
+
+    // Validate the client error
+    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
+        panic!("expected middleware error");
+    };
+
+    // No retries should occur (we can directly get the hyper rustls error)
+    // We're explicit with our chains to be sensitive to any dependency changes
+    let expected_err = if let Some(err) = middleware_error.source()
+        && let Some(err) = err.downcast_ref::<hyper_util::client::legacy::Error>()
+        && let Some(err) = err.source()
+        && let Some(err) = err.downcast_ref::<std::io::Error>()
+        && let Some(err) = err.get_ref()
+        && let Some(err) = err.downcast_ref::<std::io::Error>()
+        && let Some(err) = err.get_ref()
+        && let Some(err) = err.downcast_ref::<rustls::Error>()
+        && matches!(
+            err,
+            rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer)
+        ) {
+        true
+    } else {
+        false
+    };
+    assert!(expected_err);
+
+    Ok(())
+}
+
+// SAFETY: This test is meant to run in isolation
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn ssl_env_vars() -> Result<()> {
@@ -97,23 +145,16 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
     }
 
-    // Validate the client error
+    // Validate the client error - TLS errors return Fatal early so we get Middleware variant
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
         panic!("expected middleware error");
     };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
+
+    // TLS errors are deeply nested in io::Error::get_ref() - use find_source_with_io to find them
+    assert!(
+        uv_client::find_source_with_io::<rustls::Error>(middleware_error.as_ref()).is_some(),
+        "Expected TLS error in chain"
+    );
 
     // Validate the server error
     let server_res = server_task.await?;
@@ -207,23 +248,16 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_DIR);
     }
 
-    // Validate the client error
+    // Validate the client error - TLS errors return Fatal early so we get Middleware variant
     let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
         panic!("expected middleware error");
     };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
+
+    // TLS errors are deeply nested in io::Error::get_ref() - use find_source_with_io to find them
+    assert!(
+        uv_client::find_source_with_io::<rustls::Error>(middleware_error.as_ref()).is_some(),
+        "Expected TLS error in chain"
+    );
 
     // Validate the server error
     let server_res = server_task.await?;
@@ -296,23 +330,13 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
     }
 
-    // Validate the client error
-    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
-        panic!("expected middleware error");
+    // Validate the client error - this is an mTLS failure (no client cert provided)
+    // The server closes the connection during handshake, so the client sees a
+    // generic connection error (e.g., "Connection refused"), not a TLS certificate error
+    let Err(reqwest_middleware::Error::Middleware(_middleware_error)) = res else {
+        panic!("expected middleware error, got: {res:?}");
     };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
+    // For mTLS, just verify we got an error - the server error below confirms it's TLS-related
 
     // Validate the server error
     let server_res = server_task.await?;

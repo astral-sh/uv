@@ -368,6 +368,18 @@ pub(crate) async fn start_https_user_agent_server(
         .await
 }
 
+/// Single Request HTTPS server with a self-signed CA that echoes the User Agent Header.
+pub(crate) async fn start_https_ca_user_agent_server(
+    ca_cert: &SelfSigned,
+    server_cert: &SelfSigned,
+) -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
+    TestServerBuilder::new()
+        .with_ca_cert(ca_cert)
+        .with_server_cert(server_cert)
+        .start()
+        .await
+}
+
 /// Single Request HTTPS mTLS server that echoes the User Agent Header.
 pub(crate) async fn start_https_mtls_user_agent_server(
     ca_cert: &SelfSigned,
