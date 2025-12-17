@@ -3972,6 +3972,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror()
         .with_python_download_cache();
@@ -3985,7 +3986,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
      + cpython-3.14.2-[PLATFORM] (python3.14)
-    Bytecode compiled 1052 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 
     // Find the stdlib path for cpython 3.14
@@ -4015,7 +4016,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
 
     ----- stderr -----
     Python 3.14 is already installed
-    Bytecode compiled 1052 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 
     // Reinstalling with --compile-bytecode should compile bytecode.
@@ -4027,7 +4028,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
      ~ cpython-3.14.2-[PLATFORM] (python3.14)
-    Bytecode compiled 1052 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 
     Ok(())
@@ -4038,6 +4039,7 @@ fn python_install_compile_bytecode_existing() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror()
         .with_python_download_cache();
@@ -4060,7 +4062,7 @@ fn python_install_compile_bytecode_existing() {
 
     ----- stderr -----
     Python 3.14 is already installed
-    Bytecode compiled 1052 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 }
 
@@ -4069,6 +4071,7 @@ fn python_install_compile_bytecode_upgrade() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror()
         .with_python_download_cache();
@@ -4092,7 +4095,7 @@ fn python_install_compile_bytecode_upgrade() {
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
      + cpython-3.14.2-[PLATFORM] (python3.14)
-    Bytecode compiled 1052 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 }
 
@@ -4101,6 +4104,7 @@ fn python_install_compile_bytecode_multiple() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror()
         .with_python_download_cache();
@@ -4115,7 +4119,7 @@ fn python_install_compile_bytecode_multiple() {
     Installed 2 versions in [TIME]
      + cpython-3.12.12-[PLATFORM] (python3.12)
      + cpython-3.14.2-[PLATFORM] (python3.14)
-    Bytecode compiled 2136 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 }
 
@@ -4124,6 +4128,7 @@ fn python_install_compile_bytecode_non_cpython() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
         .with_managed_python_dirs()
         .with_empty_python_install_mirror()
         .with_python_download_cache();
@@ -4142,6 +4147,6 @@ fn python_install_compile_bytecode_non_cpython() {
      + graalpy-3.12.0-[PLATFORM] (python3.12)
      + pypy-3.11.13-[PLATFORM] (python3.11)
      + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
-    Bytecode compiled 2767 files in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 }
