@@ -742,6 +742,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -779,6 +780,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 None,
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -814,6 +816,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 Some(sdist_build.normalized_filename().version()),
+                preview,
             )
             .await?;
             build_results.push(sdist_build);
@@ -857,6 +860,7 @@ async fn build_package(
                 version_id,
                 build_output,
                 version.as_ref(),
+                preview,
             )
             .await?;
             build_results.push(wheel_build);
@@ -1014,6 +1018,7 @@ async fn build_wheel(
     build_output: BuildOutput,
     // Used for checking version consistency
     version: Option<&Version>,
+    preview: Preview,
 ) -> Result<BuildMessage, Error> {
     let build_message = match action {
         BuildAction::List => {
@@ -1023,6 +1028,7 @@ async fn build_wheel(
                     &source_tree_,
                     uv_version::version(),
                     sources == SourceStrategy::Enabled,
+                    preview,
                 )
             })
             .await??;
@@ -1054,6 +1060,7 @@ async fn build_wheel(
                     None,
                     uv_version::version(),
                     sources == SourceStrategy::Enabled,
+                    preview,
                 )
             })
             .await??;
