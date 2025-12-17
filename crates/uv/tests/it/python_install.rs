@@ -4142,17 +4142,32 @@ fn python_install_compile_bytecode_non_cpython() {
     // Should handle graalpython, pyodide and pypy gracefully
     // Currently for pyodide this means a warning complaining about the unusual
     // sydlib.
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl").arg("graalpy-3.12").arg("pypy-3.11"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    if cfg!(unix) {
+        uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl").arg("graalpy-3.12").arg("pypy-3.11"), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
 
-    ----- stderr -----
-    warning: The stdlib path for pyodide-3.13.2-emscripten-wasm32-musl (//lib/python3.13) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.
-    Installed 3 versions in [TIME]
-     + graalpy-3.12.0-[PLATFORM] (python3.12)
-     + pypy-3.11.13-[PLATFORM] (python3.11)
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
-    Bytecode compiled [COUNT] files in [TIME]
-    ");
+        ----- stderr -----
+        warning: The stdlib path for pyodide-3.13.2-emscripten-wasm32-musl (//lib/python3.13) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.
+        Installed 3 versions in [TIME]
+         + graalpy-3.12.0-[PLATFORM] (python3.12)
+         + pypy-3.11.13-[PLATFORM] (python3.11)
+         + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+        Bytecode compiled [COUNT] files in [TIME]
+        ");
+    } else if cfg!(windows) {
+        // Currently no pyodide support on windows
+        uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12").arg("pypy-3.11"), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Installed 2 versions in [TIME]
+         + graalpy-3.12.0-[PLATFORM] (python3.12)
+         + pypy-3.11.13-[PLATFORM] (python3.11)
+        Bytecode compiled [COUNT] files in [TIME]
+        ");
+    }
 }
