@@ -3990,17 +3990,23 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
     ");
 
     // Find the stdlib path for cpython 3.14
-    let stdlib = fs_err::read_link(
-        context
-            .bin_dir
-            .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX)),
-    )?
-    .parent()
-    .context("Python binary should be a child of `bin`")?
-    .parent()
-    .context("`bin` directory should be a child of the installation path")?
-    .join("lib")
-    .join("python3.14");
+    let bin_path = context
+        .bin_dir
+        .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX));
+
+    #[cfg(unix)]
+    let stdlib = fs_err::read_link(bin_path)?
+        .parent()
+        .context("Python binary should be a child of `bin`")?
+        .parent()
+        .context("`bin` directory should be a child of the installation path")?
+        .join("lib")
+        .join("python3.14");
+    #[cfg(windows)]
+    let stdlib = launcher_path(&bin_path)
+        .parent()
+        .context("Python binary should be a child of the installation path")?
+        .join("Lib");
 
     // And the count should match
     let pyc_count = count_files_by_ext(&stdlib, "pyc")?;
