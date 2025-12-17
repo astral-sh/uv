@@ -3661,9 +3661,15 @@ impl Source {
                 let path = to_lockfile_path(&path, root, preference)
                     .map_err(LockErrorKind::IndexRelativePath)?;
                 // Normalize to forward slashes for cross-platform consistency.
-                // This is needed specifically for find-links paths on Windows where
-                // `to_file_path()` returns backslashes but the lockfile stores forward slashes.
-                let path = PathBuf::from(PortablePath::from(&path).to_string());
+                // This is needed on Windows where `to_file_path()` and `std::path::absolute`
+                // return backslashes, but the lockfile stores forward slashes.
+                // We handle empty paths specially to avoid converting them to ".".
+                #[cfg(windows)]
+                let path = if path.as_os_str().is_empty() {
+                    path
+                } else {
+                    PathBuf::from(PortablePath::from(&path).to_string())
+                };
                 let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Self::Registry(source))
             }
