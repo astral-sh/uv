@@ -3309,7 +3309,9 @@ pub struct InitArgs {
     ///
     /// Disables creating extra files like `README.md`, the `src/` tree, `.python-version` files,
     /// etc.
-    #[arg(long, conflicts_with = "script")]
+    ///
+    /// When combined with `--script`, the script will only contain the inline metadata header.
+    #[arg(long)]
     pub bare: bool,
 
     /// Create a virtual project, rather than a package.
