@@ -4129,8 +4129,9 @@ fn python_install_compile_bytecode_multiple() {
     ");
 }
 
+#[cfg(unix)] // Pyodide cannot be used on Windows
 #[test]
-fn python_install_compile_bytecode_non_cpython() {
+fn python_install_compile_bytecode_pyodide() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -4139,35 +4140,63 @@ fn python_install_compile_bytecode_non_cpython() {
         .with_empty_python_install_mirror()
         .with_python_download_cache();
 
-    // Should handle graalpython, pyodide and pypy gracefully
-    // Currently for pyodide this means a warning complaining about the unusual
-    // sydlib.
-    if cfg!(unix) {
-        uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl").arg("graalpy-3.12").arg("pypy-3.11"), @r"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    // Should warn on explicit pyodide installation
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        warning: Standard library bytecode compilation is not supported for pyodide
-        Installed 3 versions in [TIME]
-         + graalpy-3.12.0-[PLATFORM] (python3.12)
-         + pypy-3.11.13-[PLATFORM] (python3.11)
-         + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
-        Bytecode compiled [COUNT] files in [TIME]
-        ");
-    } else if cfg!(windows) {
-        // Currently no pyodide support on windows
-        uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12").arg("pypy-3.11"), @r"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    ----- stderr -----
+    Installed Python 3.13.2 in [TIME]
+     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+    warning: Standard library bytecode compilation is not supported for pyodide
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
 
-        ----- stderr -----
-        Installed 2 versions in [TIME]
-         + graalpy-3.12.0-[PLATFORM] (python3.12)
-         + pypy-3.11.13-[PLATFORM] (python3.11)
-        Bytecode compiled [COUNT] files in [TIME]
-        ");
-    }
+}
+
+#[test]
+fn python_install_compile_bytecode_graalpy() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should work for graalpy
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.0 in [TIME]
+     + graalpy-3.12.0-[PLATFORM] (python3.12)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_compile_bytecode_pypy() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should work for pypy
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.13 in [TIME]
+     + pypy-3.11.13-[PLATFORM] (python3.11)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
 }
