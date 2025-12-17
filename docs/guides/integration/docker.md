@@ -331,6 +331,7 @@ to improve startup time (at the cost of increased installation time).
 To enable bytecode compilation, use the `--compile-bytecode` flag:
 
 ```dockerfile title="Dockerfile"
+RUN uv python install --compile-bytecode
 RUN uv sync --compile-bytecode
 ```
 
