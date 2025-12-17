@@ -4149,7 +4149,7 @@ fn python_install_compile_bytecode_non_cpython() {
         ----- stdout -----
 
         ----- stderr -----
-        warning: The stdlib path for pyodide-3.13.2-emscripten-wasm32-musl (//lib/python3.13) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.
+        warning: Standard library bytecode compilation is not supported for pyodide
         Installed 3 versions in [TIME]
          + graalpy-3.12.0-[PLATFORM] (python3.12)
          + pypy-3.11.13-[PLATFORM] (python3.11)
