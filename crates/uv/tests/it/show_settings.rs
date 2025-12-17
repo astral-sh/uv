@@ -3565,6 +3565,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             link_mode: Some(
                 Clone,
             ),
+            torch_backend: None,
             compile_bytecode: None,
             no_sources: None,
             upgrade: None,
@@ -3573,7 +3574,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_build_package: None,
             no_binary: None,
             no_binary_package: None,
-            torch_backend: None,
         },
         settings: ResolverInstallerSettings {
             resolver: ResolverSettings {
@@ -3615,6 +3615,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -7912,6 +7913,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8026,6 +8028,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8140,6 +8143,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8254,6 +8258,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8368,6 +8373,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8484,6 +8490,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -9738,6 +9745,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: None,
         },
     }
@@ -9857,6 +9865,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: Packages(
                 {
                     PackageName(
@@ -9999,6 +10008,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: All,
         },
     }
@@ -10116,6 +10126,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: None,
         },
     }
@@ -10223,6 +10234,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: All,
         },
     }
@@ -10331,6 +10343,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: Packages(
                 {
                     PackageName(

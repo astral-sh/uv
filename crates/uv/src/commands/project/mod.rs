@@ -43,6 +43,7 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
+use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
@@ -277,6 +278,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
+    Accelerator(#[from] uv_torch::AcceleratorError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -1723,6 +1727,7 @@ pub(crate) async fn resolve_names(
                 prerelease: _,
                 resolution: _,
                 sources,
+                torch_backend,
                 upgrade: _,
             },
         compile_bytecode: _,
@@ -1731,10 +1736,27 @@ pub(crate) async fn resolve_names(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+        })
+        .transpose()
+        .ok()
+        .flatten();
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1880,6 +1902,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        torch_backend,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1900,10 +1923,33 @@ pub(crate) async fn resolve_environment(
     let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2232,6 +2278,7 @@ pub(crate) async fn update_environment(
                 prerelease,
                 resolution,
                 sources,
+                torch_backend,
                 upgrade,
             },
         compile_bytecode,
@@ -2302,10 +2349,33 @@ pub(crate) async fn update_environment(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

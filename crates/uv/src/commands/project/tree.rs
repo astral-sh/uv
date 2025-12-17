@@ -212,6 +212,7 @@ pub(crate) async fn tree(
                 upgrade: _,
                 build_options: _,
                 sources: _,
+                torch_backend: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();

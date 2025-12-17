@@ -5371,6 +5371,21 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
@@ -5547,6 +5562,21 @@ pub struct ToolInstallArgs {
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 }
 
 #[derive(Args)]
