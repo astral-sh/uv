@@ -337,7 +337,7 @@ impl InitSettings {
             no_description,
             vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme: no_readme || bare,
+            no_readme,
             author_from,
             pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,

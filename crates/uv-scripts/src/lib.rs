@@ -270,6 +270,7 @@ impl Pep723Script {
         file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
         existing_contents: Option<Vec<u8>>,
+        bare: bool,
     ) -> Result<(), Pep723Error> {
         let file = file.as_ref();
 
@@ -305,6 +306,8 @@ impl Pep723Script {
             indoc::formatdoc! {r"
             {shebang}{metadata}
             {contents}" }
+        } else if bare {
+            metadata
         } else {
             indoc::formatdoc! {r#"
             {metadata}

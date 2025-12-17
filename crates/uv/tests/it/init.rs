@@ -700,6 +700,42 @@ fn init_script() -> Result<()> {
     Ok(())
 }
 
+/// Using `--bare` with `--script` omits the default script content.
+#[test]
+fn init_script_bare() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let script = child.join("main.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg("--bare").arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `main.py`
+    "###);
+
+    let script = fs_err::read_to_string(&script)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 // Ensure python versions passed as arguments are present in file metadata
 #[test]
 fn init_script_python_version() -> Result<()> {

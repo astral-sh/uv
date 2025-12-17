@@ -73,6 +73,7 @@ pub(crate) async fn init(
 
             init_script(
                 path,
+                bare,
                 python,
                 install_mirrors,
                 client_builder,
@@ -168,7 +169,7 @@ pub(crate) async fn init(
             .await?;
 
             // Create the `README.md` if it does not already exist.
-            if !no_readme {
+            if !no_readme && !bare {
                 let readme = path.join("README.md");
                 if !readme.exists() {
                     fs_err::write(readme, String::new())?;
@@ -201,6 +202,7 @@ pub(crate) async fn init(
 #[allow(clippy::fn_params_excessive_bools)]
 async fn init_script(
     script_path: &Path,
+    bare: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     client_builder: &BaseClientBuilder<'_>,
@@ -275,7 +277,7 @@ async fn init_script(
         fs_err::tokio::create_dir_all(parent).await?;
     }
 
-    Pep723Script::create(script_path, requires_python.specifiers(), content).await?;
+    Pep723Script::create(script_path, requires_python.specifiers(), content, bare).await?;
 
     Ok(())
 }
@@ -829,7 +831,7 @@ impl InitProjectKind {
             author.as_ref(),
             description,
             no_description,
-            no_readme,
+            no_readme || bare,
         );
 
         // Include additional project configuration for packaged applications
@@ -908,7 +910,7 @@ impl InitProjectKind {
             author.as_ref(),
             description,
             no_description,
-            no_readme,
+            no_readme || bare,
         );
 
         // Always include a build system if the project is packaged.
