@@ -1190,7 +1190,9 @@ async fn compile_stdlib_bytecode(
     match installation.implementation() {
         ImplementationName::Pyodide => {
             if explicit_request {
-                warn_user!("Standard library bytecode compilation is not supported for pyodide");
+                warn_user_once!(
+                    "Standard library bytecode compilation is not supported for pyodide"
+                );
             }
             return Ok(None);
         }
