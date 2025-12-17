@@ -138,7 +138,8 @@ pub enum Error {
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" }
+    )]
     RetriedError {
         #[source]
         err: Box<Error>,
@@ -257,27 +258,23 @@ async fn download_and_unpack_with_retry(
         )
         .await;
 
-        let result = match result {
-            Ok(path) => Ok(path),
+        match result {
+            Ok(path) => return Ok(path),
             Err(err) => {
-                if retry_state
-                    .handle_retry_and_backoff(&err, err.retries())
-                    .await
-                {
+                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                    retry_state.sleep_backoff(backoff).await;
                     continue;
                 }
-
-                if retry_state.total_retries() > 0 {
+                return if retry_state.total_retries() > 0 {
                     Err(Error::RetriedError {
                         err: Box::new(err),
                         retries: retry_state.total_retries(),
                     })
                 } else {
                     Err(err)
-                }
+                };
             }
-        };
-        return result;
+        }
     }
 }
 

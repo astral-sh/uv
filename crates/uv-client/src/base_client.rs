@@ -1169,17 +1169,18 @@ impl RetryState {
         self.total_retries
     }
 
-    /// Determines whether request should be retried and waits with backoff if it's retried.
+    /// Determines whether request should be retried.
     ///
     /// Takes the number of retries from nested layers associated with the specific `err` type as
     /// `error_retries`.
     ///
-    /// Returns `true` if the request should be retried.
-    pub async fn handle_retry_and_backoff(
+    /// Returns the backoff duration if the request should be retried.
+    #[must_use]
+    pub fn should_retry(
         &mut self,
         err: &(dyn Error + 'static),
         error_retries: u32,
-    ) -> bool {
+    ) -> Option<Duration> {
         // If the middleware performed any retries, consider them in our budget.
         self.total_retries += error_retries;
         match retryable_on_request_failure(err) {
@@ -1192,22 +1193,26 @@ impl RetryState {
                         .duration_since(SystemTime::now())
                         .unwrap_or_else(|_| Duration::default());
 
-                    debug!(
-                        "Transient failure while handling response from {}; retrying after {:.1}s...",
-                        self.url,
-                        duration.as_secs_f32(),
-                    );
-                    // TODO(konsti): Should we show a spinner plus a message in the CLI while
-                    // waiting?
-                    tokio::time::sleep(duration).await;
                     self.total_retries += 1;
-                    return true;
+                    return Some(duration);
                 }
 
-                false
+                None
             }
-            Some(Retryable::Fatal) | None => false,
+            Some(Retryable::Fatal) | None => None,
         }
+    }
+
+    /// Wait before retrying the request.
+    pub async fn sleep_backoff(&self, duration: Duration) {
+        debug!(
+            "Transient failure while handling response from {}; retrying after {:.1}s...",
+            self.url,
+            duration.as_secs_f32(),
+        );
+        // TODO(konsti): Should we show a spinner plus a message in the CLI while
+        // waiting?
+        tokio::time::sleep(duration).await;
     }
 }
 

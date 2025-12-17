@@ -558,10 +558,8 @@ pub async fn upload(
                 } else {
                     0
                 };
-                if retry_state
-                    .handle_retry_and_backoff(&err, middleware_retries)
-                    .await
-                {
+                if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                    retry_state.sleep_backoff(backoff).await;
                     continue;
                 }
                 return Err(PublishError::PublishSend(

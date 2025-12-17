@@ -1125,10 +1125,8 @@ impl ManagedPythonDownload {
             match result {
                 Ok(download_result) => return Ok(download_result),
                 Err(err) => {
-                    if retry_state
-                        .handle_retry_and_backoff(&err, err.retries())
-                        .await
-                    {
+                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
                         continue;
                     }
                     return if retry_state.total_retries() > 0 {
