@@ -6120,11 +6120,12 @@ pub struct PythonInstallCompileBytecodeArgs {
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
     /// instead, compilation is performed lazily the first time a module is imported. For use-cases
-    /// in which start time is critical, such as CLI applications and Docker containers, this option
-    /// can be enabled to trade longer installation times for faster start times.
+    /// in which start time is important, such as CLI applications and Docker containers, this
+    /// option can be enabled to trade longer installation times and some additional disk space for
+    /// faster start times.
     ///
-    /// When enabled, uv will process the Python version's `stdlib` directory. Like pip, it will
-    /// also ignore errors.
+    /// When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+    /// compilation errors.
     #[arg(
         long,
         alias = "compile",
