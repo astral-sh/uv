@@ -580,17 +580,17 @@ fn help_subsubcommand() {
               
               If multiple Python versions are requested, uv will exit with an error.
 
-    Installer options:
           --compile-bytecode
               Compile Python's standard library to bytecode after installation.
               
               By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
               instead, compilation is performed lazily the first time a module is imported. For
-              use-cases in which start time is critical, such as CLI applications and Docker containers,
-              this option can be enabled to trade longer installation times for faster start times.
+              use-cases in which start time is important, such as CLI applications and Docker
+              containers, this option can be enabled to trade longer installation times and some
+              additional disk space for faster start times.
               
-              When enabled, uv will process the Python version's `stdlib` directory. Like pip, it will
-              also ignore errors.
+              When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+              compilation errors.
               
               [env: UV_COMPILE_BYTECODE=]
 
@@ -847,10 +847,9 @@ fn help_flag_subsubcommand() {
               Upgrade existing Python installations to the latest patch version
           --default
               Use as the default Python version
-
-    Installer options:
-          --compile-bytecode  Compile Python's standard library to bytecode after installation [env:
-                              UV_COMPILE_BYTECODE=]
+          --compile-bytecode
+              Compile Python's standard library to bytecode after installation [env:
+              UV_COMPILE_BYTECODE=]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
