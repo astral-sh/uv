@@ -4153,6 +4153,10 @@ fn python_install_compile_bytecode_pyodide() {
     Bytecode compiled [COUNT] files in [TIME]
     ");
 
+    // TODO(tk) There's a bug with python_upgrade when pyodide is installed which leads to
+    // `error: No download found for request: pyodide-3.13-emscripten-wasm32-musl`
+    //// Recompilation where pyodide isn't explicitly specified shouldn't warn
+    //uv_snapshot!(context.filters(), context.python_upgrade().arg("--compile-bytecode"), @r"TODO");
 }
 
 #[test]
