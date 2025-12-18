@@ -6454,8 +6454,10 @@ name = "uv-preview"
 version = "0.0.8"
 dependencies = [
  "bitflags 2.9.4",
+ "insta",
  "schemars",
  "serde",
+ "serde_json",
  "thiserror 2.0.17",
  "uv-warnings",
 ]

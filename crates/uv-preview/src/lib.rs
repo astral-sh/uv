@@ -358,4 +358,20 @@ mod tests {
         let features = PreviewFeatures::PYTHON_UPGRADE | PreviewFeatures::JSON_OUTPUT;
         let _ = features.flag_as_str();
     }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let input = r#"["python-upgrade", "format"]"#;
+
+        let deserialized: Vec<PreviewFeatures> = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized.len(), 2);
+        assert_eq!(deserialized[0], PreviewFeatures::PYTHON_UPGRADE);
+        assert_eq!(deserialized[1], PreviewFeatures::FORMAT);
+
+        let serialized = serde_json::to_string(&deserialized).unwrap();
+        insta::assert_snapshot!(serialized, @r#"["python-upgrade","format"]"#);
+
+        let roundtrip: Vec<PreviewFeatures> = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(roundtrip, deserialized);
+    }
 }
