@@ -4149,8 +4149,7 @@ fn python_install_compile_bytecode_pyodide() {
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
      + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
-    warning: Standard library bytecode compilation is not supported for pyodide
-    Bytecode compiled [COUNT] files in [TIME]
+    No compatible versions to bytecode compile (skipped 1)
     ");
 
     // TODO(tk) There's a bug with python_upgrade when pyodide is installed which leads to

@@ -35,7 +35,7 @@ use uv_python::{
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, warn_user_once, write_error_chain};
+use uv_warnings::{warn_user, write_error_chain};
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -200,16 +200,16 @@ pub(crate) async fn install(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    let has_explicit_targets = !targets.is_empty();
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let compiler = async {
         let mut did_compile = false;
         let mut total_files = 0;
         let mut total_elapsed = std::time::Duration::default();
+        let mut total_skipped = 0;
         while let Some(installation) = receiver.recv().await {
             did_compile = true;
             if let Some((files, elapsed)) =
-                compile_stdlib_bytecode(&installation, concurrency, cache, has_explicit_targets)
+                compile_stdlib_bytecode(&installation, concurrency, cache)
                     .await
                     .with_context(|| {
                         format!(
@@ -220,9 +220,11 @@ pub(crate) async fn install(
             {
                 total_files += files;
                 total_elapsed += elapsed;
+            } else {
+                total_skipped += 1;
             }
         }
-        Ok::<_, anyhow::Error>(did_compile.then_some((total_files, total_elapsed)))
+        Ok::<_, anyhow::Error>(did_compile.then_some((total_files, total_elapsed, total_skipped)))
     };
 
     let installer = perform_install(
@@ -249,18 +251,36 @@ pub(crate) async fn install(
 
     let (installer_result, compiler_result) = join!(installer, compiler);
 
-    if let Some((total_files, total_elapsed)) = compiler_result? {
-        let s = if total_files == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Bytecode compiled {} {}",
-                format!("{total_files} file{s}").bold(),
-                format!("in {}", elapsed(total_elapsed)).dimmed(),
-            )
-            .dimmed()
-        )?;
+    if let Some((total_files, total_elapsed, total_skipped)) = compiler_result? {
+        if total_files > 0 {
+            let s = if total_files == 1 { "" } else { "s" };
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!(
+                    "Bytecode compiled {} {}{}",
+                    format!("{total_files} file{s}").bold(),
+                    format!("in {}", elapsed(total_elapsed)).dimmed(),
+                    if total_skipped > 0 {
+                        format!(
+                            " (skipped {total_skipped} incompatible version{})",
+                            if total_skipped == 1 { "" } else { "s" }
+                        )
+                    } else {
+                        String::new()
+                    }
+                    .dimmed()
+                )
+                .dimmed()
+            )?;
+        } else if total_skipped > 0 {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format!("No compatible versions to bytecode compile (skipped {total_skipped})")
+                    .dimmed()
+            )?;
+        }
     }
 
     installer_result
@@ -1182,20 +1202,12 @@ async fn compile_stdlib_bytecode(
     installation: &ManagedPythonInstallation,
     concurrency: &Concurrency,
     cache: &Cache,
-    explicit_request: bool,
 ) -> Result<Option<(usize, std::time::Duration)>> {
     let start = std::time::Instant::now();
 
     // Explicit matching so this heuristic is updated for future additions
     match installation.implementation() {
-        ImplementationName::Pyodide => {
-            if explicit_request {
-                warn_user_once!(
-                    "Standard library bytecode compilation is not supported for pyodide"
-                );
-            }
-            return Ok(None);
-        }
+        ImplementationName::Pyodide => return Ok(None),
         ImplementationName::GraalPy | ImplementationName::PyPy | ImplementationName::CPython => (),
     }
 
@@ -1214,12 +1226,6 @@ async fn compile_stdlib_bytecode(
                 interpreter.stdlib().display(),
                 interpreter_path.display()
             );
-            if explicit_request {
-                warn_user!(
-                    "Skipping standard library bytecode compilation for {} as it misreported its location.",
-                    installation.key(),
-                );
-            }
             return Ok(None);
         }
     };
