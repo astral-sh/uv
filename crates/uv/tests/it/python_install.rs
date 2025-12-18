@@ -340,6 +340,41 @@ fn python_install_automatic() {
     }
 }
 
+#[test]
+fn python_install_manual() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_sources()
+        .with_manual_python_downloads();
+
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("python").arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+
+    hint: A managed Python download is available, but Python downloads are set to 'manual', use `uv python install default` to install the required version
+    ");
+
+    // When a version range is specified, it should be quoted in the suggested install command.
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("-p").arg(">=3.11, <3.12")
+        .arg("python").arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >=3.11, <3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python >=3.11, <3.12, but Python downloads are set to 'manual', use `uv python install >=3.11, <3.12` to install the required version
+    ");
+}
+
 /// Regression test for a bad cpython runtime
 /// <https://github.com/astral-sh/uv/issues/13610>
 #[test]
