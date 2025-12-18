@@ -1322,12 +1322,12 @@ impl PackageChangeReport {
         let mut changes: Vec<_> = changelog
             .uninstalled
             .iter()
-            .map(|dist| Self::from_dist(dist, PackageChangeAction::Removed))
+            .map(|dist| Self::from_dist(dist, PackageChangeAction::Uninstalled))
             .chain(
                 changelog
                     .installed
                     .iter()
-                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Added)),
+                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Installed)),
             )
             .chain(
                 changelog
@@ -1359,8 +1359,8 @@ impl PackageChangeReport {
 #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 enum PackageChangeAction {
-    Removed,
-    Added,
+    Uninstalled,
+    Installed,
     Reinstalled,
 }
 

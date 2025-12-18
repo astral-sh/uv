@@ -425,7 +425,7 @@ fn sync_json() -> Result<()> {
           {
             "name": "iniconfig",
             "version": "2.0.0",
-            "action": "added"
+            "action": "installed"
           }
         ]
       },
@@ -644,7 +644,7 @@ fn sync_dry_json() -> Result<()> {
           {
             "name": "iniconfig",
             "version": "2.0.0",
-            "action": "added"
+            "action": "installed"
           }
         ]
       },
@@ -6878,17 +6878,17 @@ fn sync_active_script_environment_json() -> Result<()> {
           {
             "name": "anyio",
             "version": "4.3.0",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "idna",
             "version": "3.6",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "sniffio",
             "version": "1.3.1",
-            "action": "added"
+            "action": "installed"
           }
         ]
       },
@@ -6941,17 +6941,17 @@ fn sync_active_script_environment_json() -> Result<()> {
           {
             "name": "anyio",
             "version": "4.3.0",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "idna",
             "version": "3.6",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "sniffio",
             "version": "1.3.1",
-            "action": "added"
+            "action": "installed"
           }
         ]
       },
@@ -7017,17 +7017,17 @@ fn sync_active_script_environment_json() -> Result<()> {
           {
             "name": "anyio",
             "version": "4.3.0",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "idna",
             "version": "3.6",
-            "action": "added"
+            "action": "installed"
           },
           {
             "name": "sniffio",
             "version": "1.3.1",
-            "action": "added"
+            "action": "installed"
           }
         ]
       },
