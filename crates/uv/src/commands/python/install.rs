@@ -12,7 +12,7 @@ use itertools::{Either, Itertools};
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -1206,13 +1206,20 @@ async fn compile_stdlib_bytecode(
     // interpreter reports a weird stdlib path.
     let interpreter_path = installation.path().canonicalize()?;
     let stdlib_path = match interpreter.stdlib().canonicalize() {
-        Ok(path) if path.starts_with(interpreter_path) => path,
+        Ok(path) if path.starts_with(&interpreter_path) => path,
         _ => {
-            warn_user_once!(
-                "The stdlib path for {} ({}) was not a subdirectory of its installation path. Standard library bytecode will not be compiled.",
+            warn!(
+                "The stdlib path for {} ({}) is not a subdirectory of its installation path ({}).",
                 installation.key(),
-                interpreter.stdlib().display()
+                interpreter.stdlib().display(),
+                interpreter_path.display()
             );
+            if explicit_request {
+                warn_user!(
+                    "Skipping standard library bytecode compilation for {} as it misreported its location.",
+                    installation.key(),
+                );
+            }
             return Ok(None);
         }
     };
