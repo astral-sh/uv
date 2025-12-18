@@ -83,8 +83,8 @@ async fn simple_io_err() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `[SERVER]/tqdm/`
-      Caused by: Request failed after 3 retries
+    error: Request failed after 3 retries
+      Caused by: Failed to fetch: `[SERVER]/tqdm/`
       Caused by: error sending request for url ([SERVER]/tqdm/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
@@ -141,8 +141,8 @@ async fn find_links_io_error() {
 
     ----- stderr -----
     error: Failed to read `--find-links` URL: [SERVER]/
-      Caused by: Failed to fetch: `[SERVER]/`
       Caused by: Request failed after 3 retries
+      Caused by: Failed to fetch: `[SERVER]/`
       Caused by: error sending request for url ([SERVER]/)
       Caused by: client error (SendRequest)
       Caused by: connection closed before message completed
@@ -200,8 +200,8 @@ async fn direct_url_io_error() {
 
     ----- stderr -----
       × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ Request failed after 3 retries
+      ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
