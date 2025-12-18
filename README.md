@@ -272,7 +272,8 @@ See the [pip interface documentation](https://docs.astral.sh/uv/pip/index/) to g
 
 We are passionate about supporting contributors of all levels of experience and would love to see
 you get involved in the project. See the
-[contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
+[contributing guide](https://github.com/astral-sh/uv?tab=contributing-ov-file#contributing) to get
+started.
 
 ## FAQ
 
