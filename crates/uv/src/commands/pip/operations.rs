@@ -454,6 +454,13 @@ impl ChangedDist {
             },
         }
     }
+
+    pub(crate) fn version(&self) -> Option<&Version> {
+        match self {
+            Self::Local(dist) => Some(dist.installed_version().version()),
+            Self::Remote(dist) => dist.version(),
+        }
+    }
 }
 
 /// A summary of the changes made to the environment during an installation.
