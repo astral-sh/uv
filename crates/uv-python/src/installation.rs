@@ -6,6 +6,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use ref_cast::RefCast;
 use reqwest_retry::policies::ExponentialBackoff;
+use shell_escape;
 use tracing::{debug, info};
 use uv_warnings::warn_user;
 
@@ -191,7 +192,7 @@ impl PythonInstallation {
                 PythonDownloads::Manual => {
                     return Err(err.with_missing_python_hint(format!(
                         "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
-                        request.to_canonical_string(),
+                        shell_escape::escape(Cow::Owned(request.to_canonical_string())),
                     )));
                 }
                 PythonDownloads::Never => {

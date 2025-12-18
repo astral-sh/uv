@@ -55,6 +55,7 @@ rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
+shell-escape = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
