@@ -1389,7 +1389,7 @@ mod tests {
         let middleware_client = ClientWithMiddleware::default();
         let mut retried = Vec::new();
         for status in 100..599 {
-            // Test all standard status codes and and example for a non-RFC code used in the wild.
+            // Test all standard status codes and an example for a non-RFC code used in the wild.
             if StatusCode::from_u16(status)?.canonical_reason().is_none() && status != 420 {
                 continue;
             }

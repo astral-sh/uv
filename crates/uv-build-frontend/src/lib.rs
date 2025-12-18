@@ -676,7 +676,7 @@ impl SourceBuild {
 
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
-                // case,  but plans to make PEP 517 builds the default in the future.
+                // case, but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
                 Ok((DEFAULT_BACKEND.clone(), None))
             }

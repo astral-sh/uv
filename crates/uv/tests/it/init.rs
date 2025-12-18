@@ -2600,7 +2600,7 @@ fn init_existing_environment() -> Result<()> {
     Ok(())
 }
 
-/// Run `uv init`, it should ignore a the Python version from a parent `.venv`
+/// Run `uv init`, it should ignore the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.9", "3.12"]);
