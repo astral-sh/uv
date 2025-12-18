@@ -212,7 +212,7 @@ pub(crate) async fn sync(
         environment: EnvironmentReport::from(&environment),
         action: SyncAction::from(&environment),
         target: TargetName::from(&target),
-        changes: Vec::new(),
+        changes: PackageChangesReport::default(),
     };
 
     // Show the intermediate results if relevant
@@ -301,7 +301,7 @@ pub(crate) async fn sync(
                         project: None,
                         script: Some(ScriptReport::from(script)),
                         sync: SyncReport {
-                            changes: PackageChangeReport::from_changelog(&changelog),
+                            changes: PackageChangesReport::from_changelog(&changelog),
                             ..sync_report
                         },
                         lock: None,
@@ -435,7 +435,7 @@ pub(crate) async fn sync(
         project: target.project().map(ProjectReport::from),
         script: target.script().map(ScriptReport::from),
         sync: SyncReport {
-            changes: PackageChangeReport::from_changelog(&changelog),
+            changes: PackageChangesReport::from_changelog(&changelog),
             ..sync_report
         },
         lock: Some(lock_report),
@@ -1263,7 +1263,7 @@ struct SyncReport {
     action: SyncAction,
     /// The packages that changed during the sync.
     #[serde(default)]
-    changes: Vec<PackageChangeReport>,
+    changes: PackageChangesReport,
 
     // We store these fields so the report can format itself self-contained, but the outer
     // [`Report`] is intended to include these in user-facing output
@@ -1305,6 +1305,35 @@ impl SyncReport {
     }
 }
 
+/// A summary of all package changes performed during sync.
+#[derive(Serialize, Debug, Clone, Default)]
+struct PackageChangesReport(Vec<PackageChangeReport>);
+
+impl PackageChangesReport {
+    fn from_changelog(changelog: &Changelog) -> Self {
+        let mut changes: Vec<_> =
+            changelog
+                .uninstalled
+                .iter()
+                .map(|dist| PackageChangeReport::from_dist(dist, PackageChangeAction::Uninstalled))
+                .chain(changelog.installed.iter().map(|dist| {
+                    PackageChangeReport::from_dist(dist, PackageChangeAction::Installed)
+                }))
+                .chain(changelog.reinstalled.iter().map(|dist| {
+                    PackageChangeReport::from_dist(dist, PackageChangeAction::Reinstalled)
+                }))
+                .collect();
+
+        changes.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.action.cmp(&b.action))
+                .then_with(|| a.version.cmp(&b.version))
+        });
+        Self(changes)
+    }
+}
+
 /// A summary of a single package change performed during sync.
 #[derive(Serialize, Debug, Clone)]
 struct PackageChangeReport {
@@ -1318,34 +1347,6 @@ struct PackageChangeReport {
 }
 
 impl PackageChangeReport {
-    fn from_changelog(changelog: &Changelog) -> Vec<Self> {
-        let mut changes: Vec<_> = changelog
-            .uninstalled
-            .iter()
-            .map(|dist| Self::from_dist(dist, PackageChangeAction::Uninstalled))
-            .chain(
-                changelog
-                    .installed
-                    .iter()
-                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Installed)),
-            )
-            .chain(
-                changelog
-                    .reinstalled
-                    .iter()
-                    .map(|dist| Self::from_dist(dist, PackageChangeAction::Reinstalled)),
-            )
-            .collect();
-
-        changes.sort_by(|a, b| {
-            a.name
-                .cmp(&b.name)
-                .then_with(|| a.action.cmp(&b.action))
-                .then_with(|| a.version.cmp(&b.version))
-        });
-        changes
-    }
-
     fn from_dist(dist: &ChangedDist, action: PackageChangeAction) -> Self {
         Self {
             name: dist.name().clone(),
