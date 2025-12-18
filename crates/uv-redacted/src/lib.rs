@@ -265,6 +265,12 @@ impl From<DisplaySafeUrl> for Url {
     }
 }
 
+impl From<Url> for DisplaySafeUrl {
+    fn from(url: Url) -> Self {
+        Self(url)
+    }
+}
+
 impl FromStr for DisplaySafeUrl {
     type Err = DisplaySafeUrlError;
 
