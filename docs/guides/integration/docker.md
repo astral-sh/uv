@@ -326,7 +326,7 @@ See a complete example in the
 ### Compiling bytecode
 
 Compiling Python source files to bytecode is typically desirable for production images as it tends
-to improve startup time (at the cost of increased installation time).
+to improve startup time (at the cost of increased installation time and image size).
 
 To enable bytecode compilation, use the `--compile-bytecode` flag:
 
@@ -341,6 +341,13 @@ commands within the Dockerfile compile bytecode:
 ```dockerfile title="Dockerfile"
 ENV UV_COMPILE_BYTECODE=1
 ```
+
+!!! note
+
+     uv will only compile the standard library of _managed_ Python versions during
+    `uv python install`. The distributor of unmanaged Python versions decides if the
+    standard library is pre-compiled. For example, the official `python` image will not
+    have a compiled standard library.
 
 ### Caching
 
