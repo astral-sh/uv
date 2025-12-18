@@ -233,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -289,6 +289,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
+            --cargo-profile fast-build \
             --features python-patch,native-auth,secret-service \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
@@ -330,6 +331,7 @@ jobs:
           UV_HTTP_RETRIES: 5
         run: |
           cargo nextest run \
+            --cargo-profile fast-build \
             --no-default-features \
             --features python,python-managed,pypi,git,git-lfs,performance,crates-io,native-auth,apple-native \
             --workspace \
@@ -385,6 +387,7 @@ jobs:
         shell: bash
         run: |
           cargo nextest run \
+            --cargo-profile fast-build \
             --no-default-features \
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
@@ -561,15 +564,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build
+        run: cargo build --profile no-debug
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
-            ./target/debug/uv
-            ./target/debug/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-linux-aarch64:
@@ -588,15 +591,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build
+        run: cargo build --profile no-debug
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
-            ./target/debug/uv
-            ./target/debug/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-linux-musl:
@@ -620,15 +623,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
 
       - name: "Build"
-        run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
-            ./target/x86_64-unknown-linux-musl/debug/uv
-            ./target/x86_64-unknown-linux-musl/debug/uvx
+            ./target/x86_64-unknown-linux-musl/no-debug/uv
+            ./target/x86_64-unknown-linux-musl/no-debug/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
@@ -646,15 +649,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: "Build"
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
-            ./target/debug/uv
-            ./target/debug/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
@@ -672,15 +675,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
       - name: "Build"
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/debug/uv
-            ./target/debug/uvx
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
@@ -708,15 +711,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --profile no-debug --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
@@ -748,15 +751,15 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --target aarch64-pc-windows-msvc
+        run: cargo build --profile no-debug --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uvx.exe
           retention-days: 1
 
   build-binary-msrv:
@@ -781,10 +784,10 @@ jobs:
       - name: "Install mold"
         uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
-      - run: cargo +${MSRV} build
+      - run: cargo +${MSRV} build --profile no-debug
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - run: ./target/debug/uv --version
+      - run: ./target/no-debug/uv --version
 
   build-binary-freebsd:
     needs: determine_changes
@@ -805,7 +808,7 @@ jobs:
           chmod +x cross
           mv cross /usr/local/bin/cross
 
-          cross build --target x86_64-unknown-freebsd
+          cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
         uses: acj/freebsd-firecracker-action@a5a3fc1709c5b5368141a5699f10259aca3cd965 # v0.6.0
@@ -819,8 +822,8 @@ jobs:
             cat <<EOF > $include_path
             target
             target/x86_64-unknown-freebsd
-            target/x86_64-unknown-freebsd/debug
-            target/x86_64-unknown-freebsd/debug/uv
+            target/x86_64-unknown-freebsd/no-debug
+            target/x86_64-unknown-freebsd/no-debug/uv
             EOF
 
             rsync -r -e "ssh" \
@@ -830,7 +833,7 @@ jobs:
               --exclude "*" \
               . firecracker:
           run-in-vm: |
-            mv target/x86_64-unknown-freebsd/debug/uv uv
+            mv target/x86_64-unknown-freebsd/no-debug/uv uv
             chmod +x uv
             ./uv --version
 

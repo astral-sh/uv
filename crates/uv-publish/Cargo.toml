@@ -1,6 +1,6 @@
 [package]
 name = "uv-publish"
-version = "0.0.7"
+version = "0.0.8"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -46,8 +46,10 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 url = { workspace = true }
+wiremock = { workspace = true }
 
 [dev-dependencies]
+anstream = { workspace = true }
 insta = { workspace = true }
 fastrand = { workspace = true }
 

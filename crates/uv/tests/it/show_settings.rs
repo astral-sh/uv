@@ -3530,7 +3530,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         overrides: [],
         excludes: [],
         build_constraints: [],
-        lfs: None,
+        lfs: Disabled,
         python: None,
         python_platform: None,
         refresh: None(
@@ -3565,6 +3565,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             link_mode: Some(
                 Clone,
             ),
+            torch_backend: None,
             compile_bytecode: None,
             no_sources: None,
             upgrade: None,
@@ -3614,6 +3615,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: LowestDirect,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -4684,7 +4686,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -7911,6 +7913,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8025,6 +8028,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8139,6 +8143,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8253,6 +8258,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8367,6 +8373,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8483,6 +8490,7 @@ fn preview_features() {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8626,6 +8634,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8744,6 +8753,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8859,6 +8869,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -8987,6 +8998,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -9105,6 +9117,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -9220,6 +9233,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -9349,6 +9363,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -9479,6 +9494,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
                 prerelease: IfNecessaryOrExplicit,
                 resolution: Highest,
                 sources: Enabled,
+                torch_backend: None,
                 upgrade: None,
             },
             compile_bytecode: false,
@@ -10735,6 +10751,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: None,
         },
     }
@@ -10854,6 +10871,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: Packages(
                 {
                     PackageName(
@@ -10996,6 +11014,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: All,
         },
     }
@@ -11113,6 +11132,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: None,
         },
     }
@@ -11220,6 +11240,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: All,
         },
     }
@@ -11328,6 +11349,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             prerelease: IfNecessaryOrExplicit,
             resolution: Highest,
             sources: Enabled,
+            torch_backend: None,
             upgrade: Packages(
                 {
                     PackageName(

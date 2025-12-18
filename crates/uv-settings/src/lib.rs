@@ -337,6 +337,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                torch_backend,
             },
         install_mirrors:
             PythonInstallMirrors {
@@ -501,6 +502,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if no_binary_package.is_some() {
         masked_fields.push("no-binary-package");
     }
+    if torch_backend.is_some() {
+        masked_fields.push("torch-backend");
+    }
     if python_install_mirror.is_some() {
         masked_fields.push("python-install-mirror");
     }
@@ -594,6 +598,7 @@ pub struct EnvironmentOptions {
     pub python_install_registry: Option<bool>,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
+    pub lfs: Option<bool>,
     pub http_timeout: Duration,
     pub http_retries: u32,
     pub upload_http_timeout: Duration,
@@ -640,6 +645,7 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
+            lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
             upload_http_timeout: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
             )?

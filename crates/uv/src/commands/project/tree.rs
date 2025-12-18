@@ -212,6 +212,7 @@ pub(crate) async fn tree(
                 upgrade: _,
                 build_options: _,
                 sources: _,
+                torch_backend: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();
@@ -232,7 +233,7 @@ pub(crate) async fn tree(
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
                 exclude_newer: &lock.exclude_newer(),
-                requires_python: lock.requires_python(),
+                requires_python: Some(lock.requires_python()),
                 tags: None,
             };
 

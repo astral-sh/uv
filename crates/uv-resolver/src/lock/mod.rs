@@ -171,6 +171,15 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker
 });
 
+/// A distribution with its associated hash.
+///
+/// This pairs a [`Dist`] with the [`HashDigests`] for the specific wheel or
+/// sdist that would be installed.
+pub(crate) struct HashedDist {
+    pub(crate) dist: Dist,
+    pub(crate) hashes: HashDigests,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
@@ -1761,7 +1770,7 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist = package.to_dist(
+                let HashedDist { dist, .. } = package.to_dist(
                     root,
                     TagPolicy::Preferred(tags),
                     &BuildOptions::default(),
@@ -1912,7 +1921,7 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let dist = package.to_dist(
+                    let HashedDist { dist, .. } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
@@ -2579,20 +2588,26 @@ impl Package {
         Ok(())
     }
 
-    /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
+    /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
     fn to_dist(
         &self,
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
-    ) -> Result<Dist, LockError> {
+    ) -> Result<HashedDist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                return match &self.id.source {
+                let hashes = self.wheels[best_wheel_index]
+                    .hash
+                    .as_ref()
+                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
+                    .unwrap_or_else(|| HashDigests::from(vec![]));
+
+                let dist = match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
                             .wheels
@@ -2604,7 +2619,7 @@ impl Package {
                             best_wheel_index,
                             sdist: None,
                         };
-                        Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
+                        Dist::Built(BuiltDist::Registry(reg_built_dist))
                     }
                     Source::Path(path) => {
                         let filename: WheelFilename =
@@ -2616,7 +2631,7 @@ impl Package {
                             install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
@@ -2632,29 +2647,39 @@ impl Package {
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
-                    Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "Git",
+                    Source::Git(_, _) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "Git",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "directory",
+                    Source::Directory(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "directory",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "editable",
+                    Source::Editable(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "editable",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "virtual",
+                    Source::Virtual(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "virtual",
+                        }
+                        .into());
                     }
-                    .into()),
                 };
+
+                return Ok(HashedDist { dist, hashes });
             }
         }
 
@@ -2663,7 +2688,16 @@ impl Package {
             // any local source tree, or at least editable source trees, which we allow in
             // `uv pip`.)
             if !no_build || sdist.is_virtual() {
-                return Ok(Dist::Source(sdist));
+                let hashes = self
+                    .sdist
+                    .as_ref()
+                    .and_then(|s| s.hash())
+                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
+                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                return Ok(HashedDist {
+                    dist: Dist::Source(sdist),
+                    hashes,
+                });
             }
         }
 

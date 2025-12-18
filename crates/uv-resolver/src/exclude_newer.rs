@@ -635,66 +635,7 @@ impl schemars::JsonSchema for ExcludeNewerValue {
     fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
             "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to a timestamp at lock time.",
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str::FromStr;
-
-    #[test]
-    fn test_exclude_newer_timestamp_absolute() {
-        // Test RFC 3339 timestamp
-        let timestamp = ExcludeNewerValue::from_str("2023-01-01T00:00:00Z").unwrap();
-        assert!(timestamp.to_string().contains("2023-01-01"));
-
-        // Test local date
-        let timestamp = ExcludeNewerValue::from_str("2023-06-15").unwrap();
-        assert!(timestamp.to_string().contains("2023-06-16")); // Should be next day
-    }
-
-    #[test]
-    fn test_exclude_newer_timestamp_relative() {
-        // Test "1 hour" - simpler test case
-        let timestamp = ExcludeNewerValue::from_str("1 hour").unwrap();
-        let now = jiff::Timestamp::now();
-        let diff = now.as_second() - timestamp.timestamp.as_second();
-        // Should be approximately 1 hour (3600 seconds) ago
-        assert!(
-            (3550..=3650).contains(&diff),
-            "Expected ~3600 seconds, got {diff}"
-        );
-
-        // Test that we get a timestamp in the past
-        assert!(timestamp.timestamp < now, "Timestamp should be in the past");
-
-        // Test parsing succeeds for various formats
-        assert!(ExcludeNewerValue::from_str("2 days").is_ok());
-        assert!(ExcludeNewerValue::from_str("1 week").is_ok());
-        assert!(ExcludeNewerValue::from_str("30 days").is_ok());
-    }
-
-    #[test]
-    fn test_exclude_newer_timestamp_invalid() {
-        // Test invalid formats
-        assert!(ExcludeNewerValue::from_str("invalid").is_err());
-        assert!(ExcludeNewerValue::from_str("not a date").is_err());
-        assert!(ExcludeNewerValue::from_str("").is_err());
-    }
-
-    #[test]
-    fn test_exclude_newer_package_entry() {
-        let entry = ExcludeNewerPackageEntry::from_str("numpy=2023-01-01T00:00:00Z").unwrap();
-        assert_eq!(entry.package.as_ref(), "numpy");
-        assert!(entry.timestamp.to_string().contains("2023-01-01"));
-
-        // Test with relative timestamp
-        let entry = ExcludeNewerPackageEntry::from_str("requests=7 days").unwrap();
-        assert_eq!(entry.package.as_ref(), "requests");
-        // Just verify it parsed without error - the timestamp will be relative to now
     }
 }

@@ -6,6 +6,10 @@ use uv_static::EnvVars;
 use crate::common::{TestContext, uv_snapshot};
 
 /// Lock with a relative exclude-newer value.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -16,15 +20,18 @@ fn lock_exclude_newer_relative() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = ["idna"]
         "#,
     )?;
 
+    // 3 weeks before 2024-05-01 is 2024-04-10, which is before idna 3.7 (released 2024-04-11).
+    let current_timestamp = "2024-05-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks"), @r###"
+        .arg("3 weeks"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -34,22 +41,23 @@ fn lock_exclude_newer_relative() -> Result<()> {
     "###);
 
     let lock = context.read("uv.lock");
+    // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-11T00:00:00Z"
-    exclude-newer-span = "P2W"
+    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer-span = "P3W"
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -57,21 +65,21 @@ fn lock_exclude_newer_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     // Changing the current time should not result in a new lockfile
-    let current_timestamp = "2024-04-01T00:00:00Z";
+    let later_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks")
+        .arg("3 weeks")
         .arg("--locked"), @r"
     success: true
     exit_code: 0
@@ -81,23 +89,25 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Changing the span, however, should cause a new resolution
+    // Changing the span to 2 weeks should cause a new resolution.
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("1 week"), @r"
+        .arg("2 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P1W`
+    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
     ");
 
-    // Both `exclude-newer` values in the lockfile should be changed
+    // Both `exclude-newer` values in the lockfile should be changed, and we should now have idna 3.7
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -105,16 +115,16 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-25T00:00:00Z"
-    exclude-newer-span = "P1W"
+    exclude-newer = "2024-04-17T00:00:00Z"
+    exclude-newer-span = "P2W"
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.7"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
     ]
 
     [[package]]
@@ -122,21 +132,21 @@ fn lock_exclude_newer_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     // Similarly, using something like `--upgrade` should cause a new resolution
-    let current_timestamp = "2024-05-01T00:00:00Z";
+    let current_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("1 week")
+        .arg("2 weeks")
         .arg("--upgrade"), @r"
     success: true
     exit_code: 0
@@ -154,16 +164,16 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-04-24T00:00:00Z"
-    exclude-newer-span = "P1W"
+    exclude-newer = "2024-05-18T00:00:00Z"
+    exclude-newer-span = "P2W"
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.7"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
     ]
 
     [[package]]
@@ -171,21 +181,21 @@ fn lock_exclude_newer_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     // Similarly, using something like `--refresh` should cause a new resolution
-    let current_timestamp = "2024-06-01T00:00:00Z";
+    let current_timestamp = "2024-07-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("1 week")
+        .arg("2 weeks")
         .arg("--refresh"), @r"
     success: true
     exit_code: 0
@@ -199,6 +209,10 @@ fn lock_exclude_newer_relative() -> Result<()> {
 }
 
 /// Lock with a relative exclude-newer-package value.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -209,24 +223,28 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = ["idna"]
         "#,
     )?;
 
+    // 3 weeks before 2024-05-01 is 2024-04-10, which is before idna 3.7 (released 2024-04-11).
+    let current_timestamp = "2024-05-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("iniconfig=2 weeks"), @r###"
+        .arg("idna=3 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
+    // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
@@ -235,15 +253,15 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    iniconfig = { timestamp = "2024-03-11T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -251,21 +269,21 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     // Changing the current time should not result in a new lockfile
-    let current_timestamp = "2024-04-01T00:00:00Z";
+    let later_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
-        .arg("iniconfig=2 weeks")
+        .arg("idna=3 weeks")
         .arg("--locked"), @r"
     success: true
     exit_code: 0
@@ -275,23 +293,25 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Changing the span, however, should cause a new resolution
+    // Changing the span to 2 weeks should cause a new resolution.
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("iniconfig=1 week"), @r"
+        .arg("idna=2 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P1W` for package `iniconfig`
+    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
     ");
 
-    // Both `exclude-newer-package` values in the lockfile should be changed
+    // Both `exclude-newer-package` values in the lockfile should be changed, and we should now have idna 3.7
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -301,15 +321,15 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    iniconfig = { timestamp = "2024-03-25T00:00:00Z", span = "P1W" }
+    idna = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.7"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
     ]
 
     [[package]]
@@ -317,21 +337,21 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     // Similarly, using something like `--upgrade` should cause a new resolution
-    let current_timestamp = "2024-05-01T00:00:00Z";
+    let current_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("iniconfig=1 week")
+        .arg("idna=2 weeks")
         .arg("--upgrade"), @r"
     success: true
     exit_code: 0
@@ -351,15 +371,15 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    iniconfig = { timestamp = "2024-04-24T00:00:00Z", span = "P1W" }
+    idna = { timestamp = "2024-05-18T00:00:00Z", span = "P2W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.7"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
     ]
 
     [[package]]
@@ -367,17 +387,21 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     Ok(())
 }
 
 /// Lock with a relative exclude-newer value from the `pyproject.toml`.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -388,41 +412,45 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = ["idna"]
 
         [tool.uv]
-        exclude-newer = "2 weeks"
+        exclude-newer = "3 weeks"
         "#,
     )?;
 
+    // 3 weeks before 2024-05-01 is 2024-04-10, which is before idna 3.7 (released 2024-04-11).
+    let current_timestamp = "2024-05-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
+    // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-11T00:00:00Z"
-    exclude-newer-span = "P2W"
+    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer-span = "P3W"
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -430,17 +458,21 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     Ok(())
 }
 
 /// Lock with a relative exclude-newer-package value from the `pyproject.toml`.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -451,25 +483,29 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = ["idna"]
 
         [tool.uv]
-        exclude-newer-package = { iniconfig = "2 weeks" }
+        exclude-newer-package = { idna = "3 weeks" }
         "#,
     )?;
 
+    // 3 weeks before 2024-05-01 is 2024-04-10, which is before idna 3.7 (released 2024-04-11).
+    let current_timestamp = "2024-05-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
+    // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
@@ -478,15 +514,15 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     [options]
 
     [options.exclude-newer-package]
-    iniconfig = { timestamp = "2024-03-11T00:00:00Z", span = "P2W" }
+    idna = { timestamp = "2024-04-10T00:00:00Z", span = "P3W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -494,17 +530,25 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
     ]
 
     [package.metadata]
-    requires-dist = [{ name = "iniconfig" }]
+    requires-dist = [{ name = "idna" }]
     "#);
 
     Ok(())
 }
 
 /// Lock with both global and per-package relative exclude-newer values.
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+///
+/// And typing-extensions which has releases at:
+/// - 4.10.0: 2024-02-25
+/// - 4.11.0: 2024-04-05
 #[test]
 fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -515,46 +559,55 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig", "typing-extensions"]
+        dependencies = ["idna", "typing-extensions"]
         "#,
     )?;
+
+    // Use a fixed timestamp so the test is reproducible.
+    // Current time: 2024-05-01
+    // Global: 3 weeks back = 2024-04-10 (before idna 3.7 released 2024-04-11) → idna 3.6
+    // Per-package: 2 weeks back = 2024-04-17 (after typing-extensions 4.11.0 released 2024-04-05) → typing-extensions 4.11.0
+    let current_timestamp = "2024-05-01T00:00:00Z";
 
     // Lock with both global exclude-newer and package-specific override using relative durations
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks")
+        .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=1 week"), @r###"
+        .arg("typing-extensions=2 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
+    // idna 3.6 (global cutoff 2024-04-10 is before 3.7 release on 2024-04-11)
+    // typing-extensions 4.11.0 (per-package cutoff 2024-04-17 is after 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-11T00:00:00Z"
-    exclude-newer-span = "P2W"
+    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-03-18T00:00:00Z", span = "P1W" }
+    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -562,36 +615,36 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 
     [package.metadata]
     requires-dist = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 
     [[package]]
     name = "typing-extensions"
-    version = "4.10.0"
+    version = "4.11.0"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/f6/f3/b827b3ab53b4e3d8513914586dcca61c355fa2ce8252dea4da56e67bf8f2/typing_extensions-4.11.0.tar.gz", hash = "sha256:83f085bd5ca59c80295fc2a82ab5dac679cbe02b9f33f7d83af68e241bea51b0", size = 78744, upload-time = "2024-04-05T12:35:47.093Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        { url = "https://files.pythonhosted.org/packages/01/f3/936e209267d6ef7510322191003885de524fc48d1b43269810cd589ceaf5/typing_extensions-4.11.0-py3-none-any.whl", hash = "sha256:c1f94d72897edaf4ce775bb7558d5b79d8126906a14ea5ed1635921406c0387a", size = 34698, upload-time = "2024-04-05T12:35:44.388Z" },
     ]
     "#);
 
     // Changing the current time should not invalidate the lockfile
-    let current_timestamp = "2024-04-01T00:00:00Z";
+    let later_timestamp = "2024-07-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks")
+        .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=1 week")
+        .arg("typing-extensions=2 weeks")
         .arg("--locked"), @r"
     success: true
     exit_code: 0
@@ -601,22 +654,24 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    // Changing the global span should invalidate the lockfile
+    // Changing the global span to 2 weeks should cause a new resolution.
+    // 2 weeks before 2024-05-01 is 2024-04-17 (after idna 3.7 released 2024-04-11) → idna 3.7
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("1 week")
+        .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=1 week"), @r"
+        .arg("typing-extensions=2 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P1W`
+    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
+    Updated idna v3.6 -> v3.7
     ");
 
     // Changing the package-specific span should also invalidate the lockfile
@@ -625,7 +680,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("1 week")
+        .arg("2 weeks")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=3 days"), @r"
     success: true
@@ -633,7 +688,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1W` to `P3D` for package `typing-extensions`
+    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
     Resolved 3 packages in [TIME]
     ");
 
@@ -641,10 +696,11 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2024-03-01T00:00:00Z")
+        .arg("2024-05-20T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=1 week"), @r"
+        .arg("typing-extensions=2 weeks"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -655,24 +711,26 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
+    // idna 3.7 (absolute cutoff 2024-05-20 is after 3.7 release on 2024-04-11)
+    // typing-extensions 4.11.0 (relative cutoff 2024-04-17)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-01T00:00:00Z"
+    exclude-newer = "2024-05-20T00:00:00Z"
 
     [options.exclude-newer-package]
-    typing-extensions = { timestamp = "2024-03-18T00:00:00Z", span = "P1W" }
+    typing-extensions = { timestamp = "2024-04-17T00:00:00Z", span = "P2W" }
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.7"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
     ]
 
     [[package]]
@@ -680,23 +738,23 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 
     [package.metadata]
     requires-dist = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 
     [[package]]
     name = "typing-extensions"
-    version = "4.10.0"
+    version = "4.11.0"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/f6/f3/b827b3ab53b4e3d8513914586dcca61c355fa2ce8252dea4da56e67bf8f2/typing_extensions-4.11.0.tar.gz", hash = "sha256:83f085bd5ca59c80295fc2a82ab5dac679cbe02b9f33f7d83af68e241bea51b0", size = 78744, upload-time = "2024-04-05T12:35:47.093Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        { url = "https://files.pythonhosted.org/packages/01/f3/936e209267d6ef7510322191003885de524fc48d1b43269810cd589ceaf5/typing_extensions-4.11.0-py3-none-any.whl", hash = "sha256:c1f94d72897edaf4ce775bb7558d5b79d8126906a14ea5ed1635921406c0387a", size = 34698, upload-time = "2024-04-05T12:35:44.388Z" },
     ]
     "#);
 
@@ -704,39 +762,44 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks")
+        .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2024-03-01T00:00:00Z"), @r"
+        .arg("typing-extensions=2024-04-01T00:00:00Z"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer span `P2W`
+    Ignoring existing lockfile due to addition of exclude newer span `P3W`
     Resolved 3 packages in [TIME]
+    Updated idna v3.7 -> v3.6
+    Updated typing-extensions v4.11.0 -> v4.10.0
     ");
 
     let lock = context.read("uv.lock");
+    // idna 3.6 (relative cutoff 2024-04-10 is before 3.7 release on 2024-04-11)
+    // typing-extensions 4.10.0 (absolute cutoff 2024-04-01 is before 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
 
     [options]
-    exclude-newer = "2024-03-11T00:00:00Z"
-    exclude-newer-span = "P2W"
+    exclude-newer = "2024-04-10T00:00:00Z"
+    exclude-newer-span = "P3W"
 
     [options.exclude-newer-package]
-    typing-extensions = "2024-03-01T00:00:00Z"
+    typing-extensions = "2024-04-01T00:00:00Z"
 
     [[package]]
-    name = "iniconfig"
-    version = "2.0.0"
+    name = "idna"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -744,13 +807,13 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     version = "0.1.0"
     source = { virtual = "." }
     dependencies = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 
     [package.metadata]
     requires-dist = [
-        { name = "iniconfig" },
+        { name = "idna" },
         { name = "typing-extensions" },
     ]
 

@@ -159,9 +159,9 @@ pub enum InstalledVersion<'a> {
     Url(&'a DisplaySafeUrl, &'a Version),
 }
 
-impl InstalledVersion<'_> {
+impl<'a> InstalledVersion<'a> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&DisplaySafeUrl> {
+    pub fn url(&self) -> Option<&'a DisplaySafeUrl> {
         match self {
             Self::Version(_) => None,
             Self::Url(url, _) => Some(url),
@@ -169,7 +169,7 @@ impl InstalledVersion<'_> {
     }
 
     /// If it is a version, return its value.
-    pub fn version(&self) -> &Version {
+    pub fn version(&self) -> &'a Version {
         match self {
             Self::Version(version) => version,
             Self::Url(_, version) => version,

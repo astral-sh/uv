@@ -22,6 +22,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use uv_build_backend::BuildBackendSettings;
+use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -1613,13 +1614,16 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
-        lfs: Option<bool>,
+        lfs: GitLfsSetting,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some() || tag.is_some() || rev.is_some() || lfs.is_some())
+            && (branch.is_some()
+                || tag.is_some()
+                || rev.is_some()
+                || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
@@ -1639,7 +1643,7 @@ impl Source {
                                 rev,
                                 tag,
                                 branch,
-                                lfs,
+                                lfs: lfs.into(),
                                 marker: *marker,
                                 extra: extra.clone(),
                                 group: group.clone(),
@@ -1657,7 +1661,7 @@ impl Source {
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
             }
-            if let Some(true) = lfs {
+            if matches!(lfs, GitLfsSetting::Enabled { from_env: false }) {
                 return Err(SourceError::UnusedLfs(name.to_string()));
             }
         }
@@ -1768,7 +1772,7 @@ impl Source {
                         rev: rev.cloned(),
                         tag,
                         branch,
-                        lfs,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1780,7 +1784,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
-                        lfs,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,

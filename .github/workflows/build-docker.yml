@@ -184,13 +184,13 @@ jobs:
           - buildpack-deps:trixie,trixie,debian
           - debian:bookworm-slim,bookworm-slim
           - buildpack-deps:bookworm,bookworm
-          - python:3.14-alpine,python3.14-alpine
-          - python:3.13-alpine,python3.13-alpine
-          - python:3.12-alpine,python3.12-alpine
-          - python:3.11-alpine,python3.11-alpine
-          - python:3.10-alpine,python3.10-alpine
-          - python:3.9-alpine,python3.9-alpine
-          - python:3.8-alpine,python3.8-alpine
+          - python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine
+          - python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine
+          - python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine
+          - python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine
+          - python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine
+          - python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine
+          - python:3.8-alpine3.20,python3.8-alpine3.20,python3.8-alpine
           - python:3.14-trixie,python3.14-trixie
           - python:3.13-trixie,python3.13-trixie
           - python:3.12-trixie,python3.12-trixie

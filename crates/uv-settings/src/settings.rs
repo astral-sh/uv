@@ -380,6 +380,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
@@ -414,6 +415,7 @@ pub struct ResolverInstallerOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
     pub upgrade: Option<Upgrade>,
@@ -447,6 +449,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
             upgrade,
@@ -481,6 +484,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
             upgrade: Upgrade::from_args(
@@ -813,11 +817,14 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    /// Limit candidate packages to those that were uploaded prior to a given point in time.
+    /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
-    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
-    /// behave consistently across timezones.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g.,
+    /// `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "str",
@@ -826,9 +833,16 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub exclude_newer: Option<ExcludeNewerValue>,
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
     ///
-    /// Accepts package-date pairs in a dictionary format.
+    /// Accepts a dictionary format of `PACKAGE = "DATE"` pairs, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g., `24 hours`, `1 week`,
+    /// `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "dict",
@@ -967,6 +981,28 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+    /// The backend to use when fetching packages in the PyTorch ecosystem.
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This setting is only respected by `uv pip` commands.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            torch-backend = "auto"
+        "#
+    )]
+    pub torch_backend: Option<TorchMode>,
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
@@ -1801,6 +1837,8 @@ pub struct PipOptions {
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
     /// installed CUDA drivers.
     ///
+    /// This setting is only respected by `uv pip` commands.
+    ///
     /// This option is in preview and may change in any future release.
     #[option(
         default = "null",
@@ -1898,6 +1936,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -1977,6 +2016,7 @@ pub struct ToolOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub torch_backend: Option<TorchMode>,
 }
 
 impl From<ResolverInstallerOptions> for ToolOptions {
@@ -2007,6 +2047,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2041,6 +2082,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2098,6 +2140,7 @@ pub struct OptionsWire {
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
+    torch_backend: Option<TorchMode>,
 
     // #[serde(flatten)]
     // install_mirror: PythonInstallMirrors,
@@ -2122,7 +2165,7 @@ pub struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+    exclude_dependencies: Option<Vec<PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
@@ -2191,6 +2234,7 @@ impl From<OptionsWire> for Options {
             no_build_package,
             no_binary,
             no_binary_package,
+            torch_backend,
             pip,
             cache_keys,
             override_dependencies,
@@ -2265,6 +2309,7 @@ impl From<OptionsWire> for Options {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                torch_backend,
             },
             pip,
             cache_keys,

@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use std::{fmt::Display, fmt::Write, process::ExitCode};
+use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
 use anyhow::Context;
@@ -62,10 +62,8 @@ pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_distribution_types::InstalledMetadata;
 use uv_fs::{CWD, Simplified};
 use uv_installer::compile_tree;
-use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -73,6 +71,7 @@ pub(crate) use workspace::dir::dir;
 pub(crate) use workspace::list::list;
 pub(crate) use workspace::metadata::metadata;
 
+use crate::commands::pip::operations::ChangedDist;
 use crate::printer::Printer;
 
 mod auth;
@@ -148,15 +147,8 @@ pub(super) enum ChangeEventKind {
 }
 
 #[derive(Debug)]
-pub(super) struct ChangeEvent<'a, T: InstalledMetadata> {
-    dist: &'a T,
-    kind: ChangeEventKind,
-}
-
-#[derive(Debug)]
-pub(super) struct DryRunEvent<T: Display> {
-    name: PackageName,
-    version: T,
+pub(super) struct ChangeEvent<'a> {
+    dist: &'a ChangedDist,
     kind: ChangeEventKind,
 }
 

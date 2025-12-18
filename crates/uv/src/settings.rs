@@ -26,10 +26,10 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend, Reinstall,
-    RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
-    VersionControlSystem,
+    ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
+    InstallOptions, KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend,
+    Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
+    Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -353,7 +353,7 @@ impl InitSettings {
             no_description,
             vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme: no_readme || bare,
+            no_readme,
             author_from,
             pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,
@@ -563,7 +563,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -602,6 +602,7 @@ impl ToolRunSettings {
             lfs,
             python,
             python_platform,
+            torch_backend,
             generate_shell_completion: _,
         } = args;
 
@@ -631,22 +632,25 @@ impl ToolRunSettings {
             }
         }
 
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
+
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
-        let lfs = lfs.then_some(true);
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             command,
@@ -705,7 +709,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
@@ -743,24 +747,28 @@ impl ToolInstallSettings {
             refresh,
             python,
             python_platform,
+            torch_backend,
         } = args;
+
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
-        let lfs = lfs.then_some(true);
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             package,
@@ -1586,7 +1594,7 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
-    pub(crate) lfs: Option<bool>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1729,7 +1737,7 @@ impl AddSettings {
             .unwrap_or_default();
 
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
-        let lfs = lfs.then_some(true);
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             lock_check: if locked {
@@ -3215,6 +3223,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
+    pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) upgrade: Upgrade,
 }
 
@@ -3269,6 +3278,7 @@ impl From<ResolverOptions> for ResolverSettings {
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
+            torch_backend: value.torch_backend,
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
             upgrade: value.upgrade.unwrap_or_default(),
             build_options: BuildOptions::new(
@@ -3360,6 +3370,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+                torch_backend: value.torch_backend,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
@@ -3536,6 +3547,7 @@ impl PipSettings {
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
+            torch_backend: top_level_torch_backend,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -3578,6 +3590,7 @@ impl PipSettings {
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
+        let torch_backend = torch_backend.combine(top_level_torch_backend);
 
         Self {
             index_locations: IndexLocations::new(
