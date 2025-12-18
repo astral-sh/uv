@@ -884,9 +884,13 @@
       "properties": {
         "requires-python": {
           "description": "Version of python to require when installing this group",
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RequiresPythonSpecifiers"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -1857,6 +1861,10 @@
     },
     "Requirement": {
       "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
+      "type": "string"
+    },
+    "RequiresPythonSpecifiers": {
+      "description": "PEP 440 version specifiers for `requires-python`, e.g. `>=3.9` or `>=3.9,<3.14`. Free-threaded selectors (e.g., `3.14t`) are not supported.",
       "type": "string"
     },
     "ResolutionMode": {
