@@ -371,7 +371,7 @@ fn python_install_manual() {
     ----- stderr -----
     error: No interpreter found for Python >=3.11, <3.12 in [PYTHON SOURCES]
 
-    hint: A managed Python download is available for Python >=3.11, <3.12, but Python downloads are set to 'manual', use `uv python install '>=3.11, <3.12'` to install the required version
+    hint: A managed Python download is available for Python >=3.11, <3.12, but Python downloads are set to 'manual', use `uv python install >=3.11, <3.12` to install the required version
     ");
 }
 

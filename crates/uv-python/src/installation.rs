@@ -191,7 +191,7 @@ impl PythonInstallation {
                 PythonDownloads::Manual => {
                     return Err(err.with_missing_python_hint(format!(
                         "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
-                        shell_escape::escape(Cow::Owned(request.to_canonical_string())),
+                        request.to_canonical_string(),
                     )));
                 }
                 PythonDownloads::Never => {
