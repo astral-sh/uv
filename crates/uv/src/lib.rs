@@ -2428,6 +2428,61 @@ async fn run_project(
     }
 }
 
+/// Pre-parse color arguments from CLI args before clap parsing.
+///
+/// This is necessary because clap exits immediately on `--help`/`--version` before
+/// we get a chance to set the global color choice. By scanning for color-related
+/// arguments first, we can set `anstream::ColorChoice` before clap runs.
+fn preparse_color_from_args<I, T>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    let args: Vec<OsString> = args.into_iter().map(Into::into).collect();
+
+    let mut color_choice = None;
+
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        let arg_str = arg.to_string_lossy();
+
+        // Handle --color=VALUE
+        if let Some(value) = arg_str.strip_prefix("--color=") {
+            color_choice = Some(match value {
+                "always" => anstream::ColorChoice::Always,
+                "never" => anstream::ColorChoice::Never,
+                _ => anstream::ColorChoice::Auto,
+            });
+        }
+        // Handle --color VALUE
+        else if arg_str == "--color" {
+            if let Some(next) = iter.peek() {
+                let next_str = next.to_string_lossy();
+                // Only consume if it looks like a color value, not another flag
+                if !next_str.starts_with('-') {
+                    color_choice = Some(match next_str.as_ref() {
+                        "always" => anstream::ColorChoice::Always,
+                        "never" => anstream::ColorChoice::Never,
+                        _ => anstream::ColorChoice::Auto,
+                    });
+                    iter.next(); // consume the value
+                }
+            }
+        }
+        // Handle --no-color
+        else if arg_str == "--no-color" {
+            color_choice = Some(anstream::ColorChoice::Never);
+        }
+    }
+
+    // Set the global color choice if we found a color argument
+    if let Some(choice) = color_choice {
+        anstream::ColorChoice::write_global(choice);
+    }
+
+    args
+}
+
 /// The main entry point for a uv invocation.
 ///
 /// # Usage
@@ -2462,9 +2517,13 @@ where
         }
     }
 
+    // Pre-parse color arguments so --color=always works with --help
+    // (clap exits on --help before we normally set the global color choice)
+    let args = preparse_color_from_args(args);
+
     // `std::env::args` is not `Send` so we parse before passing to our runtime
     // https://github.com/rust-lang/rust/pull/48005
-    let cli = match Cli::try_parse_from(args) {
+    let cli = match Cli::try_parse_from(&args) {
         Ok(cli) => cli,
         Err(mut err) => {
             if let Some(ContextValue::String(subcommand)) = err.get(ContextKind::InvalidSubcommand)
