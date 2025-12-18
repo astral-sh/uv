@@ -2447,8 +2447,8 @@ fn python_install_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.15.0a2 in [TIME]
-     + cpython-3.15.0a2-[PLATFORM] (python3.15)
+    Installed Python 3.15.0a3 in [TIME]
+     + cpython-3.15.0a3-[PLATFORM] (python3.15)
     ");
 
     // Install a specific pre-release
@@ -2458,7 +2458,8 @@ fn python_install_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Python 3.15a2 is already installed
+    Installed Python 3.15.0a2 in [TIME]
+     + cpython-3.15.0a2-[PLATFORM]
     ");
 }
 
@@ -2482,7 +2483,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2492,7 +2493,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2501,7 +2502,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
