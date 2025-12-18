@@ -150,8 +150,7 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "prettier", "--write", "--prose-wrap", "always"]
-        + [str(path) for path in generated_paths],
+        ["npx", "prettier", "--write"] + [str(path) for path in generated_paths],
         check=True,
     )
 

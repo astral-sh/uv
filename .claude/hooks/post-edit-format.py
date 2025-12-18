@@ -35,14 +35,12 @@ def format_python(file_path: str, cwd: str) -> None:
         pass
 
 
-def format_prettier(file_path: str, cwd: str, prose_wrap: bool = False) -> None:
+def format_prettier(file_path: str, cwd: str) -> None:
     """Format files with prettier."""
-    args = ["npx", "prettier", "--write"]
-    if prose_wrap:
-        args.extend(["--prose-wrap", "always"])
-    args.append(file_path)
     try:
-        subprocess.run(args, cwd=cwd, capture_output=True)
+        subprocess.run(
+            ["npx", "prettier", "--write", file_path], cwd=cwd, capture_output=True
+        )
     except FileNotFoundError:
         pass
 
@@ -71,10 +69,8 @@ def main() -> None:
         format_rust(file_path, cwd)
     elif ext in (".py", ".pyi"):
         format_python(file_path, cwd)
-    elif ext in (".json5", ".yaml", ".yml"):
+    elif ext in (".json5", ".yaml", ".yml", ".md"):
         format_prettier(file_path, cwd)
-    elif ext == ".md":
-        format_prettier(file_path, cwd, prose_wrap=True)
 
 
 if __name__ == "__main__":
