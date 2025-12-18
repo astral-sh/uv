@@ -1003,6 +1003,8 @@ pub(crate) struct PythonListSettings {
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
     pub(crate) python_downloads_json_url: Option<String>,
+    pub(crate) python_install_mirror: Option<String>,
+    pub(crate) pypy_install_mirror: Option<String>,
 }
 
 impl PythonListSettings {
@@ -1026,14 +1028,37 @@ impl PythonListSettings {
         } = args;
 
         let options = filesystem.map(FilesystemOptions::into_options);
-        let python_downloads_json_url_option = match options {
-            Some(options) => options.install_mirrors.python_downloads_json_url,
-            None => None,
+        let (
+            python_downloads_json_url_option,
+            python_install_mirror_option,
+            pypy_install_mirror_option,
+        ) = match &options {
+            Some(options) => (
+                options.install_mirrors.python_downloads_json_url.clone(),
+                options.install_mirrors.python_install_mirror.clone(),
+                options.install_mirrors.pypy_install_mirror.clone(),
+            ),
+            None => (None, None, None),
         };
 
         let python_downloads_json_url = python_downloads_json_url_arg
-            .or(environment.install_mirrors.python_downloads_json_url)
+            .or(environment
+                .install_mirrors
+                .python_downloads_json_url
+                .clone())
             .or(python_downloads_json_url_option);
+
+        let python_install_mirror = environment
+            .install_mirrors
+            .python_install_mirror
+            .clone()
+            .or(python_install_mirror_option);
+
+        let pypy_install_mirror = environment
+            .install_mirrors
+            .pypy_install_mirror
+            .clone()
+            .or(pypy_install_mirror_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -1052,6 +1077,8 @@ impl PythonListSettings {
             show_urls,
             output_format,
             python_downloads_json_url,
+            python_install_mirror,
+            pypy_install_mirror,
         }
     }
 }
