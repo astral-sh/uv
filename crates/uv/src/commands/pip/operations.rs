@@ -34,7 +34,6 @@ use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
-use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
     RequirementsSpecification, SourceTree, SourceTreeResolver,
@@ -460,13 +459,6 @@ impl ChangedDist {
         match self {
             Self::Local(dist) => Some(dist.installed_version().version()),
             Self::Remote(dist) => dist.version(),
-        }
-    }
-
-    pub(crate) fn url(&self) -> Option<&DisplaySafeUrl> {
-        match self {
-            Self::Local(dist) => dist.installed_version().url(),
-            Self::Remote(dist) => dist.version_or_url().url().map(|url| &**url),
         }
     }
 }
