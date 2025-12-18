@@ -599,4 +599,20 @@ mod tests {
     fn test_global_preview_panic_uninitialized() {
         let _preview = get();
     }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let input = r#"["python-upgrade", "format"]"#;
+
+        let deserialized: Vec<PreviewFeature> = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized.len(), 2);
+        assert_eq!(deserialized[0], PreviewFeature::PythonUpgrade);
+        assert_eq!(deserialized[1], PreviewFeature::Format);
+
+        let serialized = serde_json::to_string(&deserialized).unwrap();
+        insta::assert_snapshot!(serialized, @r#"["python-upgrade","format"]"#);
+
+        let roundtrip: Vec<PreviewFeature> = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(roundtrip, deserialized);
+    }
 }

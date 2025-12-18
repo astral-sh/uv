@@ -28,6 +28,8 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+insta = { workspace = true }
+serde_json = { workspace = true }
 uv-preview = { path = ".", features = ["testing"] }
 
 [features]
