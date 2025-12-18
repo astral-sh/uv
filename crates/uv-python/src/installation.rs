@@ -6,7 +6,6 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use ref_cast::RefCast;
 use reqwest_retry::policies::ExponentialBackoff;
-use shell_escape;
 use tracing::{debug, info};
 use uv_warnings::warn_user;
 
