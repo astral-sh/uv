@@ -460,7 +460,7 @@ dependencies = [
 
 [tool.uv.sources]
 path-dep = { path = "./path-dep" }
-editable-path-dep = { path = "../editable-path-dep", editable = true }
+editable-path-dep = { path = "./editable-path-dep", editable = true }
 git-dep = { git = "https://github.com/astral-sh/git-dep" }
 ```
 
