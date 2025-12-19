@@ -11258,6 +11258,62 @@ fn lock_upgrade_package() -> Result<()> {
     Ok(())
 }
 
+/// Use `--no-upgrade` with `--upgrade-package` to upgrade only the specified package.
+#[test]
+fn lock_no_upgrade_with_upgrade_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio<=2", "idna<=3"]
+        "#,
+    )?;
+
+    // Lock the initial versions.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    // Remove the constraints.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio", "idna"]
+        "#,
+    )?;
+
+    // `--no-upgrade` with `--upgrade-package` should still upgrade the specified package.
+    uv_snapshot!(context.filters(), context.lock().arg("--no-upgrade").arg("--upgrade-package").arg("anyio"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    "###);
+
+    // Verify `idna` was NOT upgraded (still at 3.0).
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("version = \"3.0\""));
+    assert!(lock.contains("name = \"idna\""));
+
+    Ok(())
+}
+
 /// Check that we discard the fork marker from the lockfile when using `--upgrade`.
 #[test]
 fn lock_upgrade_drop_fork_markers() -> Result<()> {
