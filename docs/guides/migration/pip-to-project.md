@@ -439,7 +439,7 @@ $ uv add -r requirements-docs.in -c requirements-docs.txt --group docs
 
 #### Importing dependency sources
 
-When importing requirements on local paths or Git repositories, e.g., as in the following file:
+When importing requirements on local paths or Git repositories, for example:
 
 ```python title="requirements.in"
 ./path-dep
