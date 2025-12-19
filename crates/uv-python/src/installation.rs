@@ -196,8 +196,7 @@ impl PythonInstallation {
                         .map(|install| format!(" {install}"))
                         .unwrap_or_default();
                     return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install{}` to install the required version",
-                        install_request,
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install{install_request}` to install the required version",
                     )));
                 }
                 PythonDownloads::Never => {
