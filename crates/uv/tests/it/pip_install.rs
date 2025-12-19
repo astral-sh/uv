@@ -3561,6 +3561,39 @@ fn install_constraints_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
+#[test]
+fn install_constraints_txt_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraint")
+            .arg("-")
+            .stdin(std::fs::File::open(constraints_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn install_constraints_from_pyproject() -> Result<()> {
@@ -7303,6 +7336,62 @@ fn require_hashes_override() -> Result<()> {
     Ok(())
 }
 
+/// Install with overrides from stdin.
+#[test]
+fn install_with_overrides_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--override")
+        .arg("-")
+        .stdin(std::fs::File::open(overrides_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install with excludes from stdin.
+#[test]
+fn install_with_excludes_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt.write_str("anyio>4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--exclude")
+        .arg("-")
+        .stdin(std::fs::File::open(excludes_txt)?), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Provide valid hashes for all dependencies with `--require-hashes` with accompanying markers.
 /// Critically, one package (`requests`) depends on another (`urllib3`).
 #[test]
@@ -8587,6 +8676,34 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with an incompatible constraint from stdin.
+#[test]
+fn incompatible_build_constraint_from_stdin() -> Result<()> {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("-")
+        .stdin(std::fs::File::open(constraints_txt)?), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
