@@ -7,6 +7,7 @@ pub use crate::locked_file::*;
 pub use crate::path::*;
 
 pub mod cachedir;
+pub mod link;
 mod locked_file;
 mod path;
 pub mod which;
