@@ -8,8 +8,8 @@ function cleanupClipboardText(targetSelector) {
     .filter(
       (node) =>
         !excludedClasses.some((className) =>
-          node?.classList?.contains(className)
-        )
+          node?.classList?.contains(className),
+        ),
     )
     .map((node) => node.textContent)
     .filter((s) => s != "");
@@ -23,7 +23,7 @@ function setCopyText() {
   const attr = "clipboardText";
   // all "copy" buttons whose target selector is a <code> element
   const elements = document.querySelectorAll(
-    'button[data-clipboard-target$="code"]'
+    'button[data-clipboard-target$="code"]',
   );
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
@@ -33,7 +33,7 @@ function setCopyText() {
         entry.target.dataset[attr] === undefined
       ) {
         entry.target.dataset[attr] = cleanupClipboardText(
-          entry.target.dataset.clipboardTarget
+          entry.target.dataset.clipboardTarget,
         );
       }
     });
