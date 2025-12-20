@@ -835,7 +835,7 @@ def render(downloads: list[PythonDownload]) -> None:
 
     VERSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Make newlines consistent across platforms
-    VERSIONS_FILE.write_text(json.dumps(results, indent=2), newline="\n")
+    VERSIONS_FILE.write_text(json.dumps(results, indent=2) + "\n", newline="\n")
 
 
 async def find() -> None:
