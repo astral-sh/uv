@@ -122,9 +122,9 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Url(&'a T),
 }
 
-impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
+impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&T> {
+    pub fn url(&self) -> Option<&'a T> {
         match self {
             Self::Version(_) => None,
             Self::Url(url) => Some(url),

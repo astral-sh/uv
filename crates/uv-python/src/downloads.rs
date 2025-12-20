@@ -1434,7 +1434,7 @@ impl ManagedPythonDownload {
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
     /// appropriate environment variable, use it instead.
-    fn download_url(
+    pub fn download_url(
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
