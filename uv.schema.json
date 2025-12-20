@@ -386,17 +386,11 @@
     },
     "preview": {
       "description": "Whether to enable all experimental, preview features.",
-      "type": [
-        "boolean",
-        "null"
-      ]
+      "type": ["boolean", "null"]
     },
     "preview-features": {
       "description": "Whether to enable specific experimental, preview features.",
-      "type": [
-        "array",
-        "null"
-      ],
+      "type": ["array", "null"],
       "items": {
         "$ref": "#/definitions/PreviewFeatures"
       }

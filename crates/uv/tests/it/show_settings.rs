@@ -9010,8 +9010,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
     "#
     );
 
-    // CLI `--preview-features` merges into `uv.tool.preview = true`, resulting in all features
-    // being enabled.
+    // CLI `--preview-features` takes precedence over `uv.tool.preview = true`.
     uv_snapshot!(context.filters(), cmd()
         .arg("--preview-features")
         .arg("pylock"), @r#"
@@ -9038,7 +9037,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYTHON_INSTALL_DEFAULT | PYTHON_UPGRADE | JSON_OUTPUT | PYLOCK | ADD_BOUNDS | PACKAGE_CONFLICTS | EXTRA_BUILD_DEPENDENCIES | DETECT_MODULE_CONFLICTS | FORMAT | NATIVE_AUTH | S3_ENDPOINT | CACHE_SIZE | INIT_PROJECT_FLAG | WORKSPACE_METADATA | WORKSPACE_DIR | WORKSPACE_LIST | SBOM_EXPORT | AUTH_HELPER,
+                PYLOCK,
             ),
         },
         python_preference: Managed,
@@ -9257,7 +9256,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
     "#,
     )?;
 
-    // CLI `--preview-features` combines with `uv.tool.preview-features`
+    // CLI `--preview-features` takes precedence over `uv.tool.preview-features`
     uv_snapshot!(context.filters(), cmd()
         .arg("--preview-features")
         .arg("pylock"), @r#"
@@ -9284,7 +9283,7 @@ fn preview_features_precedence() -> anyhow::Result<()> {
         show_settings: true,
         preview: Preview {
             flags: PreviewFeatures(
-                PYLOCK | FORMAT,
+                PYLOCK,
             ),
         },
         python_preference: Managed,

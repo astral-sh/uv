@@ -38,7 +38,7 @@ use uv_distribution_types::{
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_preview::{Preview, PreviewFeaturesMode};
+use uv_preview::Preview;
 use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
@@ -139,7 +139,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: Preview::from(resolve_preview_settings(args, workspace)),
+            preview: resolve_preview_settings(args, workspace),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -173,26 +173,26 @@ fn resolve_python_preference(
     }
 }
 
-fn resolve_preview_settings(
-    args: &GlobalArgs,
-    workspace: Option<&FilesystemOptions>,
-) -> PreviewFeaturesMode {
+fn resolve_preview_settings(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Preview {
+    // Commandline arguments take priority.
     if let Some(preview) = flag(args.preview, args.no_preview, "preview") {
-        return PreviewFeaturesMode::from_bool(preview);
+        return Preview::from(preview);
     }
-    match workspace.and_then(|workspace| workspace.globals.preview) {
-        Some(true) => PreviewFeaturesMode::EnableAll,
-        // Disable workspace `preview-features` but keep any CLI `--preview-features`
-        Some(false) => PreviewFeaturesMode::from(args.preview_features.iter()),
-        None => {
-            let features = args.preview_features.iter().chain(
+    if !args.preview_features.is_empty() {
+        return Preview::from_iter(&args.preview_features);
+    }
+
+    workspace
+        .and_then(|workspace| {
+            workspace.globals.preview.map(Preview::from).or_else(|| {
                 workspace
-                    .and_then(|workspace| workspace.globals.preview_features.as_deref())
-                    .unwrap_or_default(),
-            );
-            PreviewFeaturesMode::from(features)
-        }
-    }
+                    .globals
+                    .preview_features
+                    .as_ref()
+                    .map(Preview::from_iter)
+            })
+        })
+        .unwrap_or_default()
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
