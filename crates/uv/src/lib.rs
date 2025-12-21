@@ -150,7 +150,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         tracing::debug!(
-            "Using explicit configuration file at: `{}` (ignoring all user-level configuration)",
+            "Using --config-file/UV_CONFIG_FILE is set to `{}`; ignoring all user-level configuration.",
             config_file.display()
         );
         if config_file
