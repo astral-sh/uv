@@ -1005,6 +1005,79 @@ fn cycle() -> Result<()> {
 }
 
 #[test]
+fn cycle_no_orphaned_roots() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["apache-airflow"]
+    "#,
+    )?;
+
+    // With --depth 1, only project should appear as a root
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── apache-airflow v2.8.3
+
+    ----- stderr -----
+    Resolved 135 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn cycle_no_infinite_loop() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["testtools==2.3.0", "fixtures==3.0.0"]
+    "#,
+    )?;
+
+    // This should complete without hanging, and cycles should be marked with (*)
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--depth").arg("2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── fixtures v3.0.0
+    │   ├── pbr v6.0.0
+    │   ├── six v1.16.0
+    │   └── testtools v2.3.0
+    └── testtools v2.3.0
+        ├── extras v1.0.0
+        ├── fixtures v3.0.0 (*)
+        ├── pbr v6.0.0
+        ├── python-mimeparse v1.6.0
+        ├── six v1.16.0
+        ├── traceback2 v1.4.0
+        └── unittest2 v1.1.0
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
 fn workspace_dev() -> Result<()> {
     let context = TestContext::new("3.12");
 

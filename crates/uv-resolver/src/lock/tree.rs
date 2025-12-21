@@ -379,40 +379,8 @@ impl<'env> TreeDisplay<'env> {
 
                 roots
             } else {
-                let mut edges = vec![];
-
-                // Remove any cycles.
-                let feedback_set: Vec<EdgeIndex> = petgraph::algo::greedy_feedback_arc_set(&graph)
-                    .map(|e| e.id())
-                    .collect();
-                for edge_id in feedback_set {
-                    if let Some((source, target)) = graph.edge_endpoints(edge_id) {
-                        if let Some(weight) = graph.remove_edge(edge_id) {
-                            edges.push((source, target, weight));
-                        }
-                    }
-                }
-
-                // Find the root nodes: nodes with no incoming edges, or only an edge from the proxy.
-                let mut roots = graph
-                    .node_indices()
-                    .filter(|index| {
-                        graph
-                            .edges_directed(*index, Direction::Incoming)
-                            .next()
-                            .is_none()
-                    })
-                    .collect::<Vec<_>>();
-
-                // Sort the roots.
-                roots.sort_by_key(|index| &graph[*index]);
-
-                // Re-add the removed edges.
-                for (source, target, weight) in edges {
-                    graph.add_edge(source, target, weight);
-                }
-
-                roots
+                // Use the root node directly.
+                vec![root]
             }
         };
 
@@ -527,16 +495,19 @@ impl<'env> TreeDisplay<'env> {
         let mut lines = vec![line];
 
         // Keep track of the dependency path to avoid cycles.
-        visited.insert(
-            package_id,
-            dependencies
-                .iter()
-                .filter_map(|node| match self.graph[node.node()] {
-                    Node::Package(package_id) => Some(package_id),
-                    Node::Root => None,
-                })
-                .collect(),
-        );
+        // Only mark as visited if we're going to expand children (not at depth limit).
+        if path.len() < self.depth {
+            visited.insert(
+                package_id,
+                dependencies
+                    .iter()
+                    .filter_map(|node| match self.graph[node.node()] {
+                        Node::Package(package_id) => Some(package_id),
+                        Node::Root => None,
+                    })
+                    .collect(),
+            );
+        }
         path.push(package_id);
 
         for (index, dep) in dependencies.iter().enumerate() {
