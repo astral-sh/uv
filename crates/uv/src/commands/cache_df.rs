@@ -99,7 +99,7 @@ pub(crate) fn cache_df(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
         let (size, count) = if bucket_path.exists() {
             let disk_usage = DiskUsage::new(vec![bucket_path.clone()]);
             let size = disk_usage.count_ignoring_errors();
-            let count = count_files_in_directory(&bucket_path)?;
+            let count = count_files_in_directory(&bucket_path);
             (size, count)
         } else {
             (0, 0)
@@ -111,12 +111,7 @@ pub(crate) fn cache_df(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
 
         writeln!(
             printer.stdout(),
-            "{:<25} {:>12} {:>8}{:<4} {:<30}",
-            name,
-            count,
-            size_val,
-            size_unit,
-            description
+            "{name:<25} {count:>12} {size_val:>8}{size_unit:<4} {description:<30}"
         )?;
     }
 
@@ -144,19 +139,16 @@ pub(crate) fn cache_df(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
     Ok(ExitStatus::Success)
 }
 
-fn count_files_in_directory(dir: &Path) -> Result<u64> {
+fn count_files_in_directory(dir: &Path) -> u64 {
     if !dir.exists() {
-        return Ok(0);
+        return 0;
     }
 
     let mut count = 0u64;
     let mut stack = vec![dir.to_path_buf()];
 
     while let Some(current) = stack.pop() {
-        let entries = match std::fs::read_dir(&current) {
-            Ok(entries) => entries,
-            Err(_) => continue,
-        };
+        let Ok(entries) = fs_err::read_dir(&current) else { continue };
 
         for entry in entries.filter_map(Result::ok) {
             count += 1;
@@ -167,5 +159,5 @@ fn count_files_in_directory(dir: &Path) -> Result<u64> {
         }
     }
 
-    Ok(count)
+    count
 }
