@@ -403,7 +403,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     if let Some(config_file) = config_file_arg.as_ref() {
         tracing::debug!(
-            "Using --config-file/UV_CONFIG_FILE is set to `{}`; ignoring all user-level configuration.",
+            "Using explicit configuration file at `{}`; ignoring discovered configuration files.",
             config_file.display()
         );
     }
