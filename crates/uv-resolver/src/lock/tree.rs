@@ -379,8 +379,21 @@ impl<'env> TreeDisplay<'env> {
 
                 roots
             } else {
-                // Use the root node directly.
-                vec![root]
+                // For non-inverted trees, use the root node directly
+                // For inverted trees, find leaf packages
+                let mut roots = graph
+                    .node_indices()
+                    .filter(|index| {
+                        !invert && matches!(graph[*index], Node::Root)
+                            || graph
+                                .edges_directed(*index, Direction::Incoming)
+                                .next()
+                                .is_none()
+                    })
+                    .collect::<Vec<_>>();
+
+                roots.sort_by_key(|index| &graph[*index]);
+                roots
             }
         };
 
