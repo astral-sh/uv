@@ -149,6 +149,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     //    starting from the current directory.
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
+        tracing::debug!(
+            "Using explicit configuration file at: `{}` (ignoring all user-level configuration)",
+            config_file.display()
+        );
         if config_file
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
