@@ -102,6 +102,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
 
+    let config_file_arg = cli.top_level.config_file.clone();
+
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
         match &*cli.command {
@@ -149,10 +151,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     //    starting from the current directory.
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
-        tracing::debug!(
-            "Using --config-file/UV_CONFIG_FILE is set to `{}`; ignoring all user-level configuration.",
-            config_file.display()
-        );
         if config_file
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
@@ -402,6 +400,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.color,
         environment.log_context.unwrap_or_default(),
     )?;
+
+    if let Some(config_file) = config_file_arg.as_ref() {
+        tracing::debug!(
+            "Using --config-file/UV_CONFIG_FILE is set to `{}`; ignoring all user-level configuration.",
+            config_file.display()
+        );
+    }
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if globals.quiet == 1 {
