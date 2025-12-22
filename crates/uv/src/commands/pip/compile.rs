@@ -183,14 +183,11 @@ pub(crate) async fn pip_compile(
 
     // If `--python` / `-p` is a simple Python version request, we treat it as `--python-version`
     // for backwards compatibility. `-p` was previously aliased to `--python-version` but changed to
-    // `--python` for consistency with the rest of the CLI in v0.6.0. Since we assume metadata is
-    // consistent across wheels, it's okay for us to build wheels (to determine metadata) with an
-    // alternative Python interpreter as long as we solve with the proper Python version tags.
+    // `--python` for consistency with the rest of the CLI in v0.6.0.
     if python_version.is_none() {
         if let Some(request) = python.as_ref() {
             if let Ok(version) = PythonVersion::from_str(request) {
                 python_version = Some(version);
-                python = None;
             }
         }
     }
