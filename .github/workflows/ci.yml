@@ -2957,8 +2957,8 @@ jobs:
           mode: walltime
           token: ${{ secrets.CODSPEED_TOKEN }}
 
-  benchmarks-instrumented:
-    name: "benchmarks | instrumented"
+  benchmarks-simulated:
+    name: "benchmarks | simulated"
     runs-on: ubuntu-latest
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
