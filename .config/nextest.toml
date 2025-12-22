@@ -3,23 +3,29 @@
 # Terminate after 120s as a stop-gap measure to terminate on deadlock.
 slow-timeout =  { period = "10s", terminate-after = 12 }
 
-[profile.ci]
-inherits = "default"
+[profile.ci-linux]
+slow-timeout =  { period = "10s", terminate-after = 12 }
 test-threads = 20
 status-level = "skip"
 final-status-level = "slow"
 failure-output = "immediate-final"
 fail-fast = false
 
-[profile.ci-linux]
-inherits = "ci"
-
 [profile.ci-macos]
-inherits = "ci"
+slow-timeout =  { period = "10s", terminate-after = 12 }
 test-threads = 12
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate-final"
+fail-fast = false
 
 [profile.ci-windows]
-inherits = "ci"
+slow-timeout =  { period = "10s", terminate-after = 12 }
+test-threads = 20
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate-final"
+fail-fast = false
 
 [test-groups]
 serial = { max-threads = 1 }
