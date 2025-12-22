@@ -3951,3 +3951,36 @@ fn python_install_upgrade_version_file() {
     hint: The version request came from a `.python-version` file; change the patch version in the file to upgrade instead
     ");
 }
+
+#[test]
+fn python_install_armv7() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_sources()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    // Explicitly request a musl build for armv7l
+    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.12.12-linux-armv7-musl"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: uv does not yet provide musl Python distributions on armv7.
+    "###);
+
+    // Explicitly request a gnuabi build for armv7l
+    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.12.12-linux-armv7-gnueabi"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+    "###);
+}
