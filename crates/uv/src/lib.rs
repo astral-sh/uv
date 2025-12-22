@@ -645,6 +645,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.install_mirrors,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
                 args.settings.universal,
                 args.settings.exclude_newer,
                 args.settings.sources,
