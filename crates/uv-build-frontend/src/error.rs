@@ -160,20 +160,13 @@ fn hint_build_dependency(
     f: &mut std::fmt::Formatter<'_>,
     display_name: &str,
     package_name: &str,
-    build_backend: &str,
+    package: &str,
 ) -> std::fmt::Result {
     let table_key = if package_name.contains('.') {
         format!("\"{package_name}\"")
     } else {
         package_name.to_string()
     };
-    // The build backend 'mesonpy' can be installed via the 'meson-python' Python package
-    let build_package = if build_backend == "mesonpy" {
-        "meson-python"
-    } else {
-        build_backend
-    };
-
     write!(
         f,
         "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
@@ -185,13 +178,13 @@ fn hint_build_dependency(
         \n\
         or `{}` into the environment and re-run with `{}`.",
         display_name.cyan(),
-        build_package.cyan(),
+        package.cyan(),
         package_name.cyan(),
-        build_package.cyan(),
+        package.cyan(),
         "build-system.requires".green(),
         table_key.cyan(),
-        build_package.cyan(),
-        format!("uv pip install {build_package}").green(),
+        package.cyan(),
+        format!("uv pip install {package}").green(),
         "--no-build-isolation".green(),
     )
 }
