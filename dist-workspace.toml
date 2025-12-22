@@ -81,8 +81,8 @@ riscv64gc-unknown-linux-gnu = "2.31"
 
 [dist.github-action-commits]
 "actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
-"actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
-"actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
+"actions/upload-artifact" = "2d9f9cdfa99fedaddba68e9b5b5c281eca26cc63" # v4.6.2
+"actions/download-artifact" = "634f93cb2916e3fdff6788551b99b062d0335ce0" # v5.0.0
 "actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
 
 [dist.binaries]
