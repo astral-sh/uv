@@ -1470,7 +1470,7 @@ fn compile_fallback_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-p")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1490,9 +1490,9 @@ fn compile_fallback_interpreter() -> Result<()> {
         # via black
 
     ----- stderr -----
-    warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.12 was not found and could not be downloaded; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // And for `UV_PYTHON`
@@ -9304,7 +9304,7 @@ fn universal_requires_python() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9316,9 +9316,9 @@ fn universal_requires_python() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9337,7 +9337,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.7")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9347,9 +9347,9 @@ fn universal_requires_python_incomplete() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The requested Python version 3.7 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.7 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9374,7 +9374,7 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9468,9 +9468,9 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
         # via importlib-metadata
 
     ----- stderr -----
-    warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 41 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9492,7 +9492,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.11")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9522,9 +9522,9 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
         # via astroid
 
     ----- stderr -----
-    warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.11 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9545,7 +9545,7 @@ fn universal_prefer_upper_bounds() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9579,9 +9579,9 @@ fn universal_prefer_upper_bounds() -> Result<()> {
         # via astroid
 
     ----- stderr -----
-    warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9600,7 +9600,7 @@ fn universal_unnecessary_python() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9610,9 +9610,9 @@ fn universal_unnecessary_python() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9714,7 +9714,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
 
     ----- stderr -----
-    warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 26 packages in [TIME]
     "
     );
@@ -14277,7 +14277,7 @@ exceptiongroup==1.0.0rc8
             .arg("-c").arg("constraints.txt")
             .arg("--universal")
             .arg("-p").arg("3.10"),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14367,8 +14367,9 @@ exceptiongroup==1.0.0rc8
         # via astroid
 
     ----- stderr -----
+    warning: The requested Python version 3.10 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 36 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14419,7 +14420,7 @@ matplotlib
             .arg("requirements.in")
             .arg("--universal")
             .arg("-p").arg("3.8"),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14477,8 +14478,9 @@ matplotlib
         # via importlib-resources
 
     ----- stderr -----
+    warning: The requested Python version 3.8 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 22 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14509,7 +14511,7 @@ fn importlib_metadata_not_repeated() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("-p").arg("3.7"),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14539,8 +14541,9 @@ fn importlib_metadata_not_repeated() -> Result<()> {
         # via importlib-metadata
 
     ----- stderr -----
+    warning: The requested Python version 3.7 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14572,7 +14575,7 @@ fn prune_unreachable() -> Result<()> {
             .arg("--universal")
             .arg("-p")
             .arg("3.7"),
-        @r###"
+        @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14582,8 +14585,9 @@ fn prune_unreachable() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
+    warning: The requested Python version 3.7 was not found and could not be downloaded; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -18150,13 +18154,12 @@ fn compile_missing_python() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python").arg("3.13")
-        .arg("--python-version").arg("3.13")
         .arg("requirements.in"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.13 --python-version 3.13 requirements.in
+    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.13 requirements.in
     anyio==3.7.0
         # via -r requirements.in
     idna==3.6
