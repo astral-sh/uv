@@ -148,7 +148,9 @@ fn count_files_in_directory(dir: &Path) -> u64 {
     let mut stack = vec![dir.to_path_buf()];
 
     while let Some(current) = stack.pop() {
-        let Ok(entries) = fs_err::read_dir(&current) else { continue };
+        let Ok(entries) = fs_err::read_dir(&current) else {
+            continue;
+        };
 
         for entry in entries.filter_map(Result::ok) {
             count += 1;
