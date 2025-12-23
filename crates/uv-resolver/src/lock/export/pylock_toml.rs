@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::str::FromStr;
@@ -695,11 +696,31 @@ impl<'lock> PylockToml {
         // Use the `requires-python` from the target lockfile.
         let requires_python = target.lock().requires_python.clone();
 
-        // We don't support locking for multiple extras at time of writing.
-        let extras = vec![];
+        // Populate extras and dependency groups from root packages.
+        let (extras, dependency_groups) = {
+            let mut all_extras = HashSet::new();
+            let mut all_groups = HashSet::new();
 
-        // We don't support locking for multiple dependency groups at time of writing.
-        let dependency_groups = vec![];
+            for root_name in target.roots() {
+                if let Ok(Some(pkg)) = target.lock().find_by_name(root_name) {
+                    all_extras.extend(pkg.optional_dependencies.keys().cloned());
+                    all_groups.extend(pkg.dependency_groups.keys().cloned());
+                }
+            }
+
+            let valid_extras: HashSet<_> = extras.extra_names(all_extras.iter()).cloned().collect();
+            let mut extras_vec: Vec<_> = all_extras
+                .into_iter()
+                .filter(|e| valid_extras.contains(e))
+                .collect();
+            extras_vec.sort();
+
+            let mut groups_vec: Vec<_> =
+                all_groups.into_iter().filter(|g| dev.contains(g)).collect();
+            groups_vec.sort();
+
+            (extras_vec, groups_vec)
+        };
 
         // We don't support locking for multiple dependency groups at time of writing.
         let default_groups = vec![];
