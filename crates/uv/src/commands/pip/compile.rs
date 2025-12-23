@@ -34,8 +34,8 @@ use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
@@ -57,6 +57,7 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
@@ -109,6 +110,7 @@ pub(crate) async fn pip_compile(
     install_mirrors: PythonInstallMirrors,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
     universal: bool,
     exclude_newer: ExcludeNewer,
     sources: SourceStrategy,
@@ -303,14 +305,21 @@ pub(crate) async fn pip_compile(
     .await?;
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(
-            &request,
+        let reporter = PythonDownloadReporter::single(printer);
+        PythonInstallation::find_or_download(
+            Some(&request),
             environment_preference,
             python_preference,
-            &download_list,
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
+        .await
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.

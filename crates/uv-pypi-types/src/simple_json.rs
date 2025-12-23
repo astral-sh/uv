@@ -81,8 +81,8 @@ impl<'de> Deserialize<'de> for PypiFile {
                 let mut url = None;
                 let mut yanked = None;
 
-                while let Some(key) = access.next_key::<String>()? {
-                    match key.as_str() {
+                while let Some(key) = access.next_key::<&str>()? {
+                    match key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -181,8 +181,8 @@ impl<'de> Deserialize<'de> for PyxFile {
                 let mut yanked = None;
                 let mut zstd = None;
 
-                while let Some(key) = access.next_key::<String>()? {
-                    match key.as_str() {
+                while let Some(key) = access.next_key::<&str>()? {
+                    match key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
