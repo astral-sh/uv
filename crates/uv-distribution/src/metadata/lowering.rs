@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -38,6 +38,7 @@ impl LoweredRequirement {
         project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
+        project_sources_used: &mut BTreeSet<PackageName>,
         project_indexes: &'data [Index],
         extra: Option<&ExtraName>,
         group: Option<&GroupName>,
@@ -48,8 +49,10 @@ impl LoweredRequirement {
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
+            project_sources_used.insert(requirement.name.clone());
             (Some(source), RequirementOrigin::Project)
         } else if let Some(source) = workspace.sources().get(&requirement.name) {
+            // TODO(jack): Track workplace sources used also.
             (Some(source), RequirementOrigin::Workspace)
         } else {
             (None, RequirementOrigin::Project)

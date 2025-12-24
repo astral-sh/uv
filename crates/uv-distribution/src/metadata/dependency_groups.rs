@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
@@ -151,6 +151,8 @@ impl SourcedDependencyGroups {
                             project.project_name(),
                             project.root(),
                             project_sources,
+                            // TODO: make this better lol
+                            &mut BTreeSet::new(),
                             project_indexes,
                             extra,
                             Some(&group),
