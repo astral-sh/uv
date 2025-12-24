@@ -58,6 +58,7 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
+use crate::commands::diagnostics::extract_python_from_shebang;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -433,6 +434,23 @@ pub(crate) async fn run(
                     return Ok(ExitStatus::Failure);
                 }
             }
+
+            // Check if the error is due to a missing Python interpreter in the script's shebang.
+            let script_path = environment.scripts().join(executable);
+            if script_path.exists() {
+                if let Some(python_path) = extract_python_from_shebang(&script_path) {
+                    if !python_path.exists() {
+                        writeln!(
+                            printer.stderr(),
+                            "{}: `{}` uses a Python interpreter at `{}` which no longer exists",
+                            "hint".cyan().bold(),
+                            executable,
+                            python_path.display(),
+                        )?;
+                    }
+                }
+            }
+
             Err(err)
         }
         Err(err) => Err(err),
