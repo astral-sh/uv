@@ -58,6 +58,29 @@ pub enum DisplaySafeUrlError {
 #[repr(transparent)]
 pub struct DisplaySafeUrl(Url);
 
+/// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
+///
+/// This skips colons that are followed by `//`, as those indicate URL schemes (e.g., `https://`)
+/// rather than credentials. This is important for handling nested URLs like proxy URLs:
+/// `git+https://proxy.com/https://github.com/user/repo.git@branch`.
+fn has_credential_like_pattern(s: &str) -> bool {
+    let mut remaining = s;
+    while let Some(colon_pos) = remaining.find(':') {
+        let after_colon = &remaining[colon_pos + 1..];
+        // If the colon is followed by "//", consider it a URL scheme.
+        if after_colon.starts_with("//") {
+            remaining = after_colon;
+            continue;
+        }
+        // Check if there's an @ after this colon.
+        if after_colon.contains('@') {
+            return true;
+        }
+        remaining = after_colon;
+    }
+    false
+}
+
 impl DisplaySafeUrl {
     #[inline]
     pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
@@ -93,17 +116,10 @@ impl DisplaySafeUrl {
         }
 
         // Check for the suspicious pattern.
-        if !url
-            .path()
-            .find(':')
-            .is_some_and(|pos| url.path()[pos..].contains('@'))
+        if !has_credential_like_pattern(url.path())
             && !url
                 .fragment()
-                .map(|fragment| {
-                    fragment
-                        .find(':')
-                        .is_some_and(|pos| fragment[pos..].contains('@'))
-                })
+                .map(has_credential_like_pattern)
                 .unwrap_or(false)
         {
             return Ok(());
@@ -486,12 +502,27 @@ mod tests {
 
     #[test]
     fn parse_url_not_ambiguous() {
-        #[allow(clippy::single_element_loop)]
         for url in &[
             // https://github.com/astral-sh/uv/issues/16756
             "file:///C:/jenkins/ython_Environment_Manager_PR-251@2/venv%201/workspace",
+            // https://github.com/astral-sh/uv/issues/17214
+            // Git proxy URLs with nested schemes should not trigger the ambiguity check
+            "git+https://githubproxy.cc/https://github.com/user/repo.git@branch",
+            "git+https://proxy.example.com/https://github.com/org/project@v1.0.0",
+            "git+https://proxy.example.com/https://github.com/org/project@refs/heads/main",
         ] {
             DisplaySafeUrl::parse(url).unwrap();
         }
+    }
+
+    #[test]
+    fn credential_like_pattern() {
+        assert!(!has_credential_like_pattern(
+            "/https://github.com/user/repo.git@branch"
+        ));
+        assert!(!has_credential_like_pattern("/http://example.com/path@ref"));
+
+        assert!(has_credential_like_pattern("/name:password@domain/a/b/c"));
+        assert!(has_credential_like_pattern(":password@domain"));
     }
 }
