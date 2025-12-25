@@ -139,13 +139,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                flag(args.preview, args.no_preview, "preview")
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: resolve_preview_settings(args, workspace),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -177,6 +171,28 @@ fn resolve_python_preference(
             .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
             .unwrap_or_default()
     }
+}
+
+fn resolve_preview_settings(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Preview {
+    // Commandline arguments take priority.
+    if let Some(preview) = flag(args.preview, args.no_preview, "preview") {
+        return Preview::from(preview);
+    }
+    if !args.preview_features.is_empty() {
+        return Preview::from_iter(&args.preview_features);
+    }
+
+    workspace
+        .and_then(|workspace| {
+            workspace.globals.preview.map(Preview::from).or_else(|| {
+                workspace
+                    .globals
+                    .preview_features
+                    .as_ref()
+                    .map(Preview::from_iter)
+            })
+        })
+        .unwrap_or_default()
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
