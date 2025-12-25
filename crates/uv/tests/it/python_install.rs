@@ -2713,10 +2713,10 @@ fn python_install_no_cache() {
      - cpython-3.14.2-[PLATFORM] (python3.14)
     ");
 
-    // 3.12 isn't cached, so it can't be installed
+    // 3.12 isn't cached, so it can't be installed offline
     let mut filters = context.filters();
     filters.push((
-        "cpython-3.12.*.tar.gz",
+        r"cpython-3\.12\.\d+(%2B|\+)\d+-[a-z0-9_-]+\.tar\.gz",
         "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
     ));
     filters.push((r"releases/download/\d{8}/", "releases/download/[DATE]/"));
@@ -2730,8 +2730,7 @@ fn python_install_no_cache() {
 
     ----- stderr -----
     error: Failed to install cpython-3.12.12-[PLATFORM]
-      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz
-      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz`
+      Caused by: An offline Python installation was requested, but cpython-3.12.12-[PLATFORM] (from https://github.com/astral-sh/python-build-standalone/releases/download/[DATE]/cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz) is missing in [CACHE_DIR]/python-v0
     ");
 }
 
