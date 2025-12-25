@@ -1396,6 +1396,14 @@ impl TestContext {
         command
     }
 
+    /// Create a `uv cache df` command.
+    pub fn cache_df(&self) -> Command {
+        let mut command = Self::new_command();
+        command.arg("cache").arg("df");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv build_backend` command.
     ///
     /// Note that this command is hidden and only invoking it through a build frontend is supported.

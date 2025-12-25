@@ -894,6 +894,11 @@ pub enum CacheCommand {
     /// wheels, source distributions, and other cached data. By default, outputs the size in raw
     /// bytes; use `--human` for human-readable output.
     Size(SizeArgs),
+    /// Show cache utilization information.
+    ///
+    /// Displays detailed usage statistics for each cache bucket, similar to `docker system df`.
+    /// Shows the number of entries and size for each cache type.
+    Df,
 }
 
 #[derive(Args, Debug)]
