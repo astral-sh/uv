@@ -234,7 +234,6 @@ module = [
   "requests_aws4auth.*", # https://github.com/tedder/requests-aws4auth/issues/53
   "rfc3986.*",
   "transaction.*",
-  "ua_parser.*", # https://github.com/ua-parser/uap-python/issues/110
   "venusian.*",
   "whitenoise.*",
   "zope.sqlalchemy.*",
