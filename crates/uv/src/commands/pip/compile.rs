@@ -303,10 +303,11 @@ pub(crate) async fn pip_compile(
         install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?;
-    let interpreter = if let Some(python) = python.as_ref() {
+
+    let (installation, python_missing_download) = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
         let reporter = PythonDownloadReporter::single(printer);
-        PythonInstallation::find_or_download(
+        match PythonInstallation::find_or_download(
             Some(&request),
             environment_preference,
             python_preference,
@@ -320,31 +321,51 @@ pub(crate) async fn pip_compile(
             preview,
         )
         .await
+        {
+            Ok(interpreter) => (Some(Ok(interpreter)), None),
+            Err(uv_python::Error::MissingPython(..)) => (None, Some(python)),
+            Err(uv_python::Error::Discovery(err)) if !err.is_critical() => (None, Some(python)),
+            err => (Some(err), None),
+        }
     } else {
-        // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
-        // be able to use `PythonInstallation::find(...)` here.
-        let request = if let Some(version) = python_version.as_ref() {
-            // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
-            PythonRequest::Version(VersionRequest::from(version))
-        } else {
-            PythonRequest::default()
-        };
-        PythonInstallation::find_best(
-            &request,
-            environment_preference,
-            python_preference,
-            &download_list,
-            &cache,
-            preview,
-        )
-    }?
-    .into_interpreter();
+        (None, None)
+    };
+    let interpreter = installation
+        .unwrap_or_else(|| {
+            // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
+            // be able to use `PythonInstallation::find(...)` here.
+            let request = if let Some(version) = python.as_ref() {
+                PythonRequest::parse(version)
+            } else if let Some(version) = python_version.as_ref() {
+                // TODO(zanieb): We should consolidate `VersionRequest` and `PythonVersion`
+                PythonRequest::Version(VersionRequest::from(version))
+            } else {
+                PythonRequest::default()
+            };
+            PythonInstallation::find_best(
+                &request,
+                environment_preference,
+                python_preference,
+                &download_list,
+                &cache,
+                preview,
+            )
+        })?
+        .into_interpreter();
 
     debug!(
         "Using Python {} interpreter at {} for builds",
         interpreter.python_version(),
         interpreter.sys_executable().user_display().cyan()
     );
+
+    if let Some(python_missing_download) = python_missing_download {
+        warn_user!(
+            "The requested Python version {} was not found and could not be downloaded; {} will be used to build dependencies instead.",
+            python_missing_download,
+            interpreter.python_version(),
+        );
+    }
 
     if let Some(python_version) = python_version.as_ref() {
         // If the requested version does not match the version we're using warn the user
