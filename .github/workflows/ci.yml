@@ -116,7 +116,12 @@ jobs:
         run: uvx ruff check .
 
       - name: "Python type check"
-        run: uvx mypy
+        run: |
+          uvx ty check python/uv
+          uvx \
+            --directory crates/uv-python \
+            --with-requirements fetch-download-metadata.py \
+            ty check --python-version 3.13 fetch-download-metadata.py
 
       - name: "Validate project metadata"
         run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
