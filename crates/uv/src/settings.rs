@@ -28,6 +28,7 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
     InstallOptions, KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend,
+    ProxyUrl,
     Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing,
     Upgrade, VersionControlSystem,
 };
@@ -184,6 +185,9 @@ fn resolve_python_preference(
 pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) native_tls: bool,
+    pub(crate) http_proxy: Option<ProxyUrl>,
+    pub(crate) https_proxy: Option<ProxyUrl>,
+    pub(crate) no_proxy: Option<Vec<String>>,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) timeout: Duration,
     pub(crate) retries: u32,
@@ -223,9 +227,16 @@ impl NetworkSettings {
                     .flatten(),
             )
             .collect();
+        let http_proxy = workspace.and_then(|workspace| workspace.globals.http_proxy.clone());
+        let https_proxy = workspace.and_then(|workspace| workspace.globals.https_proxy.clone());
+        let no_proxy = workspace.and_then(|workspace| workspace.globals.no_proxy.clone());
+
         Self {
             connectivity,
             native_tls,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             timeout: environment.http_timeout,
             retries: environment.http_retries,

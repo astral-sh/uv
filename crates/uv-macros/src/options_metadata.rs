@@ -195,6 +195,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
         example,
         scope,
         possible_values,
+        uv_toml_only,
     } = parse_field_attributes(attr)?;
     let kebab_name = LitStr::new(&ident.to_string().replace('_', "-"), ident.span());
 
@@ -254,6 +255,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
                 scope: #scope,
                 deprecated: #deprecated,
                 possible_values: #possible_values,
+                uv_toml_only: #uv_toml_only,
             })
         }
     ))
@@ -266,6 +268,7 @@ struct FieldAttributes {
     example: String,
     scope: Option<String>,
     possible_values: Option<bool>,
+    uv_toml_only: bool,
 }
 
 fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes> {
@@ -274,6 +277,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
     let mut example = None;
     let mut scope = None;
     let mut possible_values = None;
+    let mut uv_toml_only = None;
 
     attribute.parse_nested_meta(|meta| {
         if meta.path.is_ident("default") {
@@ -287,6 +291,8 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
             example = Some(dedent(&example_text).trim_matches('\n').to_string());
         } else if meta.path.is_ident("possible_values") {
             possible_values = get_bool_literal(&meta, "possible_values", "option")?;
+        } else if meta.path.is_ident("uv_toml_only") {
+            uv_toml_only = get_bool_literal(&meta, "uv_toml_only", "option")?;
         } else {
             return Err(syn::Error::new(
                 meta.path.span(),
@@ -327,6 +333,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
         example,
         scope,
         possible_values,
+        uv_toml_only: uv_toml_only.unwrap_or(false),
     })
 }
 
