@@ -1,3 +1,5 @@
+#[cfg(feature = "schemars")]
+use std::borrow::Cow;
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
@@ -70,6 +72,67 @@ impl Display for PreviewFeatures {
     }
 }
 
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PreviewFeatures {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeatures")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let choices: Vec<&str> = Self::all().iter().map(Self::flag_as_str).collect();
+        schemars::json_schema!({
+            "type": "string",
+            "enum": choices,
+        })
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PreviewFeatures {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PreviewFeatures;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                PreviewFeatures::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl serde::Serialize for PreviewFeatures {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if *self == Self::default() {
+            return Err(serde::ser::Error::custom(
+                "Cannot serialize disabled feature flags.",
+            ));
+        }
+        if self.bits().count_ones() > 1 {
+            return Err(serde::ser::Error::custom(
+                "More than one preview feature flag enabled. \
+                 Only individual flags should be serialized at a time.",
+            ));
+        }
+        serializer.serialize_str(self.flag_as_str())
+    }
+}
+
 #[derive(Debug, Error, Clone)]
 pub enum PreviewFeaturesParseError {
     #[error("Empty string in preview features: {0}")]
@@ -135,30 +198,24 @@ impl Preview {
         Self::new(PreviewFeatures::all())
     }
 
-    pub fn from_args(
-        preview: bool,
-        no_preview: bool,
-        preview_features: &[PreviewFeatures],
-    ) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        let mut flags = PreviewFeatures::empty();
-
-        for features in preview_features {
-            flags |= *features;
-        }
-
-        Self { flags }
-    }
-
     pub fn is_enabled(&self, flag: PreviewFeatures) -> bool {
         self.flags.contains(flag)
+    }
+}
+
+impl<'flag> FromIterator<&'flag PreviewFeatures> for Preview {
+    fn from_iter<T: IntoIterator<Item = &'flag PreviewFeatures>>(iter: T) -> Self {
+        let flags = iter
+            .into_iter()
+            .copied()
+            .fold(PreviewFeatures::empty(), |f1, f2| f1 | f2);
+        Self::new(flags)
+    }
+}
+
+impl From<bool> for Preview {
+    fn from(value: bool) -> Self {
+        if value { Self::all() } else { Self::default() }
     }
 }
 
@@ -239,19 +296,20 @@ mod tests {
     #[test]
     fn test_preview_from_args() {
         // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
+        let preview = Preview::default();
         assert_eq!(preview.to_string(), "disabled");
 
         // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
+        let preview = Preview::all();
         assert_eq!(preview.to_string(), "enabled");
 
         // Test specific features
-        let features = vec![
+        let preview: Preview = [
             PreviewFeatures::PYTHON_UPGRADE,
             PreviewFeatures::JSON_OUTPUT,
-        ];
-        let preview = Preview::from_args(false, false, &features);
+        ]
+        .iter()
+        .collect();
         assert!(preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE));
         assert!(preview.is_enabled(PreviewFeatures::JSON_OUTPUT));
         assert!(!preview.is_enabled(PreviewFeatures::PYLOCK));
@@ -292,5 +350,28 @@ mod tests {
     fn test_as_str_multiple_flags_panics() {
         let features = PreviewFeatures::PYTHON_UPGRADE | PreviewFeatures::JSON_OUTPUT;
         let _ = features.flag_as_str();
+    }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let input = r#"["python-upgrade", "format"]"#;
+
+        let deserialized: Vec<PreviewFeatures> = serde_json::from_str(input).unwrap();
+        assert_eq!(deserialized.len(), 2);
+        assert_eq!(deserialized[0], PreviewFeatures::PYTHON_UPGRADE);
+        assert_eq!(deserialized[1], PreviewFeatures::FORMAT);
+
+        let serialized = serde_json::to_string(&deserialized).unwrap();
+        insta::assert_snapshot!(serialized, @r#"["python-upgrade","format"]"#);
+
+        let roundtrip: Vec<PreviewFeatures> = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(roundtrip, deserialized);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot serialize disabled feature flags.")]
+    fn test_serialize_default() {
+        let disabled = PreviewFeatures::default();
+        let _ = serde_json::to_string(&disabled).unwrap();
     }
 }
