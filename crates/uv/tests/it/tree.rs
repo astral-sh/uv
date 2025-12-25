@@ -236,6 +236,33 @@ fn frozen() -> Result<()> {
     "###
     );
 
+    // `frozen` should overrides `no-frozen` and shows the stale tree.
+    uv_snapshot!(context.filters(), context.tree().arg("--no-frozen").arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── anyio v4.3.0
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // `--no-frozen` overrides `--frozen` and shows the updated tree.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--no-frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── iniconfig v2.0.0
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###
+    );
+
     Ok(())
 }
 
