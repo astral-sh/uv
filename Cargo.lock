@@ -5625,6 +5625,8 @@ dependencies = [
  "tracing-subscriber",
  "uv-build-backend",
  "uv-logging",
+ "uv-preview",
+ "uv-static",
  "uv-version",
 ]
 
@@ -5638,6 +5640,7 @@ dependencies = [
  "flate2",
  "fs-err",
  "globset",
+ "indexmap",
  "indoc",
  "insta",
  "itertools 0.14.0",
@@ -5645,6 +5648,7 @@ dependencies = [
  "rustc-hash",
  "schemars",
  "serde",
+ "serde_json",
  "sha2",
  "spdx 0.13.2",
  "tar",
@@ -5661,6 +5665,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-preview",
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
@@ -6837,6 +6842,7 @@ dependencies = [
 name = "uv-static"
 version = "0.0.8"
 dependencies = [
+ "thiserror 2.0.17",
  "uv-macros",
 ]
 

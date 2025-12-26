@@ -934,7 +934,7 @@ impl FormMetadata {
         add_option("description_content_type", description_content_type);
         add_option("download_url", download_url);
         add_option("home_page", home_page);
-        add_option("keywords", keywords);
+        add_option("keywords", keywords.map(|keywords| keywords.to_string()));
         add_option("license", license);
         add_option("license_expression", license_expression);
         add_option("maintainer", maintainer);
@@ -956,7 +956,7 @@ impl FormMetadata {
         add_vec("license_file", license_files);
         add_vec("obsoletes_dist", obsoletes_dist);
         add_vec("platform", platforms);
-        add_vec("project_urls", project_urls);
+        add_vec("project_urls", project_urls.to_vec_str());
         add_vec("provides_dist", provides_dist);
         add_vec("provides_extra", provides_extra);
         add_vec("requires_dist", requires_dist);

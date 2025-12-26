@@ -1,16 +1,17 @@
 //! Vendored from <https://github.com/PyO3/python-pkginfo-rs>
 
-use std::fmt::Display;
+use crate::MetadataError;
+use crate::metadata::Headers;
+use indexmap::IndexMap;
 use std::fmt::Write;
+use std::fmt::{Display, Formatter};
 use std::str;
 use std::str::FromStr;
 
-use crate::MetadataError;
-use crate::metadata::Headers;
-
 /// Code Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Metadata23 {
     /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3` and
     /// `2.4`.
@@ -36,7 +37,7 @@ pub struct Metadata23 {
     pub description_content_type: Option<String>,
     /// A list of additional keywords, separated by commas, to be used to
     /// assist searching for the distribution in a larger catalog.
-    pub keywords: Option<String>,
+    pub keywords: Option<Keywords>,
     /// A string containing the URL for the distribution's home page.
     ///
     /// Deprecated by PEP 753.
@@ -95,7 +96,7 @@ pub struct Metadata23 {
     pub requires_external: Vec<String>,
     /// A string containing a browsable URL for the project and a label for it, separated by a
     /// comma.
-    pub project_urls: Vec<String>,
+    pub project_urls: ProjectUrls,
     /// A string containing the name of an optional feature. Must be a valid Python identifier.
     /// May be used to make a dependency conditional on whether the optional feature has been
     /// requested.
@@ -128,7 +129,10 @@ impl Metadata23 {
         } else {
             Some(body.to_string())
         };
-        let keywords = headers.get_first_value("Keywords");
+        let keywords = headers
+            .get_first_value("Keywords")
+            .as_deref()
+            .map(Keywords::from_metadata);
         let home_page = headers.get_first_value("Home-Page");
         let download_url = headers.get_first_value("Download-URL");
         let author = headers.get_first_value("Author");
@@ -144,7 +148,7 @@ impl Metadata23 {
         let maintainer_email = headers.get_first_value("Maintainer-email");
         let requires_python = headers.get_first_value("Requires-Python");
         let requires_external = headers.get_all_values("Requires-External").collect();
-        let project_urls = headers.get_all_values("Project-URL").collect();
+        let project_urls = ProjectUrls::from_iter_str(headers.get_all_values("Project-URL"));
         let provides_extra = headers.get_all_values("Provides-Extra").collect();
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();
@@ -263,7 +267,7 @@ impl Metadata23 {
             self.requires_python.as_ref(),
         );
         write_all(&mut writer, "Requires-External", &self.requires_external);
-        write_all(&mut writer, "Project-URL", &self.project_urls);
+        write_all(&mut writer, "Project-URL", self.project_urls.to_vec_str());
         write_all(&mut writer, "Provides-Extra", &self.provides_extra);
         write_opt_str(
             &mut writer,
@@ -285,6 +289,68 @@ impl FromStr for Metadata23 {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s.as_bytes())
+    }
+}
+
+/// Handle the different keywords representation between `METADATA` and `METADATA.json`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Keywords(Vec<String>);
+
+impl Keywords {
+    pub fn new(keywords: Vec<String>) -> Self {
+        Self(keywords)
+    }
+
+    /// Read the `METADATA` format.
+    pub fn from_metadata(keywords: &str) -> Self {
+        Self(keywords.split(',').map(ToString::to_string).collect())
+    }
+}
+
+impl Display for Keywords {
+    /// Write the `METADATA` format.
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut keywords = self.0.iter();
+        if let Some(keyword) = keywords.next() {
+            write!(f, "{keyword}")?;
+        }
+        for keyword in keywords {
+            write!(f, ",{keyword}")?;
+        }
+        Ok(())
+    }
+}
+
+/// Handle the different project URLs representation between `METADATA` and `METADATA.json`.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProjectUrls(IndexMap<String, String>);
+
+impl ProjectUrls {
+    pub fn new(project_urls: IndexMap<String, String>) -> Self {
+        Self(project_urls)
+    }
+
+    /// Read the `METADATA` format.
+    pub fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
+        Self(
+            project_urls
+                .into_iter()
+                .map(|project_url| {
+                    let (label, url) = project_url.split_once(',').unwrap_or((&project_url, ""));
+                    // TODO(konsti): The spec says separated by comma, but it's actually comma and a
+                    // space.
+                    (label.trim().to_string(), url.trim().to_string())
+                })
+                .collect(),
+        )
+    }
+
+    /// Write the `METADATA` format.
+    pub fn to_vec_str(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .map(|(label, url)| format!("{label}, {url}"))
+            .collect()
     }
 }
 
