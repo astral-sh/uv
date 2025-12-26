@@ -216,7 +216,7 @@ fn set_not_readonly(path: &Path) -> io::Result<bool> {
 ///
 /// On Windows, the extended-length path prefix (`\\?\`) allows operating on paths that:
 /// - Contain special characters (like trailing dots or spaces) that are normally invalid
-/// - Exceed the MAX_PATH limit
+/// - Exceed the `MAX_PATH` limit
 ///
 /// On non-Windows systems, this is a no-op that returns the original path.
 #[cfg(windows)]
@@ -243,8 +243,8 @@ fn to_extended_path(path: &Path) -> std::borrow::Cow<'_, Path> {
     let abs_str = abs_path.to_string_lossy();
 
     // Handle UNC paths: \\server\share -> \\?\UNC\server\share
-    let extended = if abs_str.starts_with(r"\\") {
-        PathBuf::from(format!(r"\\?\UNC\{}", &abs_str[2..]))
+    let extended = if let Some(stripped) = abs_str.strip_prefix(r"\\") {
+        PathBuf::from(format!(r"\\?\UNC\{stripped}"))
     } else {
         PathBuf::from(format!(r"\\?\{}", abs_path.display()))
     };
@@ -253,6 +253,7 @@ fn to_extended_path(path: &Path) -> std::borrow::Cow<'_, Path> {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 fn to_extended_path(path: &Path) -> std::borrow::Cow<'_, Path> {
     std::borrow::Cow::Borrowed(path)
 }
@@ -403,7 +404,10 @@ mod tests {
         assert!(test_file.exists(), "Test file should exist before removal");
 
         remove_file(&test_file).expect("Failed to remove readonly file");
-        assert!(!test_file.exists(), "Readonly file should be deleted after removal");
+        assert!(
+            !test_file.exists(),
+            "Readonly file should be deleted after removal"
+        );
     }
 
     #[test]
@@ -433,7 +437,10 @@ mod tests {
         assert!(test_dir.exists(), "Test dir should exist before removal");
 
         remove_dir_all(&test_dir).expect("Failed to remove dir_all");
-        assert!(!test_dir.exists(), "Dir and contents should be deleted after removal");
+        assert!(
+            !test_dir.exists(),
+            "Dir and contents should be deleted after removal"
+        );
     }
 
     #[test]
