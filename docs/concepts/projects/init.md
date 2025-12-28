@@ -10,7 +10,7 @@ flag can be used to create a project for a library instead.
 
 uv will create a project in the working directory, or, in a target directory by providing a name,
 e.g., `uv init foo`. The working directory can be modified with the `--directory` option, which will
-cause the target directory path will be interpreted relative to the specified working directory. If
+cause the target directory path to be interpreted relative to the specified working directory. If
 there's already a project in the target directory, i.e., if there's a `pyproject.toml`, uv will exit
 with an error.
 
