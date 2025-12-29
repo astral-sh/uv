@@ -1,6 +1,6 @@
 [package]
 name = "uv-requirements-txt"
-version = "0.0.8"
+version = "0.0.9"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
