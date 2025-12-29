@@ -212,49 +212,44 @@ fn set_not_readonly(path: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
-/// Convert a path to an extended-length path on Windows.
+/// Convert a path to a verbatim path on Windows.
 ///
-/// On Windows, the extended-length path prefix (`\\?\`) allows operating on paths that:
+/// On Windows, the verbatim path prefix (`\\?\`) allows operating on paths that:
 /// - Contain special characters (like trailing dots or spaces) that are normally invalid
 /// - Exceed the `MAX_PATH` limit
-///
-/// On non-Windows systems, this is a no-op that returns the original path.
 #[cfg(windows)]
-fn to_extended_path(path: &Path) -> std::borrow::Cow<'_, Path> {
-    use std::path::PathBuf;
+fn to_verbatim_path(path: &Path) -> std::borrow::Cow<'_, Path> {
+    use std::path::{Component, PathBuf, Prefix};
 
-    // If the path already has the extended prefix, return it as-is
-    let path_str = path.to_string_lossy();
-    if path_str.starts_with(r"\\?") {
-        return std::borrow::Cow::Borrowed(path);
+    if let Some(Component::Prefix(prefix)) = path.components().next() {
+        match prefix.kind() {
+            // Already a verbatim path, return as-is
+            Prefix::Verbatim(_) | Prefix::VerbatimDisk(_) | Prefix::VerbatimUNC(_, _) => {
+                return std::borrow::Cow::Borrowed(path);
+            }
+            // UNC path: \\server\share\... -> \\?\UNC\server\share\...
+            Prefix::UNC(server, share) => {
+                let suffix: PathBuf = path.components().skip(1).collect();
+                let verbatim = PathBuf::from(format!(
+                    r"\\?\UNC\{}\{}",
+                    server.to_string_lossy(),
+                    share.to_string_lossy()
+                ))
+                .join(suffix);
+                return std::borrow::Cow::Owned(verbatim);
+            }
+            // Disk path: C:\... -> \\?\C:\...
+            Prefix::Disk(_) => {
+                return std::borrow::Cow::Owned(PathBuf::from(format!(r"\\?\{}", path.display())));
+            }
+            // DeviceNS path: \\.\device -> not typically used, return as-is
+            Prefix::DeviceNS(_) => {
+                return std::borrow::Cow::Borrowed(path);
+            }
+        }
     }
 
-    // Convert to absolute path if it's relative
-    let abs_path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        match std::env::current_dir() {
-            Ok(cwd) => cwd.join(path),
-            // If current_dir() fails, we can't create a valid extended path
-            Err(_) => return std::borrow::Cow::Borrowed(path),
-        }
-    };
-
-    let abs_str = abs_path.to_string_lossy();
-
-    // Handle UNC paths: \\server\share -> \\?\UNC\server\share
-    let extended = if let Some(stripped) = abs_str.strip_prefix(r"\\") {
-        PathBuf::from(format!(r"\\?\UNC\{stripped}"))
-    } else {
-        PathBuf::from(format!(r"\\?\{}", abs_path.display()))
-    };
-
-    std::borrow::Cow::Owned(extended)
-}
-
-#[cfg(not(windows))]
-#[allow(dead_code)]
-fn to_extended_path(path: &Path) -> std::borrow::Cow<'_, Path> {
+    // Relative path or no prefix, return unchanged
     std::borrow::Cow::Borrowed(path)
 }
 
@@ -277,17 +272,17 @@ fn remove_file(path: &Path) -> io::Result<()> {
         {
             // On Windows, files with special characters (like trailing dots) may fail with
             // NotFound or InvalidInput errors due to path normalization. Try using the
-            // extended-length path prefix (\\?\) to bypass this normalization.
-            let extended_path = to_extended_path(path);
-            if extended_path.as_ref() != path {
-                match fs_err::remove_file(extended_path.as_ref()) {
+            // verbatim path prefix (\\?\) to bypass this normalization.
+            let verbatim_path = to_verbatim_path(path);
+            if verbatim_path.as_ref() != path {
+                match fs_err::remove_file(verbatim_path.as_ref()) {
                     Ok(()) => return Ok(()),
                     // Handle the case where file has special chars AND is readonly
                     Err(e)
                         if e.kind() == io::ErrorKind::PermissionDenied
-                            && set_not_readonly(extended_path.as_ref()).unwrap_or(false) =>
+                            && set_not_readonly(verbatim_path.as_ref()).unwrap_or(false) =>
                     {
-                        return fs_err::remove_file(extended_path.as_ref()).or(Err(err));
+                        return fs_err::remove_file(verbatim_path.as_ref()).or(Err(err));
                     }
                     Err(_) => {}
                 }
@@ -315,15 +310,15 @@ fn remove_dir(path: &Path) -> io::Result<()> {
             if err.kind() == io::ErrorKind::NotFound
                 || err.kind() == io::ErrorKind::InvalidInput =>
         {
-            let extended_path = to_extended_path(path);
-            if extended_path.as_ref() != path {
-                match fs_err::remove_dir(extended_path.as_ref()) {
+            let verbatim_path = to_verbatim_path(path);
+            if verbatim_path.as_ref() != path {
+                match fs_err::remove_dir(verbatim_path.as_ref()) {
                     Ok(()) => return Ok(()),
                     Err(e)
                         if e.kind() == io::ErrorKind::PermissionDenied
-                            && set_readable(extended_path.as_ref()).unwrap_or(false) =>
+                            && set_readable(verbatim_path.as_ref()).unwrap_or(false) =>
                     {
-                        return fs_err::remove_dir(extended_path.as_ref()).or(Err(err));
+                        return fs_err::remove_dir(verbatim_path.as_ref()).or(Err(err));
                     }
                     Err(_) => {}
                 }
@@ -351,15 +346,15 @@ fn remove_dir_all(path: &Path) -> io::Result<()> {
             if err.kind() == io::ErrorKind::NotFound
                 || err.kind() == io::ErrorKind::InvalidInput =>
         {
-            let extended_path = to_extended_path(path);
-            if extended_path.as_ref() != path {
-                match fs_err::remove_dir_all(extended_path.as_ref()) {
+            let verbatim_path = to_verbatim_path(path);
+            if verbatim_path.as_ref() != path {
+                match fs_err::remove_dir_all(verbatim_path.as_ref()) {
                     Ok(()) => return Ok(()),
                     Err(e)
                         if e.kind() == io::ErrorKind::PermissionDenied
-                            && set_readable(extended_path.as_ref()).unwrap_or(false) =>
+                            && set_readable(verbatim_path.as_ref()).unwrap_or(false) =>
                     {
-                        return fs_err::remove_dir_all(extended_path.as_ref()).or(Err(err));
+                        return fs_err::remove_dir_all(verbatim_path.as_ref()).or(Err(err));
                     }
                     Err(_) => {}
                 }
@@ -493,49 +488,73 @@ mod tests {
 
     #[test]
     #[cfg(windows)]
-    fn test_to_extended_path_absolute() {
+    fn test_to_verbatim_path_absolute() {
         let path = Path::new(r"C:\Users\test\file.txt");
-        let extended = to_extended_path(path);
+        let verbatim = to_verbatim_path(path);
         assert!(
-            extended.to_string_lossy().starts_with(r"\\?\"),
-            "Extended path should start with \\\\?\\, got: {}",
-            extended.display()
+            verbatim.to_string_lossy().starts_with(r"\\?\"),
+            "Verbatim path should start with \\\\?\\, got: {}",
+            verbatim.display()
         );
     }
 
     #[test]
     #[cfg(windows)]
-    fn test_to_extended_path_already_extended() {
+    fn test_to_verbatim_path_already_verbatim() {
         let path = Path::new(r"\\?\C:\Users\test\file.txt");
-        let extended = to_extended_path(path);
+        let verbatim = to_verbatim_path(path);
         assert_eq!(
-            extended.as_ref(),
+            verbatim.as_ref(),
             path,
-            "Already extended path should be returned as-is"
+            "Already verbatim path should be returned as-is"
         );
     }
 
     #[test]
     #[cfg(windows)]
-    fn test_to_extended_path_unc() {
-        let path = Path::new(r"\\server\share\file.txt");
-        let extended = to_extended_path(path);
-        assert!(
-            extended.to_string_lossy().starts_with(r"\\?\UNC\"),
-            "UNC path should be converted to extended UNC format, got: {}",
-            extended.display()
+    fn test_to_verbatim_path_verbatim_disk() {
+        let path = Path::new(r"\\?\C:\Users\test\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "VerbatimDisk path should be returned as-is"
         );
     }
 
     #[test]
-    #[cfg(not(windows))]
-    fn test_to_extended_path_noop_on_unix() {
-        let path = Path::new("/home/user/file.txt");
-        let extended = to_extended_path(path);
+    #[cfg(windows)]
+    fn test_to_verbatim_path_verbatim_unc() {
+        let path = Path::new(r"\\?\UNC\server\share\file.txt");
+        let verbatim = to_verbatim_path(path);
         assert_eq!(
-            extended.as_ref(),
+            verbatim.as_ref(),
             path,
-            "On non-Windows, path should be returned unchanged"
+            "VerbatimUNC path should be returned as-is"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_unc() {
+        let path = Path::new(r"\\server\share\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert!(
+            verbatim.to_string_lossy().starts_with(r"\\?\UNC\"),
+            "UNC path should be converted to verbatim UNC format, got: {}",
+            verbatim.display()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_relative() {
+        let path = Path::new(r"relative\path\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "Relative path should be returned unchanged"
         );
     }
 
