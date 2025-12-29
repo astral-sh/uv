@@ -2,6 +2,38 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.9.19
+
+Released on 2025-12-29.
+
+### Python
+
+- Add CPython 3.15.0a3 ([#17165](https://github.com/astral-sh/uv/pull/17165))
+
+### Enhancements
+
+- Allow `uv pip compile` to install missing python interpreters in cases where it would otherwise fail ([#17216](https://github.com/astral-sh/uv/pull/17216))
+- Avoid creating file contents with `uv init --bare --script` ([#17162](https://github.com/astral-sh/uv/pull/17162))
+- Respect `--torch-backend` in `uv tool` commands ([#17117](https://github.com/astral-sh/uv/pull/17117))
+- Support comma-separated values in `--no-binary` and `--only-binary` ([#17185](https://github.com/astral-sh/uv/pull/17185))
+
+### Preview features
+
+- Summarize package changes in `uv sync` with JSON output format ([#16981](https://github.com/astral-sh/uv/pull/16981))
+
+### Performance
+
+- Avoid two hot `String` allocations in deserialization ([#17221](https://github.com/astral-sh/uv/pull/17221))
+- Cache NVIDIA-hosted wheels by default ([#17164](https://github.com/astral-sh/uv/pull/17164))
+
+### Bug fixes
+
+- Avoid enforcing incorrect hash in mixed-hash settings ([#17157](https://github.com/astral-sh/uv/pull/17157))
+- Fix retry counts in cached client ([#17104](https://github.com/astral-sh/uv/pull/17104))
+- Respect `UV_PYTHON_DOWNLOAD_MIRROR` in `uv python list` ([#16673](https://github.com/astral-sh/uv/pull/16673))
+- Support remote `pylock.toml` files ([#17119](https://github.com/astral-sh/uv/pull/17119))
+- Avoid flagging proxied Git URLs as ambiguous authority ([#17234](https://github.com/astral-sh/uv/pull/17234))
+- Fix dropped support of `-` in pip constraints, overrides, and excludes ([#17188](https://github.com/astral-sh/uv/pull/17188))
 
 ## 0.9.18
 
