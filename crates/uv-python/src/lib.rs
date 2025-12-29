@@ -135,6 +135,7 @@ mod tests {
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
+    use uv_client::BaseClientBuilder;
     use uv_preview::Preview;
     use uv_static::EnvVars;
 
@@ -142,8 +143,9 @@ mod tests {
 
     use crate::{
         PythonNotFound, PythonRequest, PythonSource, PythonVersion,
-        implementation::ImplementationName, installation::PythonInstallation,
-        managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
+        downloads::ManagedPythonDownloadList, implementation::ImplementationName,
+        installation::PythonInstallation, managed::ManagedPythonInstallations,
+        virtualenv::virtualenv_python_executable,
     };
     use crate::{
         PythonPreference,
@@ -989,13 +991,42 @@ mod tests {
         Ok(())
     }
 
+    fn find_best_python_installation_no_download(
+        request: &PythonRequest,
+        environments: EnvironmentPreference,
+        preference: PythonPreference,
+        cache: &Cache,
+        preview: Preview,
+    ) -> Result<Result<PythonInstallation, PythonNotFound>, crate::Error> {
+        let client_builder = BaseClientBuilder::default();
+        let download_list = ManagedPythonDownloadList::new_only_embedded()?;
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build runtime")
+            .block_on(find_best_python_installation(
+                request,
+                environments,
+                preference,
+                false,
+                &download_list,
+                &client_builder.clone().retries(0).build(),
+                &client_builder.retry_policy(),
+                cache,
+                None,
+                None,
+                None,
+                preview,
+            ))
+    }
+
     #[test]
     fn find_best_python_version_patch_exact() -> Result<()> {
         let mut context = TestContext::new()?;
         context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
         let python = context.run(|| {
-            find_best_python_installation(
+            find_best_python_installation_no_download(
                 &PythonRequest::parse("3.11.3"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
@@ -1029,7 +1060,7 @@ mod tests {
         context.add_python_versions(&["3.10.1", "3.11.2", "3.11.4", "3.11.3", "3.12.5"])?;
 
         let python = context.run(|| {
-            find_best_python_installation(
+            find_best_python_installation_no_download(
                 &PythonRequest::parse("3.11.11"),
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
@@ -1066,7 +1097,7 @@ mod tests {
 
         let python =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
-                find_best_python_installation(
+                find_best_python_installation_no_download(
                     &PythonRequest::parse("3.10"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
@@ -1097,7 +1128,7 @@ mod tests {
 
         let python =
             context.run_with_vars(&[(EnvVars::VIRTUAL_ENV, Some(venv.as_os_str()))], || {
-                find_best_python_installation(
+                find_best_python_installation_no_download(
                     &PythonRequest::parse("3.10.2"),
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,

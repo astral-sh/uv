@@ -1,5 +1,6 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
+use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
@@ -10,6 +11,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
+use uv_client::BaseClient;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -21,7 +23,7 @@ use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use which::{which, which_all};
 
-use crate::downloads::{PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
@@ -1445,13 +1447,20 @@ pub(crate) fn find_python_installation(
 ///
 /// See [`find_python_installation`] for more details on installation discovery.
 #[instrument(skip_all, fields(request))]
-pub(crate) fn find_best_python_installation(
+pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    downloads_enabled: bool,
+    download_list: &ManagedPythonDownloadList,
+    client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
+    reporter: Option<&dyn crate::downloads::Reporter>,
+    python_install_mirror: Option<&str>,
+    pypy_install_mirror: Option<&str>,
     preview: Preview,
-) -> Result<FindPythonResult, Error> {
+) -> Result<FindPythonResult, crate::Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
@@ -1465,11 +1474,41 @@ pub(crate) fn find_best_python_installation(
         // Continue if we can't find a matching Python and ignore non-critical discovery errors
         Ok(Err(_)) => {}
         Err(ref err) if !err.is_critical() => {}
-        _ => return result,
+        _ => return Ok(result?),
     }
 
-    // If that fails, and a specific patch version was requested try again allowing a
-    // different patch version
+    // Attempt to download the version if downloads are enabled
+    if downloads_enabled
+        && let Some(download_request) = PythonDownloadRequest::from_request(request)
+    {
+        let download = download_request
+            .clone()
+            .fill()
+            .map(|request| download_list.find(&request));
+        if let Some(download) = match download {
+            Ok(Ok(download)) => Some(download),
+            Ok(Err(crate::downloads::Error::NoDownloadFound(_))) => None,
+            Ok(Err(error)) => return Err(error.into()),
+            Err(error) => return Err(error.into()),
+        } {
+            let installation = PythonInstallation::fetch(
+                download,
+                client,
+                retry_policy,
+                cache,
+                reporter,
+                python_install_mirror,
+                pypy_install_mirror,
+                preview,
+            )
+            .await?;
+
+            return Ok(Ok(installation));
+        }
+    }
+
+    // If both approaches fail, and a specific patch version was requested try
+    // again allowing a different patch version
     if let Some(request) = match request {
         PythonRequest::Version(version) => {
             if version.has_patch() {
@@ -1493,7 +1532,7 @@ pub(crate) fn find_best_python_installation(
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
             Ok(Err(_)) => {}
             Err(ref err) if !err.is_critical() => {}
-            _ => return result,
+            _ => return Ok(result?),
         }
     }
 
