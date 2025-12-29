@@ -4158,8 +4158,6 @@ fn python_install_compile_bytecode_pyodide() {
     //uv_snapshot!(context.filters(), context.python_upgrade().arg("--compile-bytecode"), @r"TODO");
 }
 
-// TODO(tk): Revisit: Currently this reliably hits the 120s timeout on the Windows runners
-#[cfg(unix)]
 #[test]
 fn python_install_compile_bytecode_graalpy() {
     let context: TestContext = TestContext::new_with_versions(&[])
