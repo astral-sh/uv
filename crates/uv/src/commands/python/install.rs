@@ -202,12 +202,10 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let compiler = async {
-        let mut did_compile = false;
         let mut total_files = 0;
         let mut total_elapsed = std::time::Duration::default();
         let mut total_skipped = 0;
         while let Some(installation) = receiver.recv().await {
-            did_compile = true;
             if let Some((files, elapsed)) =
                 compile_stdlib_bytecode(&installation, concurrency, cache)
                     .await
@@ -224,7 +222,7 @@ pub(crate) async fn install(
                 total_skipped += 1;
             }
         }
-        Ok::<_, anyhow::Error>(did_compile.then_some((total_files, total_elapsed, total_skipped)))
+        Ok::<_, anyhow::Error>((total_files, total_elapsed, total_skipped))
     };
 
     let installer = perform_install(
@@ -251,36 +249,35 @@ pub(crate) async fn install(
 
     let (installer_result, compiler_result) = join!(installer, compiler);
 
-    if let Some((total_files, total_elapsed, total_skipped)) = compiler_result? {
-        if total_files > 0 {
-            let s = if total_files == 1 { "" } else { "s" };
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Bytecode compiled {} {}{}",
-                    format!("{total_files} file{s}").bold(),
-                    format!("in {}", elapsed(total_elapsed)).dimmed(),
-                    if total_skipped > 0 {
-                        format!(
-                            " (skipped {total_skipped} incompatible version{})",
-                            if total_skipped == 1 { "" } else { "s" }
-                        )
-                    } else {
-                        String::new()
-                    }
-                    .dimmed()
-                )
+    let (total_files, total_elapsed, total_skipped) = compiler_result?;
+    if total_files > 0 {
+        let s = if total_files == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Bytecode compiled {} {}{}",
+                format!("{total_files} file{s}").bold(),
+                format!("in {}", elapsed(total_elapsed)).dimmed(),
+                if total_skipped > 0 {
+                    format!(
+                        " (skipped {total_skipped} incompatible version{})",
+                        if total_skipped == 1 { "" } else { "s" }
+                    )
+                } else {
+                    String::new()
+                }
                 .dimmed()
-            )?;
-        } else if total_skipped > 0 {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!("No compatible versions to bytecode compile (skipped {total_skipped})")
-                    .dimmed()
-            )?;
-        }
+            )
+            .dimmed()
+        )?;
+    } else if total_skipped > 0 {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!("No compatible versions to bytecode compile (skipped {total_skipped})")
+                .dimmed()
+        )?;
     }
 
     installer_result
@@ -1238,6 +1235,9 @@ async fn compile_stdlib_bytecode(
     )
     .await
     .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
+    if files == 0 {
+        return Ok(None);
+    }
     Ok(Some((files, start.elapsed())))
 }
 
