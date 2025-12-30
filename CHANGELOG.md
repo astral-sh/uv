@@ -7,7 +7,7 @@
 
 Released on 2025-12-29.
 
-This is a re-release of 0.9.20, with internal crate versions incremented to enable publishing to crates.io.
+This is a re-release of 0.9.19, with internal crate versions incremented to enable publishing to crates.io.
 
 ## 0.9.19
 
