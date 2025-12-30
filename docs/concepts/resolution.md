@@ -627,7 +627,7 @@ dependencies = ["member1", "member2"]
 ## Lower bounds
 
 By default, `uv add` adds lower bounds to dependencies and, when using uv to manage projects, uv
-will warn if direct dependencies don't have lower bound.
+will warn if direct dependencies don't have lower bounds.
 
 Lower bounds are not critical in the "happy path", but they are important for cases where there are
 dependency conflicts. For example, consider a project that requires two packages and those packages
