@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -20,7 +20,7 @@ use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipar
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
+    RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
     default_on_request_success,
 };
 use thiserror::Error;
@@ -311,7 +311,7 @@ impl<'a> BaseClientBuilder<'a> {
         matches!(self.connectivity, Connectivity::Offline)
     }
 
-    /// Create a [`RetryPolicy`] for the client.
+    /// Create the retry policy for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
         let mut builder = ExponentialBackoff::builder();
         if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
@@ -684,7 +684,7 @@ impl BaseClient {
         self.connectivity
     }
 
-    /// The [`RetryPolicy`] for the client.
+    /// The retry policy for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
         let mut builder = ExponentialBackoff::builder();
         if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
@@ -1143,20 +1143,19 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     None
 }
 
-/// Per-request retry state and policy.
+/// Per-request retry state for tracking retries across layers.
 pub struct RetryState {
-    retry_policy: ExponentialBackoff,
-    start_time: SystemTime,
+    /// Kept for API compatibility with callers that pass `retry_policy`.
+    _retry_policy: ExponentialBackoff,
     total_retries: u32,
     url: DisplaySafeUrl,
 }
 
 impl RetryState {
-    /// Initialize the [`RetryState`] and start the backoff timer.
+    /// Initialize the [`RetryState`].
     pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
         Self {
-            retry_policy,
-            start_time: SystemTime::now(),
+            _retry_policy: retry_policy,
             total_retries: 0,
             url: url.into(),
         }
@@ -1181,22 +1180,19 @@ impl RetryState {
         err: &(dyn Error + 'static),
         error_retries: u32,
     ) -> Option<Duration> {
-        // If the middleware performed any retries, consider them in our budget.
+        // Track retries from the middleware layer.
         self.total_retries += error_retries;
+
+        // Check if this is a transient network error.
         match retryable_on_request_failure(err) {
             Some(Retryable::Transient) => {
-                let retry_decision = self
-                    .retry_policy
-                    .should_retry(self.start_time, self.total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-
-                    self.total_retries += 1;
-                    return Some(duration);
-                }
-
+                // For transient network errors, the middleware (RetryTransientMiddleware) already
+                // handles retries. If we get here, it means middleware exhausted its retry budget.
+                // Record the middleware's retries for error reporting, but don't retry again -
+                // that would cause nested retry loops (middleware retries * cached_client retries).
+                //
+                // Use DEFAULT_RETRIES since middleware uses the same default.
+                self.total_retries = self.total_retries.max(DEFAULT_RETRIES);
                 None
             }
             Some(Retryable::Fatal) | None => None,
