@@ -17,6 +17,7 @@ use std::path::Path;
 use url::Url;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
+#[cfg(feature = "git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;

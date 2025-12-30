@@ -1,3 +1,4 @@
+#[cfg(any(feature = "git", feature = "git-lfs"))]
 use std::collections::BTreeSet;
 use std::process::Command;
 
