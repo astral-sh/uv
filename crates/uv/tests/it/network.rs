@@ -392,6 +392,7 @@ async fn install_http_retries() {
     // Create a server that always fails, so we can see the number of retries used
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(503))
+        .expect(6)
         .mount(&server)
         .await;
 
