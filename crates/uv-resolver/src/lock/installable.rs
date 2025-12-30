@@ -16,7 +16,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{HashedDist, LockErrorKind, Package, TagPolicy};
+use crate::lock::{LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
 
 pub trait Installable<'lock> {
@@ -527,14 +527,18 @@ pub trait Installable<'lock> {
         marker_env: &ResolverMarkerEnvironment,
         build_options: &BuildOptions,
     ) -> Result<Node, LockError> {
-        let tag_policy = TagPolicy::Required(tags);
-        let HashedDist { dist, hashes } =
-            package.to_dist(self.install_path(), tag_policy, build_options, marker_env)?;
+        let dist = package.to_dist(
+            self.install_path(),
+            TagPolicy::Required(tags),
+            build_options,
+            marker_env,
+        )?;
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
             version,
         };
+        let hashes = package.hashes();
         Ok(Node::Dist {
             dist,
             hashes,
@@ -549,7 +553,7 @@ pub trait Installable<'lock> {
         tags: &Tags,
         marker_env: &ResolverMarkerEnvironment,
     ) -> Result<Node, LockError> {
-        let HashedDist { dist, .. } = package.to_dist(
+        let dist = package.to_dist(
             self.install_path(),
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
