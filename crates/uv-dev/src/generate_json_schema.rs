@@ -111,7 +111,9 @@ fn generate() -> Result<String> {
     std::io::Write::write_all(&mut output.stdin.as_ref().unwrap(), json.as_bytes())
         .context("Failed to write to prettier stdin")?;
 
-    let output = output.wait_with_output().context("Failed to run prettier")?;
+    let output = output
+        .wait_with_output()
+        .context("Failed to run prettier")?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!("prettier failed: {stderr}");
