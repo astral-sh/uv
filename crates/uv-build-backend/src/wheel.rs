@@ -4,7 +4,7 @@ use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
 use tempfile::NamedTempFile;
@@ -53,8 +53,7 @@ pub fn build_wheel(
     debug!("Writing wheel at {}", wheel_path.user_display());
 
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
-    let file = File::from_parts(temp_file.as_file().try_clone()?, &wheel_path);
-    let wheel_writer = ZipDirectoryWriter::new_wheel(file);
+    let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
         source_tree,
@@ -305,8 +304,7 @@ pub fn build_editable(
     debug!("Writing wheel at {}", wheel_path.user_display());
 
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
-    let file = File::from_parts(temp_file.as_file().try_clone()?, &wheel_path);
-    let mut wheel_writer = ZipDirectoryWriter::new_wheel(file);
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
@@ -630,18 +628,18 @@ fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
 }
 
 /// Zip archive (wheel) writer.
-struct ZipDirectoryWriter {
-    writer: ZipWriter<File>,
+struct ZipDirectoryWriter<W: Write + Seek> {
+    writer: ZipWriter<W>,
     compression: CompressionMethod,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl ZipDirectoryWriter {
+impl<W: Write + Seek> ZipDirectoryWriter<W> {
     /// A wheel writer with deflate compression.
-    fn new_wheel(file: File) -> Self {
+    fn new_wheel(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(file),
+            writer: ZipWriter::new(writer),
             compression: CompressionMethod::Deflated,
             record: Vec::new(),
         }
@@ -651,9 +649,9 @@ impl ZipDirectoryWriter {
     ///
     /// Since editables are temporary, we save time be skipping compression and decompression.
     #[expect(dead_code)]
-    fn new_editable(file: File) -> Self {
+    fn new_editable(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(file),
+            writer: ZipWriter::new(writer),
             compression: CompressionMethod::Stored,
             record: Vec::new(),
         }
@@ -675,7 +673,7 @@ impl ZipDirectoryWriter {
     }
 }
 
-impl DirectoryWriter for ZipDirectoryWriter {
+impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)

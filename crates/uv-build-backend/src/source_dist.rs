@@ -9,7 +9,7 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
-use std::io::{BufReader, Cursor};
+use std::io::{BufReader, Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
 use tempfile::NamedTempFile;
@@ -36,8 +36,7 @@ pub fn build_source_dist(
     let source_dist_path = source_dist_directory.join(filename.to_string());
 
     let temp_file = NamedTempFile::new_in(source_dist_directory)?;
-    let file = File::from_parts(temp_file.as_file().try_clone()?, &source_dist_path);
-    let writer = TarGzWriter::new(file, &source_dist_path);
+    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
         .persist(&source_dist_path)
@@ -289,21 +288,21 @@ fn write_source_dist(
     Ok(filename)
 }
 
-struct TarGzWriter {
+struct TarGzWriter<W: Write> {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<File>>,
+    tar: tar::Builder<GzEncoder<W>>,
 }
 
-impl TarGzWriter {
-    fn new(file: File, path: impl Into<PathBuf>) -> Self {
+impl<W: Write> TarGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let enc = GzEncoder::new(file, Compression::default());
+        let enc = GzEncoder::new(writer, Compression::default());
         let tar = tar::Builder::new(enc);
         Self { path, tar }
     }
 }
 
-impl DirectoryWriter for TarGzWriter {
+impl<W: Write> DirectoryWriter for TarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module
