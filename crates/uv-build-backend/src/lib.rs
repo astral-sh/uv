@@ -1076,8 +1076,7 @@ mod tests {
         let dist_contents: Vec<_> = fs_err::read_dir(dist.path()).unwrap().collect();
         assert!(
             dist_contents.is_empty(),
-            "Expected empty dist directory, but found: {:?}",
-            dist_contents
+            "Expected empty dist directory, but found: {dist_contents:?}"
         );
     }
 
