@@ -36,7 +36,8 @@ pub fn build_source_dist(
     let source_dist_path = source_dist_directory.join(filename.to_string());
 
     let temp_file = NamedTempFile::new_in(source_dist_directory)?;
-    let writer = TarGzWriter::new(temp_file.as_file().try_clone()?, &source_dist_path);
+    let file = File::from_parts(temp_file.as_file().try_clone()?, &source_dist_path);
+    let writer = TarGzWriter::new(file, &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
         .persist(&source_dist_path)
@@ -290,11 +291,11 @@ fn write_source_dist(
 
 struct TarGzWriter {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<std::fs::File>>,
+    tar: tar::Builder<GzEncoder<File>>,
 }
 
 impl TarGzWriter {
-    fn new(file: std::fs::File, path: impl Into<PathBuf>) -> Self {
+    fn new(file: File, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
         let enc = GzEncoder::new(file, Compression::default());
         let tar = tar::Builder::new(enc);

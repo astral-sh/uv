@@ -53,7 +53,8 @@ pub fn build_wheel(
     debug!("Writing wheel at {}", wheel_path.user_display());
 
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
-    let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file().try_clone()?);
+    let file = File::from_parts(temp_file.as_file().try_clone()?, &wheel_path);
+    let wheel_writer = ZipDirectoryWriter::new_wheel(file);
 
     write_wheel(
         source_tree,
@@ -304,7 +305,8 @@ pub fn build_editable(
     debug!("Writing wheel at {}", wheel_path.user_display());
 
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
-    let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file().try_clone()?);
+    let file = File::from_parts(temp_file.as_file().try_clone()?, &wheel_path);
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(file);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
@@ -629,7 +631,7 @@ fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
 
 /// Zip archive (wheel) writer.
 struct ZipDirectoryWriter {
-    writer: ZipWriter<std::fs::File>,
+    writer: ZipWriter<File>,
     compression: CompressionMethod,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
@@ -637,7 +639,7 @@ struct ZipDirectoryWriter {
 
 impl ZipDirectoryWriter {
     /// A wheel writer with deflate compression.
-    fn new_wheel(file: std::fs::File) -> Self {
+    fn new_wheel(file: File) -> Self {
         Self {
             writer: ZipWriter::new(file),
             compression: CompressionMethod::Deflated,
@@ -649,7 +651,7 @@ impl ZipDirectoryWriter {
     ///
     /// Since editables are temporary, we save time be skipping compression and decompression.
     #[expect(dead_code)]
-    fn new_editable(file: std::fs::File) -> Self {
+    fn new_editable(file: File) -> Self {
         Self {
             writer: ZipWriter::new(file),
             compression: CompressionMethod::Stored,
