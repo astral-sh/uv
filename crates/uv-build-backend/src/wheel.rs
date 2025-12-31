@@ -67,7 +67,7 @@ pub fn build_wheel(
 
     temp_file
         .persist(&wheel_path)
-        .map_err(|err| Error::Persist(wheel_path.clone(), err))?;
+        .map_err(|err| Error::Persist(wheel_path.clone(), err.error))?;
 
     Ok(filename)
 }
@@ -336,7 +336,7 @@ pub fn build_editable(
 
     temp_file
         .persist(&wheel_path)
-        .map_err(|err| Error::Persist(wheel_path.clone(), err))?;
+        .map_err(|err| Error::Persist(wheel_path.clone(), err.error))?;
 
     Ok(filename)
 }

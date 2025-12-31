@@ -41,7 +41,7 @@ pub fn build_source_dist(
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
         .persist(&source_dist_path)
-        .map_err(|err| Error::Persist(source_dist_path.clone(), err))?;
+        .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
 
     Ok(filename)
 }

@@ -33,7 +33,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to persist temporary file to {}", _0.user_display())]
-    Persist(PathBuf, #[source] tempfile::PersistError),
+    Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
     #[error("Invalid project metadata")]
