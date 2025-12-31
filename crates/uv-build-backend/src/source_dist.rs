@@ -12,6 +12,7 @@ use std::io;
 use std::io::{BufReader, Cursor};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
+use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
@@ -33,8 +34,14 @@ pub fn build_source_dist(
         extension: SourceDistExtension::TarGz,
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
-    let writer = TarGzWriter::new(&source_dist_path)?;
+
+    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let writer = TarGzWriter::new(temp_file.as_file().try_clone()?, &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    temp_file
+        .persist(&source_dist_path)
+        .map_err(|err| Error::Persist(source_dist_path.clone(), err))?;
+
     Ok(filename)
 }
 
@@ -283,16 +290,15 @@ fn write_source_dist(
 
 struct TarGzWriter {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<File>>,
+    tar: tar::Builder<GzEncoder<std::fs::File>>,
 }
 
 impl TarGzWriter {
-    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+    fn new(file: std::fs::File, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let file = File::create(&path)?;
         let enc = GzEncoder::new(file, Compression::default());
         let tar = tar::Builder::new(enc);
-        Ok(Self { path, tar })
+        Self { path, tar }
     }
 }
 
