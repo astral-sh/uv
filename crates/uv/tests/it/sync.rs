@@ -14572,6 +14572,122 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Ok(())
 }
 
+/// Sync with an index which serves zstd-compressed wheels.
+#[tokio::test]
+async fn sync_zstd_wheel() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = TestContext::new("3.13");
+    let server = MockServer::start().await;
+
+    // Copy the wheel files to serve them
+    let wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel_path,
+    )?;
+
+    let zstd_wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl.tar.zst");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl.tar.zst"),
+        &zstd_wheel_path,
+    )?;
+
+    let wheel_url = format!(
+        "{}/files/basic_package-0.1.0-py3-none-any.whl",
+        server.uri()
+    );
+
+    // Serve the uncompressed wheel file
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .mount(&server)
+        .await;
+
+    // Serve the zstd-compressed wheel file
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.tar.zst"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&zstd_wheel_path)?))
+        .mount(&server)
+        .await;
+
+    // JSON API response with zstd metadata
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": wheel_url,
+            "hashes": {
+                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            },
+            "size": 1548,
+            "zstd": {
+                "hashes": {
+                    "sha256": "21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4"
+                },
+                "size": 786
+            }
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv.sources]
+        basic-package = {{ index = "test-registry" }}
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-package==0.1.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 #[cfg(not(windows))]
 fn toggle_workspace_editable() -> Result<()> {

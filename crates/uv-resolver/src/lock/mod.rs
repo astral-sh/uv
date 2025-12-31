@@ -2601,11 +2601,17 @@ impl Package {
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                let hashes = self.wheels[best_wheel_index]
-                    .hash
-                    .as_ref()
-                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
-                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                let hashes = {
+                    let wheel = &self.wheels[best_wheel_index];
+                    HashDigests::from(
+                        wheel
+                            .hash
+                            .iter()
+                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
+                            .map(|h| h.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
 
                 let dist = match &self.id.source {
                     Source::Registry(source) => {

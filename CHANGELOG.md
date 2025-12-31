@@ -3,6 +3,19 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.21
+
+Released on 2025-12-30.
+
+### Bug fixes
+
+- Fix regression where zstd distribution hashes were not considered valid ([#17265](https://github.com/astral-sh/uv/pull/17265))
+
+### Documentation
+
+- Fix a typo in the resolution documentation ([#17258](https://github.com/astral-sh/uv/pull/17258))
+- Fix a typo in `python install --default` documentation ([#9826](https://github.com/astral-sh/uv/pull/9826))
+
 ## 0.9.20
 
 Released on 2025-12-29.
