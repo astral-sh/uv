@@ -1042,6 +1042,45 @@ mod tests {
         );
     }
 
+    /// Test that no partial files are left in dist directory when build fails.
+    #[test]
+    fn no_partial_files_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Source dist build should fail
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        // Wheel build should fail
+        let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
+        assert!(wheel_result.is_err());
+
+        // dist directory should be empty (no partial files)
+        let dist_contents: Vec<_> = fs_err::read_dir(dist.path()).unwrap().collect();
+        assert!(
+            dist_contents.is_empty(),
+            "Expected empty dist directory, but found: {:?}",
+            dist_contents
+        );
+    }
+
     #[test]
     fn invalid_stubs_name() {
         let src = TempDir::new().unwrap();
