@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: "Set up Python"
         uses: actions/setup-python@v6
@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: "Set up Python"
         uses: actions/setup-python@v6
@@ -143,7 +143,7 @@ jobs:
           - "3.12"
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install uv and set the Python version
         uses: astral-sh/setup-uv@v7
@@ -167,7 +167,7 @@ jobs:
     env:
       UV_PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 ```
 
 ## Syncing and running
@@ -184,7 +184,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -375,7 +375,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Install Python 3.13
