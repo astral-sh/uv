@@ -98,7 +98,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          version: "0.9.18"
+          version: "0.9.21"
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -260,7 +260,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          version: "0.9.18"
+          version: "0.9.21"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -313,7 +313,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          version: "0.9.18"
+          version: "0.9.21"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -356,7 +356,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          version: "0.9.18"
+          version: "0.9.21"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -522,7 +522,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          version: "0.9.18"
+          version: "0.9.21"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
