@@ -38,7 +38,7 @@ more details on getting started with a `pyproject.toml`.
 
 ## Using `requirements.in`
 
-It is also common to use a lightweight `requirements.txt` format to declare the dependencies for the
+It is also common to use a lightweight `requirements.in` format to declare the dependencies for the
 project. Each requirement is defined on its own line. Commonly, this file is called
 `requirements.in` to distinguish it from `requirements.txt` which is used for the locked
 dependencies.
