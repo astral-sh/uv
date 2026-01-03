@@ -17,10 +17,10 @@ pub enum Status {
 impl Status {
     pub fn new(status: &str) -> Option<Self> {
         match status {
-            "active" => Some(Status::Active),
-            "archived" => Some(Status::Archived),
-            "quarantined" => Some(Status::Quarantined),
-            "deprecated" => Some(Status::Deprecated),
+            "active" => Some(Self::Active),
+            "archived" => Some(Self::Archived),
+            "quarantined" => Some(Self::Quarantined),
+            "deprecated" => Some(Self::Deprecated),
             _ => None,
         }
     }

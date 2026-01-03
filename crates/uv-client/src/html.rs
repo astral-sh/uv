@@ -38,7 +38,7 @@ impl SimpleDetailHTML {
             .iter()
             .find(|node| {
                 node.as_tag()
-                    .map_or(false, |tag| tag.name().as_bytes() == b"head")
+                    .is_some_and(|tag| tag.name().as_bytes() == b"head")
             })
             .map(|head| Self::parse_project_status(dom.parser(), head))
             .transpose()?
@@ -138,7 +138,7 @@ impl SimpleDetailHTML {
         if let Some(status) = status {
             let status = ProjectStatus {
                 status,
-                reason: reason.map(|r| r.into()),
+                reason: reason,
             };
             Ok(Some(status))
         } else {
