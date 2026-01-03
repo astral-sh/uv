@@ -19,6 +19,7 @@ use crate::{ProjectStatus, VerbatimParsedUrl};
 #[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleDetail {
     /// PEP 792 project status information.
+    #[serde(default)]
     pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]

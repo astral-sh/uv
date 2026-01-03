@@ -409,6 +409,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -466,6 +470,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -526,6 +534,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -583,6 +595,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -640,6 +656,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -697,6 +717,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -752,6 +776,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -807,6 +835,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -845,6 +877,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -883,6 +919,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -938,6 +978,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -994,6 +1038,10 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -1051,6 +1099,10 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -1127,6 +1179,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1209,6 +1265,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1312,6 +1372,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1385,6 +1449,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
