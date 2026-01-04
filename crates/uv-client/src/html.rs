@@ -136,10 +136,7 @@ impl SimpleDetailHTML {
         }
 
         if let Some(status) = status {
-            let status = ProjectStatus {
-                status,
-                reason: reason,
-            };
+            let status = ProjectStatus { status, reason };
             Ok(Some(status))
         } else {
             Ok(None)
