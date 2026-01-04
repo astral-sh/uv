@@ -1605,7 +1605,7 @@ pub enum SourceError {
 }
 
 /// Check if the original user-provided path was absolute.
-/// 
+///
 /// Uses the `given()` method of `VerbatimUrl` to check the original string.
 /// If the original string is not available, defaults to checking if it's a `file://` URL
 /// with an absolute path.
@@ -1732,14 +1732,15 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, url, .. } => Self::Path {
+            RequirementSource::Path {
+                install_path, url, ..
+            } => Self::Path {
                 editable: None,
                 package: None,
                 path: PortablePathBuf::from(
                     if was_absolute_path(&url) {
                         // User provided absolute path, preserve it
-                        std::path::absolute(&install_path)
-                            .map_err(SourceError::Absolute)?
+                        std::path::absolute(&install_path).map_err(SourceError::Absolute)?
                     } else {
                         // User provided relative path, make it relative to project root
                         relative_to(&install_path, root)
@@ -1763,8 +1764,7 @@ impl Source {
                 path: PortablePathBuf::from(
                     if was_absolute_path(&url) {
                         // User provided absolute path, preserve it
-                        std::path::absolute(&install_path)
-                            .map_err(SourceError::Absolute)?
+                        std::path::absolute(&install_path).map_err(SourceError::Absolute)?
                     } else {
                         // User provided relative path, make it relative to project root
                         relative_to(&install_path, root)
