@@ -170,28 +170,26 @@ pub struct GlobalArgs {
     /// By default, uv prefers using Python versions it manages. However, it
     /// will use system Python versions if a uv-managed Python is not
     /// installed. This option disables use of system Python versions.
+    ///
+    /// Can also be set with the `UV_MANAGED_PYTHON` environment variable.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        env = EnvVars::UV_MANAGED_PYTHON,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with = "no_managed_python",
-        conflicts_with = "python_preference"
+        overrides_with = "no_managed_python"
     )]
     pub managed_python: bool,
 
     /// Disable use of uv-managed Python versions.
     ///
     /// Instead, uv will search for a suitable Python version on the system.
+    ///
+    /// Can also be set with the `UV_NO_MANAGED_PYTHON` environment variable.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        env = EnvVars::UV_NO_MANAGED_PYTHON,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with = "managed_python",
-        conflicts_with = "python_preference"
+        overrides_with = "managed_python"
     )]
     pub no_managed_python: bool,
 
@@ -259,7 +257,9 @@ pub struct GlobalArgs {
     /// Disable network access.
     ///
     /// When disabled, uv will only use locally cached data and locally available files.
-    #[arg(global = true, long, overrides_with("no_offline"), env = EnvVars::UV_OFFLINE, value_parser = clap::builder::BoolishValueParser::new())]
+    ///
+    /// Can also be set with the `UV_OFFLINE` environment variable.
+    #[arg(global = true, long, overrides_with("no_offline"))]
     pub offline: bool,
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
@@ -613,7 +613,9 @@ pub struct VersionArgs {
     pub output_format: VersionFormat,
 
     /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    ///
+    /// Can also be set with the `UV_NO_SYNC` environment variable.
+    #[arg(long)]
     pub no_sync: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -633,13 +635,17 @@ pub struct VersionArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Update the version without re-locking the project.
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -3647,6 +3653,8 @@ pub struct RunArgs {
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
+    ///
+    /// Can also be set with the `UV_NO_SYNC` environment variable.
     #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_sync: bool,
 
@@ -3654,7 +3662,9 @@ pub struct RunArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
     /// needs to be updated, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Run without updating the `uv.lock` file.
@@ -3663,7 +3673,9 @@ pub struct RunArgs {
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Run the given path as a Python script.
@@ -3976,7 +3988,9 @@ pub struct SyncArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Sync without updating the `uv.lock` file.
@@ -3985,7 +3999,9 @@ pub struct SyncArgs {
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Perform a dry run, without writing the lockfile or modifying the project environment.
@@ -4120,13 +4136,17 @@ pub struct LockArgs {
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--check`.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
     pub locked: bool,
 
     /// Assert that a `uv.lock` exists without checking if it is up-to-date.
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
@@ -4318,20 +4338,26 @@ pub struct AddArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Avoid syncing the virtual environment.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    ///
+    /// Can also be set with the `UV_NO_SYNC` environment variable.
+    #[arg(long)]
     pub no_sync: bool,
 
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Add dependencies without re-locking the project.
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -4550,7 +4576,9 @@ pub struct RemoveArgs {
     pub group: Option<GroupName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    ///
+    /// Can also be set with the `UV_NO_SYNC` environment variable.
+    #[arg(long)]
     pub no_sync: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -4570,13 +4598,17 @@ pub struct RemoveArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Remove dependencies without re-locking the project.
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -4692,13 +4724,17 @@ pub struct TreeArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Display the requirements without locking the project.
     ///
     /// If the lockfile is missing, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -4998,13 +5034,17 @@ pub struct ExportArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    ///
+    /// Can also be set with the `UV_LOCKED` environment variable.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
     /// Do not update the `uv.lock` before exporting.
     ///
     /// If a `uv.lock` does not exist, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    ///
+    /// Can also be set with the `UV_FROZEN` environment variable.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -6649,17 +6689,11 @@ pub struct IndexArgs {
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("no_refresh"),
-        help_heading = "Cache options"
-    )]
+    #[arg(long, overrides_with("no_refresh"), help_heading = "Cache options")]
     pub refresh: bool,
 
     #[arg(
         long,
-        conflicts_with("offline"),
         overrides_with("refresh"),
         hide = true,
         help_heading = "Cache options"

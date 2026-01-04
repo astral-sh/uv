@@ -561,6 +561,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = PipCompileSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -670,6 +675,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -833,6 +843,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     }
                 }
             }
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1095,6 +1110,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::BuildSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -1155,6 +1175,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1319,6 +1344,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             );
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -1403,6 +1433,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1945,6 +1980,11 @@ async fn run_project(
             let args = settings::RunSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2009,6 +2049,11 @@ async fn run_project(
             let args = settings::SyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2058,6 +2103,11 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::LockSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2171,6 +2221,11 @@ async fn run_project(
                 }
             }
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2234,6 +2289,11 @@ async fn run_project(
             let args = settings::RemoveSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2277,6 +2337,11 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VersionSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(

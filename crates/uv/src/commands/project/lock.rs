@@ -49,7 +49,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -82,7 +82,7 @@ impl LockResult {
 pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     dry_run: DryRun,
     refresh: Refresh,
     python: Option<String>,
@@ -136,8 +136,8 @@ pub(crate) async fn lock(
 
     // Determine the lock mode.
     let interpreter;
-    let mode = if frozen {
-        LockMode::Frozen(MissingLockfileSource::frozen())
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else {
         interpreter = match target {
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(

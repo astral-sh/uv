@@ -64,6 +64,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -267,6 +268,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -471,6 +473,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -707,6 +710,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -912,6 +916,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -1093,6 +1098,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -1323,6 +1329,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -1561,6 +1568,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -1857,6 +1865,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -2084,6 +2093,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -2270,6 +2280,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -2506,6 +2517,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -2765,6 +2777,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -2941,6 +2954,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -3117,6 +3131,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -3295,6 +3310,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -3492,6 +3508,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -3683,6 +3700,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -3893,6 +3911,7 @@ fn resolve_both() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -4142,6 +4161,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -4470,6 +4490,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -4773,6 +4794,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -4952,6 +4974,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -5139,6 +5162,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [
                 Host {
@@ -5340,6 +5364,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -5578,6 +5603,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -5822,6 +5848,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -6061,6 +6088,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -6307,6 +6335,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -6546,6 +6575,7 @@ fn index_priority() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -6798,6 +6828,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -6967,6 +6998,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7134,6 +7166,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7303,6 +7336,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7470,6 +7504,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7638,6 +7673,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7821,6 +7857,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7855,7 +7892,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -7936,6 +7973,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -7970,7 +8008,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8051,6 +8089,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8085,7 +8124,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8166,6 +8205,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8200,7 +8240,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8281,6 +8321,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8315,7 +8356,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8398,6 +8439,7 @@ fn preview_features() {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8432,7 +8474,7 @@ fn preview_features() {
         output_format: Text,
         dry_run: false,
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         active: None,
         no_sync: false,
         package: None,
@@ -8534,6 +8576,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8711,6 +8754,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -8911,6 +8955,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9086,6 +9131,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9255,6 +9301,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9425,6 +9472,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9660,6 +9708,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9689,7 +9738,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -9780,6 +9829,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9809,7 +9859,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -9923,6 +9973,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -9952,7 +10003,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10041,6 +10092,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -10070,7 +10122,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10149,6 +10201,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -10178,7 +10231,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10258,6 +10311,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -10287,7 +10341,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     }
     LockSettings {
         lock_check: Disabled,
-        frozen: false,
+        frozen: None,
         dry_run: Disabled,
         script: None,
         python: None,
@@ -10431,6 +10485,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],
@@ -10603,6 +10658,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         color: Auto,
         network_settings: NetworkSettings {
             connectivity: Online,
+            offline: Disabled,
             native_tls: false,
             allow_insecure_host: [],
             timeout: [TIME],

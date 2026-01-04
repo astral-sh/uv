@@ -41,7 +41,7 @@ use uv_resolver::{
     ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
-use uv_settings::{PythonInstallMirrors, parse_boolish_environment_variable};
+use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -58,7 +58,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -82,10 +83,14 @@ pub(crate) enum MissingLockfileSource {
     Frozen,
     /// The `UV_FROZEN` environment variable was set.
     FrozenEnv,
+    /// The `frozen` option was set via workspace configuration.
+    FrozenConfiguration,
     /// The `--locked` flag was provided.
     Locked,
     /// The `UV_LOCKED` environment variable was set.
     LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
     /// The `--check` flag was provided.
     Check,
 }
@@ -95,8 +100,10 @@ impl std::fmt::Display for MissingLockfileSource {
         match self {
             Self::Frozen => write!(f, "`--frozen`"),
             Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
             Self::Locked => write!(f, "`--locked`"),
             Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
             Self::Check => write!(f, "`--check`"),
         }
     }
@@ -105,38 +112,20 @@ impl std::fmt::Display for MissingLockfileSource {
 impl From<LockCheckSource> for MissingLockfileSource {
     fn from(source: LockCheckSource) -> Self {
         match source {
-            LockCheckSource::Locked => {
-                // TODO(charlie): Track the source (flag vs. environment variable) when resolving
-                // settings, rather than checking after-the-fact.
-                if matches!(
-                    parse_boolish_environment_variable(EnvVars::UV_LOCKED),
-                    Ok(Some(true))
-                ) {
-                    Self::LockedEnv
-                } else {
-                    Self::Locked
-                }
-            }
+            LockCheckSource::LockedCli => Self::Locked,
+            LockCheckSource::LockedEnv => Self::LockedEnv,
+            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
             LockCheckSource::Check => Self::Check,
         }
     }
 }
 
-impl MissingLockfileSource {
-    /// Determine the source of the frozen flag.
-    ///
-    /// If `UV_FROZEN` is set to a truthy value in the environment, the source is the environment
-    /// variable. Otherwise, the source is the `--frozen` flag.
-    pub(crate) fn frozen() -> Self {
-        // TODO(charlie): Track the source (flag vs. environment variable) when resolving
-        // settings, rather than checking after-the-fact.
-        if matches!(
-            parse_boolish_environment_variable(EnvVars::UV_FROZEN),
-            Ok(Some(true))
-        ) {
-            Self::FrozenEnv
-        } else {
-            Self::Frozen
+impl From<FrozenSource> for MissingLockfileSource {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Env => Self::FrozenEnv,
+            FrozenSource::Configuration => Self::FrozenConfiguration,
         }
     }
 }
