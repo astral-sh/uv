@@ -662,7 +662,7 @@ impl EnvironmentOptions {
 /// Parse a boolean environment variable.
 ///
 /// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
-fn parse_boolish_environment_variable(name: &'static str) -> Result<Option<bool>, Error> {
+pub fn parse_boolish_environment_variable(name: &'static str) -> Result<Option<bool>, Error> {
     // See `clap_builder/src/util/str_to_bool.rs`
     // We want to match Clap's accepted values
 
