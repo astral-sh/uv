@@ -159,6 +159,72 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub build_backend: Option<serde::de::IgnoredAny>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `PipOptions`. They are pip-only
+    // fields that users sometimes mistakenly place under `[tool.uv]` instead of `[tool.uv.pip]`.
+    // They should be rejected in both `pyproject.toml` and `uv.toml` files.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_python: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_system: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_break_system_packages: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_target: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_prefix: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_python_version: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_python_platform: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_universal: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_output_file: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_emit_package: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_emit_index_url: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_emit_find_links: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_emit_build_options: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_emit_marker_expression: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_emit_index_annotation: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_annotation_style: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_strip_extras: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_strip_markers: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_annotate: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_header: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_custom_compile_command: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_generate_hashes: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_strict: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_extra: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_all_extras: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_extra: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_no_deps: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_group: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_allow_empty_requirements: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_require_hashes: Option<serde::de::IgnoredAny>,
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub pip_verify_hashes: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -2174,6 +2240,42 @@ pub struct OptionsWire {
 
     // Build backend
     build_backend: Option<serde::de::IgnoredAny>,
+
+    // NOTE(charlie): These fields should be kept in-sync with `PipOptions`. They are pip-only
+    // fields that users sometimes mistakenly place under `[tool.uv]` instead of `[tool.uv.pip]`.
+    // We accept them here to provide helpful error messages via post-deserialization validation.
+    #[serde(rename = "python")]
+    pip_python: Option<serde::de::IgnoredAny>,
+    system: Option<serde::de::IgnoredAny>,
+    break_system_packages: Option<serde::de::IgnoredAny>,
+    target: Option<serde::de::IgnoredAny>,
+    prefix: Option<serde::de::IgnoredAny>,
+    python_version: Option<serde::de::IgnoredAny>,
+    python_platform: Option<serde::de::IgnoredAny>,
+    universal: Option<serde::de::IgnoredAny>,
+    no_emit_package: Option<serde::de::IgnoredAny>,
+    emit_index_url: Option<serde::de::IgnoredAny>,
+    emit_find_links: Option<serde::de::IgnoredAny>,
+    emit_build_options: Option<serde::de::IgnoredAny>,
+    emit_marker_expression: Option<serde::de::IgnoredAny>,
+    emit_index_annotation: Option<serde::de::IgnoredAny>,
+    annotation_style: Option<serde::de::IgnoredAny>,
+    output_file: Option<serde::de::IgnoredAny>,
+    no_strip_extras: Option<serde::de::IgnoredAny>,
+    no_strip_markers: Option<serde::de::IgnoredAny>,
+    no_annotate: Option<serde::de::IgnoredAny>,
+    no_header: Option<serde::de::IgnoredAny>,
+    custom_compile_command: Option<serde::de::IgnoredAny>,
+    generate_hashes: Option<serde::de::IgnoredAny>,
+    strict: Option<serde::de::IgnoredAny>,
+    extra: Option<serde::de::IgnoredAny>,
+    all_extras: Option<serde::de::IgnoredAny>,
+    no_extra: Option<serde::de::IgnoredAny>,
+    no_deps: Option<serde::de::IgnoredAny>,
+    group: Option<serde::de::IgnoredAny>,
+    allow_empty_requirements: Option<serde::de::IgnoredAny>,
+    require_hashes: Option<serde::de::IgnoredAny>,
+    verify_hashes: Option<serde::de::IgnoredAny>,
 }
 
 impl From<OptionsWire> for Options {
@@ -2247,6 +2349,39 @@ impl From<OptionsWire> for Options {
             add_bounds: bounds,
             // Used by the build backend
             build_backend,
+
+            // Pip-only fields
+            pip_python,
+            system,
+            break_system_packages,
+            target,
+            prefix,
+            python_version,
+            python_platform,
+            universal,
+            no_emit_package,
+            emit_index_url,
+            emit_find_links,
+            emit_build_options,
+            emit_marker_expression,
+            emit_index_annotation,
+            annotation_style,
+            output_file,
+            no_strip_extras,
+            no_strip_markers,
+            no_annotate,
+            no_header,
+            custom_compile_command,
+            generate_hashes,
+            strict,
+            extra,
+            all_extras,
+            no_extra,
+            no_deps,
+            group,
+            allow_empty_requirements,
+            require_hashes,
+            verify_hashes,
         } = value;
 
         Self {
@@ -2326,6 +2461,39 @@ impl From<OptionsWire> for Options {
             dependency_groups,
             managed,
             package,
+
+            // Pip-only fields
+            pip_python,
+            pip_system: system,
+            pip_break_system_packages: break_system_packages,
+            pip_target: target,
+            pip_prefix: prefix,
+            pip_python_version: python_version,
+            pip_python_platform: python_platform,
+            pip_universal: universal,
+            pip_output_file: output_file,
+            pip_no_emit_package: no_emit_package,
+            pip_emit_index_url: emit_index_url,
+            pip_emit_find_links: emit_find_links,
+            pip_emit_build_options: emit_build_options,
+            pip_emit_marker_expression: emit_marker_expression,
+            pip_emit_index_annotation: emit_index_annotation,
+            pip_annotation_style: annotation_style,
+            pip_no_strip_extras: no_strip_extras,
+            pip_no_strip_markers: no_strip_markers,
+            pip_no_annotate: no_annotate,
+            pip_no_header: no_header,
+            pip_custom_compile_command: custom_compile_command,
+            pip_generate_hashes: generate_hashes,
+            pip_strict: strict,
+            pip_extra: extra,
+            pip_all_extras: all_extras,
+            pip_no_extra: no_extra,
+            pip_no_deps: no_deps,
+            pip_group: group,
+            pip_allow_empty_requirements: allow_empty_requirements,
+            pip_require_hashes: require_hashes,
+            pip_verify_hashes: verify_hashes,
         }
     }
 }

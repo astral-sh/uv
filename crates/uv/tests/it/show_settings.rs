@@ -4686,7 +4686,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`, `python`, `system`, `break-system-packages`, `target`, `prefix`, `python-version`, `python-platform`, `universal`, `no-emit-package`, `emit-index-url`, `emit-find-links`, `emit-build-options`, `emit-marker-expression`, `emit-index-annotation`, `annotation-style`, `output-file`, `no-strip-extras`, `no-strip-markers`, `no-annotate`, `no-header`, `custom-compile-command`, `generate-hashes`, `strict`, `extra`, `all-extras`, `no-extra`, `no-deps`, `group`, `allow-empty-requirements`, `require-hashes`, `verify-hashes`
     "
     );
 
@@ -10761,6 +10761,80 @@ fn build_isolation_override() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// Reject `[tool.uv.pip]`-only fields in `[tool.uv]`.
+///
+/// When a user places a pip-only field (like `python-version`) under `[tool.uv]` instead of
+/// `[tool.uv.pip]`, we should provide a helpful error message.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_pip_only_field_in_tool_uv() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `pyproject.toml` with a pip-only field in `[tool.uv]`.
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    pyproject.write_str(indoc::indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.0.0"
+
+        [tool.uv]
+        python-version = "3.10"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Should fail with a helpful error.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`. The `python-version` field is not allowed at the top level. `python-version` is a `uv pip`-only option and should be placed in the `[tool.uv.pip]` section instead.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Reject `[tool.uv.pip]`-only fields in `uv.toml`.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_pip_only_field_in_uv_toml() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write a `uv.toml` with a pip-only field at the top level.
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        python-version = "3.10"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Should fail with a helpful error.
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
+        .arg("requirements.in"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`. The `python-version` field is not allowed at the top level. `python-version` is a `uv pip`-only option and should be placed in the `[pip]` section instead.
+    "###
+    );
 
     Ok(())
 }

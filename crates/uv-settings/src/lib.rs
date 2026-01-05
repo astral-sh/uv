@@ -131,6 +131,7 @@ impl FilesystemOptions {
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 validate_uv_toml(&path, &options)?;
+                validate_pip_only_fields(&path, &options, "[pip]")?;
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -162,6 +163,7 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                validate_pip_only_fields(&path, &options, "[tool.uv.pip]")?;
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -198,6 +200,7 @@ fn read_file(path: &Path) -> Result<Options, Error> {
     } else {
         options
     };
+    validate_pip_only_fields(path, &options, "[pip]")?;
     Ok(options)
 }
 
@@ -226,6 +229,37 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         managed,
         package,
         build_backend,
+        pip_python: _,
+        pip_system: _,
+        pip_break_system_packages: _,
+        pip_target: _,
+        pip_prefix: _,
+        pip_python_version: _,
+        pip_python_platform: _,
+        pip_universal: _,
+        pip_output_file: _,
+        pip_no_emit_package: _,
+        pip_emit_index_url: _,
+        pip_emit_find_links: _,
+        pip_emit_build_options: _,
+        pip_emit_marker_expression: _,
+        pip_emit_index_annotation: _,
+        pip_annotation_style: _,
+        pip_no_strip_extras: _,
+        pip_no_strip_markers: _,
+        pip_no_annotate: _,
+        pip_no_header: _,
+        pip_custom_compile_command: _,
+        pip_generate_hashes: _,
+        pip_strict: _,
+        pip_extra: _,
+        pip_all_extras: _,
+        pip_no_extra: _,
+        pip_no_deps: _,
+        pip_group: _,
+        pip_allow_empty_requirements: _,
+        pip_require_hashes: _,
+        pip_verify_hashes: _,
     } = options;
     // The `uv.toml` format is not allowed to include any of the following, which are
     // permitted by the schema since they _can_ be included in `pyproject.toml` files
@@ -279,6 +313,238 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "required-environments",
+        ));
+    }
+    Ok(())
+}
+
+/// Validate that an [`Options`] schema does not contain any `[tool.uv.pip]`-only fields.
+///
+/// These are fields that are valid in `[tool.uv.pip]` (or `[pip]` in `uv.toml`) but not at the
+/// top level.
+///
+/// The `pip_section` parameter should be `"[pip]"` for `uv.toml` files and `"[tool.uv.pip]"` for
+/// `pyproject.toml` files.
+pub fn validate_pip_only_fields(
+    path: &Path,
+    options: &Options,
+    pip_section: &'static str,
+) -> Result<(), Error> {
+    if options.pip_python.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "python",
+            pip_section,
+        ));
+    }
+    if options.pip_system.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "system",
+            pip_section,
+        ));
+    }
+    if options.pip_break_system_packages.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "break-system-packages",
+            pip_section,
+        ));
+    }
+    if options.pip_target.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "target",
+            pip_section,
+        ));
+    }
+    if options.pip_prefix.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "prefix",
+            pip_section,
+        ));
+    }
+    if options.pip_python_version.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "python-version",
+            pip_section,
+        ));
+    }
+    if options.pip_python_platform.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "python-platform",
+            pip_section,
+        ));
+    }
+    if options.pip_universal.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "universal",
+            pip_section,
+        ));
+    }
+    if options.pip_output_file.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "output-file",
+            pip_section,
+        ));
+    }
+    if options.pip_no_emit_package.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-emit-package",
+            pip_section,
+        ));
+    }
+    if options.pip_emit_index_url.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "emit-index-url",
+            pip_section,
+        ));
+    }
+    if options.pip_emit_find_links.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "emit-find-links",
+            pip_section,
+        ));
+    }
+    if options.pip_emit_build_options.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "emit-build-options",
+            pip_section,
+        ));
+    }
+    if options.pip_emit_marker_expression.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "emit-marker-expression",
+            pip_section,
+        ));
+    }
+    if options.pip_emit_index_annotation.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "emit-index-annotation",
+            pip_section,
+        ));
+    }
+    if options.pip_annotation_style.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "annotation-style",
+            pip_section,
+        ));
+    }
+    if options.pip_no_strip_extras.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-strip-extras",
+            pip_section,
+        ));
+    }
+    if options.pip_no_strip_markers.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-strip-markers",
+            pip_section,
+        ));
+    }
+    if options.pip_no_annotate.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-annotate",
+            pip_section,
+        ));
+    }
+    if options.pip_no_header.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-header",
+            pip_section,
+        ));
+    }
+    if options.pip_custom_compile_command.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "custom-compile-command",
+            pip_section,
+        ));
+    }
+    if options.pip_generate_hashes.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "generate-hashes",
+            pip_section,
+        ));
+    }
+    if options.pip_strict.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "strict",
+            pip_section,
+        ));
+    }
+    if options.pip_extra.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "extra",
+            pip_section,
+        ));
+    }
+    if options.pip_all_extras.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "all-extras",
+            pip_section,
+        ));
+    }
+    if options.pip_no_extra.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-extra",
+            pip_section,
+        ));
+    }
+    if options.pip_no_deps.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "no-deps",
+            pip_section,
+        ));
+    }
+    if options.pip_group.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "group",
+            pip_section,
+        ));
+    }
+    if options.pip_allow_empty_requirements.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "allow-empty-requirements",
+            pip_section,
+        ));
+    }
+    if options.pip_require_hashes.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "require-hashes",
+            pip_section,
+        ));
+    }
+    if options.pip_verify_hashes.is_some() {
+        return Err(Error::PipOnlyField(
+            path.to_path_buf(),
+            "verify-hashes",
+            pip_section,
         ));
     }
     Ok(())
@@ -368,6 +634,37 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         managed: _,
         package: _,
         build_backend: _,
+        pip_python: _,
+        pip_system: _,
+        pip_break_system_packages: _,
+        pip_target: _,
+        pip_prefix: _,
+        pip_python_version: _,
+        pip_python_platform: _,
+        pip_universal: _,
+        pip_output_file: _,
+        pip_no_emit_package: _,
+        pip_emit_index_url: _,
+        pip_emit_find_links: _,
+        pip_emit_build_options: _,
+        pip_emit_marker_expression: _,
+        pip_emit_index_annotation: _,
+        pip_annotation_style: _,
+        pip_no_strip_extras: _,
+        pip_no_strip_markers: _,
+        pip_no_annotate: _,
+        pip_no_header: _,
+        pip_custom_compile_command: _,
+        pip_generate_hashes: _,
+        pip_strict: _,
+        pip_extra: _,
+        pip_all_extras: _,
+        pip_no_extra: _,
+        pip_no_deps: _,
+        pip_group: _,
+        pip_allow_empty_requirements: _,
+        pip_require_hashes: _,
+        pip_verify_hashes: _,
     } = options;
 
     let mut masked_fields = vec![];
@@ -566,6 +863,9 @@ pub enum Error {
     #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]
     PyprojectOnlyField(PathBuf, &'static str),
+
+    #[error("Failed to parse: `{}`. The `{}` field is not allowed at the top level. `{}` is a `uv pip`-only option and should be placed in the `{}` section instead.", _0.user_display(), _1, _1, _2)]
+    PipOnlyField(PathBuf, &'static str, &'static str),
 
     #[error("Failed to parse environment variable `{name}` with invalid value `{value}`: {err}")]
     InvalidEnvironmentVariable {
