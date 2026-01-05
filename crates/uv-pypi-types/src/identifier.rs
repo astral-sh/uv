@@ -1,5 +1,4 @@
 use serde::{Serialize, Serializer};
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
