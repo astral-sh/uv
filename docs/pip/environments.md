@@ -31,14 +31,12 @@ Note this requires the requested Python version to be available on the system. H
 unavailable, uv will download Python for you. See the
 [Python version](../concepts/python-versions.md) documentation for more details.
 
-uv will not include `pip` in virtual environments by default. If you need it, use `--seed`:
+uv does not include `pip` in virtual environments by default.
+To include it, use [`--seed`](../reference/cli.md#uv-venv--seed):
 
 ```console
 $ uv venv --seed
 ```
-
-Note `--seed` may also include other seed packages in addition to `pip`. See the
-[CLI Reference](../reference/cli.md#uv-venv) documentation for more details.
 
 ## Using a virtual environment
 
