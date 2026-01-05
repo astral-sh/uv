@@ -143,6 +143,31 @@ impl Error {
         ErrorKind::BadMessagePack { source: err, url }.into()
     }
 
+    /// Create an [`Error`] from a [`reqwest_middleware::Error`].
+    pub(crate) fn from_reqwest_middleware(
+        url: DisplaySafeUrl,
+        err: reqwest_middleware::Error,
+    ) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
+            if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
+                return ErrorKind::Offline(offline_err.url().to_string()).into();
+            }
+            if let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+                underlying.downcast_ref::<reqwest_retry::RetryError>()
+            {
+                let retries = *retries;
+                return Self::new(
+                    ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
+                    retries,
+                );
+            }
+        }
+        Self::from(ErrorKind::WrappedReqwestError(
+            url,
+            WrappedReqwestError::from(err),
+        ))
+    }
+
     /// Returns `true` if this error corresponds to an offline error.
     pub(crate) fn is_offline(&self) -> bool {
         matches!(&*self.kind, ErrorKind::Offline(_))
@@ -246,15 +271,9 @@ impl Error {
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
-        match kind {
-            ErrorKind::RequestWithRetries { source, retries } => Self {
-                kind: source,
-                retries,
-            },
-            other => Self {
-                kind: Box::new(other),
-                retries: 0,
-            },
+        Self {
+            kind: Box::new(kind),
+            retries: 0,
         }
     }
 }
@@ -305,10 +324,6 @@ pub enum ErrorKind {
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
-
-    /// Add the number of failed retries to the error.
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
-    RequestWithRetries { source: Box<Self>, retries: u32 },
 
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {
@@ -386,32 +401,6 @@ impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
-    }
-
-    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
-    pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
-        err: reqwest_middleware::Error,
-    ) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
-            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return Self::Offline(err.url().to_string());
-            }
-            if let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
-                underlying.downcast_ref::<reqwest_retry::RetryError>()
-            {
-                let retries = *retries;
-                return Self::RequestWithRetries {
-                    source: Box::new(Self::WrappedReqwestError(
-                        url,
-                        WrappedReqwestError::from(err),
-                    )),
-                    retries,
-                };
-            }
-        }
-
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(err))
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
