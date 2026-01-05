@@ -90,7 +90,7 @@ impl GlobalSettings {
         environment: &EnvironmentOptions,
     ) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace, environment);
-        let python_preference = resolve_python_preference(args, workspace);
+        let python_preference = resolve_python_preference(args, workspace, environment);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -170,17 +170,18 @@ impl GlobalSettings {
 fn resolve_python_preference(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
 ) -> PythonPreference {
     // Resolve managed_python and no_managed_python from CLI and environment variables.
     let managed_python = resolve_flag(
         args.managed_python,
         "managed-python",
-        EnvVars::UV_MANAGED_PYTHON,
+        environment.managed_python,
     );
     let no_managed_python = resolve_flag(
         args.no_managed_python,
         "no-managed-python",
-        EnvVars::UV_NO_MANAGED_PYTHON,
+        environment.no_managed_python,
     );
 
     // Check for conflicts between managed_python and python_preference.
@@ -228,7 +229,7 @@ impl NetworkSettings {
             Some(false) => Flag::disabled(),
             None => {
                 // CLI didn't provide a value, check environment variable.
-                let env_flag = resolve_flag(false, "offline", EnvVars::UV_OFFLINE);
+                let env_flag = resolve_flag(false, "offline", environment.offline);
                 if env_flag.is_enabled() {
                     env_flag
                 } else if workspace
@@ -570,8 +571,8 @@ impl RunSettings {
             .unwrap_or_default();
 
         // Resolve locked and frozen from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -1569,8 +1570,8 @@ impl SyncSettings {
         };
 
         // Resolve locked and frozen from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -1670,8 +1671,8 @@ impl LockSettings {
             .unwrap_or_default();
 
         // Resolve locked and frozen (check_exists) from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(check_exists, "frozen", EnvVars::UV_FROZEN);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -1863,9 +1864,9 @@ impl AddSettings {
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         // Resolve locked, frozen, and no_sync from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
-        let no_sync = resolve_flag(no_sync, "no-sync", EnvVars::UV_NO_SYNC);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -1984,9 +1985,9 @@ impl RemoveSettings {
             .collect();
 
         // Resolve locked, frozen, and no_sync from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
-        let no_sync = resolve_flag(no_sync, "no-sync", EnvVars::UV_NO_SYNC);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -2068,9 +2069,9 @@ impl VersionSettings {
             .unwrap_or_default();
 
         // Resolve locked, frozen, and no_sync from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
-        let no_sync = resolve_flag(no_sync, "no-sync", EnvVars::UV_NO_SYNC);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -2159,8 +2160,8 @@ impl TreeSettings {
             .unwrap_or_default();
 
         // Resolve locked and frozen from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen, "frozen", EnvVars::UV_FROZEN);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -2279,8 +2280,8 @@ impl ExportSettings {
             .unwrap_or_default();
 
         // Resolve locked and frozen from CLI and environment variables.
-        let locked = resolve_flag(locked, "locked", EnvVars::UV_LOCKED);
-        let frozen = resolve_flag(frozen_cli, "frozen", EnvVars::UV_FROZEN);
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);

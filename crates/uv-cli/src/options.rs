@@ -6,10 +6,7 @@ use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{
-    Combine, PipOptions, ResolverInstallerOptions, ResolverOptions,
-    parse_boolish_environment_variable,
-};
+use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
@@ -130,15 +127,15 @@ impl From<Flag> for bool {
 ///
 /// The CLI argument takes precedence over the environment variable. Returns a [`Flag`] with the
 /// resolved value and source.
-pub fn resolve_flag(cli_flag: bool, name: &'static str, env_var: &'static str) -> Flag {
+pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
     if cli_flag {
         Flag::Enabled {
             source: FlagSource::Cli,
             name,
         }
-    } else if matches!(parse_boolish_environment_variable(env_var), Ok(Some(true))) {
+    } else if env_flag.value == Some(true) {
         Flag::Enabled {
-            source: FlagSource::Env(env_var),
+            source: FlagSource::Env(env_flag.env_var),
             name,
         }
     } else {

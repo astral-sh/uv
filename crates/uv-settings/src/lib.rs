@@ -582,6 +582,25 @@ pub struct Concurrency {
     pub installs: Option<NonZeroUsize>,
 }
 
+/// A boolean flag parsed from an environment variable.
+///
+/// Stores both the value and the environment variable name for use in error messages.
+#[derive(Debug, Clone, Copy)]
+pub struct EnvFlag {
+    pub value: Option<bool>,
+    pub env_var: &'static str,
+}
+
+impl EnvFlag {
+    /// Create a new [`EnvFlag`] by parsing the given environment variable.
+    pub fn new(env_var: &'static str) -> Result<Self, Error> {
+        Ok(Self {
+            value: parse_boolish_environment_variable(env_var)?,
+            env_var,
+        })
+    }
+}
+
 /// Options loaded from environment variables.
 ///
 /// This is currently a subset of all respected environment variables, most are parsed via Clap at
@@ -601,6 +620,12 @@ pub struct EnvironmentOptions {
     pub concurrency: Concurrency,
     #[cfg(feature = "tracing-durations-export")]
     pub tracing_durations_file: Option<PathBuf>,
+    pub frozen: EnvFlag,
+    pub locked: EnvFlag,
+    pub offline: EnvFlag,
+    pub no_sync: EnvFlag,
+    pub managed_python: EnvFlag,
+    pub no_managed_python: EnvFlag,
 }
 
 impl EnvironmentOptions {
@@ -655,6 +680,12 @@ impl EnvironmentOptions {
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
             ),
+            frozen: EnvFlag::new(EnvVars::UV_FROZEN)?,
+            locked: EnvFlag::new(EnvVars::UV_LOCKED)?,
+            offline: EnvFlag::new(EnvVars::UV_OFFLINE)?,
+            no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
+            managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
+            no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
         })
     }
 }
