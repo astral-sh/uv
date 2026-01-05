@@ -1616,51 +1616,12 @@ mod tests {
             &DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
         )
         .unwrap();
-        insta::assert_debug_snapshot!(result, @r#"
-        SimpleDetailHTML {
-            project_status: ProjectStatus {
-                status: Archived,
-                reason: None,
-            },
-            base: BaseUrl(
-                DisplaySafeUrl {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "pypi.org",
-                        ),
-                    ),
-                    port: None,
-                    path: "/simple/pepy/",
-                    query: None,
-                    fragment: None,
-                },
-            ),
-            files: [
-                PypiFile {
-                    core_metadata: None,
-                    filename: "pepy-1.0.0rc2.tar.gz",
-                    hashes: Hashes {
-                        md5: None,
-                        sha256: Some(
-                            "67736757345c4dad74725c520986f82c55a7404ad1b35435474a16111d68b270",
-                        ),
-                        sha384: None,
-                        sha512: None,
-                        blake2b: None,
-                    },
-                    requires_python: None,
-                    size: None,
-                    upload_time: None,
-                    url: "https://files.pythonhosted.org/packages/48/99/fa422e3fb74e6c7a9d735222aa6fceb717c8cd528468aeae13cd22a1d40b/pepy-1.0.0rc2.tar.gz",
-                    yanked: None,
-                },
-            ],
+        insta::assert_debug_snapshot!(result.project_status, @r"
+        ProjectStatus {
+            status: Archived,
+            reason: None,
         }
-        "#);
+        ");
     }
 
     /// Test parsing with project status metadata (status and reason).
@@ -1689,49 +1650,47 @@ mod tests {
             &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
         )
         .unwrap();
-        insta::assert_debug_snapshot!(result, @r#"
-        SimpleDetailHTML {
-            project_status: ProjectStatus {
-                status: Archived,
-                reason: Some(
-                    "This project is haunted.",
-                ),
-            },
-            base: BaseUrl(
-                DisplaySafeUrl {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "pypi.org",
-                        ),
-                    ),
-                    port: None,
-                    path: "/simple/fakeproject/",
-                    query: None,
-                    fragment: None,
-                },
+        insta::assert_debug_snapshot!(result.project_status, @r#"
+        ProjectStatus {
+            status: Archived,
+            reason: Some(
+                "This project is haunted.",
             ),
-            files: [
-                PypiFile {
-                    core_metadata: None,
-                    filename: "fakeproject",
-                    hashes: Hashes {
-                        md5: None,
-                        sha256: None,
-                        sha384: None,
-                        sha512: None,
-                        blake2b: None,
-                    },
-                    requires_python: None,
-                    size: None,
-                    upload_time: None,
-                    url: "https://example.com/fakeproject",
-                    yanked: None,
-                },
-            ],
+        }
+        "#);
+    }
+
+    // Test parsing project status metadata with emojis in the reason.
+    #[test]
+    fn parse_simple_detail_with_project_status_and_emoji_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="deprecated">
+    <meta name="pypi:project-status-reason" content="This project is haunted 👻.">
+    <title>Links for spookyproject</title>
+</head>
+<body>
+    <h1>Links for spookyproject</h1>
+    <a href="https://example.com/spookyproject">spookyproject-0.9.9.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/spookyproject/").unwrap(),
+        );
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @r#"
+        ProjectStatus {
+            status: Deprecated,
+            reason: Some(
+                "This project is haunted 👻.",
+            ),
         }
         "#);
     }
@@ -1760,51 +1719,12 @@ mod tests {
             text,
             &DisplaySafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
         );
-        insta::assert_debug_snapshot!(result, @r#"
-        Ok(
-            SimpleDetailHTML {
-                project_status: ProjectStatus {
-                    status: Active,
-                    reason: None,
-                },
-                base: BaseUrl(
-                    DisplaySafeUrl {
-                        scheme: "https",
-                        cannot_be_a_base: false,
-                        username: "",
-                        password: None,
-                        host: Some(
-                            Domain(
-                                "pypi.org",
-                            ),
-                        ),
-                        port: None,
-                        path: "/simple/unknownproject/",
-                        query: None,
-                        fragment: None,
-                    },
-                ),
-                files: [
-                    PypiFile {
-                        core_metadata: None,
-                        filename: "unknownproject",
-                        hashes: Hashes {
-                            md5: None,
-                            sha256: None,
-                            sha384: None,
-                            sha512: None,
-                            blake2b: None,
-                        },
-                        requires_python: None,
-                        size: None,
-                        upload_time: None,
-                        url: "https://example.com/unknownproject",
-                        yanked: None,
-                    },
-                ],
-            },
-        )
-        "#);
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @r"
+        ProjectStatus {
+            status: Active,
+            reason: None,
+        }
+        ");
     }
 
     /// Test parsing Simple API index (root) HTML.
