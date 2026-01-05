@@ -129,6 +129,12 @@ pub(crate) async fn run(
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
     }
 
+    if settings.resolver.torch_backend.is_some() {
+        warn_user_once!(
+            "The `--torch-backend` option is experimental and may change without warning."
+        );
+    }
+
     // Read from the `.env` file, if necessary.
     if !no_env_file {
         for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {

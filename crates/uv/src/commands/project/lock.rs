@@ -43,7 +43,7 @@ use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, Wor
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
@@ -137,7 +137,7 @@ pub(crate) async fn lock(
     // Determine the lock mode.
     let interpreter;
     let mode = if frozen {
-        LockMode::Frozen
+        LockMode::Frozen(MissingLockfileSource::frozen())
     } else {
         interpreter = match target {
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
@@ -261,7 +261,7 @@ pub(super) enum LockMode<'env> {
     /// Error if the lockfile is not up-to-date with the project requirements.
     Locked(&'env Interpreter, LockCheckSource),
     /// Use the existing lockfile without performing a resolution.
-    Frozen,
+    Frozen(MissingLockfileSource),
 }
 
 /// A lock operation.
@@ -330,12 +330,12 @@ impl<'env> LockOperation<'env> {
     /// Perform a [`LockOperation`].
     pub(super) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
         match self.mode {
-            LockMode::Frozen => {
+            LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
                 let existing = target
                     .read()
                     .await?
-                    .ok_or_else(|| ProjectError::MissingLockfile)?;
+                    .ok_or(ProjectError::MissingLockfile(source))?;
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
@@ -354,7 +354,7 @@ impl<'env> LockOperation<'env> {
                 let existing = target
                     .read()
                     .await?
-                    .ok_or_else(|| ProjectError::MissingLockfile)?;
+                    .ok_or(ProjectError::MissingLockfile(lock_source.into()))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
@@ -470,6 +470,7 @@ async fn do_lock(
         upgrade,
         build_options,
         sources,
+        torch_backend: _,
     } = settings;
 
     if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)

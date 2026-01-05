@@ -651,6 +651,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.install_mirrors,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
                 args.settings.universal,
                 args.settings.exclude_newer,
                 args.settings.sources,
@@ -846,7 +847,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.upgrade.clone())),
             );
 
-            commands::pip_install(
+            Box::pin(commands::pip_install(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -898,7 +899,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
-            )
+            ))
             .await
         }
         Commands::Pip(PipNamespace {
@@ -1591,6 +1592,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_urls,
                 args.output_format,
                 args.python_downloads_json_url,
+                args.python_install_mirror,
+                args.pypy_install_mirror,
                 globals.python_preference,
                 globals.python_downloads,
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),

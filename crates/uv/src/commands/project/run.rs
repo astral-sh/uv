@@ -65,8 +65,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, MissingLockfileSource, PreferenceLocation, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
@@ -263,7 +263,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             // Determine the lock mode.
             let mode = if frozen {
-                LockMode::Frozen
+                LockMode::Frozen(MissingLockfileSource::frozen())
             } else if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(environment.interpreter(), lock_check)
             } else {
@@ -339,7 +339,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             )
             .await
             {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         client_builder.is_native_tls(),
@@ -749,7 +749,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
                 // Determine the lock mode.
                 let mode = if frozen {
-                    LockMode::Frozen
+                    LockMode::Frozen(MissingLockfileSource::frozen())
                 } else if let LockCheck::Enabled(lock_check) = lock_check {
                     LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
@@ -867,7 +867,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await
                 {
-                    Ok(()) => {}
+                    Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
                             client_builder.is_native_tls(),

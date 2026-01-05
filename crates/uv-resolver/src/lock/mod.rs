@@ -110,6 +110,36 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 's390x'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'riscv64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'loongarch64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*ARM_MARKERS);
@@ -123,6 +153,41 @@ static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*X86_MARKERS);
+    marker
+});
+static LINUX_PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64LE_MARKERS);
+    marker
+});
+static LINUX_PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64_MARKERS);
+    marker
+});
+static LINUX_S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*S390X_MARKERS);
+    marker
+});
+static LINUX_RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*RISCV64_MARKERS);
+    marker
+});
+static LINUX_LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*LOONGARCH64_MARKERS);
+    marker
+});
+static LINUX_ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV7L_MARKERS);
+    marker
+});
+static LINUX_ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV6L_MARKERS);
     marker
 });
 static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -170,6 +235,15 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     marker.and(*X86_MARKERS);
     marker
 });
+
+/// A distribution with its associated hash.
+///
+/// This pairs a [`Dist`] with the [`HashDigests`] for the specific wheel or
+/// sdist that would be installed.
+pub(crate) struct HashedDist {
+    pub(crate) dist: Dist,
+    pub(crate) hashes: HashDigests,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -416,6 +490,55 @@ impl Lock {
                     {
                         return false;
                     }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64LE_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_S390X_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_RISCV64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV7L_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV6L_MARKERS)
+                    {
+                        return false;
+                    }
                 } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
@@ -525,6 +648,63 @@ impl Lock {
 
             if platform_tags.iter().all(PlatformTag::is_x86) {
                 if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*PPC64LE_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_s390x) {
+                if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*RISCV64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*LOONGARCH64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV7L_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV6L_MARKERS)
+                {
                     return false;
                 }
             }
@@ -1761,7 +1941,7 @@ impl Lock {
 
             if let Some(version) = package.id.version.as_ref() {
                 // For a non-dynamic package, fetch the metadata from the distribution database.
-                let dist = package.to_dist(
+                let HashedDist { dist, .. } = package.to_dist(
                     root,
                     TagPolicy::Preferred(tags),
                     &BuildOptions::default(),
@@ -1912,7 +2092,7 @@ impl Lock {
                 // exactly. For example, `hatchling` will flatten any recursive (or self-referential)
                 // extras, while `setuptools` will not.
                 if !satisfied {
-                    let dist = package.to_dist(
+                    let HashedDist { dist, .. } = package.to_dist(
                         root,
                         TagPolicy::Preferred(tags),
                         &BuildOptions::default(),
@@ -2579,20 +2759,32 @@ impl Package {
         Ok(())
     }
 
-    /// Convert the [`Package`] to a [`Dist`] that can be used in installation.
+    /// Convert the [`Package`] to a [`Dist`] that can be used in installation, along with its hash.
     fn to_dist(
         &self,
         workspace_root: &Path,
         tag_policy: TagPolicy<'_>,
         build_options: &BuildOptions,
         markers: &MarkerEnvironment,
-    ) -> Result<Dist, LockError> {
+    ) -> Result<HashedDist, LockError> {
         let no_binary = build_options.no_binary_package(&self.id.name);
         let no_build = build_options.no_build_package(&self.id.name);
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                return match &self.id.source {
+                let hashes = {
+                    let wheel = &self.wheels[best_wheel_index];
+                    HashDigests::from(
+                        wheel
+                            .hash
+                            .iter()
+                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
+                            .map(|h| h.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
+
+                let dist = match &self.id.source {
                     Source::Registry(source) => {
                         let wheels = self
                             .wheels
@@ -2604,7 +2796,7 @@ impl Package {
                             best_wheel_index,
                             sdist: None,
                         };
-                        Ok(Dist::Built(BuiltDist::Registry(reg_built_dist)))
+                        Dist::Built(BuiltDist::Registry(reg_built_dist))
                     }
                     Source::Path(path) => {
                         let filename: WheelFilename =
@@ -2616,7 +2808,7 @@ impl Package {
                             install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
@@ -2632,29 +2824,39 @@ impl Package {
                             url: VerbatimUrl::from_url(url),
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
-                        Ok(Dist::Built(built_dist))
+                        Dist::Built(built_dist)
                     }
-                    Source::Git(_, _) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "Git",
+                    Source::Git(_, _) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "Git",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Directory(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "directory",
+                    Source::Directory(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "directory",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Editable(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "editable",
+                    Source::Editable(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "editable",
+                        }
+                        .into());
                     }
-                    .into()),
-                    Source::Virtual(_) => Err(LockErrorKind::InvalidWheelSource {
-                        id: self.id.clone(),
-                        source_type: "virtual",
+                    Source::Virtual(_) => {
+                        return Err(LockErrorKind::InvalidWheelSource {
+                            id: self.id.clone(),
+                            source_type: "virtual",
+                        }
+                        .into());
                     }
-                    .into()),
                 };
+
+                return Ok(HashedDist { dist, hashes });
             }
         }
 
@@ -2663,7 +2865,16 @@ impl Package {
             // any local source tree, or at least editable source trees, which we allow in
             // `uv pip`.)
             if !no_build || sdist.is_virtual() {
-                return Ok(Dist::Source(sdist));
+                let hashes = self
+                    .sdist
+                    .as_ref()
+                    .and_then(|s| s.hash())
+                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
+                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                return Ok(HashedDist {
+                    dist: Dist::Source(sdist),
+                    hashes,
+                });
             }
         }
 

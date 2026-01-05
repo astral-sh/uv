@@ -24,7 +24,8 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
+    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
@@ -125,7 +126,7 @@ pub(crate) async fn tree(
 
     // Determine the lock mode.
     let mode = if frozen {
-        LockMode::Frozen
+        LockMode::Frozen(MissingLockfileSource::frozen())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {
@@ -212,6 +213,7 @@ pub(crate) async fn tree(
                 upgrade: _,
                 build_options: _,
                 sources: _,
+                torch_backend: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();

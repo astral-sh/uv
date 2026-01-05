@@ -27,8 +27,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
-    detect_conflicts,
+    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, detect_conflicts,
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
@@ -185,7 +185,7 @@ pub(crate) async fn export(
 
     // Determine the lock mode.
     let mode = if frozen {
-        LockMode::Frozen
+        LockMode::Frozen(MissingLockfileSource::frozen())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))

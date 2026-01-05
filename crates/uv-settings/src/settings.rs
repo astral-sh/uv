@@ -400,6 +400,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
@@ -434,6 +435,7 @@ pub struct ResolverInstallerOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
     pub upgrade: Option<Upgrade>,
@@ -442,7 +444,6 @@ pub struct ResolverInstallerOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
-    pub torch_backend: Option<TorchMode>,
 }
 
 impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
@@ -468,6 +469,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
             upgrade,
@@ -478,7 +480,6 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             no_build_package,
             no_binary,
             no_binary_package,
-            torch_backend,
         } = value;
         Self {
             index,
@@ -503,6 +504,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
             upgrade: Upgrade::from_args(
@@ -518,7 +520,6 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             no_build_package,
             no_binary,
             no_binary_package,
-            torch_backend,
         }
     }
 }
@@ -1955,6 +1956,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2034,6 +2036,7 @@ pub struct ToolOptions {
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub torch_backend: Option<TorchMode>,
 }
 
 impl From<ResolverInstallerOptions> for ToolOptions {
@@ -2064,6 +2067,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2098,7 +2102,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
-            torch_backend: None,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2183,7 +2187,7 @@ pub struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+    exclude_dependencies: Option<Vec<PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,

@@ -348,7 +348,7 @@ impl InitSettings {
             no_description,
             vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme: no_readme || bare,
+            no_readme,
             author_from,
             pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,
@@ -597,6 +597,7 @@ impl ToolRunSettings {
             lfs,
             python,
             python_platform,
+            torch_backend,
             generate_shell_completion: _,
         } = args;
 
@@ -626,21 +627,24 @@ impl ToolRunSettings {
             }
         }
 
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
+
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
@@ -738,23 +742,27 @@ impl ToolInstallSettings {
             refresh,
             python,
             python_platform,
+            torch_backend,
         } = args;
+
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
@@ -1006,6 +1014,8 @@ pub(crate) struct PythonListSettings {
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
     pub(crate) python_downloads_json_url: Option<String>,
+    pub(crate) python_install_mirror: Option<String>,
+    pub(crate) pypy_install_mirror: Option<String>,
 }
 
 impl PythonListSettings {
@@ -1029,14 +1039,37 @@ impl PythonListSettings {
         } = args;
 
         let options = filesystem.map(FilesystemOptions::into_options);
-        let python_downloads_json_url_option = match options {
-            Some(options) => options.install_mirrors.python_downloads_json_url,
-            None => None,
+        let (
+            python_downloads_json_url_option,
+            python_install_mirror_option,
+            pypy_install_mirror_option,
+        ) = match &options {
+            Some(options) => (
+                options.install_mirrors.python_downloads_json_url.clone(),
+                options.install_mirrors.python_install_mirror.clone(),
+                options.install_mirrors.pypy_install_mirror.clone(),
+            ),
+            None => (None, None, None),
         };
 
         let python_downloads_json_url = python_downloads_json_url_arg
-            .or(environment.install_mirrors.python_downloads_json_url)
+            .or(environment
+                .install_mirrors
+                .python_downloads_json_url
+                .clone())
             .or(python_downloads_json_url_option);
+
+        let python_install_mirror = environment
+            .install_mirrors
+            .python_install_mirror
+            .clone()
+            .or(python_install_mirror_option);
+
+        let pypy_install_mirror = environment
+            .install_mirrors
+            .pypy_install_mirror
+            .clone()
+            .or(pypy_install_mirror_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -1055,6 +1088,8 @@ impl PythonListSettings {
             show_urls,
             output_format,
             python_downloads_json_url,
+            python_install_mirror,
+            pypy_install_mirror,
         }
     }
 }
@@ -3210,6 +3245,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
+    pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) upgrade: Upgrade,
 }
 
@@ -3264,6 +3300,7 @@ impl From<ResolverOptions> for ResolverSettings {
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
+            torch_backend: value.torch_backend,
             sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
             upgrade: value.upgrade.unwrap_or_default(),
             build_options: BuildOptions::new(
@@ -3355,6 +3392,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+                torch_backend: value.torch_backend,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),

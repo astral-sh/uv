@@ -125,7 +125,6 @@ See https://github.com/astral-sh/uv/issues/5130 */
   }
 }
 
-
 /* Always take the full screen for content, require scrolling to see the footer
 This stops the size of the nav from jumping around when you visit a page without
 a lot of content (i.e., an overview page). We don't apply this to sma screens
@@ -144,8 +143,8 @@ because the nav is in a hamburger menu anyway
   }
   /* Remove the bold from the section headings, use a larger font instead */
   .md-nav__item--section > .md-nav__link {
-      font-weight: normal;
-      font-size: 0.85rem;
+    font-weight: normal;
+    font-size: 0.85rem;
   }
   /* Reducing spacing between nav items to fit more content
   First, disable `nav__link` spacing then use `nav__item` to enforce margins this reduces inconsistencies in the spacing. */
@@ -161,15 +160,32 @@ because the nav is in a hamburger menu anyway
     margin-top: 1em;
   }
   /* Decrease the font size of items in a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list {
+  .md-nav__item--section
+    > .md-nav
+    > .md-nav__list
+    > .md-nav__item
+    > .md-nav
+    > .md-nav__list {
     font-size: 0.725rem;
   }
   /* Increase top margin on the first item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:first-of-type {
+  .md-nav__item--section
+    > .md-nav
+    > .md-nav__list
+    > .md-nav__item
+    > .md-nav
+    > .md-nav__list
+    > .md-nav__item:first-of-type {
     margin-top: 0.5em;
   }
   /* Increase bottom margin on the last item of a collapsible section */
-  .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item:last-of-type {
+  .md-nav__item--section
+    > .md-nav
+    > .md-nav__list
+    > .md-nav__item
+    > .md-nav
+    > .md-nav__list
+    > .md-nav__item:last-of-type {
     margin-bottom: 0.575em;
   }
   /* Increase the size of the first nav item to match the sections
@@ -186,7 +202,9 @@ because the nav is in a hamburger menu anyway
 }
 
 /* See: https://mkdocstrings.github.io/recipes/#prevent-selection-of-prompts-and-output-in-python-code-blocks */
-.highlight .gp, .highlight .go { /* Generic.Prompt, Generic.Output */
+.highlight .gp,
+.highlight .go {
+  /* Generic.Prompt, Generic.Output */
   user-select: none;
 }
 

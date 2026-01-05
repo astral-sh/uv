@@ -34,7 +34,8 @@ use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
+    MissingLockfileSource, ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState,
+    default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -464,7 +465,7 @@ async fn print_frozen_version(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         project::lock::LockOperation::new(
-            LockMode::Frozen,
+            LockMode::Frozen(MissingLockfileSource::frozen()),
             &settings.resolver,
             &client_builder,
             &state,
@@ -680,7 +681,7 @@ async fn lock_and_sync(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)

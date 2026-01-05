@@ -1608,7 +1608,7 @@ pub struct PipCompileArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
@@ -1619,7 +1619,7 @@ pub struct PipCompileArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// The Python version to use for resolution.
@@ -1969,7 +1969,7 @@ pub struct PipSyncArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
@@ -1980,7 +1980,7 @@ pub struct PipSyncArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Allow sync of empty requirements, which will clear the environment of all packages.
@@ -2346,7 +2346,7 @@ pub struct PipInstallArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Only use pre-built wheels; don't build source distributions.
@@ -2357,7 +2357,7 @@ pub struct PipInstallArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, conflicts_with = "no_build")]
+    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// The minimum Python version that should be supported by the requirements (e.g., `3.7` or
@@ -3309,7 +3309,9 @@ pub struct InitArgs {
     ///
     /// Disables creating extra files like `README.md`, the `src/` tree, `.python-version` files,
     /// etc.
-    #[arg(long, conflicts_with = "script")]
+    ///
+    /// When combined with `--script`, the script will only contain the inline metadata header.
+    #[arg(long)]
     pub bare: bool,
 
     /// Create a virtual project, rather than a package.
@@ -5371,6 +5373,21 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
+
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
 }
@@ -5547,6 +5564,21 @@ pub struct ToolInstallArgs {
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 }
 
 #[derive(Args)]
@@ -6195,8 +6227,8 @@ pub struct PythonInstallArgs {
     /// also installed.
     ///
     /// Alternative Python variants will still include their tag. For example, installing
-    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-    /// and `python`.
+    /// 3.13+freethreaded with `--default` will include `python3t` and `pythont` instead of
+    /// `python3` and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long, conflicts_with("no_bin"))]

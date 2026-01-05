@@ -375,7 +375,7 @@ pub(crate) async fn remove(
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)

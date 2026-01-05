@@ -9,7 +9,6 @@ use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
 use regex::Regex;
 use thiserror::Error;
-use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
 use uv_fs::Simplified;

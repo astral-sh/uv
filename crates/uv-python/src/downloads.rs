@@ -5,14 +5,13 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
 use std::{env, io};
 
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::{RetryError, RetryPolicy};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
@@ -21,7 +20,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{BaseClient, WrappedReqwestError, is_transient_network_error};
+use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
@@ -58,7 +57,7 @@ pub enum Error {
     #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     NetworkErrorWithRetries {
         #[source]
-        err: Box<Error>,
+        err: Box<Self>,
         retries: u32,
     },
     #[error("Failed to download {0}")]
@@ -106,7 +105,7 @@ pub enum Error {
     #[error("This version of uv is too old to support the JSON Python download list at {0}")]
     UnsupportedPythonDownloadsJSON(String),
     #[error("Error while fetching remote python downloads json from '{0}'")]
-    FetchingPythonDownloadsJSONError(String, #[source] Box<Error>),
+    FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -118,29 +117,24 @@ pub enum Error {
 }
 
 impl Error {
-    // Return the number of attempts that were made to complete this request before this error was
-    // returned. Note that e.g. 3 retries equates to 4 attempts.
+    // Return the number of retries that were made to complete this request before this error was
+    // returned.
     //
-    // It's easier to do arithmetic with "attempts" instead of "retries", because if you have
-    // nested retry loops you can just add up all the attempts directly, while adding up the
-    // retries requires +1/-1 adjustments.
-    fn attempts(&self) -> u32 {
+    // Note that e.g. 3 retries equates to 4 attempts.
+    fn retries(&self) -> u32 {
         // Unfortunately different variants of `Error` track retry counts in different ways. We
         // could consider unifying the variants we handle here in `Error::from_reqwest_middleware`
         // instead, but both approaches will be fragile as new variants get added over time.
         if let Self::NetworkErrorWithRetries { retries, .. } = self {
-            return retries + 1;
+            return *retries;
         }
-        // TODO(jack): let-chains are stable as of Rust 1.88. We should use them here as soon as
-        // our rust-version is high enough.
-        if let Self::NetworkMiddlewareError(_, anyhow_error) = self {
-            if let Some(RetryError::WithRetries { retries, .. }) =
+        if let Self::NetworkMiddlewareError(_, anyhow_error) = self
+            && let Some(RetryError::WithRetries { retries, .. }) =
                 anyhow_error.downcast_ref::<RetryError>()
-            {
-                return retries + 1;
-            }
+        {
+            return *retries;
         }
-        1
+        0
     }
 }
 
@@ -782,8 +776,7 @@ impl FromStr for PythonDownloadRequest {
         let mut state = State::new(parts.by_ref());
         state.next_part();
 
-        loop {
-            let Some(part) = state.part else { break };
+        while let Some(part) = state.part {
             match state.position {
                 Position::Start => unreachable!("We start before the loop"),
                 Position::Implementation => {
@@ -1111,9 +1104,11 @@ impl ManagedPythonDownload {
         pypy_install_mirror: Option<&str>,
         reporter: Option<&dyn Reporter>,
     ) -> Result<DownloadResult, Error> {
-        let mut total_attempts = 0;
-        let mut retried_here = false;
-        let start_time = SystemTime::now();
+        let mut retry_state = RetryState::start(
+            *retry_policy,
+            self.download_url(python_install_mirror, pypy_install_mirror)?,
+        );
+
         loop {
             let result = self
                 .fetch(
@@ -1126,43 +1121,23 @@ impl ManagedPythonDownload {
                     reporter,
                 )
                 .await;
-            let result = match result {
-                Ok(download_result) => Ok(download_result),
+            match result {
+                Ok(download_result) => return Ok(download_result),
                 Err(err) => {
-                    // Inner retry loops (e.g. `reqwest-retry` middleware) might make more than one
-                    // attempt per error we see here.
-                    total_attempts += err.attempts();
-                    // We currently interpret e.g. "3 retries" to mean we should make 4 attempts.
-                    let n_past_retries = total_attempts - 1;
-                    if is_transient_network_error(&err) {
-                        let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-                        if let reqwest_retry::RetryDecision::Retry { execute_after } =
-                            retry_decision
-                        {
-                            let duration = execute_after
-                                .duration_since(SystemTime::now())
-                                .unwrap_or_else(|_| Duration::default());
-                            debug!(
-                                "Transient failure while handling response for {}; retrying after {}s...",
-                                self.key(),
-                                duration.as_secs()
-                            );
-                            tokio::time::sleep(duration).await;
-                            retried_here = true;
-                            continue; // Retry.
-                        }
+                    if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
                     }
-                    if retried_here {
+                    return if retry_state.total_retries() > 0 {
                         Err(Error::NetworkErrorWithRetries {
                             err: Box::new(err),
-                            retries: n_past_retries,
+                            retries: retry_state.total_retries(),
                         })
                     } else {
                         Err(err)
-                    }
+                    };
                 }
             };
-            return result;
         }
     }
 
@@ -1458,7 +1433,7 @@ impl ManagedPythonDownload {
 
     /// Return the [`Url`] to use when downloading the distribution. If a mirror is set via the
     /// appropriate environment variable, use it instead.
-    fn download_url(
+    pub fn download_url(
         &self,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
