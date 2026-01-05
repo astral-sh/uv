@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
@@ -148,7 +147,7 @@ impl<'de> Deserialize<'de> for PipGroupName {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

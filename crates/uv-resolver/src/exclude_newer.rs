@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::{
     ops::{Deref, DerefMut},
@@ -197,7 +196,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerSpan {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         let span: Span = s.parse().map_err(serde::de::Error::custom)?;
         Ok(Self(span))
     }
