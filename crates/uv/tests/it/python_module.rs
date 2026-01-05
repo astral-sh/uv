@@ -383,14 +383,22 @@ fn find_uv_bin_user_bin() {
     // We should find the binary in the bin now
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
-    success: true
-    exit_code: 0
+        .arg(TEST_SCRIPT), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    [USER_SCHEME]/[BIN]/uv
 
     ----- stderr -----
-    "
+    Traceback (most recent call last):
+      File "<string>", line 6, in <module>
+      File "[SITE_PACKAGES]/uv/_find_uv.py", line 50, in find_uv_bin
+        raise UvNotFound(
+    uv._find_uv.UvNotFound: Could not find the uv binary in any of the following locations:
+     - [VENV]/[BIN]
+     - /dev/null/[BIN]
+     - [SITE_PACKAGES]/[BIN]
+     - [HOME]/Library/Python/3.12/[BIN]
+    "#
     );
 }
 
@@ -467,7 +475,7 @@ fn find_uv_bin_error_message() {
      - [VENV]/[BIN]
      - /dev/null/[BIN]
      - [SITE_PACKAGES]/[BIN]
-     - [USER_SCHEME]/[BIN]
+     - [HOME]/Library/Python/3.12/[BIN]
     "#
     );
 }

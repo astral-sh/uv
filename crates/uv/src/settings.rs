@@ -143,9 +143,7 @@ impl GlobalSettings {
             },
             show_settings: args.show_settings,
             preview: Preview::from_args(
-                flag(args.preview, args.no_preview, "preview")
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
+                resolve_preview(args, workspace, environment),
                 args.no_preview,
                 &args.preview_features,
             ),
@@ -161,8 +159,15 @@ impl GlobalSettings {
             .unwrap_or_default(),
             // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
             // with log messages.
-            no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
-            installer_metadata: !args.no_installer_metadata,
+            no_progress: resolve_flag(args.no_progress, "no-progress", environment.no_progress)
+                .is_enabled()
+                || std::env::var_os(EnvVars::RUST_LOG).is_some(),
+            installer_metadata: !resolve_flag(
+                args.no_installer_metadata,
+                "no-installer-metadata",
+                environment.no_installer_metadata,
+            )
+            .is_enabled(),
         }
     }
 }
@@ -172,7 +177,7 @@ fn resolve_python_preference(
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
 ) -> PythonPreference {
-    // Resolve managed_python and no_managed_python from CLI and environment variables.
+    // Resolve flags from CLI and environment variables.
     let managed_python = resolve_flag(
         args.managed_python,
         "managed-python",
@@ -202,6 +207,29 @@ fn resolve_python_preference(
         args.python_preference
             .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
             .unwrap_or_default()
+    }
+}
+
+/// Resolve the preview setting from CLI, environment, and workspace config.
+fn resolve_preview(
+    args: &GlobalArgs,
+    workspace: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> bool {
+    // CLI takes precedence
+    match flag(args.preview, args.no_preview, "preview") {
+        Some(value) => value,
+        None => {
+            // Check environment variable
+            if environment.preview.value == Some(true) {
+                true
+            } else {
+                // Fall back to workspace config
+                workspace
+                    .and_then(|workspace| workspace.globals.preview)
+                    .unwrap_or(false)
+            }
+        }
     }
 }
 
@@ -249,9 +277,18 @@ impl NetworkSettings {
         } else {
             Connectivity::Online
         };
-        let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
-            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-            .unwrap_or(false);
+        let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
+            Some(value) => value,
+            None => {
+                if environment.native_tls.value == Some(true) {
+                    true
+                } else {
+                    workspace
+                        .and_then(|workspace| workspace.globals.native_tls)
+                        .unwrap_or(false)
+                }
+            }
+        };
         let allow_insecure_host = args
             .allow_insecure_host
             .as_ref()
@@ -570,12 +607,20 @@ impl RunSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        // Resolve locked and frozen from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let isolated = isolated || environment.isolated.value == Some(true);
+        let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
+        let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Self {
             lock_check: resolve_lock_check(locked),
@@ -741,6 +786,11 @@ impl ToolRunSettings {
             settings.resolver.torch_backend = torch_backend;
         }
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
+
+        // Resolve flags from CLI and environment variables.
+        let isolated = isolated || environment.isolated.value == Some(true);
+        let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
+        let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Self {
             command,
@@ -1569,12 +1619,16 @@ impl SyncSettings {
             DryRun::from_args(dry_run)
         };
 
-        // Resolve locked and frozen from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
 
         Self {
             output_format,
@@ -1670,7 +1724,7 @@ impl LockSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        // Resolve locked and frozen (check_exists) from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
 
@@ -1785,6 +1839,10 @@ impl AddSettings {
             only_install_package,
         } = args;
 
+        // Resolve flags from CLI and environment variables.
+        let dev = dev || environment.dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
+
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
         } else if let Some(group) = group {
@@ -1863,7 +1921,7 @@ impl AddSettings {
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
         let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
-        // Resolve locked, frozen, and no_sync from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
@@ -1964,6 +2022,9 @@ impl RemoveSettings {
             python,
         } = args;
 
+        // Resolve flags from CLI and environment variables.
+        let dev = dev || environment.dev.value == Some(true);
+
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
         } else if let Some(group) = group {
@@ -1984,7 +2045,7 @@ impl RemoveSettings {
             .map(|requirement| requirement.name)
             .collect();
 
-        // Resolve locked, frozen, and no_sync from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
@@ -2068,7 +2129,7 @@ impl VersionSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        // Resolve locked, frozen, and no_sync from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
         let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
@@ -2159,12 +2220,15 @@ impl TreeSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        // Resolve locked and frozen from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
 
         Self {
             groups: DependencyGroups::from_args(
@@ -2279,12 +2343,16 @@ impl ExportSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
-        // Resolve locked and frozen from CLI and environment variables.
+        // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
 
         Self {
             format,
@@ -3298,6 +3366,10 @@ impl VenvSettings {
             compat_args: _,
             exclude_newer_package,
         } = args;
+
+        // Resolve flags from CLI and environment variables.
+        let seed = seed || environment.venv_seed.value == Some(true);
+        let clear = clear || environment.venv_clear.value == Some(true);
 
         Self {
             seed,

@@ -1583,7 +1583,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1592,7 +1592,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is preserved after first creation
@@ -1602,7 +1602,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1612,7 +1612,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is STILL preserved after recreation
@@ -1646,7 +1646,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1655,7 +1655,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify both symlinks are preserved
@@ -1666,7 +1666,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1676,7 +1676,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify nested symlinks are STILL preserved
@@ -1776,7 +1776,7 @@ fn no_clear_with_existing_directory() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1785,7 +1785,7 @@ fn no_clear_with_existing_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Try to create again with --no-clear (should fail)
@@ -1818,7 +1818,7 @@ fn no_clear_with_non_existent_directory() {
         .arg(context.venv.as_os_str())
         .arg("--no-clear")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1827,7 +1827,7 @@ fn no_clear_with_non_existent_directory() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
