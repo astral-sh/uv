@@ -1080,6 +1080,70 @@ mod tests {
         );
     }
 
+    /// Test that existing files are overwritten on successful build.
+    #[test]
+    fn existing_files_overwritten_on_success() {
+        let src = TempDir::new().unwrap();
+
+        // Create a valid project
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "overwrite-test"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("overwrite_test")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("overwrite_test")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory with known content
+        let sdist_path = dist.path().join("overwrite_test-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("overwrite_test-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should succeed and overwrite existing files
+        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
+
+        // Verify files were overwritten (content should be different)
+        assert_ne!(
+            &fs_err::read(&sdist_path).unwrap()[..],
+            &old_content[..],
+            "Source dist should have been overwritten"
+        );
+        assert_ne!(
+            &fs_err::read(&wheel_path).unwrap()[..],
+            &old_content[..],
+            "Wheel should have been overwritten"
+        );
+
+        // Verify the new files are valid archives
+        assert!(
+            !sdist_contents(&sdist_path).is_empty(),
+            "sdist should be a valid archive"
+        );
+        assert!(
+            !wheel_contents(&wheel_path).is_empty(),
+            "wheel should be a valid archive"
+        );
+    }
+
     #[test]
     fn invalid_stubs_name() {
         let src = TempDir::new().unwrap();
