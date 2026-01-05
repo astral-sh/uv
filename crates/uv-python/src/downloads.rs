@@ -57,7 +57,7 @@ pub enum Error {
     #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     NetworkErrorWithRetries {
         #[source]
-        err: Box<Error>,
+        err: Box<Self>,
         retries: u32,
     },
     #[error("Failed to download {0}")]
@@ -105,7 +105,7 @@ pub enum Error {
     #[error("This version of uv is too old to support the JSON Python download list at {0}")]
     UnsupportedPythonDownloadsJSON(String),
     #[error("Error while fetching remote python downloads json from '{0}'")]
-    FetchingPythonDownloadsJSONError(String, #[source] Box<Error>),
+    FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -776,8 +776,7 @@ impl FromStr for PythonDownloadRequest {
         let mut state = State::new(parts.by_ref());
         state.next_part();
 
-        loop {
-            let Some(part) = state.part else { break };
+        while let Some(part) = state.part {
             match state.position {
                 Position::Start => unreachable!("We start before the loop"),
                 Position::Implementation => {
