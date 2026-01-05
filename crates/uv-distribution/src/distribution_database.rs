@@ -426,6 +426,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             };
         }
 
+        // Upload the wheel to the remote cache.
+        self.resolver
+            .upload_to_cache(
+                &BuildableSource::Dist(dist),
+                &built_wheel.path,
+                &built_wheel.filename,
+                &self.client,
+            )
+            .await?;
+
         // Acquire the advisory lock.
         #[cfg(windows)]
         let _lock = {
@@ -611,16 +621,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     ) -> Result<Option<LocalWheel>, Error> {
         let Some(index) = self
             .resolver
-            .get_cached_distribution(source, Some(tags), &self.client)
+            .get_cached_distribution(&BuildableSource::Dist(source), Some(tags), &self.client)
             .await?
         else {
             return Ok(None);
         };
-        for prioritized_dist in index
-            .get(source.name())
-            .iter()
-            .flat_map(|index| index.iter())
-        {
+        for prioritized_dist in index.iter() {
             let Some(compatible_dist) = prioritized_dist.get() else {
                 continue;
             };
@@ -652,9 +658,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<Option<ArchiveMetadata>, Error> {
-        let BuildableSource::Dist(source) = source else {
-            return Ok(None);
-        };
         let Some(index) = self
             .resolver
             .get_cached_distribution(source, None, &self.client)
@@ -662,11 +665,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         else {
             return Ok(None);
         };
-        for prioritized_dist in index
-            .get(source.name())
-            .iter()
-            .flat_map(|index| index.iter())
-        {
+        for prioritized_dist in index.iter() {
             let Some(compatible_dist) = prioritized_dist.get() else {
                 continue;
             };
