@@ -503,3 +503,59 @@ async fn rfc9457_problem_details_license_violation() {
       ╰─▶ HTTP status client error (403 Forbidden) for url ([SERVER]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
+
+/// Check the python list error message when the server returns HTTP status 500, a retryable error.
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url_http_500() {
+    let context = TestContext::new("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
+
+    let python_downloads_json_url = format!("{mock_server_uri}/python_downloads.json");
+    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
+    uv_snapshot!(filters, context
+        .python_list()
+        .arg("--python-downloads-json-url")
+        .arg(&python_downloads_json_url)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from '[SERVER]/python_downloads.json'
+      Caused by: Request failed after 3 retries
+      Caused by: Failed to download [SERVER]/python_downloads.json
+      Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/python_downloads.json)
+    ");
+}
+
+/// Check the python list error message when the server returns a retryable IO error.
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url_io_error() {
+    let context = TestContext::new("3.12");
+
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
+
+    let python_downloads_json_url = format!("{mock_server_uri}/python_downloads.json");
+    let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
+    uv_snapshot!(filters, context
+        .python_list()
+        .arg("--python-downloads-json-url")
+        .arg(&python_downloads_json_url)
+        .env_remove(EnvVars::UV_HTTP_RETRIES)
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from '[SERVER]/python_downloads.json'
+      Caused by: Failed to download [SERVER]/python_downloads.json
+      Caused by: Request failed after 3 retries
+      Caused by: error sending request for url ([SERVER]/python_downloads.json)
+      Caused by: client error (SendRequest)
+      Caused by: connection closed before message completed
+    ");
+}

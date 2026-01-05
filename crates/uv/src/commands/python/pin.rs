@@ -97,7 +97,7 @@ pub(crate) async fn pin(
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
-                    let client = client_builder.clone().retries(0).build();
+                    let client = client_builder.build();
                     let download_list = ManagedPythonDownloadList::new(
                         &client,
                         install_mirrors.python_downloads_json_url.as_deref(),

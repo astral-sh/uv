@@ -297,7 +297,7 @@ pub(crate) async fn pip_compile(
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let python_preference = python_preference.with_system_flag(system);
-    let client = client_builder.clone().retries(0).build();
+    let client = client_builder.build();
     let download_list = ManagedPythonDownloadList::new(
         &client,
         install_mirrors.python_downloads_json_url.as_deref(),
