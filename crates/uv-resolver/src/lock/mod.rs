@@ -110,6 +110,36 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 's390x'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'riscv64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'loongarch64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*ARM_MARKERS);
@@ -123,6 +153,41 @@ static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*X86_MARKERS);
+    marker
+});
+static LINUX_PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64LE_MARKERS);
+    marker
+});
+static LINUX_PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64_MARKERS);
+    marker
+});
+static LINUX_S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*S390X_MARKERS);
+    marker
+});
+static LINUX_RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*RISCV64_MARKERS);
+    marker
+});
+static LINUX_LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*LOONGARCH64_MARKERS);
+    marker
+});
+static LINUX_ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV7L_MARKERS);
+    marker
+});
+static LINUX_ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV6L_MARKERS);
     marker
 });
 static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -425,6 +490,55 @@ impl Lock {
                     {
                         return false;
                     }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64LE_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_S390X_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_RISCV64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV7L_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV6L_MARKERS)
+                    {
+                        return false;
+                    }
                 } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
@@ -534,6 +648,63 @@ impl Lock {
 
             if platform_tags.iter().all(PlatformTag::is_x86) {
                 if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*PPC64LE_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_s390x) {
+                if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*RISCV64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*LOONGARCH64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV7L_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV6L_MARKERS)
+                {
                     return false;
                 }
             }
