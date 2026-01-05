@@ -41,7 +41,7 @@ use uv_resolver::{
     ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, parse_boolish_environment_variable};
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
@@ -75,6 +75,72 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
 
+/// The source of a missing lockfile error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MissingLockfileSource {
+    /// The `--frozen` flag was provided.
+    Frozen,
+    /// The `UV_FROZEN` environment variable was set.
+    FrozenEnv,
+    /// The `--locked` flag was provided.
+    Locked,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `--check` flag was provided.
+    Check,
+}
+
+impl std::fmt::Display for MissingLockfileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frozen => write!(f, "`--frozen`"),
+            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::Locked => write!(f, "`--locked`"),
+            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::Check => write!(f, "`--check`"),
+        }
+    }
+}
+
+impl From<LockCheckSource> for MissingLockfileSource {
+    fn from(source: LockCheckSource) -> Self {
+        match source {
+            LockCheckSource::Locked => {
+                // TODO(charlie): Track the source (flag vs. environment variable) when resolving
+                // settings, rather than checking after-the-fact.
+                if matches!(
+                    parse_boolish_environment_variable(EnvVars::UV_LOCKED),
+                    Ok(Some(true))
+                ) {
+                    Self::LockedEnv
+                } else {
+                    Self::Locked
+                }
+            }
+            LockCheckSource::Check => Self::Check,
+        }
+    }
+}
+
+impl MissingLockfileSource {
+    /// Determine the source of the frozen flag.
+    ///
+    /// If `UV_FROZEN` is set to a truthy value in the environment, the source is the environment
+    /// variable. Otherwise, the source is the `--frozen` flag.
+    pub(crate) fn frozen() -> Self {
+        // TODO(charlie): Track the source (flag vs. environment variable) when resolving
+        // settings, rather than checking after-the-fact.
+        if matches!(
+            parse_boolish_environment_variable(EnvVars::UV_FROZEN),
+            Ok(Some(true))
+        ) {
+            Self::FrozenEnv
+        } else {
+            Self::Frozen
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
@@ -83,9 +149,9 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile,
+    MissingLockfile(MissingLockfileSource),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."

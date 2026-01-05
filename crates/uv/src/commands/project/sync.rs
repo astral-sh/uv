@@ -44,9 +44,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState, default_dependency_groups, detect_conflicts, script_extra_build_requires,
-    script_specification, update_environment,
+    EnvironmentUpdate, MissingLockfileSource, PlatformState, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
+    script_extra_build_requires, script_specification, update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
@@ -330,7 +330,7 @@ pub(crate) async fn sync(
 
     // Determine the lock mode.
     let mode = if frozen {
-        LockMode::Frozen
+        LockMode::Frozen(MissingLockfileSource::frozen())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
@@ -1388,8 +1388,8 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                 Outcome::Success(result) => {
                     match result {
                         LockResult::Unchanged(..) => match mode {
-                            // When `--frozen` is used, we don't check the lockfile
-                            LockMode::Frozen => LockAction::Use,
+                            // When `--frozen` is used, we don't check the lockfile.
+                            LockMode::Frozen(_) => LockAction::Use,
                             LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }
