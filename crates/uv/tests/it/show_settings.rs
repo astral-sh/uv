@@ -3622,6 +3622,8 @@ fn resolve_tool() -> anyhow::Result<()> {
             reinstall: None,
         },
         force: false,
+        locked: false,
+        frozen: false,
         editable: false,
         install_mirrors: PythonInstallMirrors {
             python_install_mirror: None,

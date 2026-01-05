@@ -35,6 +35,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_scripts::Pep723Script;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
@@ -52,7 +53,8 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
+    EnvironmentSpecification, PlatformState, ProjectError, ScriptLockResult, UniversalState,
+    resolve_names, update_script_lockfile,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
@@ -104,6 +106,8 @@ pub(crate) async fn run(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
+    frozen: bool,
     lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -290,6 +294,8 @@ pub(crate) async fn run(
         overrides,
         build_constraints,
         show_resolution,
+        locked,
+        frozen,
         python.as_deref(),
         python_platform,
         install_mirrors,
@@ -723,6 +729,8 @@ async fn get_or_create_environment(
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     show_resolution: bool,
+    locked: bool,
+    frozen: bool,
     python: Option<&str>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -966,6 +974,72 @@ async fn get_or_create_environment(
     } else {
         None
     };
+
+    // Handle lockfiles for any `--with-requirements` scripts.
+    // Collect script locks for use as preferences when resolving.
+    let mut script_locks: Vec<(uv_resolver::Lock, PathBuf)> = Vec::new();
+    let lock_state = UniversalState::default();
+    for source in with {
+        if let RequirementsSource::Pep723Script(script_path) = source {
+            // Read the script.
+            let script = match Pep723Script::read(script_path).await {
+                Ok(Some(script)) => script,
+                Ok(None) => continue,
+                Err(err) => {
+                    debug!("Failed to read script `{}`: {err}", script_path.display());
+                    continue;
+                }
+            };
+
+            // Update the script's lockfile.
+            let logger: Box<dyn crate::commands::pip::loggers::ResolveLogger> = if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            };
+            let result = update_script_lockfile(
+                &script,
+                frozen,
+                locked,
+                &interpreter,
+                &settings.resolver,
+                &lock_state,
+                logger,
+                client_builder,
+                concurrency,
+                cache,
+                &workspace_cache,
+                printer,
+                preview,
+            )
+            .await;
+
+            match result {
+                Ok(ScriptLockResult::NoLockfile) => {}
+                Ok(ScriptLockResult::Ok(lock)) => {
+                    let install_path = script.path.parent().unwrap().to_path_buf();
+                    script_locks.push((*lock, install_path));
+                }
+                Err(ProjectError::Operation(err)) => {
+                    return if let Some(err) =
+                        diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+                            .with_context("script")
+                            .report(err)
+                    {
+                        Err(err.into())
+                    } else {
+                        Ok((
+                            ToolRequirement::Python {
+                                executable: String::new(),
+                            },
+                            PythonEnvironment::from_interpreter(interpreter),
+                        ))
+                    };
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
 
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(

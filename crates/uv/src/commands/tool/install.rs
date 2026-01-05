@@ -26,6 +26,7 @@ use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_scripts::Pep723Script;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::{warn_user, warn_user_once};
@@ -37,8 +38,9 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EnvironmentSpecification, PlatformState, ProjectError, ScriptLockResult, UniversalState,
+    resolve_environment, resolve_names, sync_environment, update_environment,
+    update_script_lockfile,
 };
 use crate::commands::tool::common::{
     finalize_tool_install, refine_interpreter, remove_entrypoints,
@@ -60,6 +62,8 @@ pub(crate) async fn install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
+    locked: bool,
+    frozen: bool,
     lfs: GitLfsSetting,
     python: Option<String>,
     python_platform: Option<TargetTriple>,
@@ -314,6 +318,58 @@ pub(crate) async fn install(
     } else {
         settings
     };
+
+    // Handle lockfiles for any `--with-requirements` scripts.
+    let lock_state = UniversalState::default();
+    for source in with {
+        if let RequirementsSource::Pep723Script(script_path) = source {
+            // Read the script.
+            let script = match Pep723Script::read(script_path).await {
+                Ok(Some(script)) => script,
+                Ok(None) => continue,
+                Err(err) => {
+                    debug!("Failed to read script `{}`: {err}", script_path.display());
+                    continue;
+                }
+            };
+
+            // Update the script's lockfile.
+            let result = update_script_lockfile(
+                &script,
+                frozen,
+                locked,
+                &interpreter,
+                &settings.resolver,
+                &lock_state,
+                Box::new(DefaultResolveLogger),
+                &client_builder,
+                concurrency,
+                &cache,
+                &workspace_cache,
+                printer,
+                preview,
+            )
+            .await;
+
+            match result {
+                Ok(ScriptLockResult::NoLockfile | ScriptLockResult::Ok(_)) => {
+                    // Lockfile updated or verified successfully (or no lockfile exists).
+                }
+                Err(ProjectError::Operation(err)) => {
+                    return if let Some(err) =
+                        diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+                            .with_context("script")
+                            .report(err)
+                    {
+                        Err(err.into())
+                    } else {
+                        Ok(ExitStatus::Failure)
+                    };
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
 
     // Read the `--with` requirements.
     let spec = RequirementsSpecification::from_sources(

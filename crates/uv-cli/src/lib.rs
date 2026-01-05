@@ -5306,6 +5306,15 @@ pub struct ToolRunArgs {
     #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
+    /// Require that any `--with-requirements` scripts with lockfiles have up-to-date lockfiles. If
+    /// the lockfile is missing or needs to be updated, uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Run without updating any `--with-requirements` script lockfiles.
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
+    pub frozen: bool,
+
     /// Load environment variables from a `.env` file.
     ///
     /// Can be provided multiple times, with subsequent files overriding values defined in previous
@@ -5523,6 +5532,15 @@ pub struct ToolInstallArgs {
     /// Will replace any existing entry points with the same name in the executable directory.
     #[arg(long)]
     pub force: bool,
+
+    /// Require that any `--with-requirements` scripts with lockfiles have up-to-date lockfiles. If
+    /// the lockfile is missing or needs to be updated, uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    pub locked: bool,
+
+    /// Install without updating any `--with-requirements` script lockfiles.
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "locked")]
+    pub frozen: bool,
 
     /// Whether to use Git LFS when adding a dependency from Git.
     #[arg(long)]

@@ -3060,6 +3060,214 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     Ok(())
 }
 
+/// Test `--frozen` and `--locked` flags with `--with-requirements` scripts that have lockfiles.
+#[test]
+fn tool_run_with_requirements_script_lockfile() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create a script with dependencies.
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+    "#})?;
+
+    // Without a lockfile, `--locked` should error.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    ");
+
+    // Without a lockfile, `--frozen` should warn and continue.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    warning: No lockfile found for script `script.py` (ignoring `--frozen`)
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    ");
+
+    // Lock the script.
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // With a lockfile, `--locked` should succeed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Resolved [N] packages in [TIME]
+    ");
+
+    // With a lockfile, `--frozen` should succeed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Modify the script to add a new dependency.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        #   "typing-extensions",
+        # ]
+        # ///
+
+        import iniconfig
+        import typing_extensions
+    "#})?;
+
+    // With a stale lockfile, `--locked` should error.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // With a stale lockfile, `--frozen` should use the old lockfile (and may fail at runtime).
+    // Here we just verify it doesn't update the lockfile.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + iniconfig==2.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + typing-extensions==4.10.0
+     + werkzeug==3.0.1
+    ");
+
+    // Without flags, should update the lockfile.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Resolved [N] packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Test windows runnable types, namely console scripts and legacy setuptools scripts.
 /// Console Scripts <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#console-scripts>
 /// Legacy Scripts <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts>.

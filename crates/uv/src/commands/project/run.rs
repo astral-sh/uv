@@ -37,7 +37,7 @@ use uv_python::{
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
-use uv_scripts::Pep723Item;
+use uv_scripts::{Pep723Item, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
@@ -66,9 +66,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    ScriptEnvironment, ScriptInterpreter, ScriptLockResult, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
-    update_environment, validate_project_requires_python,
+    update_environment, update_script_lockfile, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
@@ -951,6 +951,63 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         base_interpreter.python_version(),
         base_interpreter.sys_executable().display()
     );
+
+    // Handle lockfiles for any `--with-requirements` scripts.
+    let lock_state = UniversalState::default();
+    for source in &requirements {
+        if let RequirementsSource::Pep723Script(script_path) = source {
+            // Read the script.
+            let script = match Pep723Script::read(script_path).await {
+                Ok(Some(script)) => script,
+                Ok(None) => continue,
+                Err(err) => {
+                    debug!("Failed to read script `{}`: {err}", script_path.display());
+                    continue;
+                }
+            };
+
+            // Update the script's lockfile.
+            let locked = matches!(lock_check, LockCheck::Enabled(_));
+            let logger: Box<dyn crate::commands::pip::loggers::ResolveLogger> = if show_resolution {
+                Box::new(DefaultResolveLogger)
+            } else {
+                Box::new(SummaryResolveLogger)
+            };
+            let result = update_script_lockfile(
+                &script,
+                frozen,
+                locked,
+                &base_interpreter,
+                &settings.resolver,
+                &lock_state,
+                logger,
+                &client_builder,
+                concurrency,
+                &cache,
+                &workspace_cache,
+                printer,
+                preview,
+            )
+            .await;
+
+            match result {
+                Ok(ScriptLockResult::NoLockfile | ScriptLockResult::Ok(_)) => {
+                    // Lockfile handled successfully (or no lockfile exists).
+                }
+                Err(ProjectError::Operation(err)) => {
+                    return if let Some(err) =
+                        diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+                            .report(err)
+                    {
+                        Err(err.into())
+                    } else {
+                        Ok(ExitStatus::Failure)
+                    };
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
 
     // Read the requirements.
     let spec = if requirements.is_empty() {

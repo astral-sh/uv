@@ -2696,6 +2696,207 @@ fn run_requirements_txt_arguments() -> Result<()> {
     Ok(())
 }
 
+/// Test `--frozen` and `--locked` flags with `--with` scripts that have lockfiles.
+#[test]
+fn run_with_requirements_script_lockfile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "project"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // Create a script with dependencies.
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+    "#})?;
+
+    let main = context.temp_dir.child("main.py");
+    main.write_str(indoc! { r"
+        print('Hello, world!')
+       "
+    })?;
+
+    // First lock the project (required for --frozen/--locked to work with a project).
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Without a script lockfile, `--locked` should error.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==1.0.0 (from file://[TEMP_DIR]/)
+    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    "###);
+
+    // Without a script lockfile, `--frozen` should warn and continue.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    warning: No lockfile found for script `script.py` (ignoring `--frozen`)
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Lock the script.
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "###);
+
+    // With a lockfile, `--locked` should succeed.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    "###);
+
+    // With a lockfile, `--frozen` should succeed.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    "###);
+
+    // Modify the script to add a new dependency.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        #   "typing-extensions",
+        # ]
+        # ///
+
+        import iniconfig
+        import typing_extensions
+    "#})?;
+
+    // With a stale lockfile, `--locked` should error.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--locked")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    "###);
+
+    // With a stale lockfile, `--frozen` should use the old lockfile.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--frozen")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    "###);
+
+    // Without flags, should update the lockfile.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    Resolved 2 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_editable() -> Result<()> {

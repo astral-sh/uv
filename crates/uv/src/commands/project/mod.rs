@@ -68,7 +68,7 @@ pub(crate) mod format;
 pub(crate) mod init;
 mod install_target;
 pub(crate) mod lock;
-mod lock_target;
+pub(crate) mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
@@ -2917,6 +2917,83 @@ fn format_optional_requires_python_sources(
     }
     // Otherwise don't elaborate
     String::new()
+}
+
+/// The result of updating a script's lockfile.
+pub(crate) enum ScriptLockResult {
+    /// No lockfile exists for the script and no update was attempted.
+    NoLockfile,
+    /// The lockfile was successfully updated or verified.
+    Ok(Box<Lock>),
+}
+
+/// Update or verify a script's lockfile if one exists.
+///
+/// Returns `ScriptLockResult::NoLockfile` if no lockfile exists (after warning/erroring based on flags).
+/// Returns `ScriptLockResult::Ok(lock)` if the lockfile was successfully updated or verified.
+pub(crate) async fn update_script_lockfile(
+    script: &uv_scripts::Pep723Script,
+    frozen: bool,
+    locked: bool,
+    interpreter: &Interpreter,
+    settings: &ResolverSettings,
+    state: &UniversalState,
+    logger: Box<dyn ResolveLogger>,
+    client_builder: &BaseClientBuilder<'_>,
+    concurrency: Concurrency,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+    preview: Preview,
+) -> Result<ScriptLockResult, ProjectError> {
+    use lock::LockMode;
+    use lock_target::LockTarget;
+
+    let lock_target = LockTarget::from(script);
+    let lock_path = lock_target.lock_path();
+
+    if !lock_path.is_file() {
+        // No lockfile exists.
+        if locked {
+            return Err(ProjectError::MissingLockfile);
+        }
+        if frozen {
+            warn_user!(
+                "No lockfile found for script `{}` (ignoring `--frozen`)",
+                script.path.user_display()
+            );
+        }
+        return Ok(ScriptLockResult::NoLockfile);
+    }
+
+    debug!("Found lockfile for script `{}`", script.path.user_display());
+
+    // Determine the lock mode.
+    let mode = if frozen {
+        LockMode::Frozen
+    } else if locked {
+        LockMode::Locked(interpreter, LockCheckSource::Locked)
+    } else {
+        LockMode::Write(interpreter)
+    };
+
+    // Run the lock operation.
+    let result = lock::LockOperation::new(
+        mode,
+        settings,
+        client_builder,
+        state,
+        logger,
+        concurrency,
+        cache,
+        workspace_cache,
+        printer,
+        preview,
+    )
+    .execute(lock_target)
+    .await?;
+
+    Ok(ScriptLockResult::Ok(Box::new(result.into_lock())))
 }
 
 #[cfg(test)]
