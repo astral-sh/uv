@@ -234,17 +234,18 @@ fn to_verbatim_path(path: &Path) -> std::borrow::Cow<'_, Path> {
         // UNC path: \\server\share\... -> \\?\UNC\server\share\...
         Prefix::UNC(server, share) => {
             let suffix: PathBuf = path.components().skip(1).collect();
-            let verbatim = PathBuf::from(format!(
-                r"\\?\UNC\{}\{}",
-                server.to_string_lossy(),
-                share.to_string_lossy()
-            ))
-            .join(suffix);
+            let mut verbatim = PathBuf::from(r"\\?\UNC");
+            verbatim.push(server);
+            verbatim.push(share);
+            verbatim.push(suffix);
             std::borrow::Cow::Owned(verbatim)
         }
         // Disk path: C:\... -> \\?\C:\...
         Prefix::Disk(_) => {
-            std::borrow::Cow::Owned(PathBuf::from(format!(r"\\?\{}", path.display())))
+            use std::ffi::OsString;
+            let mut verbatim = OsString::from(r"\\?\");
+            verbatim.push(path.as_os_str());
+            std::borrow::Cow::Owned(PathBuf::from(verbatim))
         }
         // DeviceNS path: \\.\device -> not typically used, return as-is
         Prefix::DeviceNS(_) => std::borrow::Cow::Borrowed(path),
