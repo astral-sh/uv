@@ -640,10 +640,30 @@ pub(crate) enum ScriptInterpreter {
 impl ScriptInterpreter {
     /// Return the expected virtual environment path for the [`Pep723Script`].
     ///
+    /// If `UV_SCRIPT_ENVIRONMENT` is set, it will take precedence. If a relative path is provided,
+    /// it is resolved relative to the current working directory.
+    ///
     /// If `--active` is set, the active virtual environment will be preferred.
     ///
     /// See: [`Workspace::venv`].
     pub(crate) fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+        /// Resolve the `UV_SCRIPT_ENVIRONMENT` value, if any.
+        fn from_script_environment_variable() -> Option<PathBuf> {
+            let value = std::env::var_os(EnvVars::UV_SCRIPT_ENVIRONMENT)?;
+
+            if value.is_empty() {
+                return None;
+            }
+
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                return Some(path);
+            }
+
+            // Resolve the path relative to current directory.
+            Some(CWD.join(path))
+        }
+
         /// Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
@@ -689,15 +709,18 @@ impl ScriptInterpreter {
                 .into_path_buf()
         };
 
-        // If `--active` is set, prefer the active virtual environment.
+        // Determine the script environment path (from UV_SCRIPT_ENVIRONMENT or the cache).
+        let script_env = from_script_environment_variable().unwrap_or(cache_env);
+
+        // Warn if it conflicts with `VIRTUAL_ENV`.
         if let Some(from_virtual_env) = from_virtual_env_variable() {
-            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &cache_env).unwrap_or(false) {
+            if !uv_fs::is_same_file_allow_missing(&from_virtual_env, &script_env).unwrap_or(false) {
                 match active {
                     Some(true) => {
                         debug!(
                             "Using active virtual environment `{}` instead of script environment `{}`",
                             from_virtual_env.user_display(),
-                            cache_env.user_display()
+                            script_env.user_display()
                         );
                         return from_virtual_env;
                     }
@@ -706,7 +729,7 @@ impl ScriptInterpreter {
                         warn_user_once!(
                             "`VIRTUAL_ENV={}` does not match the script environment path `{}` and will be ignored; use `--active` to target the active environment instead",
                             from_virtual_env.user_display(),
-                            cache_env.user_display()
+                            script_env.user_display()
                         );
                     }
                 }
@@ -719,8 +742,8 @@ impl ScriptInterpreter {
             }
         }
 
-        // Otherwise, use the cache root.
-        cache_env
+        // Use the script environment.
+        script_env
     }
 
     /// Discover the interpreter to use for the current [`Pep723Item`].

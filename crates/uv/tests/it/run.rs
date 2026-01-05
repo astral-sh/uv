@@ -4352,6 +4352,128 @@ fn run_active_script_environment() -> Result<()> {
 }
 
 #[test]
+fn run_script_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    // Running `uv run --script` with `UV_SCRIPT_ENVIRONMENT` should use the specified path
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("custom-env")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent run will re-use the environment
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    // Using a different script environment path should create a new environment
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "another-env"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("another-env")
+        .assert(predicate::path::is_dir());
+
+    // `UV_SCRIPT_ENVIRONMENT` should take priority over `VIRTUAL_ENV`
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    "###);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // But if `--active` is used, `VIRTUAL_ENV` should take priority
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--active")
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env")
+        .env(EnvVars::VIRTUAL_ENV, "bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
     let context = TestContext::new("3.12");

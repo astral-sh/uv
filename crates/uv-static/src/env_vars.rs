@@ -387,6 +387,12 @@ impl EnvVars {
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    /// Specifies the path to the directory to use for a script virtual environment.
+    ///
+    /// If a relative path is provided, it is resolved relative to the current working directory.
+    #[attr_added_in("next version")]
+    pub const UV_SCRIPT_ENVIRONMENT: &'static str = "UV_SCRIPT_ENVIRONMENT";
+
     /// Specifies the directory to place links to installed, managed Python executables.
     #[attr_added_in("0.4.29")]
     pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";

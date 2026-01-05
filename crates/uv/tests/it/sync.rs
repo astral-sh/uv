@@ -6830,6 +6830,128 @@ fn sync_active_script_environment() -> Result<()> {
 }
 
 #[test]
+fn sync_script_environment() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    // Running `uv sync --script` with `UV_SCRIPT_ENVIRONMENT` should use the specified path
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: custom-env
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    context
+        .temp_dir
+        .child("custom-env")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: custom-env
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    // Using a different script environment path should create a new environment
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::UV_SCRIPT_ENVIRONMENT, "another-env"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: another-env
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    context
+        .temp_dir
+        .child("another-env")
+        .assert(predicate::path::is_dir());
+
+    // `UV_SCRIPT_ENVIRONMENT` should take priority over `VIRTUAL_ENV` (with a warning)
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--script")
+        .arg("script.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `custom-env` and will be ignored; use `--active` to target the active environment instead
+    Using script environment at: custom-env
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // But if `--active` is used, `VIRTUAL_ENV` should take priority
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--script")
+        .arg("script.py")
+        .env(EnvVars::UV_SCRIPT_ENVIRONMENT, "custom-env")
+        .env(EnvVars::VIRTUAL_ENV, "bar")
+        .arg("--active"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: bar
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::is_dir());
+
+    Ok(())
+}
+
+#[test]
 fn sync_active_script_environment_json() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
