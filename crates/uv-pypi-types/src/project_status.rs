@@ -1,4 +1,7 @@
 //! PEP 792 project status marker types.
+//!
+//! See the living Project Status Markers specification:
+//! <https://packaging.python.org/en/latest/specifications/project-status-markers/#project-status-markers>
 
 use serde::Deserialize;
 use uv_small_str::SmallString;
@@ -40,6 +43,17 @@ mod tests {
     use uv_small_str::SmallString;
 
     use crate::{ProjectStatus, Status};
+
+    #[test]
+    fn test_status() {
+        assert_eq!(Status::new("active"), Some(Status::Active));
+        assert_eq!(Status::new("archived"), Some(Status::Archived));
+        assert_eq!(Status::new("quarantined"), Some(Status::Quarantined));
+        assert_eq!(Status::new("deprecated"), Some(Status::Deprecated));
+        assert_eq!(Status::new("unknown"), None);
+        assert_eq!(Status::new("ACTIVE"), None);
+        assert_eq!(Status::new("acTiVe"), None);
+    }
 
     #[test]
     fn test_deserialize() {
