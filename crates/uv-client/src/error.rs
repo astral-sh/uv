@@ -302,10 +302,7 @@ pub enum ErrorKind {
 
     /// Add the number of failed retries to the error.
     #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
-    RequestWithRetries {
-        source: Box<ErrorKind>,
-        retries: u32,
-    },
+    RequestWithRetries { source: Box<Self>, retries: u32 },
 
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {

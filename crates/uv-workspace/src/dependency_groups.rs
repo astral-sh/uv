@@ -3,7 +3,6 @@ use std::str::FromStr;
 use std::{collections::BTreeMap, path::Path};
 
 use thiserror::Error;
-use tracing::error;
 
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
