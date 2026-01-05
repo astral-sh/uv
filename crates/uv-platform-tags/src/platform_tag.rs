@@ -376,7 +376,13 @@ impl PlatformTag {
     pub fn is_armv6l(&self) -> bool {
         matches!(
             self,
-            Self::Linux {
+            Self::Manylinux {
+                arch: Arch::Armv6L,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Armv6L,
+                ..
+            } | Self::Linux {
                 arch: Arch::Armv6L,
                 ..
             } | Self::Musllinux {
