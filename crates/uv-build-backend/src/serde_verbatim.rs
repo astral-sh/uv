@@ -39,7 +39,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        let verbatim = <Cow<'_, &str>>::deserialize(deserializer)?;
+        let verbatim = <Cow<'_, str>>::deserialize(deserializer)?;
         let inner = T::from_str(&verbatim).map_err(serde::de::Error::custom)?;
         Ok(Self {
             verbatim: verbatim.to_string(),

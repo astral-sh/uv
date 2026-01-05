@@ -124,7 +124,7 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
     where
         D: Deserializer<'de>,
     {
-        let given = <Cow<'_, &str>>::deserialize(deserializer)?;
+        let given = <Cow<'_, str>>::deserialize(deserializer)?;
         let normalized = PackageName::from_str(&given).map_err(serde::de::Error::custom)?;
         Ok(Self {
             given: given.to_string(),
