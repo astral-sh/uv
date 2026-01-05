@@ -94,13 +94,27 @@ impl SimpleDetailHTML {
     ///
     /// Precondition: `head` is a `<head>` tag.
     fn parse_project_status(parser: &Parser, head: &Node) -> Result<Option<ProjectStatus>, Error> {
-        let mut status: Option<Status> = None;
-        let mut reason: Option<SmallString> = None;
+        /// Extract the value of the `content` attribute from a tag.
+        #[inline]
+        fn content<'a>(tag: &'a HTMLTag<'a>) -> Result<Option<&'a str>, Error> {
+            let Some(content) = tag
+                .attributes()
+                .get("content")
+                .and_then(|bytes| bytes)
+                .map(|bytes| std::str::from_utf8(bytes.as_bytes()))
+                .transpose()?
+            else {
+                return Ok(None);
+            };
+            Ok(Some(content))
+        }
 
         let Some(children) = head.children() else {
             return Ok(None);
         };
 
+        let mut status: Option<Status> = None;
+        let mut reason: Option<SmallString> = None;
         for node in children.all(parser) {
             let tag = match node.as_tag() {
                 Some(tag) if tag.name().as_bytes() == b"meta" => tag,
@@ -112,24 +126,28 @@ impl SimpleDetailHTML {
                 None => continue,
             };
 
-            let content = match tag.attributes().get("content").and_then(|bytes| bytes) {
-                Some(content) => std::str::from_utf8(content.as_bytes())?,
-                None => continue,
-            };
-
+            // Per PEP 792: both `pypi:project-status` and `pypi:project-status-reason`
+            // are optional, but if present should be well-formed.
             match name {
                 "pypi:project-status" => {
                     status = {
-                        let Some(status) = Status::new(content) else {
+                        let Some(status) = content(tag)?.and_then(Status::new) else {
                             // TODO: Make this a hard error instead?
-                            warn!("Invalid project status: `{content}`");
+                            warn!("Invalid project status (missing or unrecognized)");
                             return Ok(None);
                         };
                         Some(status)
                     };
                 }
                 "pypi:project-status-reason" => {
-                    reason = Some(content.into());
+                    reason = {
+                        let Some(content) = content(tag)?.map(SmallString::from) else {
+                            // TODO: Make this a hard error instead?
+                            warn!("Invalid project status reason (missing)");
+                            return Ok(None);
+                        };
+                        Some(content)
+                    }
                 }
                 _ => {}
             }
