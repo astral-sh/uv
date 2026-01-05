@@ -44,8 +44,8 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -60,7 +60,7 @@ fn help() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -125,8 +125,8 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -141,7 +141,7 @@ fn help_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -205,8 +205,8 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -221,7 +221,7 @@ fn help_short_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -332,14 +332,14 @@ fn help_subcommand() {
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
               
-              [env: UV_MANAGED_PYTHON=]
+              Can also be set with the `UV_MANAGED_PYTHON` environment variable.
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
-              [env: UV_NO_MANAGED_PYTHON=]
+              Can also be set with the `UV_NO_MANAGED_PYTHON` environment variable.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -386,7 +386,7 @@ fn help_subcommand() {
               
               When disabled, uv will only use locally cached data and locally available files.
               
-              [env: UV_OFFLINE=]
+              Can also be set with the `UV_OFFLINE` environment variable.
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -605,14 +605,14 @@ fn help_subsubcommand() {
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
               
-              [env: UV_MANAGED_PYTHON=]
+              Can also be set with the `UV_MANAGED_PYTHON` environment variable.
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
-              [env: UV_NO_MANAGED_PYTHON=]
+              Can also be set with the `UV_NO_MANAGED_PYTHON` environment variable.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -659,7 +659,7 @@ fn help_subsubcommand() {
               
               When disabled, uv will only use locally cached data and locally available files.
               
-              [env: UV_OFFLINE=]
+              Can also be set with the `UV_OFFLINE` environment variable.
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -759,8 +759,8 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -775,7 +775,7 @@ fn help_flag_subcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -840,8 +840,8 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -856,7 +856,7 @@ fn help_flag_subsubcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1002,8 +1002,8 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -1018,7 +1018,7 @@ fn help_with_global_option() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1125,8 +1125,8 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -1141,7 +1141,7 @@ fn help_with_no_pager() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access [env: UV_OFFLINE=]
+              Disable network access
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
