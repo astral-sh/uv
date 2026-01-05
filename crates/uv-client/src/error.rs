@@ -246,9 +246,15 @@ impl Error {
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
-        Self {
-            kind: Box::new(kind),
-            retries: 0,
+        match kind {
+            ErrorKind::RequestWithRetries { source, retries } => Self {
+                kind: source,
+                retries,
+            },
+            other => Self {
+                kind: Box::new(other),
+                retries: 0,
+            },
         }
     }
 }
@@ -390,6 +396,18 @@ impl ErrorKind {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
                 return Self::Offline(err.url().to_string());
+            }
+            if let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+                underlying.downcast_ref::<reqwest_retry::RetryError>()
+            {
+                let retries = *retries;
+                return Self::RequestWithRetries {
+                    source: Box::new(Self::WrappedReqwestError(
+                        url,
+                        WrappedReqwestError::from(err),
+                    )),
+                    retries,
+                };
             }
         }
 
