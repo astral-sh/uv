@@ -5,7 +5,7 @@ use http::StatusCode;
 use serde_json::json;
 use uv_static::EnvVars;
 use wiremock::matchers::method;
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::common::{TestContext, uv_snapshot};
 
@@ -392,6 +392,7 @@ async fn install_http_retries() {
     // Create a server that always fails, so we can see the number of retries used
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(503))
+        .expect(6)
         .mount(&server)
         .await;
 
@@ -451,6 +452,40 @@ async fn install_http_retries() {
     error: Request failed after 5 retries
       Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+    "
+    );
+}
+
+#[tokio::test]
+async fn install_http_retry_low_level() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Create a server that fails with a more fundamental error so we trigger
+    // earlier error paths
+    Mock::given(method("GET"))
+        .respond_with_err(|_: &'_ Request| io::Error::new(io::ErrorKind::ConnectionReset, "error"))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 1 retry
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: error sending request for url (http://[LOCALHOST]/anyio/)
+      Caused by: client error (SendRequest)
+      Caused by: connection closed before message completed
     "
     );
 }
