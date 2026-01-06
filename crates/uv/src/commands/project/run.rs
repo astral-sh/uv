@@ -65,15 +65,15 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, MissingLockfileSource, PreferenceLocation, ProjectEnvironment,
-    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
+    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -84,7 +84,7 @@ pub(crate) async fn run(
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     isolated: bool,
@@ -262,8 +262,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .ok();
 
             // Determine the lock mode.
-            let mode = if frozen {
-                LockMode::Frozen(MissingLockfileSource::frozen())
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
             } else if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(environment.interpreter(), lock_check)
             } else {
@@ -364,7 +364,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     "uv lock --script".green(),
                 );
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
@@ -601,7 +601,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
             if no_sync {
@@ -748,8 +748,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .ok();
 
                 // Determine the lock mode.
-                let mode = if frozen {
-                    LockMode::Frozen(MissingLockfileSource::frozen())
+                let mode = if let Some(frozen_source) = frozen {
+                    LockMode::Frozen(frozen_source.into())
                 } else if let LockCheck::Enabled(lock_check) = lock_check {
                     LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {

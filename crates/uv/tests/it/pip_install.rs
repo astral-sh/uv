@@ -12273,6 +12273,25 @@ fn conflicting_flags_clap_bug() {
     );
 }
 
+/// Test that `--offline` and `--refresh` conflict.
+#[test]
+fn offline_refresh_conflict() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `--offline` cannot be used with `--refresh`
+    "
+    );
+}
+
 /// Test that shebang arguments are stripped when installing scripts
 #[test]
 #[cfg(unix)]

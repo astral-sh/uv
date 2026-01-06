@@ -57,8 +57,7 @@ fn help() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -138,8 +137,7 @@ fn help_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -218,8 +216,7 @@ fn help_short_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -331,14 +328,14 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -369,7 +366,7 @@ fn help_subcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -378,14 +375,14 @@ fn help_subcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -406,7 +403,7 @@ fn help_subcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -454,7 +451,6 @@ fn help_subcommand() {
               Display the concise help for this command
 
     Use `uv help python <command>` for more information on a specific command.
-
 
     ----- stderr -----
     "#);
@@ -604,14 +600,14 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -642,7 +638,7 @@ fn help_subsubcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -651,14 +647,14 @@ fn help_subsubcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -679,7 +675,7 @@ fn help_subsubcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -726,7 +722,6 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-
     ----- stderr -----
     "#);
 }
@@ -772,8 +767,7 @@ fn help_flag_subcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -853,8 +847,7 @@ fn help_flag_subsubcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1015,8 +1008,7 @@ fn help_with_global_option() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1138,8 +1130,7 @@ fn help_with_no_pager() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>

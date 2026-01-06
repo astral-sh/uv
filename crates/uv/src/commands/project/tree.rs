@@ -24,12 +24,12 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    default_dependency_groups,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
 
@@ -39,7 +39,7 @@ pub(crate) async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     universal: bool,
     depth: u8,
     prune: Vec<PackageName>,
@@ -83,7 +83,7 @@ pub(crate) async fn tree(
     let groups = groups.with_defaults(default_groups);
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
-    let interpreter = if frozen && universal {
+    let interpreter = if frozen.is_some() && universal {
         None
     } else {
         Some(match target {
@@ -125,8 +125,8 @@ pub(crate) async fn tree(
     };
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen(MissingLockfileSource::frozen())
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {

@@ -594,6 +594,25 @@ pub struct Concurrency {
     pub installs: Option<NonZeroUsize>,
 }
 
+/// A boolean flag parsed from an environment variable.
+///
+/// Stores both the value and the environment variable name for use in error messages.
+#[derive(Debug, Clone, Copy)]
+pub struct EnvFlag {
+    pub value: Option<bool>,
+    pub env_var: &'static str,
+}
+
+impl EnvFlag {
+    /// Create a new [`EnvFlag`] by parsing the given environment variable.
+    pub fn new(env_var: &'static str) -> Result<Self, Error> {
+        Ok(Self {
+            value: parse_boolish_environment_variable(env_var)?,
+            env_var,
+        })
+    }
+}
+
 /// Options loaded from environment variables.
 ///
 /// This is currently a subset of all respected environment variables, most are parsed via Clap at
@@ -613,6 +632,24 @@ pub struct EnvironmentOptions {
     pub concurrency: Concurrency,
     #[cfg(feature = "tracing-durations-export")]
     pub tracing_durations_file: Option<PathBuf>,
+    pub frozen: EnvFlag,
+    pub locked: EnvFlag,
+    pub offline: EnvFlag,
+    pub no_sync: EnvFlag,
+    pub managed_python: EnvFlag,
+    pub no_managed_python: EnvFlag,
+    pub native_tls: EnvFlag,
+    pub preview: EnvFlag,
+    pub isolated: EnvFlag,
+    pub no_progress: EnvFlag,
+    pub no_installer_metadata: EnvFlag,
+    pub dev: EnvFlag,
+    pub no_dev: EnvFlag,
+    pub show_resolution: EnvFlag,
+    pub no_editable: EnvFlag,
+    pub no_env_file: EnvFlag,
+    pub venv_seed: EnvFlag,
+    pub venv_clear: EnvFlag,
 }
 
 impl EnvironmentOptions {
@@ -667,6 +704,24 @@ impl EnvironmentOptions {
             tracing_durations_file: parse_path_environment_variable(
                 EnvVars::TRACING_DURATIONS_FILE,
             ),
+            frozen: EnvFlag::new(EnvVars::UV_FROZEN)?,
+            locked: EnvFlag::new(EnvVars::UV_LOCKED)?,
+            offline: EnvFlag::new(EnvVars::UV_OFFLINE)?,
+            no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
+            managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
+            no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
+            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
+            preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
+            isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
+            no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
+            no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
+            dev: EnvFlag::new(EnvVars::UV_DEV)?,
+            no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
+            show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
+            no_editable: EnvFlag::new(EnvVars::UV_NO_EDITABLE)?,
+            no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
+            venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
+            venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
         })
     }
 }
