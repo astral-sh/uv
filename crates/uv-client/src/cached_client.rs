@@ -540,7 +540,7 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
 
         // Check for HTTP error status and extract problem details if available
         if let Err(status_error) = response.error_for_status_ref() {
@@ -610,7 +610,7 @@ impl CachedClient {
             .0
             .execute(req)
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
 
         // If the user set a custom `Cache-Control` header, override it.
         if let CacheControl::Override(header) = cache_control {
