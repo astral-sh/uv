@@ -1528,7 +1528,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         filters => context.filters(),
     }, {
             assert_snapshot!(
-                context.read("main"), @r##"
+                context.read("main"), @r#"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
             import sys
@@ -1539,7 +1539,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
                 sys.exit(main())
-            "##
+            "#
             );
         }
     );
@@ -4112,8 +4112,8 @@ fn run_linked_environment_path() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/target
-    [TEMP_DIR]/target/[BIN]/[PYTHON]
+    [VENV]/
+    [VENV]/[BIN]/[PYTHON]
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
@@ -4126,8 +4126,8 @@ fn run_linked_environment_path() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            black_entrypoint, @r##"
-        #![TEMP_DIR]/target/[BIN]/[PYTHON]
+            black_entrypoint, @r#"
+        #![VENV]/[BIN]/[PYTHON]
         # -*- coding: utf-8 -*-
         import sys
         from black import patched_main
@@ -4137,7 +4137,7 @@ fn run_linked_environment_path() -> Result<()> {
             elif sys.argv[0].endswith(".exe"):
                 sys.argv[0] = sys.argv[0][:-4]
             sys.exit(patched_main())
-        "##
+        "#
         );
     });
 

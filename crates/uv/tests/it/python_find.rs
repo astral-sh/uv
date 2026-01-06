@@ -1009,7 +1009,7 @@ fn python_required_python_major_minor() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/python3.11
+    [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -1019,7 +1019,7 @@ fn python_required_python_major_minor() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/child/python3.11
+    [PYTHON-3.11]
 
     ----- stderr -----
     ");
