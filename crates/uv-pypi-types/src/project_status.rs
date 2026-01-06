@@ -3,12 +3,14 @@
 //! See the living Project Status Markers specification:
 //! <https://packaging.python.org/en/latest/specifications/project-status-markers/#project-status-markers>
 
+use std::borrow::Cow;
+
 use serde::Deserialize;
+use tracing::info;
 use uv_small_str::SmallString;
 
 /// The status marker for a project.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Status {
     #[default]
     Active,
@@ -24,8 +26,22 @@ impl Status {
             "archived" => Some(Self::Archived),
             "quarantined" => Some(Self::Quarantined),
             "deprecated" => Some(Self::Deprecated),
-            _ => None,
+            _ => {
+                info!("Unknown project status: '{status}'");
+                None
+            }
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for Status {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
+        // If we don't recognize the status, default to Active.
+        Ok(Self::new(&s).unwrap_or_default())
     }
 }
 
@@ -69,6 +85,25 @@ mod tests {
         assert_eq!(
             project_status.reason,
             Some(SmallString::from("This project is no longer maintained."))
+        );
+    }
+
+    #[test]
+    fn test_deserialize_unknown_status() {
+        let json = r#"
+        {
+            "status": "unknown",
+            "reason": "This project has an unrecognized status."
+        }
+        "#;
+
+        let project_status: ProjectStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(project_status.status, Status::Active);
+        assert_eq!(
+            project_status.reason,
+            Some(SmallString::from(
+                "This project has an unrecognized status."
+            ))
         );
     }
 }

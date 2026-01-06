@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use tl::{HTMLTag, Node, Parser};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
@@ -132,8 +132,6 @@ impl SimpleDetailHTML {
                 "pypi:project-status" => {
                     status = {
                         let Some(status) = content(tag)?.and_then(Status::new) else {
-                            // TODO: Make this a hard error instead?
-                            warn!("Invalid project status (missing or unrecognized)");
                             return Ok(None);
                         };
                         Some(status)
