@@ -368,10 +368,7 @@
     },
     "no-proxy": {
       "description": "A list of hosts to exclude from proxying.",
-      "type": [
-        "array",
-        "null"
-      ],
+      "type": ["array", "null"],
       "items": {
         "type": "string"
       }
