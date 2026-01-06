@@ -13641,3 +13641,65 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that RECORD entries use forward slashes on all platforms.
+///
+/// See <https://github.com/astral-sh/uv/issues/14446>.
+#[test]
+fn record_uses_forward_slashes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a package with scripts via uv_build data directory.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend.data]
+        scripts = "scripts"
+        headers = "headers"
+    "#})?;
+
+    let module_dir = context.temp_dir.child("src").child("project");
+    module_dir.child("__init__.py").touch()?;
+
+    // Create a script that uses the install_script path.
+    let scripts_dir = context.temp_dir.child("scripts");
+    scripts_dir.child("my_script").write_str(indoc! {r#"
+        #!python
+        print("Hello from script")
+    "#})?;
+
+    let scripts_dir = context.temp_dir.child("headers");
+    scripts_dir.child("project.h").write_str(indoc! {r"
+        #include <stdio.h>
+    "})?;
+
+    context.pip_install().arg(".").assert().success();
+
+    // Read the RECORD file and check that all paths use forward slashes.
+    let record_path = context
+        .site_packages()
+        .join("project-0.1.0.dist-info")
+        .join("RECORD");
+
+    let record = fs::read_to_string(&record_path)?;
+    let record_lines: Vec<_> = record
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert!(record_lines.iter().any(|line| line.contains("my_script")));
+    assert!(record_lines.iter().any(|line| line.contains("project.h")));
+    for line in record_lines {
+        // Each RECORD line is: path,hash,size
+        let path = line.split(',').next().unwrap();
+        assert!(!path.contains('\\'), "{path}");
+    }
+
+    Ok(())
+}
