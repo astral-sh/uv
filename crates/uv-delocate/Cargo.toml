@@ -1,0 +1,36 @@
+[package]
+name = "uv-delocate"
+version = "0.0.11"
+description = "Mach-O delocate functionality for Python wheels"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-distribution-filename = { workspace = true }
+uv-extract = { workspace = true }
+uv-fs = { workspace = true }
+uv-platform-tags = { workspace = true }
+uv-static = { workspace = true }
+
+base64 = { workspace = true }
+csv = { workspace = true }
+fs-err = { workspace = true }
+goblin = { workspace = true }
+pathdiff = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }
