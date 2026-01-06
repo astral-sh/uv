@@ -44,8 +44,8 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -60,7 +60,7 @@ fn help() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -125,8 +125,8 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -141,7 +141,7 @@ fn help_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -205,8 +205,8 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -221,7 +221,7 @@ fn help_short_flag() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -326,20 +326,16 @@ fn help_subcommand() {
 
     Python options:
           --managed-python
-              Require use of uv-managed Python versions.
+              Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
               
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
-              Can also be set with the `UV_MANAGED_PYTHON` environment variable.
 
           --no-managed-python
-              Disable use of uv-managed Python versions.
+              Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
               
               Instead, uv will search for a suitable Python version on the system.
-              
-              Can also be set with the `UV_NO_MANAGED_PYTHON` environment variable.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -369,7 +365,8 @@ fn help_subcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -378,15 +375,11 @@ fn help_subcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
-              [env: UV_NATIVE_TLS=]
 
           --offline
-              Disable network access.
+              Disable network access [env: UV_OFFLINE=]
               
               When disabled, uv will only use locally cached data and locally available files.
-              
-              Can also be set with the `UV_OFFLINE` environment variable.
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -403,11 +396,9 @@ fn help_subcommand() {
               [env: UV_INSECURE_HOST=]
 
           --no-progress
-              Hide all progress outputs.
+              Hide all progress outputs [env: UV_NO_PROGRESS=]
               
               For example, spinners or progress bars.
-              
-              [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -599,20 +590,16 @@ fn help_subsubcommand() {
 
     Python options:
           --managed-python
-              Require use of uv-managed Python versions.
+              Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
               
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
-              Can also be set with the `UV_MANAGED_PYTHON` environment variable.
 
           --no-managed-python
-              Disable use of uv-managed Python versions.
+              Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
               
               Instead, uv will search for a suitable Python version on the system.
-              
-              Can also be set with the `UV_NO_MANAGED_PYTHON` environment variable.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -642,7 +629,8 @@ fn help_subsubcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native certificate store [env:
+              UV_NATIVE_TLS=]
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -651,15 +639,11 @@ fn help_subsubcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
-              [env: UV_NATIVE_TLS=]
 
           --offline
-              Disable network access.
+              Disable network access [env: UV_OFFLINE=]
               
               When disabled, uv will only use locally cached data and locally available files.
-              
-              Can also be set with the `UV_OFFLINE` environment variable.
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -676,11 +660,9 @@ fn help_subsubcommand() {
               [env: UV_INSECURE_HOST=]
 
           --no-progress
-              Hide all progress outputs.
+              Hide all progress outputs [env: UV_NO_PROGRESS=]
               
               For example, spinners or progress bars.
-              
-              [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
               Change to the given directory prior to running the command.
@@ -759,8 +741,8 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -775,7 +757,7 @@ fn help_flag_subcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -840,8 +822,8 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -856,7 +838,7 @@ fn help_flag_subsubcommand() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1002,8 +984,8 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -1018,7 +1000,7 @@ fn help_with_global_option() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1125,8 +1107,8 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions
-          --no-managed-python    Disable use of uv-managed Python versions
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -1141,7 +1123,7 @@ fn help_with_no_pager() {
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
