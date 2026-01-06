@@ -19,9 +19,13 @@ workspace = true
 uv-warnings = { workspace = true }
 
 bitflags = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+insta = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []
