@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env::VarError;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -2787,6 +2788,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
+    pub(crate) exclude: HashSet<PackageName>,
     pub(crate) paths: Option<Vec<PathBuf>>,
     pub(crate) settings: PipSettings,
 }
@@ -2800,6 +2802,7 @@ impl PipFreezeSettings {
     ) -> Self {
         let PipFreezeArgs {
             exclude_editable,
+            exclude,
             strict,
             no_strict,
             python,
@@ -2813,6 +2816,7 @@ impl PipFreezeSettings {
 
         Self {
             exclude_editable,
+            exclude: exclude.into_iter().collect(),
             paths,
             settings: PipSettings::combine(
                 PipOptions {

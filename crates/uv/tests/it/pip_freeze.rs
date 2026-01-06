@@ -574,3 +574,41 @@ fn freeze_prefix() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn freeze_exclude() {
+    let context = TestContext::new("3.12");
+
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
+    context
+        .pip_install()
+        .arg("MarkupSafe")
+        .arg("tomli")
+        .arg("--prefix")
+        .arg(prefix.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze --exclude MarkupSafe`.
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--prefix").arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Run `pip freeze --exclude MarkupSafe --exclude tomli`.
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--exclude").arg("MarkupSafe").arg("--exclude").arg("tomli").arg("--prefix").arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+}
