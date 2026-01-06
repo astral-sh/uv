@@ -1,6 +1,6 @@
 [package]
 name = "uv-cache"
-version = "0.0.10"
+version = "0.0.11"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
