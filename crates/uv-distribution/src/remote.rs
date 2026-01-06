@@ -4,13 +4,15 @@ use std::collections::btree_map::Entry;
 use std::path::Path;
 use std::sync::Arc;
 
-use blake2::Digest;
+use reqwest::Body;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
+use tokio_util::io::ReaderStream;
 use tracing::{debug, instrument, warn};
 use url::Url;
 
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::PyxTokenStore;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{MetadataFormat, VersionFiles};
 use uv_configuration::BuildOptions;
@@ -35,9 +37,32 @@ use crate::distribution_database::ManagedClient;
 /// A resolver for remote Git-based indexes.
 pub(crate) struct RemoteCacheResolver<'a, Context: BuildContext> {
     build_context: &'a Context,
-    cache: Arc<Mutex<GitIndexCache>>,
+    /// Cache for Git index entries.
+    index_cache: Arc<Mutex<GitIndexCache>>,
+    /// Cache for server-provided cache keys.
+    key_cache: Arc<Mutex<CacheKeyCache>>,
     store: Option<PyxTokenStore>,
     workspace: Option<String>,
+}
+
+/// A cache for server-provided cache keys.
+///
+/// Maps (repository, commit, subdirectory) to the server-computed cache key.
+type CacheKeyCache = FxHashMap<CacheKeyRequest, String>;
+
+/// Request body for fetching a cache key from the server.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+struct CacheKeyRequest {
+    repository: String,
+    commit: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subdirectory: Option<String>,
+}
+
+/// Response from the cache key endpoint.
+#[derive(Debug, Deserialize)]
+struct CacheKeyResponse {
+    key: String,
 }
 
 impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
@@ -45,10 +70,161 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
     pub(crate) fn new(build_context: &'a T) -> Self {
         Self {
             build_context,
-            cache: Arc::default(),
+            index_cache: Arc::default(),
+            key_cache: Arc::default(),
             store: PyxTokenStore::from_settings().ok(),
-            workspace: std::env::var(EnvVars::PYX_GIT_CACHE).ok(),
+            workspace: std::env::var(EnvVars::PYX_CACHE_WORKSPACE).ok(),
         }
+    }
+
+    /// Fetch the cache key from the server for the given Git source.
+    async fn get_cache_key(
+        &self,
+        repository: &RepositoryUrl,
+        commit: GitOid,
+        subdirectory: Option<&Path>,
+        client: &ManagedClient<'a>,
+    ) -> Result<Option<String>, Error> {
+        let Some(store) = &self.store else {
+            return Ok(None);
+        };
+
+        // Build the request.
+        let request = CacheKeyRequest {
+            repository: repository.to_string(),
+            commit: commit.to_string(),
+            subdirectory: subdirectory.and_then(|p| p.to_str()).map(String::from),
+        };
+
+        // Check the local cache first.
+        {
+            let cache = self.key_cache.lock().await;
+            if let Some(key) = cache.get(&request) {
+                return Ok(Some(key.clone()));
+            }
+        }
+
+        // Build the API URL with query parameters.
+        let Some(workspace) = &self.workspace else {
+            return Ok(None);
+        };
+        let url = {
+            let mut url = store.api().clone();
+            url.set_path(&format!("v1/cache/{workspace}/key"));
+            url.query_pairs_mut()
+                .append_pair("repository", &request.repository)
+                .append_pair("commit", &request.commit);
+            if let Some(ref subdir) = request.subdirectory {
+                url.query_pairs_mut().append_pair("subdirectory", subdir);
+            }
+            url
+        };
+        debug!("Fetching cache key from: {url}");
+
+        // Build and send the request.
+        let response = match client
+            .unmanaged
+            .uncached_client(&url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                debug!("Failed to fetch cache key: {err}");
+                return Ok(None);
+            }
+        };
+
+        if !response.status().is_success() {
+            debug!(
+                "Failed to fetch cache key: {} {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            );
+            return Ok(None);
+        }
+
+        let response: CacheKeyResponse = response.json().await?;
+
+        // Cache the key.
+        {
+            let mut cache = self.key_cache.lock().await;
+            cache.insert(request, response.key.clone());
+        }
+
+        Ok(Some(response.key))
+    }
+
+    /// Create a cache entry on the server and return the cache key.
+    ///
+    /// Unlike [`get_cache_key`], this creates the necessary server-side resources
+    /// (registry, view) that are required before uploading wheels.
+    async fn create_cache_entry(
+        &self,
+        repository: &RepositoryUrl,
+        commit: GitOid,
+        subdirectory: Option<&Path>,
+        client: &ManagedClient<'a>,
+    ) -> Result<Option<String>, Error> {
+        let Some(store) = &self.store else {
+            return Ok(None);
+        };
+
+        // Build the request.
+        let request = CacheKeyRequest {
+            repository: repository.to_string(),
+            commit: commit.to_string(),
+            subdirectory: subdirectory.and_then(|p| p.to_str()).map(String::from),
+        };
+
+        // Build the API URL.
+        let Some(workspace) = &self.workspace else {
+            return Ok(None);
+        };
+        let url = {
+            let mut url = store.api().clone();
+            url.set_path(&format!("v1/cache/{workspace}"));
+            url
+        };
+        debug!("Creating cache entry at: {url}");
+
+        // Build and send the request.
+        let body = serde_json::to_vec(&request).expect("failed to serialize cache key request");
+        let response = match client
+            .unmanaged
+            .uncached_client(&url)
+            .post(Url::from(url.clone()))
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                debug!("Failed to create cache entry: {err}");
+                return Ok(None);
+            }
+        };
+
+        if !response.status().is_success() {
+            debug!(
+                "Failed to create cache entry: {} {}",
+                response.status(),
+                response.text().await.unwrap_or_default()
+            );
+            return Ok(None);
+        }
+
+        let response: CacheKeyResponse = response.json().await?;
+
+        // Cache the key.
+        {
+            let mut cache = self.key_cache.lock().await;
+            cache.insert(request, response.key.clone());
+        }
+
+        Ok(Some(response.key))
     }
 
     /// Return the cached Git index for the given distribution, if any.
@@ -111,19 +287,23 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
             return Ok(Vec::default());
         };
 
-        // Determine the cache key for the Git source.
-        let cache_key = GitCacheKey {
-            repository: RepositoryUrl::new(source.git.repository()),
-            precise,
-            subdirectory: source.subdirectory,
+        // Fetch the cache key from the server.
+        let repository = RepositoryUrl::new(source.git.repository());
+        let Some(cache_key) = self
+            .get_cache_key(&repository, precise, source.subdirectory, client)
+            .await?
+        else {
+            return Ok(Vec::default());
         };
-        let digest = cache_key.digest();
+
+        // Build the index URL using the server-provided cache key.
+        let Some(store) = &self.store else {
+            return Ok(Vec::default());
+        };
         let index = IndexUrl::from(
             VerbatimUrl::parse_url(format!(
-                "http://localhost:8000/v1/git/{workspace}/{}/{}/{}",
-                &digest[..2],
-                &digest[2..4],
-                &digest[4..],
+                "{}/v1/cache/{workspace}/{cache_key}",
+                store.api().as_str().trim_end_matches('/'),
             ))
             .unwrap(),
         );
@@ -153,7 +333,7 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
 
         // Store the index entries in a cache, to avoid redundant fetches.
         {
-            let cache = self.cache.lock().await;
+            let cache = self.index_cache.lock().await;
             if let Some(entries) = cache.get(&index) {
                 return Ok(entries.to_vec());
             }
@@ -203,7 +383,7 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
 
         // Write to the cache.
         {
-            let mut cache = self.cache.lock().await;
+            let mut cache = self.index_cache.lock().await;
             cache.insert(index.clone(), entries.clone());
         }
 
@@ -250,61 +430,56 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
             return Ok(());
         };
 
-        // Determine the cache key for the Git source.
-        let cache_key = GitCacheKey {
-            repository: RepositoryUrl::new(source.git.repository()),
-            precise,
-            subdirectory: source.subdirectory,
+        // Create the cache entry on the server (or get existing key).
+        let repository = RepositoryUrl::new(source.git.repository());
+        let Some(cache_key) = self
+            .create_cache_entry(&repository, precise, source.subdirectory, client)
+            .await?
+        else {
+            return Ok(());
         };
-        let digest = cache_key.digest();
 
-        // Build the upload URL.
+        // Build the upload URL using the server-provided cache key.
         let url = {
             let mut url = store.api().clone();
-            url.set_path(&format!(
-                "v1/cache/{workspace}/{}/{}/{}",
-                &digest[..2],
-                &digest[2..4],
-                &digest[4..],
-            ));
+            url.set_path(&format!("v1/cache/{workspace}/{cache_key}"));
             url
         };
         debug!("Uploading wheel to remote cache: {url}");
 
-        // Get an access token.
-        let access_token = store
-            .access_token(client.unmanaged.uncached_client(&url).raw_client(), 60 * 5)
+        // Get the file size for the Content-Length header.
+        let file_size = fs_err::tokio::metadata(wheel_path)
             .await
-            .map_err(Error::TokenStore)?;
+            .map_err(Error::CacheRead)?
+            .len();
 
-        let Some(access_token) = access_token else {
-            debug!("No access token available; skipping cache upload");
-            return Ok(());
-        };
-
-        // Read the wheel file.
-        let wheel_bytes = fs_err::tokio::read(wheel_path)
+        // Open the wheel file.
+        let file = fs_err::tokio::File::open(wheel_path)
             .await
             .map_err(Error::CacheRead)?;
+        let stream = ReaderStream::new(file);
+        let body = Body::wrap_stream(stream);
+
+        // Build the multipart form with streaming body.
+        let part = reqwest::multipart::Part::stream_with_length(body, file_size)
+            .file_name(filename.to_string());
+        let form = reqwest::multipart::Form::new().part("content", part);
 
         // Build and send the request.
-        let credentials = Credentials::from(access_token);
-        let request = client
+        let response = match client
             .unmanaged
             .uncached_client(&url)
-            .raw_client()
-            .put(Url::from(url.clone()))
-            .query(&[("filename", filename.to_string())])
-            .body(wheel_bytes)
-            .build()?;
-        let request = credentials.authenticate(request);
-
-        let response = client
-            .unmanaged
-            .uncached_client(&url)
-            .raw_client()
-            .execute(request)
-            .await?;
+            .post(Url::from(url.clone()))
+            .multipart(form)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                warn!("Failed to upload wheel to cache: {err}");
+                return Ok(());
+            }
+        };
 
         if !response.status().is_success() {
             warn!(
@@ -524,41 +699,5 @@ impl GitIndexCache {
         entries: Vec<GitIndexEntry>,
     ) -> Option<Vec<GitIndexEntry>> {
         self.0.insert(index, entries)
-    }
-}
-
-/// A cache key for a Git repository at a precise commit.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct GitCacheKey<'a> {
-    repository: RepositoryUrl,
-    precise: GitOid,
-    subdirectory: Option<&'a Path>,
-}
-
-impl GitCacheKey<'_> {
-    /// Compute the digest for the Git cache key.
-    fn digest(&self) -> String {
-        let mut hasher = blake2::Blake2b::<blake2::digest::consts::U32>::new();
-        hasher.update(self.repository.as_str().as_bytes());
-        hasher.update(b"/");
-        hasher.update(self.precise.as_str().as_bytes());
-        if let Some(subdirectory) = self
-            .subdirectory
-            .and_then(|subdirectory| subdirectory.to_str())
-        {
-            hasher.update(b"?subdirectory=");
-            hasher.update(subdirectory.as_bytes());
-        }
-        hex::encode(hasher.finalize())
-    }
-}
-
-impl std::fmt::Display for GitCacheKey<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.repository, self.precise.as_str())?;
-        if let Some(subdirectory) = &self.subdirectory {
-            write!(f, "?subdirectory={}", subdirectory.display())?;
-        }
-        Ok(())
     }
 }

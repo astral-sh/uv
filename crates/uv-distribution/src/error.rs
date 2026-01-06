@@ -191,9 +191,6 @@ pub enum Error {
 
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
-
-    #[error("Failed to acquire access token")]
-    TokenStore(#[source] uv_auth::TokenStoreError),
 }
 
 impl From<reqwest::Error> for Error {
