@@ -303,6 +303,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 concurrent_builds,
                 concurrent_installs,
                 allow_insecure_host,
+                http_proxy,
+                https_proxy,
+                no_proxy,
             },
         top_level:
             ResolverInstallerSchema {
@@ -407,6 +410,15 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if allow_insecure_host.is_some() {
         masked_fields.push("allow-insecure-host");
+    }
+    if http_proxy.is_some() {
+        masked_fields.push("http-proxy");
+    }
+    if https_proxy.is_some() {
+        masked_fields.push("https-proxy");
+    }
+    if no_proxy.is_some() {
+        masked_fields.push("no-proxy");
     }
     if index.is_some() {
         masked_fields.push("index");
