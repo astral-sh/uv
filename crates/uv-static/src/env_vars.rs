@@ -716,6 +716,18 @@ impl EnvVars {
     #[attr_added_in("0.1.42")]
     pub const MACOSX_DEPLOYMENT_TARGET: &'static str = "MACOSX_DEPLOYMENT_TARGET";
 
+    /// Search path for dynamic libraries on macOS (checked before system paths).
+    ///
+    /// Used during wheel delocating to find library dependencies.
+    #[attr_added_in("0.9.22")]
+    pub const DYLD_LIBRARY_PATH: &'static str = "DYLD_LIBRARY_PATH";
+
+    /// Fallback search path for dynamic libraries on macOS.
+    ///
+    /// Used during wheel delocating to find library dependencies.
+    #[attr_added_in("0.9.22")]
+    pub const DYLD_FALLBACK_LIBRARY_PATH: &'static str = "DYLD_FALLBACK_LIBRARY_PATH";
+
     /// Used with `--python-platform arm64-apple-ios` and related variants to set the
     /// deployment target (i.e., the minimum supported iOS version).
     ///

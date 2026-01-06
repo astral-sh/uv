@@ -21,3 +21,7 @@ extend-ignore-re = [
 
 [default.extend-identifiers]
 seeked = "seeked" # special term used for streams
+
+[default.extend-words]
+Delocate = "Delocate"
+delocate = "delocate"
