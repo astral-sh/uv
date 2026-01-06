@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use tl::{HTMLTag, Node, Parser};
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, instrument, warn};
 
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
