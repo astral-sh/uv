@@ -235,8 +235,7 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store [env:
-    /// UV_NATIVE_TLS=]
+    /// Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
     /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
