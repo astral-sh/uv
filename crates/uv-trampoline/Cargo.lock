@@ -118,7 +118,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "uv-macros"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "uv-static"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "uv-macros",
 ]
