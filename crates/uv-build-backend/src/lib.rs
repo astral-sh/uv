@@ -1080,6 +1080,53 @@ mod tests {
         );
     }
 
+    /// Test that pre-existing files in the dist directory are deleted before build starts.
+    #[test]
+    fn existing_files_deleted_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory
+        let sdist_path = dist.path().join("failing_build-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("failing_build-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should fail and delete existing files
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
+        assert!(wheel_result.is_err());
+
+        // Verify pre-existing files were deleted
+        assert!(
+            !sdist_path.exists(),
+            "Pre-existing sdist should have been deleted"
+        );
+        assert!(
+            !wheel_path.exists(),
+            "Pre-existing wheel should have been deleted"
+        );
+    }
+
     /// Test that existing files are overwritten on successful build.
     #[test]
     fn existing_files_overwritten_on_success() {

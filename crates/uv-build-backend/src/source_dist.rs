@@ -35,6 +35,10 @@ pub fn build_source_dist(
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
 
+    if source_dist_path.exists() {
+        fs_err::remove_file(&source_dist_path)?;
+    }
+
     let temp_file = NamedTempFile::new_in(source_dist_directory)?;
     let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;

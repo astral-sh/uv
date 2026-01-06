@@ -52,6 +52,10 @@ pub fn build_wheel(
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
 
+    if wheel_path.exists() {
+        fs_err::remove_file(&wheel_path)?;
+    }
+
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
     let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
@@ -302,6 +306,10 @@ pub fn build_editable(
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
+
+    if wheel_path.exists() {
+        fs_err::remove_file(&wheel_path)?;
+    }
 
     let temp_file = NamedTempFile::new_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
