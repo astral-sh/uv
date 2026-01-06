@@ -3185,7 +3185,8 @@ fn add_path_adjacent_directory() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg(dependency.path()).current_dir(project.path()), @r"
+    // Use a relative path to test adjacent directory behavior
+    uv_snapshot!(context.filters(), context.add().arg("../dependency").current_dir(project.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3215,7 +3216,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        dependency = { path = "[TEMP_DIR]/dependency" }
+        dependency = { path = "../dependency" }
         "#
         );
     });
