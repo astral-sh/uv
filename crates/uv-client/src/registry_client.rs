@@ -1504,7 +1504,11 @@ impl SimpleDetailMetadata {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
     ) -> Result<Self, Error> {
-        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, url)
+        let SimpleDetailHTML {
+            project_status: _,
+            base,
+            files,
+        } = SimpleDetailHTML::parse(text, url)
             .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
         Ok(Self::from_pypi_files(files, package_name, base.as_url()))
@@ -1866,7 +1870,11 @@ mod tests {
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
-        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, &base).unwrap();
+        let SimpleDetailHTML {
+            project_status: _,
+            base,
+            files,
+        } = SimpleDetailHTML::parse(text, &base).unwrap();
         let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls

@@ -10,13 +10,17 @@ use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::Requirement;
 use uv_small_str::SmallString;
 
-use crate::VerbatimParsedUrl;
 use crate::lenient_requirement::LenientVersionSpecifiers;
+use crate::{ProjectStatus, VerbatimParsedUrl};
 
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]
     pub files: Vec<PypiFile>,

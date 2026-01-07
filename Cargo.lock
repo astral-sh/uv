@@ -6502,6 +6502,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde-untagged",
+ "serde_json",
  "thiserror 2.0.17",
  "toml_edit 0.23.7",
  "tracing",
