@@ -523,8 +523,8 @@ pub fn delocate_wheel(
             wheel::update_record(wheel_dir, &dist_info)?;
 
             // Repack the wheel.
-            let output_filename = wheel::filename_with_platform(&filename, &final_platform_tags);
-            let output_path = dest_dir.join(&output_filename);
+            let output_filename = filename.with_platform_tags(&final_platform_tags);
+            let output_path = dest_dir.join(output_filename.to_string());
             wheel::pack_wheel(wheel_dir, &output_path)?;
             return Ok(output_path);
         }
@@ -629,8 +629,8 @@ pub fn delocate_wheel(
     wheel::update_record(wheel_dir, &dist_info)?;
 
     // Create output wheel with potentially updated platform tag.
-    let output_filename = wheel::filename_with_platform(&filename, &final_platform_tags);
-    let output_path = dest_dir.join(&output_filename);
+    let output_filename = filename.with_platform_tags(&final_platform_tags);
+    let output_path = dest_dir.join(output_filename.to_string());
 
     wheel::pack_wheel(wheel_dir, &output_path)?;
 

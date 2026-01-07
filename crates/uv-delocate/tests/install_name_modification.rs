@@ -35,7 +35,7 @@ fn test_change_install_name() {
 
     // Verify the change.
     let macho = uv_delocate::macho::parse_macho(&dylib).unwrap();
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"@loader_path/ext2.dylib"));
     assert!(!dep_names.contains(&"@rpath/libextfunc2_rpath.dylib"));
 }
@@ -56,7 +56,7 @@ fn test_change_install_name_longer_via_install_name_tool() {
 
     // Verify the change.
     let macho = uv_delocate::macho::parse_macho(&dylib).unwrap();
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"@loader_path/long/path/liba.dylib"));
 }
 
