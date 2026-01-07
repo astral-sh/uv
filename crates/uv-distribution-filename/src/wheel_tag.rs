@@ -38,6 +38,39 @@ pub(crate) enum WheelTag {
 }
 
 impl WheelTag {
+    /// Create a new [`WheelTag`] from its components.
+    pub(crate) fn new(
+        build_tag: Option<BuildTag>,
+        python_tags: &[LanguageTag],
+        abi_tags: &[AbiTag],
+        platform_tags: &[PlatformTag],
+    ) -> Self {
+        // Use the small variant if possible (no build tag and single tags).
+        if build_tag.is_none()
+            && python_tags.len() == 1
+            && abi_tags.len() == 1
+            && platform_tags.len() == 1
+        {
+            return Self::Small {
+                small: WheelTagSmall {
+                    python_tag: python_tags[0],
+                    abi_tag: abi_tags[0],
+                    platform_tag: platform_tags[0].clone(),
+                },
+            };
+        }
+
+        Self::Large {
+            large: Box::new(WheelTagLarge {
+                build_tag,
+                python_tag: python_tags.iter().copied().collect(),
+                abi_tag: abi_tags.iter().copied().collect(),
+                platform_tag: platform_tags.iter().cloned().collect(),
+                repr: None,
+            }),
+        }
+    }
+
     /// Return the Python tags.
     pub(crate) fn python_tags(&self) -> &[LanguageTag] {
         match self {
@@ -139,11 +172,40 @@ pub(crate) struct WheelTagLarge {
     /// The string representation of the tag.
     ///
     /// Preserves any unsupported tags that were filtered out when parsing the wheel filename.
-    pub(crate) repr: SmallString,
+    /// If `None`, the representation is generated from the tag fields.
+    pub(crate) repr: Option<SmallString>,
 }
 
 impl Display for WheelTagLarge {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.repr)
+        if let Some(repr) = &self.repr {
+            return write!(f, "{}", repr);
+        }
+
+        // Generate from fields.
+        let python_str = self
+            .python_tag
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
+        let abi_str = self
+            .abi_tag
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
+        let platform_str = self
+            .platform_tag
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
+
+        if let Some(build_tag) = &self.build_tag {
+            write!(f, "{build_tag}-{python_str}-{abi_str}-{platform_str}")
+        } else {
+            write!(f, "{python_str}-{abi_str}-{platform_str}")
+        }
     }
 }
