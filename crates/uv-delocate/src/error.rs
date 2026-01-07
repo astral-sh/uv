@@ -21,7 +21,7 @@ pub enum DelocateError {
     Extract(#[from] uv_extract::Error),
 
     #[error(transparent)]
-    Csv(#[from] csv::Error),
+    InstallWheel(#[from] uv_install_wheel::Error),
 
     #[error("Failed to parse Mach-O binary: {0}")]
     MachOParse(String),

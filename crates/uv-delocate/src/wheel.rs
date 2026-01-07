@@ -10,11 +10,12 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use fs_err as fs;
 use fs_err::File;
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 use zip::ZipWriter;
 use zip::write::FileOptions;
+
+use uv_install_wheel::{RecordEntry, write_record_file};
 
 use crate::error::DelocateError;
 
@@ -97,16 +98,6 @@ fn hash_file(path: &Path) -> Result<(String, u64), DelocateError> {
     Ok((hash_str, size))
 }
 
-/// A single entry in a RECORD file.
-///
-/// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
-#[derive(Serialize, PartialOrd, PartialEq, Ord, Eq)]
-struct RecordEntry {
-    path: String,
-    hash: Option<String>,
-    size: Option<u64>,
-}
-
 /// Update the RECORD file in a wheel directory.
 pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), DelocateError> {
     let record_path = wheel_dir.join(dist_info_dir).join("RECORD");
@@ -131,31 +122,14 @@ pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), Deloca
 
         // RECORD file itself has no hash.
         if relative_str == format!("{dist_info_dir}/RECORD") {
-            records.push(RecordEntry {
-                path: relative_str,
-                hash: None,
-                size: None,
-            });
+            records.push(RecordEntry::unhashed(relative_str));
         } else {
             let (hash, size) = hash_file(path)?;
-            records.push(RecordEntry {
-                path: relative_str,
-                hash: Some(hash),
-                size: Some(size),
-            });
+            records.push(RecordEntry::new(relative_str, hash, size));
         }
     }
 
-    // Sort for reproducibility.
-    records.sort();
-
-    let mut writer = csv::WriterBuilder::new()
-        .has_headers(false)
-        .escape(b'"')
-        .from_path(&record_path)?;
-    for record in records {
-        writer.serialize(record)?;
-    }
+    write_record_file(&record_path, records)?;
 
     Ok(())
 }

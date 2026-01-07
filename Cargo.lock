@@ -5881,11 +5881,9 @@ name = "uv-delocate"
 version = "0.0.11"
 dependencies = [
  "base64 0.22.1",
- "csv",
  "fs-err",
  "goblin",
  "pathdiff",
- "serde",
  "sha2",
  "tempfile",
  "thiserror 2.0.17",
@@ -5893,6 +5891,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-extract",
  "uv-fs",
+ "uv-install-wheel",
  "uv-platform-tags",
  "uv-static",
  "walkdir",
