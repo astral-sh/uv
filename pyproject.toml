@@ -92,12 +92,5 @@ version_files = [
 "Documentation" = ["documentation"]
 "Other changes" = ["__unknown__"]
 
-[tool.mypy]
-ignore_missing_imports = true
-files = [
-  "crates/uv-python/*.py",
-  "python/uv/*.py",
-]
-
 [tool.uv]
 managed = false
