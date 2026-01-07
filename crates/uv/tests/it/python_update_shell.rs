@@ -68,10 +68,17 @@ mod unix {
             .success();
 
         let stderr = String::from_utf8_lossy(&output.get_output().stderr);
-        // With --force, it should update the config file (not skip)
+        // With --force, it should update/create the config file (not skip)
         assert!(
-            stderr.contains("Force updated") || stderr.contains("Updated"),
-            "Expected update message, got: {stderr}"
+            stderr.contains("Force updated")
+                || stderr.contains("Updated")
+                || stderr.contains("Created"),
+            "Expected update/create message, got: {stderr}"
+        );
+        // Most importantly, it should NOT say "already in PATH"
+        assert!(
+            !stderr.contains("is already in PATH"),
+            "With --force, should not skip even if already in PATH"
         );
     }
 }
