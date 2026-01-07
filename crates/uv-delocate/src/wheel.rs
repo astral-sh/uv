@@ -100,13 +100,14 @@ pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateEr
 
         let relative_str = relative.to_string_lossy();
 
-        // Determine permissions.
+        // Normalize permissions: 0o755 for executables, 0o644 for non-executable files.
         #[cfg(unix)]
         let options = {
             use std::os::unix::fs::PermissionsExt;
             let metadata = fs::metadata(path)?;
-            let mode = metadata.permissions().mode();
-            options.unix_permissions(mode)
+            let is_executable = metadata.permissions().mode() & 0o111 != 0;
+            let permissions = if is_executable { 0o755 } else { 0o644 };
+            options.unix_permissions(permissions)
         };
 
         zip.start_file(relative_str.as_ref(), options)?;
