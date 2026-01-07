@@ -7,7 +7,6 @@ use owo_colors::OwoColorize;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
-use uv_cli::PythonUpdateShellArgs;
 use uv_fs::Simplified;
 use uv_shell::Shell;
 use uv_tool::tool_executable_dir;
@@ -16,10 +15,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
-pub(crate) async fn update_shell(
-    args: PythonUpdateShellArgs,
-    printer: Printer,
-) -> Result<ExitStatus> {
+pub(crate) async fn update_shell(force: bool, printer: Printer) -> Result<ExitStatus> {
     let executable_directory = tool_executable_dir()?;
     debug!(
         "Ensuring that the executable directory is in PATH: {}",
@@ -31,7 +27,7 @@ pub(crate) async fn update_shell(
         // Check if path is in PATH (read-only, doesn't mutate)
         let is_in_path = uv_shell::windows::contains_path(&executable_directory)?;
 
-        if is_in_path && !args.force {
+        if is_in_path && !force {
             // Already in PATH and not forcing - exit early
             writeln!(
                 printer.stderr(),
@@ -41,7 +37,7 @@ pub(crate) async fn update_shell(
             return Ok(ExitStatus::Success);
         }
 
-        if is_in_path && args.force {
+        if is_in_path && force {
             // Already in PATH but forcing - remove it first, then prepend
             uv_shell::windows::force_prepend_path(&executable_directory)?;
 
@@ -65,7 +61,7 @@ pub(crate) async fn update_shell(
         return Ok(ExitStatus::Success);
     }
 
-    if Shell::contains_path(&executable_directory) && !args.force {
+    if Shell::contains_path(&executable_directory) && !force {
         writeln!(
             printer.stderr(),
             "Executable directory {} is already in PATH",
@@ -113,7 +109,7 @@ pub(crate) async fn update_shell(
                     .any(|line| line.contains(&command));
 
                 if command_exists {
-                    if args.force {
+                    if force {
                         // With --force: Remove old entry and add it again at the end
                         let new_contents: String = contents
                             .lines()

@@ -1553,7 +1553,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Tool(ToolNamespace {
             command: ToolCommand::UpdateShell(args),
         }) => {
-            commands::tool_update_shell(args, printer).await?;
+            commands::tool_update_shell(args.force, printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Tool(ToolNamespace {
@@ -1747,7 +1747,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::UpdateShell(args),
         }) => {
-            commands::python_update_shell(args, printer).await?;
+            commands::python_update_shell(args.force, printer).await?;
             Ok(ExitStatus::Success)
         }
         Commands::Publish(args) => {
