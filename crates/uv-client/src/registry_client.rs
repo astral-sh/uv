@@ -29,6 +29,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_pypi_types::ProjectStatus;
 use uv_pypi_types::{
     PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
 };
@@ -1369,9 +1370,15 @@ impl SimpleIndexMetadata {
     }
 }
 
+/// Detail response for a Python package from a Simple API index.
+///
+/// Abstracts over both HTML and JSON index formats.
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct SimpleDetailMetadata(Vec<SimpleDetailMetadatum>);
+pub struct SimpleDetailMetadata {
+    project_status: ProjectStatus,
+    versions: Vec<SimpleDetailMetadatum>,
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -1383,12 +1390,13 @@ pub struct SimpleDetailMetadatum {
 
 impl SimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleDetailMetadatum> {
-        self.0.iter()
+        self.versions.iter()
     }
 
     fn from_pypi_files(
         files: Vec<uv_pypi_types::PypiFile>,
         package_name: &PackageName,
+        project_status: ProjectStatus,
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
@@ -1423,8 +1431,8 @@ impl SimpleDetailMetadata {
             }
         }
 
-        Self(
-            version_map
+        Self {
+            versions: version_map
                 .into_iter()
                 .map(|(version, files)| SimpleDetailMetadatum {
                     version,
@@ -1432,7 +1440,8 @@ impl SimpleDetailMetadata {
                     metadata: None,
                 })
                 .collect(),
-        )
+            project_status,
+        }
     }
 
     fn from_pyx_files(
@@ -1473,8 +1482,8 @@ impl SimpleDetailMetadata {
             }
         }
 
-        Self(
-            version_map
+        Self {
+            versions: version_map
                 .into_iter()
                 .map(|(version, files)| {
                     let metadata =
@@ -1495,7 +1504,9 @@ impl SimpleDetailMetadata {
                     }
                 })
                 .collect(),
-        )
+            // TODO: Pull from pyx metadata.
+            project_status: ProjectStatus::default(),
+        }
     }
 
     /// Read the [`SimpleDetailMetadata`] from an HTML index.
@@ -1505,13 +1516,18 @@ impl SimpleDetailMetadata {
         url: &DisplaySafeUrl,
     ) -> Result<Self, Error> {
         let SimpleDetailHTML {
-            project_status: _,
+            project_status,
             base,
             files,
         } = SimpleDetailHTML::parse(text, url)
             .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(Self::from_pypi_files(files, package_name, base.as_url()))
+        Ok(Self::from_pypi_files(
+            files,
+            package_name,
+            project_status,
+            base.as_url(),
+        ))
     }
 }
 
@@ -1520,17 +1536,17 @@ impl IntoIterator for SimpleDetailMetadata {
     type IntoIter = std::vec::IntoIter<SimpleDetailMetadatum>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.versions.into_iter()
     }
 }
 
 impl ArchivedSimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleDetailMetadatum>> {
-        self.0.iter()
+        self.versions.iter()
     }
 
     pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleDetailMetadatum>> {
-        self.0.get(i)
+        self.versions.get(i)
     }
 }
 
@@ -1835,6 +1851,7 @@ mod tests {
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
+            data.project_status,
             &base,
         );
         let versions: Vec<String> = simple_metadata
