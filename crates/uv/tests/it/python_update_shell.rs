@@ -37,8 +37,7 @@ mod unix {
         let stderr = String::from_utf8_lossy(&output.get_output().stderr);
         assert!(
             stderr.contains("is already in PATH"),
-            "Expected 'is already in PATH' message, got: {}",
-            stderr
+            "Expected 'is already in PATH' message, got: {stderr}"
         );
     }
 
@@ -72,8 +71,7 @@ mod unix {
         // With --force, it should update the config file (not skip)
         assert!(
             stderr.contains("Force updated") || stderr.contains("Updated"),
-            "Expected update message, got: {}",
-            stderr
+            "Expected update message, got: {stderr}"
         );
     }
 }
@@ -125,8 +123,7 @@ mod windows {
         let bin_path_str = bin_dir.path().to_string_lossy();
         assert!(
             registry_path.contains(&*bin_path_str),
-            "Path should be in registry after first run: {}",
-            registry_path
+            "Path should be in registry after first run: {registry_path}"
         );
 
         // Second run with --force - should move to front
@@ -142,8 +139,7 @@ mod windows {
         let registry_path_after = get_registry_path();
         assert!(
             registry_path_after.contains(&*bin_path_str),
-            "Path should still be in registry after --force: {}",
-            registry_path_after
+            "Path should still be in registry after --force: {registry_path_after}"
         );
     }
 }
