@@ -437,7 +437,7 @@ jobs:
 
       - name: "rustfmt"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: cargo fmt --all --check
+        run: cargo fmt --check
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
