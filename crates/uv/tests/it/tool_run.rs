@@ -3147,9 +3147,9 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
     ----- stderr -----
     An executable named `does_not_exist` is not provided by package `foo`.
     The following executables are available:
-    - custom_pydoc.exe
     - custom_pydoc.bat
     - custom_pydoc.cmd
+    - custom_pydoc.exe
     - custom_pydoc.ps1
     "###);
 
