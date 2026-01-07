@@ -13693,8 +13693,8 @@ fn record_uses_forward_slashes() -> Result<()> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .collect();
-    assert!(record_lines.iter().any(|line| line.contains("my_script")));
-    assert!(record_lines.iter().any(|line| line.contains("project.h")));
+    assert!(record_lines.iter().any(|line| line.contains("/my_script")));
+    assert!(record_lines.iter().any(|line| line.contains("/project.h")));
     for line in record_lines {
         // Each RECORD line is: path,hash,size
         let path = line.split(',').next().unwrap();
