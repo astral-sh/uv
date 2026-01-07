@@ -16,7 +16,7 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.metadata.cargo-shear]
-ignored = ["uv-delocate", "xz2"]
+ignored = ["uv-delocate"]
 
 [workspace.dependencies]
 uv = { version = "0.13.5", path = "crates/uv", default-features = false }

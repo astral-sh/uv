@@ -208,7 +208,7 @@ impl Debug for WheelTagLarge {
 impl Display for WheelTagLarge {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(repr) = &self.repr {
-            return write!(f, "{}", repr);
+            return write!(f, "{repr}");
         }
 
         // Generate from fields.

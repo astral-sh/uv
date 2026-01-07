@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use fs_err as fs;
 use tempfile::TempDir;
+
 use uv_delocate::Arch;
 
 fn test_data_dir() -> PathBuf {
@@ -67,7 +68,7 @@ fn test_change_install_name_not_found() {
 
     // Get original dependencies.
     let original = uv_delocate::macho::parse_macho(&dylib).unwrap();
-    let original_deps: Vec<_> = original.dependencies.iter().map(|d| d.clone()).collect();
+    let original_deps = original.dependencies.clone();
 
     // liba doesn't depend on "nonexistent.dylib".
     // install_name_tool silently does nothing if the old name doesn't exist.
@@ -80,7 +81,7 @@ fn test_change_install_name_not_found() {
 
     // Verify dependencies are unchanged.
     let after = uv_delocate::macho::parse_macho(&dylib).unwrap();
-    let after_deps: Vec<_> = after.dependencies.iter().map(|d| d.clone()).collect();
+    let after_deps = after.dependencies.clone();
     assert_eq!(original_deps, after_deps);
 }
 

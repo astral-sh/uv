@@ -993,8 +993,9 @@ fn get_relocatable_executable(
     })
 }
 
-/// Reads the record file
-/// <https://www.python.org/dev/peps/pep-0376/#record>
+/// Reads the record file.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
 pub fn read_record_into_iter(
     record: impl Read,
 ) -> impl Iterator<Item = Result<RecordEntry, Error>> {
@@ -1120,6 +1121,23 @@ pub fn validate_and_heal_record<'a>(
     }
 
     Ok(healed.then(|| PathBuf::from(dist_info_dir).join("RECORD")))
+}
+
+/// Writes a record file.
+///
+/// The records are sorted for reproducibility before writing.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
+pub fn write_record_file(path: &Path, mut records: Vec<RecordEntry>) -> Result<(), Error> {
+    records.sort();
+    let mut writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .escape(b'"')
+        .from_path(path)?;
+    for record in records {
+        writer.serialize(record)?;
+    }
+    Ok(())
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA

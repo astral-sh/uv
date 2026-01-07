@@ -238,26 +238,12 @@ fn check_dependency_archs(lib_path: &Path, required_archs: &[Arch]) -> Result<()
     macho::check_archs(lib_path, required_archs)
 }
 
-/// Find the maximum macOS version required by any binary in the wheel or its dependencies.
-fn find_max_macos_version(
-    binaries: &[PathBuf],
-    libraries: &HashMap<PathBuf, LibraryInfo>,
-) -> Option<MacOSVersion> {
+/// Find the maximum macOS version required by any of the given binaries.
+fn find_max_macos_version<'a>(paths: impl Iterator<Item = &'a Path>) -> Option<MacOSVersion> {
     let mut max_version: Option<MacOSVersion> = None;
 
-    // Check wheel binaries.
-    for binary in binaries {
-        if let Ok(macho) = macho::parse_macho(binary) {
-            if let Some(version) = macho.min_macos_version {
-                max_version =
-                    Some(max_version.map_or(version, |current| std::cmp::max(current, version)));
-            }
-        }
-    }
-
-    // Check external libraries.
-    for lib_path in libraries.keys() {
-        if let Ok(macho) = macho::parse_macho(lib_path) {
+    for path in paths {
+        if let Ok(macho) = macho::parse_macho(path) {
             if let Some(version) = macho.min_macos_version {
                 max_version =
                     Some(max_version.map_or(version, |current| std::cmp::max(current, version)));
@@ -500,7 +486,12 @@ pub fn delocate_wheel(
     }
 
     // Find the maximum macOS version required by all binaries.
-    let max_required_version = find_max_macos_version(&binaries, &libraries);
+    let max_required_version = find_max_macos_version(
+        binaries
+            .iter()
+            .map(PathBuf::as_path)
+            .chain(libraries.keys().map(PathBuf::as_path)),
+    );
 
     // Determine the final platform tags; update if binaries require higher version.
     let final_platform_tags = match (&wheel_platform_version, &max_required_version) {

@@ -19,15 +19,14 @@ workspace = true
 uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-static = { workspace = true }
 
 base64 = { workspace = true }
-csv = { workspace = true }
 fs-err = { workspace = true }
 goblin = { workspace = true }
 pathdiff = { workspace = true }
-serde = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

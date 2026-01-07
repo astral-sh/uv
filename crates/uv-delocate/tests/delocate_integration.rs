@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use tempfile::TempDir;
+
 use uv_delocate::{Arch, DelocateOptions};
 
 fn test_data_dir() -> PathBuf {
