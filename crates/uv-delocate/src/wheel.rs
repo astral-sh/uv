@@ -16,52 +16,7 @@ use walkdir::WalkDir;
 use zip::ZipWriter;
 use zip::write::FileOptions;
 
-use uv_distribution_filename::WheelFilename;
-use uv_platform_tags::PlatformTag;
-
 use crate::error::DelocateError;
-
-/// Build a wheel filename with the given platform tags.
-pub fn filename_with_platform(filename: &WheelFilename, platform_tags: &[PlatformTag]) -> String {
-    let python_tags = filename
-        .python_tags()
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(".");
-    let abi_tags = filename
-        .abi_tags()
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(".");
-    let platform_tags_str = platform_tags
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(".");
-
-    if let Some(build_tag) = filename.build_tag() {
-        format!(
-            "{}-{}-{}-{}-{}-{}.whl",
-            filename.name.as_dist_info_name(),
-            filename.version,
-            build_tag,
-            python_tags,
-            abi_tags,
-            platform_tags_str
-        )
-    } else {
-        format!(
-            "{}-{}-{}-{}-{}.whl",
-            filename.name.as_dist_info_name(),
-            filename.version,
-            python_tags,
-            abi_tags,
-            platform_tags_str
-        )
-    }
-}
 
 /// Unpack a wheel to a directory.
 pub fn unpack_wheel(wheel_path: &Path, dest_dir: &Path) -> Result<(), DelocateError> {

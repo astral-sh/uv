@@ -40,7 +40,7 @@ fn test_parse_single_arch_x86_64() {
     assert_eq!(macho.archs.len(), 1);
 
     // Check dependencies; should have system libs.
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"/usr/lib/libc++.1.dylib"));
     assert!(dep_names.contains(&"/usr/lib/libSystem.B.dylib"));
 }
@@ -72,12 +72,12 @@ fn test_parse_with_dependencies() {
 
     // libb depends on liba.
     let macho = uv_delocate::macho::parse_macho(&data_dir.join("libb.dylib")).unwrap();
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"liba.dylib"));
 
     // libc depends on liba and libb.
     let macho = uv_delocate::macho::parse_macho(&data_dir.join("libc.dylib")).unwrap();
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"liba.dylib"));
     assert!(dep_names.contains(&"libb.dylib"));
 }
@@ -88,7 +88,7 @@ fn test_parse_with_rpath() {
     let macho = uv_delocate::macho::parse_macho(&data_dir.join("libextfunc_rpath.dylib")).unwrap();
 
     // Should have @rpath dependencies.
-    let dep_names: Vec<&str> = macho.dependencies.iter().map(|d| d.as_str()).collect();
+    let dep_names: Vec<&str> = macho.dependencies.iter().map(String::as_str).collect();
     assert!(dep_names.contains(&"@rpath/libextfunc2_rpath.dylib"));
 
     // Should have rpaths.
