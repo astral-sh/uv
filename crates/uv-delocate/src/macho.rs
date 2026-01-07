@@ -9,6 +9,7 @@ use std::path::Path;
 use std::process::Command;
 
 use fs_err as fs;
+use goblin::Hint;
 use goblin::mach::load_command;
 use goblin::mach::{Mach, MachO};
 use tracing::trace;
@@ -141,31 +142,21 @@ pub struct MachOFile {
 
 /// Check if a file is a Mach-O binary by examining its magic bytes.
 pub fn is_macho_file(path: &Path) -> Result<bool, DelocateError> {
-    // Mach-O magic numbers.
-    const MH_MAGIC: [u8; 4] = [0xfe, 0xed, 0xfa, 0xce]; // 32-bit.
-    const MH_CIGAM: [u8; 4] = [0xce, 0xfa, 0xed, 0xfe]; // 32-bit swapped.
-    const MH_MAGIC_64: [u8; 4] = [0xfe, 0xed, 0xfa, 0xcf]; // 64-bit.
-    const MH_CIGAM_64: [u8; 4] = [0xcf, 0xfa, 0xed, 0xfe]; // 64-bit swapped.
-    const FAT_MAGIC: [u8; 4] = [0xca, 0xfe, 0xba, 0xbe]; // Universal.
-    const FAT_CIGAM: [u8; 4] = [0xbe, 0xba, 0xfe, 0xca]; // Universal swapped.
-
     let mut file = match fs::File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(e) => return Err(e.into()),
     };
 
-    let mut magic = [0u8; 4];
-    if file.read_exact(&mut magic).is_err() {
+    let mut bytes = [0u8; 16];
+    if file.read_exact(&mut bytes).is_err() {
         return Ok(false);
     }
 
-    Ok(magic == MH_MAGIC
-        || magic == MH_CIGAM
-        || magic == MH_MAGIC_64
-        || magic == MH_CIGAM_64
-        || magic == FAT_MAGIC
-        || magic == FAT_CIGAM)
+    Ok(matches!(
+        goblin::mach::peek_bytes(&bytes),
+        Ok(Hint::Mach(_) | Hint::MachFat(_))
+    ))
 }
 
 /// Parse a Mach-O file and extract dependency information.

@@ -597,6 +597,7 @@ mod wheel_metadata {
 
 mod rpath_handling {
     use super::*;
+
     #[cfg(target_os = "macos")]
     use tempfile::TempDir;
 
