@@ -297,18 +297,36 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let MacOSVersion { major, minor } = macos_deployment_target().map_or(
+                    MacOSVersion {
+                        major: 13,
+                        minor: 0,
+                    },
+                    |version| {
+                        debug!(
+                            "Found macOS deployment target: {}.{}",
+                            version.major, version.minor
+                        );
+                        version
+                    },
+                );
                 Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let MacOSVersion { major, minor } = macos_deployment_target().map_or(
+                    MacOSVersion {
+                        major: 13,
+                        minor: 0,
+                    },
+                    |version| {
+                        debug!(
+                            "Found macOS deployment target: {}.{}",
+                            version.major, version.minor
+                        );
+                        version
+                    },
+                );
                 Platform::new(Os::Macos { major, minor }, Arch::X86_64)
             }
             Self::Aarch64UnknownLinuxGnu => Platform::new(
@@ -936,18 +954,27 @@ impl TargetTriple {
     }
 }
 
+/// macOS version.
+#[derive(Debug, Clone, Copy)]
+struct MacOSVersion {
+    major: u16,
+    minor: u16,
+}
+
+impl MacOSVersion {
+    /// Parse a macOS version string like "10.9" or "11.0" or "14.0".
+    fn parse(s: &str) -> Option<Self> {
+        let mut parts = s.split('.');
+        let major: u16 = parts.next()?.parse().ok()?;
+        let minor: u16 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
+        Some(Self { major, minor })
+    }
+}
+
 /// Return the macOS deployment target as parsed from the environment.
-fn macos_deployment_target() -> Option<(u16, u16)> {
+fn macos_deployment_target() -> Option<MacOSVersion> {
     let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
-    let mut parts = version.split('.');
-
-    // Parse the major version (e.g., `12` in `12.0`).
-    let major = parts.next()?.parse::<u16>().ok()?;
-
-    // Parse the minor version (e.g., `0` in `12.0`), with a default of `0`.
-    let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
-
-    Some((major, minor))
+    MacOSVersion::parse(&version)
 }
 
 /// Return the iOS deployment target as parsed from the environment.

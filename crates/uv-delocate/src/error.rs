@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
 use thiserror::Error;
+
+use uv_distribution_filename::WheelFilenameError;
 use uv_fs::Simplified;
 
 /// Errors that can occur during delocate operations.
@@ -33,8 +35,21 @@ pub enum DelocateError {
     #[error("Library name collision: {name} exists at multiple paths: {paths:?}")]
     LibraryCollision { name: String, paths: Vec<PathBuf> },
 
-    #[error("Invalid wheel: {0}")]
-    InvalidWheel(String),
+    #[error("Invalid wheel filename: {filename}")]
+    InvalidWheelFilename {
+        filename: String,
+        #[source]
+        err: WheelFilenameError,
+    },
+
+    #[error("Invalid wheel path: {}", path.user_display())]
+    InvalidWheelPath { path: PathBuf },
+
+    #[error("Missing `.dist-info` directory in wheel")]
+    MissingDistInfo,
+
+    #[error("Path `{}` is not within wheel directory `{}`", path.user_display(), wheel_dir.user_display())]
+    PathNotInWheel { path: PathBuf, wheel_dir: PathBuf },
 
     #[error("Unsupported Mach-O format: {0}")]
     UnsupportedFormat(String),

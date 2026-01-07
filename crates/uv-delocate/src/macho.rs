@@ -81,47 +81,39 @@ impl std::str::FromStr for Arch {
     }
 }
 
-/// Information about a dylib dependency.
-#[derive(Debug, Clone)]
-pub struct DylibInfo {
-    /// The install name (path) of the dylib.
-    pub name: String,
-    /// Offset of the name string in the file (for each architecture slice).
-    /// Each entry is (`file_offset`, `max_string_length_with_padding`).
-    pub offsets: Vec<(u64, usize)>,
-}
-
 /// macOS version requirement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MacOSVersion {
     pub major: u32,
     pub minor: u32,
-    pub patch: u32,
 }
 
 impl MacOSVersion {
-    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self {
-            major,
-            minor,
-            patch,
-        }
+    pub fn new(major: u32, minor: u32) -> Self {
+        Self { major, minor }
+    }
+
+    /// Parse a macOS version string like "10.9" or "11.0" or "14.0".
+    pub fn parse(s: &str) -> Option<Self> {
+        let mut parts = s.split('.');
+        let major: u32 = parts.next()?.parse().ok()?;
+        let minor: u32 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
+        Some(Self::new(major, minor))
     }
 
     /// Parse from a packed version (used in `LC_BUILD_VERSION` and `LC_VERSION_MIN_MACOSX`).
-    /// Format: xxxx.yy.zz where x is major, y is minor, z is patch.
+    /// Format: xxxx.yy.zz where x is major, y is minor, z is patch (ignored).
     fn from_packed(packed: u32) -> Self {
         Self {
             major: (packed >> 16) & 0xFFFF,
             minor: (packed >> 8) & 0xFF,
-            patch: packed & 0xFF,
         }
     }
 }
 
 impl std::fmt::Display for MacOSVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+        write!(f, "{}.{}", self.major, self.minor)
     }
 }
 
@@ -131,11 +123,11 @@ pub struct MachOFile {
     /// Architectures present in the binary.
     pub archs: HashSet<Arch>,
     /// Dylib dependencies (`LC_LOAD_DYLIB`, `LC_LOAD_WEAK_DYLIB`, etc.).
-    pub dependencies: Vec<DylibInfo>,
+    pub dependencies: Vec<String>,
     /// Runtime search paths (`LC_RPATH`).
     pub rpaths: Vec<String>,
-    /// Install ID of this library (`LC_ID_DYLIB`), if present.
-    pub install_id: Option<DylibInfo>,
+    /// Install name of this library (`LC_ID_DYLIB`), if present.
+    pub install_name: Option<String>,
     /// Minimum macOS version required, per architecture.
     pub min_macos_version: Option<MacOSVersion>,
 }
@@ -170,12 +162,12 @@ pub fn parse_macho_bytes(data: &[u8]) -> Result<MachOFile, DelocateError> {
     let mach = Mach::parse(data).map_err(|err| DelocateError::MachOParse(err.to_string()))?;
 
     match mach {
-        Mach::Binary(macho) => parse_single_macho(&macho, data, 0),
+        Mach::Binary(macho) => Ok(parse_single_macho(&macho)),
         Mach::Fat(fat) => {
             let mut archs = HashSet::new();
-            let mut all_deps: Vec<DylibInfo> = Vec::new();
+            let mut all_deps: HashSet<String> = HashSet::new();
             let mut all_rpaths: HashSet<String> = HashSet::new();
-            let mut install_id: Option<DylibInfo> = None;
+            let mut install_name: Option<String> = None;
             let mut min_macos_version: Option<MacOSVersion> = None;
 
             for arch in fat.iter_arches().flatten() {
@@ -183,30 +175,11 @@ pub fn parse_macho_bytes(data: &[u8]) -> Result<MachOFile, DelocateError> {
                 let macho = MachO::parse(slice_data, 0)
                     .map_err(|err| DelocateError::MachOParse(err.to_string()))?;
 
-                let parsed = parse_single_macho(&macho, slice_data, u64::from(arch.offset))?;
+                let parsed = parse_single_macho(&macho);
                 archs.extend(parsed.archs);
+                all_deps.extend(parsed.dependencies);
                 all_rpaths.extend(parsed.rpaths);
-
-                // Merge dependencies, tracking offsets for each arch.
-                for dep in parsed.dependencies {
-                    if let Some(existing) = all_deps
-                        .iter_mut()
-                        .find(|existing_dep| existing_dep.name == dep.name)
-                    {
-                        existing.offsets.extend(dep.offsets);
-                    } else {
-                        all_deps.push(dep);
-                    }
-                }
-
-                // Merge install ID.
-                if let Some(id) = parsed.install_id {
-                    if let Some(existing) = &mut install_id {
-                        existing.offsets.extend(id.offsets);
-                    } else {
-                        install_id = Some(id);
-                    }
-                }
+                install_name = install_name.or(parsed.install_name);
 
                 // Take the maximum macOS version across all architectures.
                 if let Some(version) = parsed.min_macos_version {
@@ -219,72 +192,20 @@ pub fn parse_macho_bytes(data: &[u8]) -> Result<MachOFile, DelocateError> {
 
             Ok(MachOFile {
                 archs,
-                dependencies: all_deps,
+                dependencies: all_deps.into_iter().collect(),
                 rpaths: all_rpaths.into_iter().collect(),
-                install_id,
+                install_name,
                 min_macos_version,
             })
         }
     }
 }
 
-fn parse_single_macho(
-    macho: &MachO,
-    data: &[u8],
-    base_offset: u64,
-) -> Result<MachOFile, DelocateError> {
-    let mut archs = HashSet::new();
-    let mut dependencies = Vec::new();
-    let mut rpaths = Vec::new();
-    let mut install_id = None;
+fn parse_single_macho(macho: &MachO) -> MachOFile {
     let mut min_macos_version: Option<MacOSVersion> = None;
-
-    archs.insert(Arch::from_cputype(macho.header.cputype()));
 
     for cmd in &macho.load_commands {
         match cmd.command {
-            load_command::CommandVariant::LoadDylib(ref dylib)
-            | load_command::CommandVariant::LoadWeakDylib(ref dylib)
-            | load_command::CommandVariant::ReexportDylib(ref dylib)
-            | load_command::CommandVariant::LoadUpwardDylib(ref dylib)
-            | load_command::CommandVariant::LazyLoadDylib(ref dylib) => {
-                // Extract the name from the raw data.
-                let name_offset = dylib.dylib.name as usize;
-                let cmd_size = cmd.command.cmdsize();
-                let string_start = cmd.offset + name_offset;
-                let string_max_len = cmd_size - name_offset;
-
-                let name = extract_cstring(data, string_start, string_max_len)?;
-                let file_offset = base_offset + string_start as u64;
-
-                dependencies.push(DylibInfo {
-                    name,
-                    offsets: vec![(file_offset, string_max_len)],
-                });
-            }
-            load_command::CommandVariant::IdDylib(ref dylib) => {
-                let name_offset = dylib.dylib.name as usize;
-                let cmd_size = cmd.command.cmdsize();
-                let string_start = cmd.offset + name_offset;
-                let string_max_len = cmd_size - name_offset;
-
-                let name = extract_cstring(data, string_start, string_max_len)?;
-                let file_offset = base_offset + string_start as u64;
-
-                install_id = Some(DylibInfo {
-                    name,
-                    offsets: vec![(file_offset, string_max_len)],
-                });
-            }
-            load_command::CommandVariant::Rpath(ref rpath) => {
-                let path_offset = rpath.path as usize;
-                let cmd_size = cmd.command.cmdsize();
-                let string_start = cmd.offset + path_offset;
-                let string_max_len = cmd_size - path_offset;
-
-                let path = extract_cstring(data, string_start, string_max_len)?;
-                rpaths.push(path);
-            }
             load_command::CommandVariant::BuildVersion(ref build_ver) => {
                 // LC_BUILD_VERSION is used in modern binaries; platform 1 = MACOS.
                 if build_ver.platform == 1 {
@@ -306,34 +227,13 @@ fn parse_single_macho(
         }
     }
 
-    Ok(MachOFile {
-        archs,
-        dependencies,
-        rpaths,
-        install_id,
+    MachOFile {
+        archs: HashSet::from([Arch::from_cputype(macho.header.cputype())]),
+        dependencies: macho.libs.iter().map(|s| (*s).to_string()).collect(),
+        rpaths: macho.rpaths.iter().map(|s| (*s).to_string()).collect(),
+        install_name: macho.name.map(ToString::to_string),
         min_macos_version,
-    })
-}
-
-/// Extract a null-terminated C string from a byte slice.
-fn extract_cstring(data: &[u8], offset: usize, max_len: usize) -> Result<String, DelocateError> {
-    if offset >= data.len() {
-        return Err(DelocateError::MachOParse(
-            "String offset out of bounds".into(),
-        ));
     }
-
-    let end = (offset + max_len).min(data.len());
-    let slice = &data[offset..end];
-
-    // Find null terminator.
-    let len = slice
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(slice.len());
-
-    String::from_utf8(slice[..len].to_vec())
-        .map_err(|err| DelocateError::MachOParse(format!("Invalid UTF-8 in string: {err}")))
 }
 
 /// Change an install name in a Mach-O binary file.
