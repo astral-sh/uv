@@ -183,7 +183,7 @@ tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", 
 tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
 toml = { version = "0.9.2", features = ["fast_hash"] }
-toml_edit = { version = "0.23.2", features = ["serde"] }
+toml_edit = { version = "0.24.0", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18" } # Default feature set for uv_build, uv activates extra features
