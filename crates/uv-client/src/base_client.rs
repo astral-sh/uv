@@ -1107,7 +1107,10 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
-        trace!("Considering retry of response HTTP {status} for {url}");
+        trace!(
+            "Considering retry of response HTTP {status} for {url}",
+            url = DisplaySafeUrl::from_url(url.clone())
+        );
     } else {
         trace!("Considering retry of error: {err:?}");
     }
