@@ -95,7 +95,6 @@ impl SimpleDetailHTML {
     /// Precondition: `head` is a `<head>` tag.
     fn parse_project_status(parser: &Parser, head: &Node) -> Result<Option<ProjectStatus>, Error> {
         /// Extract the value of the `content` attribute from a tag.
-        #[inline]
         fn content<'a>(tag: &'a HTMLTag<'a>) -> Result<Option<&'a str>, Error> {
             let Some(content) = tag
                 .attributes()
