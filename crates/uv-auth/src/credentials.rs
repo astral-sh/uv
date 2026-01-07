@@ -536,6 +536,23 @@ mod tests {
         assert_eq!(credentials.password(), Some("password"));
     }
 
+    /// Test for <https://github.com/astral-sh/uv/issues/17343>
+    ///
+    /// URLs with an empty username but a password (e.g., `https://:token@example.com`)
+    /// should be recognized as having credentials.
+    #[test]
+    fn from_url_empty_username_with_password() {
+        // Parse a URL with the format `:password@host` directly
+        let url = Url::parse("https://:token@example.com/simple/first/").unwrap();
+        let credentials = Credentials::from_url(&url).unwrap();
+        assert_eq!(credentials.username(), None);
+        assert_eq!(credentials.password(), Some("token"));
+        assert!(
+            credentials.is_authenticated(),
+            "URL with empty username but password should be considered authenticated"
+        );
+    }
+
     #[test]
     fn from_url_no_password() {
         let url = &Url::parse("https://example.com/simple/first/").unwrap();
