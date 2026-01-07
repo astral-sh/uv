@@ -42,7 +42,7 @@ impl Default for DelocateOptions {
     fn default() -> Self {
         let target_macos_version = env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET)
             .ok()
-            .and_then(|value| parse_macos_version_string(&value));
+            .and_then(|value| MacOSVersion::parse(&value));
 
         Self {
             lib_sdir: ".dylibs".to_string(),
@@ -55,19 +55,10 @@ impl Default for DelocateOptions {
     }
 }
 
-/// Parse a macOS version string like "10.9" or "11.0" or "14.0".
-fn parse_macos_version_string(s: &str) -> Option<MacOSVersion> {
-    let mut parts = s.split('.');
-
-    let major: u32 = parts.next()?.parse().ok()?;
-    let minor: u32 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
-    let patch: u32 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
-
-    Some(MacOSVersion::new(major, minor, patch))
-}
-
 /// System library prefixes that should not be bundled.
-const SYSTEM_PREFIXES: &[&str] = &["/usr/lib/", "/System/Library/", "/Library/Frameworks/"];
+///
+/// See: <https://github.com/matthew-brett/delocate/blob/d0ec232826dd31cc80bfcc8adedfd8be78aff0b4/delocate/libsana.py#L35>
+const SYSTEM_PREFIXES: &[&str] = &["/usr/lib", "/System"];
 
 /// Check if a path is a system library that shouldn't be bundled.
 fn is_system_library(path: &str) -> bool {
@@ -211,7 +202,7 @@ fn get_macos_version(platform_tags: &[PlatformTag]) -> Option<MacOSVersion> {
         .iter()
         .filter_map(|tag| match tag {
             PlatformTag::Macos { major, minor, .. } => {
-                Some(MacOSVersion::new(u32::from(*major), u32::from(*minor), 0))
+                Some(MacOSVersion::new(u32::from(*major), u32::from(*minor)))
             }
             _ => None,
         })
@@ -221,12 +212,12 @@ fn get_macos_version(platform_tags: &[PlatformTag]) -> Option<MacOSVersion> {
 /// Check that a library's macOS version requirement is compatible with the wheel's platform tag.
 fn check_macos_version_compatible(
     lib_path: &Path,
-    wheel_version: &MacOSVersion,
+    wheel_version: MacOSVersion,
 ) -> Result<(), DelocateError> {
     let macho = macho::parse_macho(lib_path)?;
 
     if let Some(lib_version) = macho.min_macos_version {
-        if lib_version > *wheel_version {
+        if lib_version > wheel_version {
             return Err(DelocateError::IncompatibleMacOSVersion {
                 library: lib_path.to_path_buf(),
                 library_version: lib_version.to_string(),
@@ -283,7 +274,7 @@ fn find_max_macos_version(
 /// Non-macOS tags are preserved unchanged.
 fn update_platform_tags_version(
     platform_tags: &[PlatformTag],
-    version: &MacOSVersion,
+    version: MacOSVersion,
 ) -> Vec<PlatformTag> {
     // Handle macOS 11+ where minor version is always 0 for tagging.
     let (major, minor) = if version.major >= 11 {
@@ -352,23 +343,23 @@ fn analyze_dependencies(
 
         for dep in &macho.dependencies {
             // Skip excluded libraries.
-            if exclude.iter().any(|pat| dep.name.contains(pat)) {
+            if exclude.iter().any(|pat| dep.contains(pat)) {
                 continue;
             }
 
             // Skip system libraries.
-            if is_system_library(&dep.name) {
+            if is_system_library(dep) {
                 continue;
             }
 
             // Try to resolve the dependency.
-            if let Some(resolved) = resolve_dynamic_path(&dep.name, binary_path, &macho.rpaths) {
+            if let Some(resolved) = resolve_dynamic_path(dep, binary_path, &macho.rpaths) {
                 // Skip if the resolved path is within our directory (already bundled).
                 if resolved.starts_with(dir) {
                     continue;
                 }
 
-                to_process.push((resolved, binary_path.clone(), dep.name.clone()));
+                to_process.push((resolved, binary_path.clone(), dep.clone()));
             }
         }
     }
@@ -390,22 +381,20 @@ fn analyze_dependencies(
         if processed.insert(lib_path.clone()) {
             if let Ok(macho) = macho::parse_macho(&lib_path) {
                 for dep in &macho.dependencies {
-                    if exclude.iter().any(|pat| dep.name.contains(pat)) {
+                    if exclude.iter().any(|pat| dep.contains(pat)) {
                         continue;
                     }
 
-                    if is_system_library(&dep.name) {
+                    if is_system_library(dep) {
                         continue;
                     }
 
-                    if let Some(resolved) =
-                        resolve_dynamic_path(&dep.name, &lib_path, &macho.rpaths)
-                    {
+                    if let Some(resolved) = resolve_dynamic_path(dep, &lib_path, &macho.rpaths) {
                         if resolved.starts_with(dir) {
                             continue;
                         }
 
-                        to_process.push((resolved, lib_path.clone(), dep.name.clone()));
+                        to_process.push((resolved, lib_path.clone(), dep.clone()));
                     }
                 }
             }
@@ -459,9 +448,14 @@ pub fn delocate_wheel(
     let filename_str = wheel_path
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| DelocateError::InvalidWheel("Invalid wheel path".into()))?;
+        .ok_or_else(|| DelocateError::InvalidWheelPath {
+            path: wheel_path.to_path_buf(),
+        })?;
     let filename = WheelFilename::from_str(filename_str).map_err(|err| {
-        DelocateError::InvalidWheel(format!("Invalid wheel filename: {filename_str}: {err}"))
+        DelocateError::InvalidWheelFilename {
+            filename: filename_str.to_string(),
+            err,
+        }
     })?;
 
     let temp_dir = tempfile::tempdir()?;
@@ -472,10 +466,7 @@ pub fn delocate_wheel(
     // 1. Use explicitly set target_macos_version from options (includes MACOSX_DEPLOYMENT_TARGET).
     // 2. Fall back to parsing from wheel's platform tag.
     let wheel_platform_version = get_macos_version(platform_tags);
-    let target_version = options
-        .target_macos_version
-        .as_ref()
-        .or(wheel_platform_version.as_ref());
+    let target_version = options.target_macos_version.or(wheel_platform_version);
 
     // Unpack the wheel.
     wheel::unpack_wheel(wheel_path, wheel_dir)?;
@@ -514,7 +505,7 @@ pub fn delocate_wheel(
     // Determine the final platform tags; update if binaries require higher version.
     let final_platform_tags = match (&wheel_platform_version, &max_required_version) {
         (Some(wheel_ver), Some(max_ver)) if max_ver > wheel_ver => {
-            update_platform_tags_version(platform_tags, max_ver)
+            update_platform_tags_version(platform_tags, *max_ver)
         }
         _ => platform_tags.to_vec(),
     };
@@ -701,7 +692,6 @@ mod tests {
         let version = get_macos_version(&tags).unwrap();
         assert_eq!(version.major, 10);
         assert_eq!(version.minor, 9);
-        assert_eq!(version.patch, 0);
 
         // macOS 11+.
         let tags = [PlatformTag::Macos {
@@ -751,22 +741,21 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_macos_version_string() {
-        let version = parse_macos_version_string("10.9").unwrap();
+    fn test_parse_macos_version() {
+        let version = MacOSVersion::parse("10.9").unwrap();
         assert_eq!(version.major, 10);
         assert_eq!(version.minor, 9);
-        assert_eq!(version.patch, 0);
 
-        let version = parse_macos_version_string("11.0").unwrap();
+        let version = MacOSVersion::parse("11.0").unwrap();
         assert_eq!(version.major, 11);
         assert_eq!(version.minor, 0);
 
-        let version = parse_macos_version_string("14.2.1").unwrap();
+        // Patch is ignored.
+        let version = MacOSVersion::parse("14.2.1").unwrap();
         assert_eq!(version.major, 14);
         assert_eq!(version.minor, 2);
-        assert_eq!(version.patch, 1);
 
-        let version = parse_macos_version_string("15").unwrap();
+        let version = MacOSVersion::parse("15").unwrap();
         assert_eq!(version.major, 15);
         assert_eq!(version.minor, 0);
     }
@@ -779,7 +768,7 @@ mod tests {
             minor: 9,
             binary_format: BinaryFormat::X86_64,
         }];
-        let updated = update_platform_tags_version(&tags, &MacOSVersion::new(11, 0, 0));
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
             updated,
             vec![PlatformTag::Macos {
@@ -790,7 +779,7 @@ mod tests {
         );
 
         // Upgrade from 10.9 to 10.15.
-        let updated = update_platform_tags_version(&tags, &MacOSVersion::new(10, 15, 0));
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(10, 15));
         assert_eq!(
             updated,
             vec![PlatformTag::Macos {
@@ -806,7 +795,7 @@ mod tests {
             minor: 9,
             binary_format: BinaryFormat::Universal2,
         }];
-        let updated = update_platform_tags_version(&tags, &MacOSVersion::new(11, 0, 0));
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
             updated,
             vec![PlatformTag::Macos {
@@ -822,7 +811,7 @@ mod tests {
             minor: 0,
             binary_format: BinaryFormat::Arm64,
         }];
-        let updated = update_platform_tags_version(&tags, &MacOSVersion::new(14, 2, 0));
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(14, 2));
         assert_eq!(
             updated,
             vec![PlatformTag::Macos {
@@ -836,7 +825,7 @@ mod tests {
         let tags = [PlatformTag::Linux {
             arch: uv_platform_tags::Arch::X86_64,
         }];
-        let updated = update_platform_tags_version(&tags, &MacOSVersion::new(11, 0, 0));
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
             updated,
             vec![PlatformTag::Linux {
