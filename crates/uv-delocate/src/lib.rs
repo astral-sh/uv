@@ -43,4 +43,4 @@ pub mod wheel;
 
 pub use delocate::{DelocateOptions, delocate_wheel, list_wheel_dependencies};
 pub use error::DelocateError;
-pub use macho::{Arch, DylibInfo, MacOSVersion, MachOFile};
+pub use macho::{Arch, MacOSVersion, MachOFile};

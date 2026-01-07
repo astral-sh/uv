@@ -91,9 +91,12 @@ pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateEr
 
     for entry in paths {
         let path = entry.path();
-        let relative = path
-            .strip_prefix(source_dir)
-            .map_err(|_| DelocateError::InvalidWheel("Path prefix error".into()))?;
+        let relative =
+            path.strip_prefix(source_dir)
+                .map_err(|_| DelocateError::PathNotInWheel {
+                    path: path.to_path_buf(),
+                    wheel_dir: source_dir.to_path_buf(),
+                })?;
 
         let relative_str = relative.to_string_lossy();
 
@@ -163,7 +166,10 @@ pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), Deloca
         let path = entry.path();
         let relative = path
             .strip_prefix(wheel_dir)
-            .map_err(|_| DelocateError::InvalidWheel("Path prefix error".into()))?;
+            .map_err(|_| DelocateError::PathNotInWheel {
+                path: path.to_path_buf(),
+                wheel_dir: wheel_dir.to_path_buf(),
+            })?;
 
         let relative_str = relative.to_string_lossy().replace('\\', "/");
 
@@ -209,7 +215,5 @@ pub fn find_dist_info(wheel_dir: &Path) -> Result<String, DelocateError> {
         }
     }
 
-    Err(DelocateError::InvalidWheel(
-        "No `.dist-info` directory found".into(),
-    ))
+    Err(DelocateError::MissingDistInfo)
 }
