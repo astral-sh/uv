@@ -2576,4 +2576,61 @@ mod tests {
     fn create_request(url: &str) -> Request {
         Request::new(Method::GET, Url::parse(url).unwrap())
     }
+
+    /// Test for <https://github.com/astral-sh/uv/issues/17343>
+    ///
+    /// URLs with an empty username but a password (e.g., `https://:token@example.com`)
+    /// should be recognized as having credentials and authenticate successfully.
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_empty_username() -> Result<(), Error> {
+        let username = "";
+        let password = "token";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
+            .build();
+
+        let base_url = Url::parse(&server.uri())?;
+
+        // Test with the URL format `:password@host` (empty username, password present)
+        let mut url = base_url.clone();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            200,
+            "URL with empty username but password should authenticate successfully"
+        );
+
+        // Subsequent requests to the same realm should also succeed (credentials cached)
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should use cached credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests to different paths in the same realm should succeed"
+        );
+
+        Ok(())
+    }
 }
