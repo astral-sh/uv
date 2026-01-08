@@ -1,6 +1,7 @@
 use tracing::debug;
 
 use uv_pep508::MarkerEnvironment;
+use uv_platform::MacOSVersion;
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_static::EnvVars;
 
@@ -951,23 +952,6 @@ impl TargetTriple {
             .with_sys_platform(self.sys_platform())
             .with_platform_release(self.platform_release())
             .with_platform_version(self.platform_version())
-    }
-}
-
-/// macOS version.
-#[derive(Debug, Clone, Copy)]
-struct MacOSVersion {
-    major: u16,
-    minor: u16,
-}
-
-impl MacOSVersion {
-    /// Parse a macOS version string like "10.9" or "11.0" or "14.0".
-    fn parse(s: &str) -> Option<Self> {
-        let mut parts = s.split('.');
-        let major: u16 = parts.next()?.parse().ok()?;
-        let minor: u16 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
-        Some(Self { major, minor })
     }
 }
 
