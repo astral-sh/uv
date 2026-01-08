@@ -3648,6 +3648,10 @@ fn pep_751_dependency() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -3661,6 +3665,7 @@ fn pep_751_dependency() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12'" }]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3709,6 +3714,10 @@ fn pep_751_export_no_header() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -3722,6 +3731,7 @@ fn pep_751_export_no_header() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12'" }]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3772,6 +3782,10 @@ fn pep_751_export_no_editable() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -3785,6 +3799,7 @@ fn pep_751_export_no_editable() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12'" }]
     directory = { path = "." }
 
     [[packages]]
@@ -3842,6 +3857,7 @@ fn pep_751_dependency_extra() -> Result<()> {
     [[packages]]
     name = "click"
     version = "8.1.7"
+    dependencies = [{ name = "colorama", version = "0.4.6", marker = "python_full_version >= '3.12' and sys_platform == 'win32'" }]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", upload-time = 2023-08-17T17:29:11Z, size = 336121, hashes = { sha256 = "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", upload-time = 2023-08-17T17:29:10Z, size = 97941, hashes = { sha256 = "ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28" } }]
@@ -3857,6 +3873,14 @@ fn pep_751_dependency_extra() -> Result<()> {
     [[packages]]
     name = "flask"
     version = "3.0.2"
+    dependencies = [
+        { name = "blinker", version = "1.7.0", marker = "python_full_version >= '3.12'" },
+        { name = "click", version = "8.1.7", marker = "python_full_version >= '3.12'" },
+        { name = "itsdangerous", version = "2.1.2", marker = "python_full_version >= '3.12'" },
+        { name = "jinja2", version = "3.1.3", marker = "python_full_version >= '3.12'" },
+        { name = "python-dotenv", version = "1.0.1", marker = "python_full_version >= '3.12' and 'dotenv' in extras" },
+        { name = "werkzeug", version = "3.0.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/3f/e0/a89e8120faea1edbfca1a9b171cff7f2bf62ec860bbafcb2c2387c0317be/flask-3.0.2.tar.gz", upload-time = 2024-02-03T21:11:44Z, size = 675248, hashes = { sha256 = "822c03f4b799204250a7ee84b1eddc40665395333973dfb9deebfe425fefcb7d" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/93/a6/aa98bfe0eb9b8b15d36cdfd03c8ca86a03968a87f27ce224fb4f766acb23/flask-3.0.2-py3-none-any.whl", upload-time = 2024-02-03T21:11:42Z, size = 101300, hashes = { sha256 = "3232e0e9c850d781933cf0207523d1ece087eb8d87b23777ae38456e2fbe7c6e" } }]
@@ -3871,6 +3895,7 @@ fn pep_751_dependency_extra() -> Result<()> {
     [[packages]]
     name = "jinja2"
     version = "3.1.3"
+    dependencies = [{ name = "markupsafe", version = "2.1.5", marker = "python_full_version >= '3.12'" }]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/b2/5e/3a21abf3cd467d7876045335e681d276ac32492febe6d98ad89562d1a7e1/Jinja2-3.1.3.tar.gz", upload-time = 2024-01-10T23:12:21Z, size = 268261, hashes = { sha256 = "ac8bd6544d4bb2c9792bf3a159e80bba8fda7f07e81bc3aed565432d5925ba90" } }
     wheels = [{ name = "jinja2-3.1.3-py3-none-any.whl", url = "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl", upload-time = 2024-01-10T23:12:19Z, size = 133236, hashes = { sha256 = "7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa" } }]
@@ -3895,6 +3920,7 @@ fn pep_751_dependency_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "flask", version = "3.0.2", marker = "python_full_version >= '3.12'" }]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3907,6 +3933,7 @@ fn pep_751_dependency_extra() -> Result<()> {
     [[packages]]
     name = "werkzeug"
     version = "3.0.1"
+    dependencies = [{ name = "markupsafe", version = "2.1.5", marker = "python_full_version >= '3.12'" }]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/0d/cc/ff1904eb5eb4b455e442834dabf9427331ac0fa02853bf83db817a7dd53d/werkzeug-3.0.1.tar.gz", upload-time = 2023-10-24T20:57:50Z, size = 801436, hashes = { sha256 = "507e811ecea72b18a404947aded4b3390e1db8f826b494d76550ef45bb3b1dcc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", upload-time = 2023-10-24T20:57:47Z, size = 226669, hashes = { sha256 = "90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10" } }]
@@ -3952,9 +3979,18 @@ fn pep_751_project_extra() -> Result<()> {
     lock-version = "1.0"
     created-by = "uv"
     requires-python = ">=3.12"
+    extras = [
+        "async",
+        "pytest",
+    ]
 
     [[packages]]
     name = "project"
+    dependencies = [
+        { name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12' and 'async' in extras" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_full_version >= '3.12' and 'pytest' in extras" },
+        { name = "typing-extensions", version = "4.10.0", marker = "python_full_version >= '3.12'" },
+    ]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3977,10 +4013,18 @@ fn pep_751_project_extra() -> Result<()> {
     lock-version = "1.0"
     created-by = "uv"
     requires-python = ">=3.12"
+    extras = [
+        "async",
+        "pytest",
+    ]
 
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -3994,6 +4038,11 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [
+        { name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12' and 'async' in extras" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_full_version >= '3.12' and 'pytest' in extras" },
+        { name = "typing-extensions", version = "4.10.0", marker = "python_full_version >= '3.12'" },
+    ]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4023,6 +4072,10 @@ fn pep_751_project_extra() -> Result<()> {
     lock-version = "1.0"
     created-by = "uv"
     requires-python = ">=3.12"
+    extras = [
+        "async",
+        "pytest",
+    ]
 
     [[packages]]
     name = "iniconfig"
@@ -4033,6 +4086,11 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [
+        { name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12' and 'async' in extras" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_full_version >= '3.12' and 'pytest' in extras" },
+        { name = "typing-extensions", version = "4.10.0", marker = "python_full_version >= '3.12'" },
+    ]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4055,10 +4113,18 @@ fn pep_751_project_extra() -> Result<()> {
     lock-version = "1.0"
     created-by = "uv"
     requires-python = ">=3.12"
+    extras = [
+        "async",
+        "pytest",
+    ]
 
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -4079,6 +4145,11 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [
+        { name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12' and 'async' in extras" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_full_version >= '3.12' and 'pytest' in extras" },
+        { name = "typing-extensions", version = "4.10.0", marker = "python_full_version >= '3.12'" },
+    ]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4108,10 +4179,18 @@ fn pep_751_project_extra() -> Result<()> {
     lock-version = "1.0"
     created-by = "uv"
     requires-python = ">=3.12"
+    extras = [
+        "async",
+        "pytest",
+    ]
 
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -4125,6 +4204,11 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [
+        { name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12' and 'async' in extras" },
+        { name = "iniconfig", version = "2.0.0", marker = "python_full_version >= '3.12' and 'pytest' in extras" },
+        { name = "typing-extensions", version = "4.10.0", marker = "python_full_version >= '3.12'" },
+    ]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4220,6 +4304,10 @@ fn pep_751_wheel_url() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     archive = { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }
 
     [[packages]]
@@ -4273,6 +4361,10 @@ fn pep_751_sdist_url() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     archive = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
 
     [[packages]]
@@ -4329,6 +4421,10 @@ fn pep_751_sdist_url_subdirectory() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
@@ -4343,6 +4439,7 @@ fn pep_751_sdist_url_subdirectory() -> Result<()> {
     [[packages]]
     name = "root"
     version = "0.0.1"
+    dependencies = [{ name = "anyio", version = "4.3.0", marker = "python_full_version >= '3.12'" }]
     archive = { url = "https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root", subdirectory = "packages/root", hashes = { sha256 = "24b55efee28d08ad3cdc58903e359e820601baa6a4a4b3424311541ebcfb09d3" } }
 
     [[packages]]
@@ -4417,6 +4514,10 @@ fn pep_751_infer_output_format() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -4430,6 +4531,7 @@ fn pep_751_infer_output_format() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12'" }]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4456,6 +4558,10 @@ fn pep_751_infer_output_format() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.7.0"
+    dependencies = [
+        { name = "idna", version = "3.6", marker = "python_full_version >= '3.12'" },
+        { name = "sniffio", version = "1.3.1", marker = "python_full_version >= '3.12'" },
+    ]
     index = "https://pypi.org/simple"
     sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", upload-time = 2023-05-27T11:12:46Z, size = 142737, hashes = { sha256 = "275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", upload-time = 2023-05-27T11:12:44Z, size = 80873, hashes = { sha256 = "eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0" } }]
@@ -4469,6 +4575,7 @@ fn pep_751_infer_output_format() -> Result<()> {
 
     [[packages]]
     name = "project"
+    dependencies = [{ name = "anyio", version = "3.7.0", marker = "python_full_version >= '3.12'" }]
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -8408,6 +8515,114 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
     ----- stderr -----
     Resolved 12 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+/// Test PEP 751 export with conflicting extras.
+///
+/// When extras conflict (require different versions of the same package),
+/// the markers should use PEP 751 syntax: `'extra_name' in extras`.
+#[test]
+fn pep_751_conflicting_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        conflicts = [
+            [
+              { extra = "extra1" },
+              { extra = "extra2" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Export with extra1 - shows dependencies with PEP 751 'extra' in extras markers
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--extra").arg("extra1"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --format pylock.toml --extra extra1
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    extras = [
+        "extra1",
+        "extra2",
+    ]
+
+    [[packages]]
+    name = "project"
+    dependencies = [
+        { name = "sortedcontainers", version = "2.3.0", marker = "python_full_version >= '3.12' and 'extra1' in extras" },
+        { name = "sortedcontainers", version = "2.4.0", marker = "python_full_version >= '3.12' and 'extra2' in extras" },
+    ]
+    directory = { path = ".", editable = true }
+
+    [[packages]]
+    name = "sortedcontainers"
+    version = "2.3.0"
+    index = "https://pypi.org/simple"
+    sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", upload-time = 2020-11-09T00:03:52Z, size = 30509, hashes = { sha256 = "59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", upload-time = 2020-11-09T00:03:50Z, size = 29479, hashes = { sha256 = "37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Export with extra2 - shows dependencies with PEP 751 'extra' in extras markers
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--extra").arg("extra2"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --format pylock.toml --extra extra2
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+    extras = [
+        "extra1",
+        "extra2",
+    ]
+
+    [[packages]]
+    name = "project"
+    dependencies = [
+        { name = "sortedcontainers", version = "2.3.0", marker = "python_full_version >= '3.12' and 'extra1' in extras" },
+        { name = "sortedcontainers", version = "2.4.0", marker = "python_full_version >= '3.12' and 'extra2' in extras" },
+    ]
+    directory = { path = ".", editable = true }
+
+    [[packages]]
+    name = "sortedcontainers"
+    version = "2.4.0"
+    index = "https://pypi.org/simple"
+    sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", upload-time = 2021-05-16T22:03:42Z, size = 30594, hashes = { sha256 = "25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", upload-time = 2021-05-16T22:03:41Z, size = 29575, hashes = { sha256 = "a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
     "#);
 
     Ok(())

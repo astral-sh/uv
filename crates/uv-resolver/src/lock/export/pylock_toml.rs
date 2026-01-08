@@ -31,13 +31,17 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_pep508::{
+    CanonicalMarkerListPair, ContainerOperator, MarkerEnvironment, MarkerExpression, MarkerTree,
+    VerbatimUrl,
+};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
+use crate::lock::export::marker_conversion::to_pep751_marker;
 use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, ResolverOutput};
@@ -231,8 +235,17 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[allow(clippy::empty_structs_with_brackets)]
-struct PylockTomlDependency {}
+struct PylockTomlDependency {
+    name: PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<Version>,
+    #[serde(
+        skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+        serialize_with = "uv_pep508::marker::ser::serialize",
+        default
+    )]
+    marker: MarkerTree,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -387,7 +400,7 @@ impl<'lock> PylockToml {
             let mut package = PylockTomlPackage {
                 name: dist.name().clone(),
                 version: version.cloned(),
-                marker: node.marker.pep508(),
+                marker: to_pep751_marker(node.marker.pep508()),
                 requires_python: None,
                 dependencies: vec![],
                 index: None,
@@ -695,13 +708,14 @@ impl<'lock> PylockToml {
         // Use the `requires-python` from the target lockfile.
         let requires_python = target.lock().requires_python.clone();
 
-        // We don't support locking for multiple extras at time of writing.
-        let extras = vec![];
+        // Extract available extras from the project metadata.
+        let extras = target.available_extras();
 
-        // We don't support locking for multiple dependency groups at time of writing.
-        let dependency_groups = vec![];
+        // Extract available dependency groups from the project metadata.
+        let dependency_groups = target.available_dependency_groups();
 
-        // We don't support locking for multiple dependency groups at time of writing.
+        // PEP 751 default-groups are synthetic groups representing default installation.
+        // We don't currently create synthetic groups, so this defaults to empty per the spec.
         let default_groups = vec![];
 
         // We don't support attestation identities at time of writing.
@@ -917,12 +931,59 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
-            let package = PylockTomlPackage {
+            let mut dependencies = Vec::new();
+
+            for dep in &package.dependencies {
+                dependencies.push(PylockTomlDependency {
+                    name: dep.package_id.name.clone(),
+                    version: dep.package_id.version.clone(),
+                    marker: to_pep751_marker(dep.complexified_marker.combined()),
+                });
+            }
+
+            for (extra_name, extra_deps) in &package.optional_dependencies {
+                let extras_marker = MarkerTree::expression(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::Extras(extra_name.clone()),
+                    operator: ContainerOperator::In,
+                });
+                for dep in extra_deps {
+                    let mut marker = to_pep751_marker(dep.complexified_marker.combined());
+                    marker.and(extras_marker);
+                    dependencies.push(PylockTomlDependency {
+                        name: dep.package_id.name.clone(),
+                        version: dep.package_id.version.clone(),
+                        marker,
+                    });
+                }
+            }
+
+            for (group_name, group_deps) in &package.dependency_groups {
+                let groups_marker = MarkerTree::expression(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::DependencyGroup(group_name.clone()),
+                    operator: ContainerOperator::In,
+                });
+                for dep in group_deps {
+                    let mut marker = to_pep751_marker(dep.complexified_marker.combined());
+                    marker.and(groups_marker);
+                    dependencies.push(PylockTomlDependency {
+                        name: dep.package_id.name.clone(),
+                        version: dep.package_id.version.clone(),
+                        marker,
+                    });
+                }
+            }
+
+            // Dedupe since same package may appear in multiple extras/groups.
+            dependencies
+                .sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.version.cmp(&b.version)));
+            dependencies.dedup_by(|a, b| a.name == b.name && a.version == b.version);
+
+            let package_pylock = PylockTomlPackage {
                 name,
                 version,
-                marker: node.marker,
+                marker: to_pep751_marker(node.marker),
                 requires_python: None,
-                dependencies: vec![],
+                dependencies,
                 index,
                 vcs,
                 directory,
@@ -931,7 +992,7 @@ impl<'lock> PylockToml {
                 wheels,
             };
 
-            packages.push(package);
+            packages.push(package_pylock);
         }
 
         Ok(Self {

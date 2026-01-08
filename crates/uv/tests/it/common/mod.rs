@@ -999,6 +999,9 @@ impl TestContext {
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
             .env_remove(EnvVars::XDG_CONFIG_HOME)
+            // Ensure tests use public PyPI, not internal mirrors that may lack upload dates
+            .env_remove(EnvVars::UV_INDEX_URL)
+            .env_remove(EnvVars::UV_EXTRA_INDEX_URL)
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
