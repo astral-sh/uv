@@ -6,12 +6,7 @@ uv is a single tool that replaces pip, pip-tools, pipx, poetry, pyenv, twine, vi
 
 ## Fetching Documentation
 
-When fetching documentation pages, always use the explicit `index.md` path for directory URLs:
-
-- Preferred: https://docs.astral.sh/uv/concepts/projects/dependencies/index.md
-- Avoid: https://docs.astral.sh/uv/concepts/projects/dependencies/
-
-The explicit `.md` path returns clean raw markdown, while directory URLs return rendered HTML with embedded JS/CSS that wastes tokens and complicates parsing.
+When fetching documentation, use explicit `index.md` paths for directories, e.g., `https://docs.astral.sh/uv/concepts/projects/dependencies/index.md`. This returns clean markdown instead of rendered HTML with JS/CSS.
 
 ## Documentation
 
