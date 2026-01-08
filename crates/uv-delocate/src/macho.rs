@@ -14,6 +14,8 @@ use goblin::mach::load_command;
 use goblin::mach::{Mach, MachO};
 use tracing::trace;
 
+use uv_platform::MacOSVersion;
+
 use crate::error::DelocateError;
 
 /// CPU architecture of a Mach-O binary.
@@ -78,42 +80,6 @@ impl std::str::FromStr for Arch {
             "ppc64" | "powerpc64" => Ok(Self::PowerPC64),
             _ => Err(format!("Unknown architecture: {s}")),
         }
-    }
-}
-
-/// macOS version requirement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MacOSVersion {
-    pub major: u32,
-    pub minor: u32,
-}
-
-impl MacOSVersion {
-    pub fn new(major: u32, minor: u32) -> Self {
-        Self { major, minor }
-    }
-
-    /// Parse a macOS version string like "10.9" or "11.0" or "14.0".
-    pub fn parse(s: &str) -> Option<Self> {
-        let mut parts = s.split('.');
-        let major: u32 = parts.next()?.parse().ok()?;
-        let minor: u32 = parts.next().and_then(|part| part.parse().ok()).unwrap_or(0);
-        Some(Self::new(major, minor))
-    }
-
-    /// Parse from a packed version (used in `LC_BUILD_VERSION` and `LC_VERSION_MIN_MACOSX`).
-    /// Format: xxxx.yy.zz where x is major, y is minor, z is patch (ignored).
-    fn from_packed(packed: u32) -> Self {
-        Self {
-            major: (packed >> 16) & 0xFFFF,
-            minor: (packed >> 8) & 0xFF,
-        }
-    }
-}
-
-impl std::fmt::Display for MacOSVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.major, self.minor)
     }
 }
 

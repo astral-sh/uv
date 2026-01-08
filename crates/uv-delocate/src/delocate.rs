@@ -13,8 +13,10 @@ use uv_distribution_filename::WheelFilename;
 use uv_platform_tags::PlatformTag;
 use uv_static::EnvVars;
 
+use uv_platform::MacOSVersion;
+
 use crate::error::DelocateError;
-use crate::macho::{self, Arch, MacOSVersion};
+use crate::macho::{self, Arch};
 use crate::wheel;
 
 /// Options for delocating a wheel.
@@ -201,9 +203,7 @@ fn get_macos_version(platform_tags: &[PlatformTag]) -> Option<MacOSVersion> {
     platform_tags
         .iter()
         .filter_map(|tag| match tag {
-            PlatformTag::Macos { major, minor, .. } => {
-                Some(MacOSVersion::new(u32::from(*major), u32::from(*minor)))
-            }
+            PlatformTag::Macos { major, minor, .. } => Some(MacOSVersion::new(*major, *minor)),
             _ => None,
         })
         .min()
@@ -264,12 +264,9 @@ fn update_platform_tags_version(
 ) -> Vec<PlatformTag> {
     // Handle macOS 11+ where minor version is always 0 for tagging.
     let (major, minor) = if version.major >= 11 {
-        (u16::try_from(version.major).unwrap_or(u16::MAX), 0)
+        (version.major, 0)
     } else {
-        (
-            u16::try_from(version.major).unwrap_or(u16::MAX),
-            u16::try_from(version.minor).unwrap_or(u16::MAX),
-        )
+        (version.major, version.minor)
     };
 
     platform_tags

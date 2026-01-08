@@ -5865,6 +5865,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-static",
 ]
@@ -5892,6 +5893,7 @@ dependencies = [
  "uv-extract",
  "uv-fs",
  "uv-install-wheel",
+ "uv-platform",
  "uv-platform-tags",
  "uv-static",
  "walkdir",
