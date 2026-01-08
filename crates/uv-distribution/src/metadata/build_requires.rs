@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use uv_auth::CredentialsCache;
 use uv_configuration::SourceStrategy;
@@ -116,6 +116,8 @@ impl BuildRequires {
                         metadata.name.as_ref(),
                         project_workspace.project_root(),
                         project_sources,
+                        // TODO: make this better lol
+                        &mut BTreeSet::new(),
                         project_indexes,
                         extra.as_deref(),
                         group,
@@ -190,6 +192,8 @@ impl BuildRequires {
                         None,
                         workspace.install_path(),
                         project_sources,
+                        // TODO: make this better lol
+                        &mut BTreeSet::new(),
                         project_indexes,
                         extra.as_deref(),
                         group,
