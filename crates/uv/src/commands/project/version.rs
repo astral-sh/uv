@@ -203,17 +203,26 @@ pub(crate) async fn project_version(
             ));
         }
 
-        // Very little reason to "bump to post" and then do other things,
-        // how is it a post-release otherwise?
-        if post_count > 0 && bump.len() > 1 {
-            let components = bump
+        // `--bump post` can be combined with `--bump dev` (e.g., `--bump dev --bump post`
+        // for `1.0.0.dev1.post1`), but not with release component bumps (major/minor/patch),
+        // stable, or pre-releases (alpha/beta/rc).
+        if post_count > 0 {
+            let disallowed: Vec<_> = bump
                 .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(anyhow!(
-                "`--bump post` cannot be used with another `--bump` value, got: {components}"
-            ));
+                .filter(|spec| {
+                    !matches!(spec.bump, VersionBump::Post | VersionBump::Dev)
+                })
+                .collect();
+            if !disallowed.is_empty() {
+                let components = bump
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(anyhow!(
+                    "`--bump post` can only be combined with `--bump dev`, got: {components}"
+                ));
+            }
         }
 
         // `--bump major --bump minor` makes perfect sense (1.2.3 => 2.1.0)
