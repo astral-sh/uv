@@ -349,7 +349,7 @@ pub fn from_lock<'lock>(
 
     let mut dependencies = create_dependencies(&nodes, &component_builder);
 
-    // With `--all-packages`, use synthetic root which depends on workspace root and all workspace members.
+    // With `--all-packages`, use synthetic root which depends on root and all workspace members.
     // This ensures that we don't have any dangling components resulting from workspace packages not depended on by the workspace root.
     if all_packages {
         let synthetic_root = component_builder.create_synthetic_root_component(root);
@@ -357,19 +357,29 @@ pub fn from_lock<'lock>(
             .bom_ref
             .clone()
             .expect("bom-ref should always exist");
-        let workspace_root = metadata.component.replace(synthetic_root);
+        let root = metadata.component.replace(synthetic_root);
 
-        if let Some(workspace_root) = workspace_root {
+        let mut synthetic_root_deps = workspace_member_ids
+            .iter()
+            .filter_map(|c| component_builder.get_component(c))
+            .map(|c| c.bom_ref.clone().expect("bom-ref should always exist"))
+            .collect::<Vec<_>>();
+        if let Some(ref root_component) = root
+            && let Some(ref root_bom_ref) = root_component.bom_ref
+        {
+            synthetic_root_deps.push(root_bom_ref.clone());
+        }
+
+        if let Some(workspace_root) = root {
             components.push(workspace_root);
         }
 
         dependencies.push(Dependency {
             dependency_ref: synthetic_root_bom_ref,
-            dependencies: workspace_member_ids
-                .iter()
-                .filter_map(|c| component_builder.get_component(c))
-                .map(|c| c.bom_ref.clone().expect("bom-ref should always exist"))
+            dependencies: synthetic_root_deps
+                .into_iter()
                 .sorted_unstable()
+                .unique()
                 .collect(),
         });
     }

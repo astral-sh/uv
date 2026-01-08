@@ -6257,6 +6257,93 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "my-project-3",
+          "name": "my-project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "my-project-1@0.1.0",
+          "name": "my-project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "my-project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "my-project-3",
+          "dependsOn": [
+            "my-project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
 // Contains a combination of combination of workspace and registry deps, with another workspace dep not depended on by the root
 #[test]
 fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
