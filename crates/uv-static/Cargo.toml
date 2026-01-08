@@ -17,3 +17,5 @@ workspace = true
 
 [dependencies]
 uv-macros = { workspace = true }
+
+thiserror = { workspace = true }

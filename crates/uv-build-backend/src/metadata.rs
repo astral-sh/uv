@@ -1,3 +1,6 @@
+use indexmap::IndexMap;
+use itertools::Itertools;
+use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
@@ -5,9 +8,6 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
-
-use itertools::Itertools;
-use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -19,7 +19,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -353,13 +353,7 @@ impl PyProjectToml {
         let (license, license_expression, license_files) = self.license_metadata(root)?;
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
-        let project_urls = self
-            .project
-            .urls
-            .iter()
-            .flatten()
-            .map(|(key, value)| format!("{key}, {value}"))
-            .collect();
+        let project_urls = ProjectUrls::new(self.project.urls.clone().unwrap_or_default());
 
         let extras = self
             .project
@@ -404,11 +398,7 @@ impl PyProjectToml {
             summary,
             description,
             description_content_type,
-            keywords: self
-                .project
-                .keywords
-                .as_ref()
-                .map(|keywords| keywords.join(",")),
+            keywords: self.project.keywords.clone().map(Keywords::new),
             home_page: None,
             download_url: None,
             author,
@@ -699,7 +689,7 @@ struct Project {
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
     /// main: <https://github.com/pypi/warehouse/blob/main/warehouse/templates/packaging/detail.html>
     /// archived: <https://github.com/pypi/warehouse/blob/e3bd3c3805ff47fff32b67a899c1ce11c16f3c31/warehouse/templates/packaging/detail.html>
-    urls: Option<BTreeMap<String, String>>,
+    urls: Option<IndexMap<String, String>>,
     /// The console entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.

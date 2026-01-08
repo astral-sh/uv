@@ -27,6 +27,7 @@ bitflags::bitflags! {
         const WORKSPACE_LIST = 1 << 15;
         const SBOM_EXPORT = 1 << 16;
         const AUTH_HELPER = 1 << 17;
+        const METADATA_JSON = 1 << 18;
     }
 }
 
@@ -54,6 +55,7 @@ impl PreviewFeatures {
             Self::WORKSPACE_LIST => "workspace-list",
             Self::SBOM_EXPORT => "sbom-export",
             Self::AUTH_HELPER => "auth-helper",
+            Self::METADATA_JSON => "metadata-json",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -109,6 +111,7 @@ impl FromStr for PreviewFeatures {
                 "workspace-list" => Self::WORKSPACE_LIST,
                 "sbom-export" => Self::SBOM_EXPORT,
                 "auth-helper" => Self::AUTH_HELPER,
+                "metadata-json" => Self::METADATA_JSON,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -285,6 +288,10 @@ mod tests {
         assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
         assert_eq!(PreviewFeatures::S3_ENDPOINT.flag_as_str(), "s3-endpoint");
         assert_eq!(PreviewFeatures::SBOM_EXPORT.flag_as_str(), "sbom-export");
+        assert_eq!(
+            PreviewFeatures::METADATA_JSON.flag_as_str(),
+            "metadata-json"
+        );
     }
 
     #[test]
