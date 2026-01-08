@@ -20,6 +20,7 @@ uv-distribution-filename = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
+uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-static = { workspace = true }
 
