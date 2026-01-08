@@ -1,0 +1,119 @@
+# uv
+
+> An extremely fast Python package and project manager, written in Rust.
+
+uv is a single tool that replaces pip, pip-tools, pipx, poetry, pyenv, twine, virtualenv, and more. It is 10-100x faster than pip and provides comprehensive project management with a universal lockfile.
+
+## Fetching Documentation
+
+When fetching documentation pages, always use the explicit `index.md` path for directory URLs:
+
+- Preferred: https://docs.astral.sh/uv/concepts/projects/dependencies/index.md
+- Avoid: https://docs.astral.sh/uv/concepts/projects/dependencies/
+
+The explicit `.md` path returns clean raw markdown, while directory URLs return rendered HTML with embedded JS/CSS that wastes tokens and complicates parsing.
+
+## Documentation
+
+### Getting Started
+
+- [Installation](https://docs.astral.sh/uv/getting-started/installation.md): Install uv on macOS, Linux, or Windows
+- [First Steps](https://docs.astral.sh/uv/getting-started/first-steps.md): Quick introduction to using uv
+- [Features](https://docs.astral.sh/uv/getting-started/features.md): Overview of uv's capabilities
+- [Help](https://docs.astral.sh/uv/getting-started/help.md): Getting help and reporting issues
+
+### Guides
+
+- [Projects](https://docs.astral.sh/uv/guides/projects.md): Managing Python projects with uv
+- [Scripts](https://docs.astral.sh/uv/guides/scripts.md): Running single-file scripts with dependencies
+- [Tools](https://docs.astral.sh/uv/guides/tools.md): Installing and running Python CLI tools
+- [Installing Python](https://docs.astral.sh/uv/guides/install-python.md): Managing Python versions
+- [Packaging](https://docs.astral.sh/uv/guides/package.md): Building and publishing packages
+
+### Integration Guides
+
+- [Docker](https://docs.astral.sh/uv/guides/integration/docker.md): Using uv in Docker containers
+- [GitHub Actions](https://docs.astral.sh/uv/guides/integration/github.md): CI/CD with GitHub Actions
+- [GitLab CI](https://docs.astral.sh/uv/guides/integration/gitlab.md): CI/CD with GitLab
+- [Pre-commit](https://docs.astral.sh/uv/guides/integration/pre-commit.md): Using uv with pre-commit hooks
+- [FastAPI](https://docs.astral.sh/uv/guides/integration/fastapi.md): FastAPI project setup
+- [Jupyter](https://docs.astral.sh/uv/guides/integration/jupyter.md): Jupyter notebook integration
+- [PyTorch](https://docs.astral.sh/uv/guides/integration/pytorch.md): PyTorch installation and configuration
+- [AWS Lambda](https://docs.astral.sh/uv/guides/integration/aws-lambda.md): Deploying to AWS Lambda
+- [Alternative Indexes](https://docs.astral.sh/uv/guides/integration/alternative-indexes.md): Using custom package indexes
+- [Dependency Bots](https://docs.astral.sh/uv/guides/integration/dependency-bots.md): Dependabot and Renovate
+- [Marimo](https://docs.astral.sh/uv/guides/integration/marimo.md): Marimo notebook integration
+- [Coiled](https://docs.astral.sh/uv/guides/integration/coiled.md): Coiled cloud integration
+
+### Migration
+
+- [Migrating from pip](https://docs.astral.sh/uv/guides/migration/index.md): Guide for migrating from pip workflows
+- [pip to Project](https://docs.astral.sh/uv/guides/migration/pip-to-project.md): Converting pip projects to uv projects
+
+### Concepts
+
+- [Concepts Overview](https://docs.astral.sh/uv/concepts/index.md): Core uv concepts
+- [Projects Overview](https://docs.astral.sh/uv/concepts/projects/index.md): Project structure and management
+- [Project Layout](https://docs.astral.sh/uv/concepts/projects/layout.md): pyproject.toml and lockfile structure
+- [Dependencies](https://docs.astral.sh/uv/concepts/projects/dependencies.md): Managing project dependencies
+- [Workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces.md): Multi-package workspaces
+- [Project Init](https://docs.astral.sh/uv/concepts/projects/init.md): Initializing new projects
+- [Running Commands](https://docs.astral.sh/uv/concepts/projects/run.md): Running commands in project context
+- [Syncing](https://docs.astral.sh/uv/concepts/projects/sync.md): Syncing environments with lockfile
+- [Building](https://docs.astral.sh/uv/concepts/projects/build.md): Building distributions
+- [Exporting](https://docs.astral.sh/uv/concepts/projects/export.md): Exporting to requirements.txt
+- [Configuration](https://docs.astral.sh/uv/concepts/projects/config.md): Project configuration options
+- [Python Versions](https://docs.astral.sh/uv/concepts/python-versions.md): Python version management
+- [Resolution](https://docs.astral.sh/uv/concepts/resolution.md): Dependency resolution strategies
+- [Indexes](https://docs.astral.sh/uv/concepts/indexes.md): Package index configuration
+- [Cache](https://docs.astral.sh/uv/concepts/cache.md): Global cache behavior
+- [Tools](https://docs.astral.sh/uv/concepts/tools.md): Tool management concepts
+- [Build Backend](https://docs.astral.sh/uv/concepts/build-backend.md): uv's build backend
+- [Configuration Files](https://docs.astral.sh/uv/concepts/configuration-files.md): uv.toml and pyproject.toml
+- [Preview Features](https://docs.astral.sh/uv/concepts/preview.md): Experimental features
+
+### Authentication
+
+- [Authentication Overview](https://docs.astral.sh/uv/concepts/authentication/index.md): Authentication methods
+- [HTTP Authentication](https://docs.astral.sh/uv/concepts/authentication/http.md): HTTP basic auth for indexes
+- [CLI Authentication](https://docs.astral.sh/uv/concepts/authentication/cli.md): Command-line authentication
+- [Git Authentication](https://docs.astral.sh/uv/concepts/authentication/git.md): Git repository authentication
+- [Certificates](https://docs.astral.sh/uv/concepts/authentication/certificates.md): TLS/SSL certificates
+- [Third-party Auth](https://docs.astral.sh/uv/concepts/authentication/third-party.md): Keyring and credential helpers
+
+### pip Interface
+
+- [pip Interface Overview](https://docs.astral.sh/uv/pip/index.md): Drop-in pip replacement
+- [Dependencies](https://docs.astral.sh/uv/pip/dependencies.md): Declaring dependencies
+- [Environments](https://docs.astral.sh/uv/pip/environments.md): Virtual environment management
+- [Packages](https://docs.astral.sh/uv/pip/packages.md): Installing packages
+- [Compile](https://docs.astral.sh/uv/pip/compile.md): Compiling requirements files
+- [Inspection](https://docs.astral.sh/uv/pip/inspection.md): Inspecting environments
+- [Compatibility](https://docs.astral.sh/uv/pip/compatibility.md): pip compatibility notes
+
+### Reference
+
+- [CLI Reference](https://docs.astral.sh/uv/reference/cli/): Complete command-line reference
+- [Settings Reference](https://docs.astral.sh/uv/reference/settings/): All configuration options
+- [Environment Variables](https://docs.astral.sh/uv/reference/environment/): Environment variable reference
+- [Storage](https://docs.astral.sh/uv/reference/storage.md): Cache and data storage locations
+- [Installer](https://docs.astral.sh/uv/reference/installer.md): Standalone installer details
+- [Benchmarks](https://docs.astral.sh/uv/reference/benchmarks.md): Performance benchmarks
+
+### Troubleshooting
+
+- [Troubleshooting](https://docs.astral.sh/uv/reference/troubleshooting/index.md): Common issues and solutions
+- [Build Failures](https://docs.astral.sh/uv/reference/troubleshooting/build-failures.md): Resolving build errors
+- [Reproducible Examples](https://docs.astral.sh/uv/reference/troubleshooting/reproducible-examples.md): Creating bug reports
+
+### Internals
+
+- [Internals Overview](https://docs.astral.sh/uv/reference/internals/index.md): Implementation details
+- [Resolver](https://docs.astral.sh/uv/reference/internals/resolver.md): How the resolver works
+
+### Policies
+
+- [Policies Overview](https://docs.astral.sh/uv/reference/policies/index.md): Project policies
+- [Versioning](https://docs.astral.sh/uv/reference/policies/versioning.md): Version compatibility policy
+- [Platforms](https://docs.astral.sh/uv/reference/policies/platforms.md): Supported platforms
+- [License](https://docs.astral.sh/uv/reference/policies/license.md): License information
