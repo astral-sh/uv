@@ -141,10 +141,12 @@ pub(crate) async fn publish(
         .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
         .build();
-    let oidc_client = client_builder
+    let unauthenticated_client = client_builder
         .clone()
+        .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .wrap_existing(&upload_client);
+        .timeout(environment.upload_http_timeout)
+        .build();
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -158,7 +160,7 @@ pub(crate) async fn publish(
         trusted_publishing,
         keyring_provider,
         &token_store,
-        &oidc_client,
+        &unauthenticated_client,
         &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
@@ -250,7 +252,8 @@ pub(crate) async fn publish(
                 &form_metadata,
                 &publish_url,
                 &upload_client,
-                &oidc_client,
+                &unauthenticated_client,
+                retry_policy,
                 &credentials,
                 // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
                 Arc::new(reporter),
@@ -348,7 +351,7 @@ async fn gather_credentials(
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     token_store: &PyxTokenStore,
-    oidc_client: &BaseClient,
+    unauthenticated_client: &BaseClient,
     base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
@@ -398,7 +401,7 @@ async fn gather_credentials(
         keyring_provider,
         trusted_publishing,
         &publish_url,
-        oidc_client,
+        unauthenticated_client,
     )
     .await?;
 

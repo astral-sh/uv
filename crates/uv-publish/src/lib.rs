@@ -673,12 +673,13 @@ pub async fn upload_two_phase(
     registry: &DisplaySafeUrl,
     client: &BaseClient,
     s3_client: &BaseClient,
+    retry_policy: ExponentialBackoff,
     credentials: &Credentials,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     #[derive(Debug, Deserialize)]
     struct ReserveResponse {
-        upload_url: String,
+        upload_url: Option<String>,
     }
 
     // Step 1: Reserve an upload slot.
@@ -736,73 +737,103 @@ pub async fn upload_two_phase(
         }
     };
 
-    debug!(
-        "Got pre-signed URL for upload: {}",
-        reserve_response.upload_url
-    );
-
-    // Step 2: Upload the file directly to S3.
-    let file = File::open(&group.file).await.map_err(|err| {
-        PublishError::PublishPrepare(group.file.clone(), Box::new(PublishPrepareError::Io(err)))
-    })?;
-    let file_size = file
-        .metadata()
-        .await
-        .map_err(|err| {
-            PublishError::PublishPrepare(group.file.clone(), Box::new(PublishPrepareError::Io(err)))
-        })?
-        .len();
-
-    let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
-    let reporter_clone = reporter.clone();
-    let reader = ProgressReader::new(file, move |read| {
-        reporter_clone.on_upload_progress(idx, read as u64);
-    });
-    let file_reader = Body::wrap_stream(ReaderStream::new(reader));
-
-    let s3_url = DisplaySafeUrl::parse(&reserve_response.upload_url).map_err(|_| {
-        PublishError::S3Upload(
-            group.file.clone(),
-            PublishSendError::Status(
-                StatusCode::BAD_REQUEST,
-                "Invalid S3 URL in reserve response".to_string(),
-            )
-            .into(),
-        )
-    })?;
-
-    let s3_response = s3_client
-        .for_host(&s3_url)
-        .raw_client()
-        .put(Url::from(s3_url))
-        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-        .header(reqwest::header::CONTENT_LENGTH, file_size)
-        .body(file_reader)
-        .send()
-        .await
-        .map_err(|err| {
+    // Step 2: Upload the file directly to S3 (if needed).
+    // When upload_url is None, the file already exists on S3 with the correct hash.
+    if let Some(upload_url) = reserve_response.upload_url {
+        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
             PublishError::S3Upload(
                 group.file.clone(),
                 PublishSendError::Status(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("S3 upload failed: {err}"),
+                    StatusCode::BAD_REQUEST,
+                    "Invalid S3 URL in reserve response".to_string(),
                 )
                 .into(),
             )
         })?;
 
-    reporter.on_upload_complete(idx);
+        debug!("Got pre-signed URL for upload: {s3_url}");
 
-    if !s3_response.status().is_success() {
-        let status = s3_response.status();
-        let body = s3_response.text().await.unwrap_or_default();
-        return Err(PublishError::S3Upload(
-            group.file.clone(),
-            PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
-        ));
+        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
+        let file_size = fs_err::tokio::metadata(&group.file)
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?
+            .len();
+
+        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
+        loop {
+            let file = File::open(&group.file).await.map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?;
+
+            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
+            let reporter_clone = reporter.clone();
+            let reader = ProgressReader::new(file, move |read| {
+                reporter_clone.on_upload_progress(idx, read as u64);
+            });
+            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+
+            let result = s3_client
+                .for_host(&s3_url)
+                .raw_client()
+                .put(Url::from(s3_url.clone()))
+                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                .header(reqwest::header::CONTENT_LENGTH, file_size)
+                .body(file_reader)
+                .send()
+                .await;
+
+            let response = match result {
+                Ok(response) => {
+                    reporter.on_upload_complete(idx);
+                    response
+                }
+                Err(err) => {
+                    let middleware_retries =
+                        if let Some(RetryError::WithRetries { retries, .. }) =
+                            (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                        {
+                            *retries
+                        } else {
+                            0
+                        };
+                    if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(PublishError::S3Upload(
+                        group.file.clone(),
+                        PublishSendError::ReqwestMiddleware(err).into(),
+                    ));
+                }
+            };
+
+            if response.status().is_success() {
+                break;
+            }
+
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
+            ));
+        }
+
+        debug!("S3 upload complete for {}", group.raw_filename);
+    } else {
+        debug!(
+            "File already exists on S3, skipping upload: {}",
+            group.raw_filename
+        );
     }
-
-    debug!("S3 upload complete for {}", group.raw_filename);
 
     // Step 3: Finalize the upload.
     let mut finalize_url = registry.clone();
