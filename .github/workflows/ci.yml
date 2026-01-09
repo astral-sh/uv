@@ -84,11 +84,6 @@ jobs:
             echo "Detected code change in: ${file}"
             CODE_CHANGED=true
 
-            # Can stop early if we've found both code and trampoline changes
-            if [[ "${TRAMPOLINE_CHANGED}" == "true" ]]; then
-              break
-            fi
-
           done <<< "${CHANGED_FILES}"
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "schema_changed=${SCHEMA_CHANGED}" >> "${GITHUB_OUTPUT}"
