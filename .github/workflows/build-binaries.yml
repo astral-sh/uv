@@ -434,8 +434,9 @@ jobs:
             manylinux: 2_17
           - target: arm-unknown-linux-musleabihf
             arch: arm
-            # Special case: armv6l is linux_armv6l, no manylinux or musllinux
-            manylinux: off
+            # Special case: armv6l is linux_armv6l, no manylinux or musllinux.
+            # "auto" instead of "off" to get the cross container
+            manylinux: auto
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
