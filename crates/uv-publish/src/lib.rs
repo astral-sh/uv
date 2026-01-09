@@ -88,6 +88,12 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
+    #[error("Failed to reserve upload slot for `{}`", _0.user_display())]
+    Reserve(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to upload to S3 for `{}`", _0.user_display())]
+    S3Upload(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to finalize upload for `{}`", _0.user_display())]
+    Finalize(PathBuf, #[source] Box<PublishSendError>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -625,7 +631,7 @@ pub async fn validate(
             .expect("URL must have path segments")
             .push("validate");
 
-        let request = build_validation_request(
+        let request = build_metadata_request(
             raw_filename,
             &validation_url,
             client,
@@ -651,6 +657,215 @@ pub async fn validate(
     }
 
     Ok(())
+}
+
+/// Upload a file using the two-phase upload protocol for pyx.
+///
+/// This is a more efficient upload method that:
+/// 1. Reserves an upload slot and gets a pre-signed S3 URL.
+/// 2. Uploads the file directly to S3.
+/// 3. Finalizes the upload with the registry.
+///
+/// Returns `true` if the file was newly uploaded and `false` if it already existed.
+pub async fn upload_two_phase(
+    group: &UploadDistribution,
+    form_metadata: &FormMetadata,
+    registry: &DisplaySafeUrl,
+    client: &BaseClient,
+    s3_client: &BaseClient,
+    retry_policy: ExponentialBackoff,
+    credentials: &Credentials,
+    reporter: Arc<impl Reporter>,
+) -> Result<bool, PublishError> {
+    #[derive(Debug, Deserialize)]
+    struct ReserveResponse {
+        upload_url: Option<String>,
+    }
+
+    // Step 1: Reserve an upload slot.
+    let mut reserve_url = registry.clone();
+    reserve_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("reserve");
+
+    debug!("Reserving upload slot at {reserve_url}");
+
+    let reserve_request = build_metadata_request(
+        &group.raw_filename,
+        &reserve_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = reserve_request.send().await.map_err(|err| {
+        PublishError::Reserve(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    let status = response.status();
+
+    let reserve_response: ReserveResponse = match status {
+        StatusCode::OK => {
+            debug!("File already uploaded: {}", group.raw_filename);
+            return Ok(false);
+        }
+        StatusCode::CREATED => {
+            let body = response.text().await.map_err(|err| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::StatusNoBody(status, err).into(),
+                )
+            })?;
+            serde_json::from_str(&body).map_err(|_| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::Status(status, format!("Invalid JSON response: {body}"))
+                        .into(),
+                )
+            })?
+        }
+        _ => {
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::Reserve(
+                group.file.clone(),
+                PublishSendError::Status(status, body).into(),
+            ));
+        }
+    };
+
+    // Step 2: Upload the file directly to S3 (if needed).
+    // When upload_url is None, the file already exists on S3 with the correct hash.
+    if let Some(upload_url) = reserve_response.upload_url {
+        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
+            PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid S3 URL in reserve response".to_string(),
+                )
+                .into(),
+            )
+        })?;
+
+        debug!("Got pre-signed URL for upload: {s3_url}");
+
+        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
+        let file_size = fs_err::tokio::metadata(&group.file)
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?
+            .len();
+
+        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
+        loop {
+            let file = File::open(&group.file).await.map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?;
+
+            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
+            let reporter_clone = reporter.clone();
+            let reader = ProgressReader::new(file, move |read| {
+                reporter_clone.on_upload_progress(idx, read as u64);
+            });
+            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+
+            let result = s3_client
+                .for_host(&s3_url)
+                .raw_client()
+                .put(Url::from(s3_url.clone()))
+                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                .header(reqwest::header::CONTENT_LENGTH, file_size)
+                .body(file_reader)
+                .send()
+                .await;
+
+            let response = match result {
+                Ok(response) => {
+                    reporter.on_upload_complete(idx);
+                    response
+                }
+                Err(err) => {
+                    let middleware_retries =
+                        if let Some(RetryError::WithRetries { retries, .. }) =
+                            (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                        {
+                            *retries
+                        } else {
+                            0
+                        };
+                    if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(PublishError::S3Upload(
+                        group.file.clone(),
+                        PublishSendError::ReqwestMiddleware(err).into(),
+                    ));
+                }
+            };
+
+            if response.status().is_success() {
+                break;
+            }
+
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
+            ));
+        }
+
+        debug!("S3 upload complete for {}", group.raw_filename);
+    } else {
+        debug!(
+            "File already exists on S3, skipping upload: {}",
+            group.raw_filename
+        );
+    }
+
+    // Step 3: Finalize the upload.
+    let mut finalize_url = registry.clone();
+    finalize_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("finalize");
+
+    debug!("Finalizing upload at {finalize_url}");
+
+    let finalize_request = build_metadata_request(
+        &group.raw_filename,
+        &finalize_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = finalize_request.send().await.map_err(|err| {
+        PublishError::Finalize(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    handle_response(&finalize_url, response)
+        .await
+        .map_err(|err| PublishError::Finalize(group.file.clone(), err.into()))?;
+
+    debug!("Upload finalized for {}", group.raw_filename);
+
+    Ok(true)
 }
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
@@ -1067,10 +1282,8 @@ async fn build_upload_request<'a>(
     Ok((request, idx))
 }
 
-/// Build the validation request, to validate the upload without actually uploading the file.
-///
-/// Returns the [`RequestBuilder`].
-fn build_validation_request<'a>(
+/// Build a request with form metadata but without the file content.
+fn build_metadata_request<'a>(
     raw_filename: &str,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,

@@ -7586,6 +7586,13 @@ pub struct PublishArgs {
     /// that is published.
     #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
     pub no_attestations: bool,
+
+    /// Use direct upload to the registry.
+    ///
+    /// When enabled, the publish command will use a direct two-phase upload protocol
+    /// that uploads files directly to storage, bypassing the registry's upload endpoint.
+    #[arg(long, hide = true)]
+    pub direct: bool,
 }
 
 #[derive(Args)]
