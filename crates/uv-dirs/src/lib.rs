@@ -24,7 +24,7 @@ use uv_static::EnvVars;
 pub fn user_executable_directory(override_variable: Option<&'static str>) -> Option<PathBuf> {
     override_variable
         .and_then(std::env::var_os)
-        .and_then(parse_xdg_path)
+        .and_then(parse_path)
         .or_else(|| std::env::var_os(EnvVars::XDG_BIN_HOME).and_then(parse_xdg_path))
         .or_else(|| {
             std::env::var_os(EnvVars::XDG_DATA_HOME)
@@ -81,6 +81,18 @@ pub fn legacy_user_state_dir() -> Option<PathBuf> {
         .ok()
         .map(|dirs| dirs.data_dir().join("uv"))
         .map(|dir| if cfg!(windows) { dir.join("data") } else { dir })
+}
+
+/// Return a [`PathBuf`] from the given [`OsString`], if non-empty.
+///
+/// Unlike [`parse_xdg_path`], this function accepts both relative and absolute paths,
+/// for use with uv-specific override variables that are not subject to the XDG specification.
+fn parse_path(path: OsString) -> Option<PathBuf> {
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
 }
 
 /// Return a [`PathBuf`] if the given [`OsString`] is an absolute path.
