@@ -29,6 +29,8 @@ jobs:
       code: ${{ steps.changed.outputs.code_any_changed }}
       # Flag that is raised when uv.schema.json is changed (e.g., in a release PR)
       schema: ${{ steps.changed.outputs.schema_changed }}
+      # Flag that is raised when trampoline-related code is changed
+      trampoline: ${{ steps.changed.outputs.trampoline_any_changed }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -43,12 +45,19 @@ jobs:
 
           CODE_CHANGED=false
           SCHEMA_CHANGED=false
+          TRAMPOLINE_CHANGED=false
 
           while IFS= read -r file; do
             # Check if the schema file changed (e.g., in a release PR)
             if [[ "${file}" == "uv.schema.json" ]]; then
               echo "Detected schema change: ${file}"
               SCHEMA_CHANGED=true
+            fi
+
+            # Check if trampoline-related files changed
+            if [[ "${file}" =~ ^crates/uv-trampoline/ ]] || [[ "${file}" =~ ^crates/uv-trampoline-builder/ ]]; then
+              echo "Detected trampoline change: ${file}"
+              TRAMPOLINE_CHANGED=true
             fi
 
             if [[ "${file}" =~ ^docs/ ]]; then
@@ -74,11 +83,16 @@ jobs:
 
             echo "Detected code change in: ${file}"
             CODE_CHANGED=true
-            break
+
+            # Can stop early if we've found both code and trampoline changes
+            if [[ "${TRAMPOLINE_CHANGED}" == "true" ]]; then
+              break
+            fi
 
           done <<< "${CHANGED_FILES}"
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "schema_changed=${SCHEMA_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "trampoline_any_changed=${TRAMPOLINE_CHANGED}" >> "${GITHUB_OUTPUT}"
   lint:
     timeout-minutes: 10
     name: "lint"
@@ -400,7 +414,7 @@ jobs:
   windows-trampoline-check:
     timeout-minutes: 15
     needs: determine_changes
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.trampoline == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: windows-latest
     name: "check windows trampoline | ${{ matrix.target-arch }}"
     strategy:
@@ -460,7 +474,7 @@ jobs:
   windows-trampoline-test:
     timeout-minutes: 10
     needs: determine_changes
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.trampoline == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: ${{ matrix.runner }}
     name: "test windows trampoline | ${{ matrix.target-arch }}"
     strategy:
