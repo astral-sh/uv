@@ -597,7 +597,7 @@ class PyodideFinder(Finder):
         releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
 
-        maj_minor_seen = set()
+        python_version_seen = set()
         results = []
         for release in releases:
             pyodide_version = release["tag_name"]
@@ -605,17 +605,20 @@ class PyodideFinder(Finder):
             if meta is None:
                 continue
 
-            maj_min = pyodide_version.rpartition(".")[0]
-            # Only keep latest
-            if maj_min in maj_minor_seen:
-                continue
-            maj_minor_seen.add(maj_min)
-
             python_version = Version.from_str(meta["python_version"])
+            # Only keep latest Pyodide version of each Python version
+            if python_version in python_version_seen:
+                continue
+
             # Find xbuildenv asset
             for asset in release["assets"]:
                 if asset["name"].startswith("xbuildenv"):
                     break
+            else:
+                # not found: should not happen but just in case
+                continue
+
+            python_version_seen.add(python_version)
 
             url = asset["browser_download_url"]
             results.append(
