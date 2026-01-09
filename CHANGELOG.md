@@ -3,6 +3,19 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.24
+
+Released on 2026-01-09.
+
+### Bug fixes
+
+- Fix handling of `UV_NO_SYNC=1 uv run ...` ([#17391](https://github.com/astral-sh/uv/pull/17391))
+- Rebuild dynamic distribution when version changes with `--no-cache` ([#17387](https://github.com/astral-sh/uv/pull/17387))
+
+### Documentation
+
+- Add Rust language classifier ([#17389](https://github.com/astral-sh/uv/pull/17389))
+
 ## 0.9.23
 
 Released on 2026-01-09.
