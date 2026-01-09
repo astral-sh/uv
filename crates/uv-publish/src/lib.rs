@@ -680,6 +680,7 @@ pub async fn upload_two_phase(
     #[derive(Debug, Deserialize)]
     struct ReserveResponse {
         upload_url: Option<String>,
+        upload_headers: Option<FxHashMap<String, String>>,
     }
 
     // Step 1: Reserve an upload slot.
@@ -780,15 +781,21 @@ pub async fn upload_two_phase(
             });
             let file_reader = Body::wrap_stream(ReaderStream::new(reader));
 
-            let result = s3_client
+            let mut request = s3_client
                 .for_host(&s3_url)
                 .raw_client()
                 .put(Url::from(s3_url.clone()))
                 .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-                .header(reqwest::header::CONTENT_LENGTH, file_size)
-                .body(file_reader)
-                .send()
-                .await;
+                .header(reqwest::header::CONTENT_LENGTH, file_size);
+
+            // Add any required headers from the reserve response (e.g., x-amz-tagging).
+            if let Some(headers) = &reserve_response.upload_headers {
+                for (key, value) in headers {
+                    request = request.header(key, value);
+                }
+            }
+
+            let result = request.body(file_reader).send().await;
 
             let response = match result {
                 Ok(response) => {
