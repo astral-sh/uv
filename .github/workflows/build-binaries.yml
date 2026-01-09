@@ -428,7 +428,8 @@ jobs:
             # see https://github.com/astral-sh/ruff/issues/3791
             # and https://github.com/gnzlbg/jemallocator/issues/170#issuecomment-1503228963
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-            manylinux: 2_17
+            # Build fails with 2_17 container: https://github.com/astral-sh/uv/actions/runs/20850906093/job/59905482208?pr=17358
+            manylinux: 2_28
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
             manylinux: 2_17
@@ -989,7 +990,8 @@ jobs:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: --release --locked --out dist --features self-update --compatibility pypi
+          # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
+          args: --release --locked --out dist --features self-update --compatibility 2_17 --compatibility pypi
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
