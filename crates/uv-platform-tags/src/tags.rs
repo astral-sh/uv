@@ -401,7 +401,10 @@ impl Implementation {
     fn language_tag(self, python_version: (u8, u8)) -> LanguageTag {
         match self {
             // Ex) `cp39`
-            Self::CPython { .. } => LanguageTag::CPython { python_version },
+            Self::CPython { .. } => LanguageTag::CPython {
+                major: python_version.0,
+                minor: Some(python_version.1),
+            },
             // Ex) `pp39`
             Self::PyPy => LanguageTag::PyPy { python_version },
             // Ex) `graalpy310`
