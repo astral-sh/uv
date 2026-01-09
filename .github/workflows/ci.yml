@@ -2987,9 +2987,7 @@ jobs:
           name: benchmarks-walltime
 
       - name: "Restore binary permissions"
-        run: |
-          chmod +x target/codspeed/profiling/uv
-          chmod +x target/codspeed/profiling/deps/*
+        run: chmod -R +x target/codspeed
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@346a2d8a8d9d38909abd0bc3d23f773110f076ad # v4.4.1
