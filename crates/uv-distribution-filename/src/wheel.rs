@@ -152,6 +152,21 @@ impl WheelFilename {
         self.tags.build_tag()
     }
 
+    /// Create a new [`WheelFilename`] with the given platform tags.
+    #[must_use]
+    pub fn with_platform_tags(&self, platform_tags: &[PlatformTag]) -> Self {
+        Self {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            tags: WheelTag::new(
+                self.build_tag().cloned(),
+                self.python_tags(),
+                self.abi_tags(),
+                platform_tags,
+            ),
+        }
+    }
+
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
         // The wheel stem should not contain the `.whl` extension.
@@ -274,7 +289,7 @@ impl WheelFilename {
                         .map(PlatformTag::from_str)
                         .filter_map(Result::ok)
                         .collect(),
-                    repr: repr.into(),
+                    repr: Some(repr.into()),
                 }),
             }
         };
@@ -469,5 +484,22 @@ mod tests {
             "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
         insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
+    }
+
+    #[test]
+    fn with_platform_tags() {
+        use uv_platform_tags::BinaryFormat;
+
+        let filename =
+            WheelFilename::from_str("foo-1.0-cp311-cp311-macosx_10_9_x86_64.whl").unwrap();
+        let new_filename = filename.with_platform_tags(&[PlatformTag::Macos {
+            major: 11,
+            minor: 0,
+            binary_format: BinaryFormat::X86_64,
+        }]);
+        assert_eq!(
+            new_filename.to_string(),
+            "foo-1.0-cp311-cp311-macosx_11_0_x86_64.whl"
+        );
     }
 }

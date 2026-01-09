@@ -9,11 +9,13 @@ use tracing::trace;
 
 pub use crate::arch::{Arch, ArchVariant};
 pub use crate::libc::{Libc, LibcDetectionError, LibcVersion};
+pub use crate::macos::MacOSVersion;
 pub use crate::os::Os;
 
 mod arch;
 mod cpuinfo;
 mod libc;
+mod macos;
 mod os;
 
 #[derive(Error, Debug)]
