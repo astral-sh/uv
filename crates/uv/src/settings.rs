@@ -620,6 +620,7 @@ impl RunSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -677,7 +678,7 @@ impl RunSettings {
             all_packages,
             package,
             no_project,
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
             python_platform,
