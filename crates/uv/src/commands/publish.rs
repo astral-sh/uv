@@ -141,7 +141,14 @@ pub(crate) async fn publish(
         .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
         .build();
-    let unauthenticated_client = client_builder
+    // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
+    // and default timeouts.
+    let oidc_client = client_builder
+        .clone()
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .build();
+    // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
+    let s3_client = client_builder
         .clone()
         .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
@@ -160,7 +167,7 @@ pub(crate) async fn publish(
         trusted_publishing,
         keyring_provider,
         &token_store,
-        &unauthenticated_client,
+        &oidc_client,
         &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
@@ -252,7 +259,7 @@ pub(crate) async fn publish(
                 &form_metadata,
                 &publish_url,
                 &upload_client,
-                &unauthenticated_client,
+                &s3_client,
                 retry_policy,
                 &credentials,
                 // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
@@ -351,7 +358,7 @@ async fn gather_credentials(
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     token_store: &PyxTokenStore,
-    unauthenticated_client: &BaseClient,
+    oidc_client: &BaseClient,
     base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
@@ -401,7 +408,7 @@ async fn gather_credentials(
         keyring_provider,
         trusted_publishing,
         &publish_url,
-        unauthenticated_client,
+        oidc_client,
     )
     .await?;
 
