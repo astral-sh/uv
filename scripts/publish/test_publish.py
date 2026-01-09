@@ -199,6 +199,8 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
 
 # Temporarily disable codeberg on CI due to unreliability.
 all_targets.pop("codeberg", None)
+# Temporarily disable pyx staging tests due to broken environment.
+all_targets.pop("pyx-token", None)
 
 
 def get_latest_version(target: str, client: httpx.Client) -> Version | None:
