@@ -8,7 +8,7 @@ use windows::Win32::{
     Foundation::{
         CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
-    Storage::FileSystem::{GetFileType, FILE_TYPE_PIPE},
+    Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
     System::Console::{
         GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
     },
