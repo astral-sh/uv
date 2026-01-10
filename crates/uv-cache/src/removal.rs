@@ -62,6 +62,14 @@ impl Removal {
         reporter: Option<&dyn CleanReporter>,
         skip_locked_file: bool,
     ) -> io::Result<()> {
+        #[cfg(windows)]
+        let verbatim_path = {
+            // Use a verbatim path so traversal and deletion handle Windows special filenames.
+            to_verbatim_path(path)
+        };
+        #[cfg(windows)]
+        let path = verbatim_path.as_ref();
+
         let metadata = match fs_err::symlink_metadata(path) {
             Ok(metadata) => metadata,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -253,13 +261,8 @@ fn to_verbatim_path(path: &Path) -> std::borrow::Cow<'_, Path> {
 }
 
 /// Like [`fs_err::remove_file`], but attempts to change the permissions to force the file to be
-/// deleted (if it is readonly). On Windows, also attempts to use extended-length paths to handle
-/// files with special characters (like trailing dots).
+/// deleted (if it is readonly).
 fn remove_file(path: &Path) -> io::Result<()> {
-    remove_file_impl(path, true)
-}
-
-fn remove_file_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
     match fs_err::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err)
@@ -268,36 +271,13 @@ fn remove_file_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
         {
             fs_err::remove_file(path)
         }
-        Err(err)
-            if cfg!(windows)
-                && retry_verbatim
-                && (err.kind() == io::ErrorKind::NotFound
-                    || err.kind() == io::ErrorKind::InvalidInput) =>
-        {
-            // On Windows, files with special characters (like trailing dots) may fail with
-            // NotFound or InvalidInput errors due to path normalization. Try using the
-            // verbatim path prefix (\\?\) to bypass this normalization.
-            #[cfg(windows)]
-            {
-                let verbatim_path = to_verbatim_path(path);
-                if verbatim_path.as_ref() != path {
-                    return remove_file_impl(verbatim_path.as_ref(), false).or(Err(err));
-                }
-            }
-            Err(err)
-        }
         Err(err) => Err(err),
     }
 }
 
 /// Like [`fs_err::remove_dir`], but attempts to change the permissions to force the directory to
-/// be deleted (if it is readonly). On Windows, also attempts to use extended-length paths to handle
-/// directories with special characters (like trailing dots).
+/// be deleted (if it is readonly).
 fn remove_dir(path: &Path) -> io::Result<()> {
-    remove_dir_impl(path, true)
-}
-
-fn remove_dir_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
     match fs_err::remove_dir(path) {
         Ok(()) => Ok(()),
         Err(err)
@@ -306,33 +286,13 @@ fn remove_dir_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
         {
             fs_err::remove_dir(path)
         }
-        Err(err)
-            if cfg!(windows)
-                && retry_verbatim
-                && (err.kind() == io::ErrorKind::NotFound
-                    || err.kind() == io::ErrorKind::InvalidInput) =>
-        {
-            #[cfg(windows)]
-            {
-                let verbatim_path = to_verbatim_path(path);
-                if verbatim_path.as_ref() != path {
-                    return remove_dir_impl(verbatim_path.as_ref(), false).or(Err(err));
-                }
-            }
-            Err(err)
-        }
         Err(err) => Err(err),
     }
 }
 
 /// Like [`fs_err::remove_dir_all`], but attempts to change the permissions to force the directory
-/// to be deleted (if it is readonly). On Windows, also attempts to use extended-length paths to
-/// handle directories with special characters (like trailing dots).
+/// to be deleted (if it is readonly).
 fn remove_dir_all(path: &Path) -> io::Result<()> {
-    remove_dir_all_impl(path, true)
-}
-
-fn remove_dir_all_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
     match fs_err::remove_dir_all(path) {
         Ok(()) => Ok(()),
         Err(err)
@@ -340,21 +300,6 @@ fn remove_dir_all_impl(path: &Path, retry_verbatim: bool) -> io::Result<()> {
                 && set_readable(path).unwrap_or(false) =>
         {
             fs_err::remove_dir_all(path)
-        }
-        Err(err)
-            if cfg!(windows)
-                && retry_verbatim
-                && (err.kind() == io::ErrorKind::NotFound
-                    || err.kind() == io::ErrorKind::InvalidInput) =>
-        {
-            #[cfg(windows)]
-            {
-                let verbatim_path = to_verbatim_path(path);
-                if verbatim_path.as_ref() != path {
-                    return remove_dir_all_impl(verbatim_path.as_ref(), false).or(Err(err));
-                }
-            }
-            Err(err)
         }
         Err(err) => Err(err),
     }
