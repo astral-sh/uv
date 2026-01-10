@@ -8,6 +8,7 @@ use windows::Win32::{
     Foundation::{
         CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
+    Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
     System::Console::{
         GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
     },
@@ -345,6 +346,9 @@ fn close_handles(si: &STARTUPINFOA) {
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
         if let Ok(handle) = unsafe { GetStdHandle(std_handle) } {
+            if handle.is_invalid() || unsafe { GetFileType(handle) } != FILE_TYPE_PIPE {
+                continue;
+            }
             unsafe { CloseHandle(handle) }.unwrap_or_else(|_| {
                 warn!("Failed to close standard device handle {}", handle.0 as u32);
             });
