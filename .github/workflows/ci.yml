@@ -2922,12 +2922,12 @@ jobs:
       - name: "Validate embedded Python install"
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
 
-  benchmarks-walltime:
-    name: "benchmarks | walltime aarch64 linux"
-    runs-on: codspeed-macro
+  benchmarks-walltime-build:
+    name: "benchmarks | walltime build"
+    runs-on: depot-ubuntu-22.04-arm-4
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -2953,7 +2953,41 @@ jobs:
           cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling -p uv-bench
+        run: cargo codspeed build -m walltime --profile profiling -p uv-bench
+
+      - name: "Upload benchmark artifacts"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: benchmarks-walltime
+          path: |
+            target/codspeed
+            .cache
+            .venv
+          retention-days: 1
+
+  benchmarks-walltime-run:
+    name: "benchmarks | walltime aarch64 linux"
+    runs-on: codspeed-macro
+    needs: benchmarks-walltime-build
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Branch"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Install codspeed"
+        uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
+        with:
+          tool: cargo-codspeed
+
+      - name: "Download benchmark artifacts"
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: benchmarks-walltime
+
+      - name: "Restore binary permissions"
+        run: chmod -R +x target/codspeed
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@346a2d8a8d9d38909abd0bc3d23f773110f076ad # v4.4.1
