@@ -171,7 +171,12 @@ pub enum CanonicalMarkerListPair {
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
     /// For leniency, preserve invalid values.
-    Arbitrary { key: MarkerValueList, value: String },
+    Arbitrary {
+        /// The list key.
+        key: MarkerValueList,
+        /// The string value.
+        value: String,
+    },
 }
 
 impl CanonicalMarkerListPair {

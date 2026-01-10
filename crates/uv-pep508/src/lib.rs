@@ -32,11 +32,12 @@ use uv_normalize::{ExtraName, PackageName};
 
 use crate::cursor::Cursor;
 pub use crate::marker::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
-    ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
-    MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
-    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
-    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion, ContainerOperator, ContainsMarkerTree, ExtraMarkerTree,
+    ExtraOperator, InMarkerTree, MarkerEnvironment, MarkerEnvironmentBuilder, MarkerExpression,
+    MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeKind, MarkerValue, MarkerValueExtra,
+    MarkerValueList, MarkerValueString, MarkerValueVersion, MarkerWarningKind, StringMarkerTree,
+    StringVersion, VersionMarkerTree,
 };
 pub use crate::origin::RequirementOrigin;
 #[cfg(feature = "non-pep508-extensions")]
