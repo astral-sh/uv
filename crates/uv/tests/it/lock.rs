@@ -7648,7 +7648,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "c"
         version = "0.1.0"
-        source = { directory = "c" }
+        source = { directory = "[TEMP_DIR]/c" }
         "#
         );
     });
@@ -8908,7 +8908,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v1" }
+        source = { directory = "[TEMP_DIR]/v1" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -8922,7 +8922,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v2" }
+        source = { directory = "[TEMP_DIR]/v2" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
@@ -8947,8 +8947,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
-            { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
@@ -12776,7 +12776,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { path = "workspace.zip" }
+        source = { path = "[TEMP_DIR]/workspace.zip" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -12901,7 +12901,7 @@ fn lock_sources_source_tree() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { directory = "workspace" }
+        source = { directory = "[TEMP_DIR]/workspace" }
         dependencies = [
             { name = "anyio" },
         ]
