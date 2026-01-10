@@ -62,6 +62,14 @@ impl Removal {
         reporter: Option<&dyn CleanReporter>,
         skip_locked_file: bool,
     ) -> io::Result<()> {
+        #[cfg(windows)]
+        let verbatim_path = {
+            // Use a verbatim path so traversal and deletion handle Windows special filenames.
+            to_verbatim_path(path)
+        };
+        #[cfg(windows)]
+        let path = verbatim_path.as_ref();
+
         let metadata = match fs_err::symlink_metadata(path) {
             Ok(metadata) => metadata,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -212,6 +220,46 @@ fn set_not_readonly(path: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
+/// Convert a path to a verbatim path on Windows.
+///
+/// On Windows, the verbatim path prefix (`\\?\`) allows operating on paths that:
+/// - Contain special characters (like trailing dots or spaces) that are normally invalid
+/// - Exceed the `MAX_PATH` limit
+#[cfg(windows)]
+fn to_verbatim_path(path: &Path) -> std::borrow::Cow<'_, Path> {
+    use std::path::{Component, PathBuf, Prefix};
+
+    let Some(Component::Prefix(prefix)) = path.components().next() else {
+        // Relative path or no prefix, return unchanged
+        return std::borrow::Cow::Borrowed(path);
+    };
+
+    match prefix.kind() {
+        // Already a verbatim path, return as-is
+        Prefix::Verbatim(_) | Prefix::VerbatimDisk(_) | Prefix::VerbatimUNC(_, _) => {
+            std::borrow::Cow::Borrowed(path)
+        }
+        // UNC path: \\server\share\... -> \\?\UNC\server\share\...
+        Prefix::UNC(server, share) => {
+            let suffix: PathBuf = path.components().skip(1).collect();
+            let mut verbatim = PathBuf::from(r"\\?\UNC");
+            verbatim.push(server);
+            verbatim.push(share);
+            verbatim.push(suffix);
+            std::borrow::Cow::Owned(verbatim)
+        }
+        // Disk path: C:\... -> \\?\C:\...
+        Prefix::Disk(_) => {
+            use std::ffi::OsString;
+            let mut verbatim = OsString::from(r"\\?\");
+            verbatim.push(path.as_os_str());
+            std::borrow::Cow::Owned(PathBuf::from(verbatim))
+        }
+        // DeviceNS path: \\.\device -> not typically used, return as-is
+        Prefix::DeviceNS(_) => std::borrow::Cow::Borrowed(path),
+    }
+}
+
 /// Like [`fs_err::remove_file`], but attempts to change the permissions to force the file to be
 /// deleted (if it is readonly).
 fn remove_file(path: &Path) -> io::Result<()> {
@@ -254,5 +302,219 @@ fn remove_dir_all(path: &Path) -> io::Result<()> {
             fs_err::remove_dir_all(path)
         }
         Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_remove_normal_file() {
+        // Sanity check: normal file removal should still work
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_file = temp_dir.path().join("normal_file.txt");
+
+        fs_err::write(&test_file, "test").expect("Failed to write test file");
+        assert!(test_file.exists(), "Test file should exist before removal");
+
+        remove_file(&test_file).expect("Failed to remove normal file");
+        assert!(!test_file.exists(), "File should be deleted after removal");
+    }
+
+    #[test]
+    fn test_remove_readonly_file() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_file = temp_dir.path().join("readonly_file.txt");
+
+        fs_err::write(&test_file, "test").expect("Failed to write test file");
+
+        // Make the file readonly
+        let mut perms = fs_err::metadata(&test_file)
+            .expect("Failed to get metadata")
+            .permissions();
+        perms.set_readonly(true);
+        fs_err::set_permissions(&test_file, perms).expect("Failed to set permissions");
+
+        assert!(test_file.exists(), "Test file should exist before removal");
+
+        remove_file(&test_file).expect("Failed to remove readonly file");
+        assert!(
+            !test_file.exists(),
+            "Readonly file should be deleted after removal"
+        );
+    }
+
+    #[test]
+    fn test_remove_normal_dir() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_dir = temp_dir.path().join("test_dir");
+
+        fs_err::create_dir(&test_dir).expect("Failed to create test dir");
+        assert!(test_dir.exists(), "Test dir should exist before removal");
+
+        remove_dir(&test_dir).expect("Failed to remove dir");
+        assert!(!test_dir.exists(), "Dir should be deleted after removal");
+    }
+
+    #[test]
+    fn test_remove_dir_all_with_contents() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_dir = temp_dir.path().join("test_dir");
+        let sub_dir = test_dir.join("sub_dir");
+        let test_file = test_dir.join("file.txt");
+        let sub_file = sub_dir.join("sub_file.txt");
+
+        fs_err::create_dir_all(&sub_dir).expect("Failed to create dirs");
+        fs_err::write(&test_file, "test").expect("Failed to write test file");
+        fs_err::write(&sub_file, "sub test").expect("Failed to write sub file");
+
+        assert!(test_dir.exists(), "Test dir should exist before removal");
+
+        remove_dir_all(&test_dir).expect("Failed to remove dir_all");
+        assert!(
+            !test_dir.exists(),
+            "Dir and contents should be deleted after removal"
+        );
+    }
+
+    #[test]
+    fn test_rm_rf_file() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_file = temp_dir.path().join("test_file.txt");
+
+        fs_err::write(&test_file, "hello world").expect("Failed to write test file");
+        assert!(test_file.exists(), "Test file should exist before removal");
+
+        let removal = rm_rf(&test_file).expect("Failed to rm_rf file");
+        assert!(!test_file.exists(), "File should be deleted after rm_rf");
+        assert_eq!(removal.num_files, 1);
+        assert_eq!(removal.num_dirs, 0);
+        assert_eq!(removal.total_bytes, 11); // "hello world" = 11 bytes
+    }
+
+    #[test]
+    fn test_rm_rf_directory() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let test_dir = temp_dir.path().join("test_dir");
+        let sub_dir = test_dir.join("sub_dir");
+        let file1 = test_dir.join("file1.txt");
+        let file2 = sub_dir.join("file2.txt");
+
+        fs_err::create_dir_all(&sub_dir).expect("Failed to create dirs");
+        fs_err::write(&file1, "test1").expect("Failed to write file1");
+        fs_err::write(&file2, "test2").expect("Failed to write file2");
+
+        assert!(test_dir.exists(), "Test dir should exist before removal");
+
+        let removal = rm_rf(&test_dir).expect("Failed to rm_rf directory");
+        assert!(!test_dir.exists(), "Dir should be deleted after rm_rf");
+        assert_eq!(removal.num_files, 2);
+        assert!(removal.num_dirs >= 1); // At least the subdirectory
+        assert_eq!(removal.total_bytes, 10); // "test1" + "test2" = 10 bytes
+    }
+
+    #[test]
+    fn test_rm_rf_nonexistent() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let nonexistent = temp_dir.path().join("nonexistent");
+
+        // Should not error on nonexistent path
+        let removal = rm_rf(&nonexistent).expect("rm_rf should succeed on nonexistent path");
+        assert_eq!(removal.num_files, 0);
+        assert_eq!(removal.num_dirs, 0);
+        assert_eq!(removal.total_bytes, 0);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_absolute() {
+        let path = Path::new(r"C:\Users\test\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert!(
+            verbatim.to_string_lossy().starts_with(r"\\?\"),
+            "Verbatim path should start with \\\\?\\, got: {}",
+            verbatim.display()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_already_verbatim() {
+        let path = Path::new(r"\\?\C:\Users\test\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "Already verbatim path should be returned as-is"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_verbatim_disk() {
+        let path = Path::new(r"\\?\C:\Users\test\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "VerbatimDisk path should be returned as-is"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_verbatim_unc() {
+        let path = Path::new(r"\\?\UNC\server\share\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "VerbatimUNC path should be returned as-is"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_unc() {
+        let path = Path::new(r"\\server\share\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert!(
+            verbatim.to_string_lossy().starts_with(r"\\?\UNC\"),
+            "UNC path should be converted to verbatim UNC format, got: {}",
+            verbatim.display()
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_to_verbatim_path_relative() {
+        let path = Path::new(r"relative\path\file.txt");
+        let verbatim = to_verbatim_path(path);
+        assert_eq!(
+            verbatim.as_ref(),
+            path,
+            "Relative path should be returned unchanged"
+        );
+    }
+
+    #[test]
+    fn test_removal_add_assign() {
+        let mut removal1 = Removal {
+            num_files: 5,
+            num_dirs: 2,
+            total_bytes: 1000,
+        };
+        let removal2 = Removal {
+            num_files: 3,
+            num_dirs: 1,
+            total_bytes: 500,
+        };
+
+        removal1 += removal2;
+
+        assert_eq!(removal1.num_files, 8);
+        assert_eq!(removal1.num_dirs, 3);
+        assert_eq!(removal1.total_bytes, 1500);
     }
 }
