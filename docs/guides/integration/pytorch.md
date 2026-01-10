@@ -244,6 +244,12 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 As a complete example, the following project would use PyTorch's CPU-only builds on all platforms:
 
+!!! note
+
+    The CPU index provides wheels with different local version suffixes depending on the platform:
+    `+cpu` for x86_64 (Linux) and AMD64 (Windows), but no suffix for aarch64 (Linux) and arm64 (macOS).
+    As such, `torchvision` requires platform-specific version specifiers to match the available wheels.
+
 ```toml
 [project]
 name = "project"
@@ -251,7 +257,21 @@ version = "0.1.0"
 requires-python = ">=3.14.0"
 dependencies = [
   "torch>=2.9.1",
-  "torchvision>=0.24.1",
+  # Linux x86_64
+  "torchvision==0.24.1+cpu; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  # Windows x86_64 (AMD64)
+  "torchvision==0.24.1+cpu; sys_platform == 'win32' and platform_machine == 'AMD64'",
+  # Linux aarch64, macOS arm64: PyPI default wheel
+  "torchvision==0.24.1; (sys_platform == 'linux' and platform_machine == 'aarch64') or (sys_platform == 'darwin' and platform_machine == 'arm64')",
+]
+
+[tool.uv]
+# Add environments constraint to avoid resolution conflicts between dependencies and sources markers.
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'linux' and platform_machine == 'aarch64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'win32' and platform_machine == 'AMD64'",
 ]
 
 [tool.uv.sources]
@@ -389,7 +409,12 @@ dependencies = []
 [project.optional-dependencies]
 cpu = [
   "torch>=2.9.1",
-  "torchvision>=0.24.1",
+  # Linux x86_64
+  "torchvision==0.24.1+cpu; sys_platform == 'linux' and platform_machine == 'x86_64'",
+  # Windows x86_64 (AMD64)
+  "torchvision==0.24.1+cpu; sys_platform == 'win32' and platform_machine == 'AMD64'",
+  # Linux aarch64, macOS arm64: PyPI default wheel
+  "torchvision==0.24.1; (sys_platform == 'linux' and platform_machine == 'aarch64') or (sys_platform == 'darwin' and platform_machine == 'arm64')",
 ]
 cu128 = [
   "torch>=2.9.1",
