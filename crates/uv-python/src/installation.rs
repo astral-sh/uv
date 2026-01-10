@@ -75,17 +75,42 @@ impl PythonInstallation {
 
     /// Find an installed [`PythonInstallation`] that satisfies a requested version, if the request cannot
     /// be satisfied, fallback to the best available Python installation.
-    pub fn find_best(
+    pub async fn find_best(
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
-        download_list: &ManagedPythonDownloadList,
+        python_downloads: PythonDownloads,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
+        reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_best_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, download_list);
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build();
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        let downloads_enabled = preference.allows_managed()
+            && python_downloads.is_automatic()
+            && client_builder.connectivity.is_online();
+        let installation = find_best_python_installation(
+            request,
+            environments,
+            preference,
+            downloads_enabled,
+            &download_list,
+            &client,
+            &retry_policy,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+            preview,
+        )
+        .await??;
+        installation.warn_if_outdated_prerelease(request, &download_list);
         Ok(installation)
     }
 
