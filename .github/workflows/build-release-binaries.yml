@@ -2,30 +2,17 @@
 #
 # Generates both wheels (for PyPI) and archived binaries (for GitHub releases).
 #
-# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
-# artifacts job within `cargo-dist`.
+# Called from:
+# - .github/workflows/ci.yml (when release-relevant files change)
+# - .github/workflows/release.yml (as a local artifacts job within `cargo-dist`)
 name: "Build release binaries"
 
 on:
   workflow_call:
     inputs:
       plan:
-        required: true
+        required: false
         type: string
-  pull_request:
-    paths:
-      # We want to ensure that the maturin builds still work when we change
-      # Project metadata
-      - pyproject.toml
-      - Cargo.toml
-      - .cargo/config.toml
-      - crates/uv-build/Cargo.toml
-      - crates/uv-build/pyproject.toml
-      # Toolchain or dependency versions
-      - Cargo.lock
-      - rust-toolchain.toml
-      # And the workflow itself
-      - .github/workflows/build-binaries.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
