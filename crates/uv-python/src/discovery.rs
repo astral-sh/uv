@@ -37,7 +37,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenLink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -1039,7 +1039,7 @@ impl Error {
                     false
                 }
                 InterpreterError::NotFound(path)
-                | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
+                | InterpreterError::BrokenLink(BrokenLink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if matches!(source, PythonSource::ActiveEnvironment)
@@ -1114,7 +1114,7 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
                             python_preference: preference,
@@ -1140,7 +1140,7 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
                             python_preference: preference,
