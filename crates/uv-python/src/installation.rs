@@ -251,7 +251,6 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
-        let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
         info!("Fetching requested Python...");
@@ -260,7 +259,7 @@ impl PythonInstallation {
                 client,
                 retry_policy,
                 installations_dir,
-                &scratch_dir,
+                cache,
                 false,
                 python_install_mirror,
                 pypy_install_mirror,

@@ -270,6 +270,12 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      - name: "Seed Python install test cache"
+        run: |
+          uv python install \
+            3.9.5 3.10.16 3.10.17 3.12.4 3.12.5 3.12.6 3.12.7 3.12.8 3.12.9 3.12.11 \
+            3.13.1 3.13t 3.13d 3.13td 3.14.0rc2 3.14.0rc3 3.14.0 3.14t 3.15
+
       - name: "Install secret service"
         run: |
           sudo apt update -y
@@ -323,6 +329,12 @@ jobs:
       - name: "Install required Python versions"
         run: uv python install
 
+      - name: "Seed Python install test cache"
+        run: |
+          uv python install \
+            3.9.5 3.10.16 3.10.17 3.12.4 3.12.5 3.12.6 3.12.7 3.12.8 3.12.9 3.12.11 \
+            3.13.1 3.13t 3.13d 3.13td 3.14.0rc2 3.14.0rc3 3.14.0 3.14t 3.15
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@a416ddeedbd372e614cc1386e8b642692f66865e # v2.57.1
         with:
@@ -365,6 +377,12 @@ jobs:
 
       - name: "Install required Python versions"
         run: uv python install
+
+      - name: "Seed Python install test cache"
+        run: |
+          uv python install `
+            3.9.5 3.10.16 3.10.17 3.12.4 3.12.5 3.12.6 3.12.7 3.12.8 3.12.9 3.12.11 `
+            3.13.1 3.13t 3.14.0rc2 3.14.0rc3 3.14.0 3.14t 3.15
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:

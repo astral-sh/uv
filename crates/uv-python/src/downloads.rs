@@ -7,6 +7,8 @@ use std::str::FromStr;
 use std::task::{Context, Poll};
 use std::{env, io};
 
+use walkdir::WalkDir;
+
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -20,6 +22,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -1065,6 +1068,141 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
     Ok(buf)
 }
 
+/// Tracks the state of hard link/copy fallback attempts.
+///
+/// Hard linking might not be supported, but we can't detect this ahead of time,
+/// so we'll try hard linking the first file - if this succeeds we'll know later
+/// errors are not due to lack of OS/filesystem support. If it fails, we'll switch
+/// to copying for the rest of the operation.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Attempt {
+    #[default]
+    Initial,
+    Subsequent,
+    UseCopyFallback,
+}
+
+/// Check if a file should be copied instead of hard-linked.
+///
+/// These files are modified after installation and must be copied to avoid
+/// corrupting the cache:
+/// - `_sysconfigdata_*.py` - patched by `ensure_sysconfig_patched()`
+/// - `*.pc` files in `pkgconfig/` directories - patched by sysconfig
+/// - `libpython*.dylib` on macOS - patched by `ensure_dylib_patched()`
+fn should_copy_python_distribution_file(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    let extension = path.extension().and_then(|e| e.to_str());
+
+    // _sysconfigdata_*.py files
+    if file_name.starts_with("_sysconfigdata_")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+    {
+        return true;
+    }
+
+    // *.pc files in pkgconfig directories
+    if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("pc")) {
+        if let Some(parent) = path.parent() {
+            if parent.file_name().and_then(|n| n.to_str()) == Some("pkgconfig") {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // libpython*.dylib on macOS
+    #[cfg(target_os = "macos")]
+    if file_name.starts_with("libpython")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("dylib"))
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Recursively hard link or copy a directory tree from `src` to `dst`.
+///
+/// Tries hard linking first for efficiency, falling back to copying if hard links
+/// are not supported (e.g., cross-filesystem operations).
+///
+/// Files that will be patched after installation (sysconfig, pkgconfig, dylib) are
+/// always copied to avoid modifying the cached source.
+fn hardlink_or_copy_dir(src: &Path, dst: &Path) -> Result<(), Error> {
+    let mut attempt = Attempt::Initial;
+
+    for entry in WalkDir::new(src) {
+        let entry = entry.map_err(|e| Error::ReadError {
+            dir: src.to_path_buf(),
+            err: io::Error::other(e),
+        })?;
+
+        let path = entry.path();
+        let relative = path.strip_prefix(src).expect("walkdir starts with root");
+        let target = dst.join(relative);
+
+        if entry.file_type().is_dir() {
+            fs_err::create_dir_all(&target)?;
+            continue;
+        }
+
+        // Always copy files that will be patched to avoid modifying the cache
+        if should_copy_python_distribution_file(path) {
+            fs_err::copy(path, &target).map_err(|err| Error::CopyError {
+                to: target.clone(),
+                err,
+            })?;
+            continue;
+        }
+
+        match attempt {
+            Attempt::Initial => {
+                if let Err(err) = fs_err::hard_link(path, &target) {
+                    debug!(
+                        "Failed to hard link `{}` to `{}`: {}; falling back to copy",
+                        path.display(),
+                        target.display(),
+                        err
+                    );
+                    attempt = Attempt::UseCopyFallback;
+                    fs_err::copy(path, &target).map_err(|err| Error::CopyError {
+                        to: target.clone(),
+                        err,
+                    })?;
+                } else {
+                    attempt = Attempt::Subsequent;
+                }
+            }
+            Attempt::Subsequent => {
+                if let Err(err) = fs_err::hard_link(path, &target) {
+                    // Unexpected failure after initial success - still fall back to copy
+                    debug!(
+                        "Unexpected hard link failure for `{}`: {}; falling back to copy",
+                        path.display(),
+                        err
+                    );
+                    attempt = Attempt::UseCopyFallback;
+                    fs_err::copy(path, &target).map_err(|err| Error::CopyError {
+                        to: target.clone(),
+                        err,
+                    })?;
+                }
+            }
+            Attempt::UseCopyFallback => {
+                fs_err::copy(path, &target).map_err(|err| Error::CopyError {
+                    to: target.clone(),
+                    err,
+                })?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl ManagedPythonDownload {
     /// Return a display type that includes the build information.
     pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
@@ -1092,13 +1230,13 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution, retrying on failure.
-    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, cache, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
         client: &BaseClient,
         retry_policy: &ExponentialBackoff,
         installation_dir: &Path,
-        scratch_dir: &Path,
+        cache: &Cache,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -1114,7 +1252,7 @@ impl ManagedPythonDownload {
                 .fetch(
                     client,
                     installation_dir,
-                    scratch_dir,
+                    cache,
                     reinstall,
                     python_install_mirror,
                     pypy_install_mirror,
@@ -1142,12 +1280,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution.
-    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, cache, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &BaseClient,
         installation_dir: &Path,
-        scratch_dir: &Path,
+        cache: &Cache,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -1178,95 +1316,105 @@ impl ManagedPythonDownload {
         let ext = SourceDistExtension::from_path(&filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
 
-        let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
+        // Use the cache directory from the environment variable if set, otherwise use the default
+        // cache bucket.
+        let python_builds_dir = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| cache.bucket(CacheBucket::Python));
 
-        if let Some(python_builds_dir) =
-            env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
-        {
-            let python_builds_dir = PathBuf::from(python_builds_dir);
-            fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256.as_deref() {
-                Some(sha) => {
-                    // Shorten the hash to avoid too-long-filename errors
-                    &sha[..9]
-                }
-                None => "none",
-            };
-            let target_cache_file = python_builds_dir.join(format!("{hash_prefix}-{filename}"));
+        fs_err::create_dir_all(&python_builds_dir)?;
 
-            // Download the archive to the cache, or return a reader if we have it in cache.
-            // TODO(konsti): We should "tee" the write so we can do the download-to-cache and unpacking
-            // in one step.
-            let (reader, size): (Box<dyn AsyncRead + Unpin>, Option<u64>) =
-                match fs_err::tokio::File::open(&target_cache_file).await {
-                    Ok(file) => {
-                        debug!(
-                            "Extracting existing `{}`",
-                            target_cache_file.simplified_display()
-                        );
-                        let size = file.metadata().await?.len();
-                        let reader = Box::new(tokio::io::BufReader::new(file));
-                        (reader, Some(size))
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                        // Point the user to which file is missing where and where to download it
-                        if client.connectivity().is_offline() {
-                            return Err(Error::OfflinePythonMissing {
-                                file: Box::new(self.key().clone()),
-                                url: Box::new(url),
-                                python_builds_dir,
-                            });
-                        }
+        let hash_prefix = match self.sha256.as_deref() {
+            Some(sha) => {
+                // Shorten the hash to avoid too-long-filename errors
+                &sha[..9]
+            }
+            None => "none",
+        };
+        let target_cache_file = python_builds_dir.join(format!("{hash_prefix}-{filename}"));
 
-                        self.download_archive(
-                            &url,
-                            client,
-                            reporter,
-                            &python_builds_dir,
-                            &target_cache_file,
-                        )
-                        .await?;
+        // Strip the archive extension for the unpacked directory name
+        let basename = filename
+            .strip_suffix(&format!(".{}", ext.name()))
+            .expect("filename was parsed with this extension");
+        let target_unpacked = python_builds_dir.join(format!("{hash_prefix}-{basename}"));
 
-                        debug!("Extracting `{}`", target_cache_file.simplified_display());
-                        let file = fs_err::tokio::File::open(&target_cache_file).await?;
-                        let size = file.metadata().await?.len();
-                        let reader = Box::new(tokio::io::BufReader::new(file));
-                        (reader, Some(size))
-                    }
-                    Err(err) => return Err(err.into()),
-                };
-
-            // Extract the downloaded archive into a temporary directory.
-            self.extract_reader(
-                reader,
-                temp_dir.path(),
-                &filename,
-                ext,
-                size,
-                reporter,
-                Direction::Extract,
-            )
-            .await?;
-        } else {
-            // Avoid overlong log lines
-            debug!("Downloading {url}");
+        // Check if unpacked cache exists first - if so, hard link from it directly
+        if target_unpacked.is_dir() {
             debug!(
-                "Extracting {filename} to temporary location: {}",
-                temp_dir.path().simplified_display()
+                "Using unpacked cache at `{}`",
+                target_unpacked.simplified_display()
             );
 
-            let (reader, size) = read_url(&url, client).await?;
-            self.extract_reader(
-                reader,
-                temp_dir.path(),
-                &filename,
-                ext,
-                size,
-                reporter,
-                Direction::Download,
-            )
-            .await?;
+            // Remove the target if it already exists.
+            if path.is_dir() {
+                debug!("Removing existing directory: {}", path.user_display());
+                fs_err::tokio::remove_dir_all(&path).await?;
+            }
+
+            // Hard link (or copy) from unpacked cache to installation directory
+            hardlink_or_copy_dir(&target_unpacked, &path)?;
+
+            return Ok(DownloadResult::Fetched(path));
         }
+
+        // Create temp dir in the cache directory to ensure same-filesystem renames
+        let temp_dir = tempfile::tempdir_in(&python_builds_dir).map_err(Error::DownloadDirError)?;
+
+        // Download the archive to the cache, or return a reader if we have it in cache.
+        // TODO(konsti): We should "tee" the write so we can do the download-to-cache and unpacking
+        // in one step.
+        let (reader, size): (Box<dyn AsyncRead + Unpin>, Option<u64>) =
+            match fs_err::tokio::File::open(&target_cache_file).await {
+                Ok(file) => {
+                    debug!(
+                        "Extracting existing `{}`",
+                        target_cache_file.simplified_display()
+                    );
+                    let size = file.metadata().await?.len();
+                    let reader = Box::new(tokio::io::BufReader::new(file));
+                    (reader, Some(size))
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // Point the user to which file is missing where and where to download it
+                    if client.connectivity().is_offline() {
+                        return Err(Error::OfflinePythonMissing {
+                            file: Box::new(self.key().clone()),
+                            url: Box::new(url),
+                            python_builds_dir,
+                        });
+                    }
+
+                    self.download_archive(
+                        &url,
+                        client,
+                        reporter,
+                        &python_builds_dir,
+                        &target_cache_file,
+                    )
+                    .await?;
+
+                    debug!("Extracting `{}`", target_cache_file.simplified_display());
+                    let file = fs_err::tokio::File::open(&target_cache_file).await?;
+                    let size = file.metadata().await?.len();
+                    let reader = Box::new(tokio::io::BufReader::new(file));
+                    (reader, Some(size))
+                }
+                Err(err) => return Err(err.into()),
+            };
+
+        // Extract the downloaded archive into a temporary directory.
+        self.extract_reader(
+            reader,
+            temp_dir.path(),
+            &filename,
+            ext,
+            size,
+            reporter,
+            Direction::Extract,
+        )
+        .await?;
 
         // Extract the top-level directory.
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -1320,14 +1468,54 @@ impl ManagedPythonDownload {
             fs_err::tokio::remove_dir_all(&path).await?;
         }
 
-        // Persist it to the target.
-        debug!("Moving {} to {}", extracted.display(), path.user_display());
-        rename_with_retry(extracted, &path)
+        // Save to unpacked cache and hard link to target
+        // Move extracted files to unpacked cache using atomic rename
+        debug!(
+            "Saving to unpacked cache at `{}`",
+            target_unpacked.simplified_display()
+        );
+
+        // Use a temporary name for atomic creation
+        // Note: Don't use `with_extension` as the path contains version dots (e.g., "3.10.19")
+        let temp_unpacked = PathBuf::from(format!(
+            "{}.tmp.{}",
+            target_unpacked.display(),
+            std::process::id()
+        ));
+
+        // Move extracted to temp cache location
+        rename_with_retry(&extracted, &temp_unpacked)
             .await
             .map_err(|err| Error::CopyError {
-                to: path.clone(),
+                to: temp_unpacked.clone(),
                 err,
             })?;
+
+        // Atomic rename to final cache location
+        match fs_err::rename(&temp_unpacked, &target_unpacked) {
+            Ok(()) => {
+                debug!(
+                    "Created unpacked cache at `{}`",
+                    target_unpacked.simplified_display()
+                );
+            }
+            Err(err)
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    || err.kind() == io::ErrorKind::DirectoryNotEmpty =>
+            {
+                // Another process won the race - use theirs and clean up ours
+                debug!("Unpacked cache already exists (concurrent creation)");
+                let _ = fs_err::remove_dir_all(&temp_unpacked);
+            }
+            Err(err) => {
+                // Clean up temp directory on error
+                let _ = fs_err::remove_dir_all(&temp_unpacked);
+                return Err(err.into());
+            }
+        }
+
+        // Hard link (or copy) from unpacked cache to installation directory
+        hardlink_or_copy_dir(&target_unpacked, &path)?;
 
         Ok(DownloadResult::Fetched(path))
     }
