@@ -1645,6 +1645,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
             commands::python_install(
                 &project_dir,
                 args.install_dir,
@@ -1661,6 +1664,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                args.compile_bytecode,
+                &globals.concurrency,
+                &cache,
                 globals.preview,
                 printer,
             )
@@ -1673,6 +1679,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
             let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
 
             commands::python_install(
                 &project_dir,
@@ -1690,6 +1699,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                args.compile_bytecode,
+                &globals.concurrency,
+                &cache,
                 globals.preview,
                 printer,
             )

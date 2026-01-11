@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::{env, path::Path, process::Command};
 
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
@@ -15,6 +16,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use walkdir::WalkDir;
 
 #[test]
 fn python_install() {
@@ -3949,5 +3951,255 @@ fn python_install_upgrade_version_file() {
     error: `uv python install --upgrade` only accepts minor versions, got: 3.12.4
 
     hint: The version request came from a `.python-version` file; change the patch version in the file to upgrade instead
+    ");
+}
+
+#[test]
+fn python_install_compile_bytecode() -> anyhow::Result<()> {
+    fn count_files_by_ext(dir: &Path, extension: &str) -> anyhow::Result<usize> {
+        let mut count = 0;
+        let walker = WalkDir::new(dir).into_iter();
+        for entry in walker {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.metadata()?.is_file() && path.extension().is_some_and(|ext| ext == extension) {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install 3.14 and compile its bytecode
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+
+    // Find the stdlib path for cpython 3.14
+    let bin_path = context
+        .bin_dir
+        .child(format!("python3.14{}", std::env::consts::EXE_SUFFIX));
+
+    #[cfg(unix)]
+    let stdlib = fs_err::read_link(bin_path)?
+        .parent()
+        .context("Python binary should be a child of `bin`")?
+        .parent()
+        .context("`bin` directory should be a child of the installation path")?
+        .join("lib")
+        .join("python3.14");
+    #[cfg(windows)]
+    let stdlib = launcher_path(&bin_path)
+        .parent()
+        .context("Python binary should be a child of the installation path")?
+        .join("Lib");
+
+    // And the count should match
+    let pyc_count = count_files_by_ext(&stdlib, "pyc")?;
+    let py_count = count_files_by_ext(&stdlib, "py")?;
+    assert_eq!(pyc_count, py_count);
+
+    // Attempting to install with --compile-bytecode should (currently)
+    // unconditionally re-run the bytecode compiler
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.14 is already installed
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+
+    // Reinstalling with --compile-bytecode should compile bytecode.
+    uv_snapshot!(context.filters(), context.python_install().arg("--reinstall").arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.2 in [TIME]
+     ~ cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn python_install_compile_bytecode_existing() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // A fresh install should be able to be compiled later
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.14 is already installed
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_compile_bytecode_upgrade() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // An upgrade should also compile bytecode
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0 in [TIME]
+     + cpython-3.14.0-[PLATFORM] (python3.14)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("--compile-bytecode").arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_compile_bytecode_multiple() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should handle installing and compiling multiple versions correctly
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("3.14").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 2 versions in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[cfg(unix)] // Pyodide cannot be used on Windows
+#[test]
+fn python_install_compile_bytecode_pyodide() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should warn on explicit pyodide installation
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("cpython-3.13.2-emscripten-wasm32-musl"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.2 in [TIME]
+     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+    No compatible versions to bytecode compile (skipped 1)
+    ");
+
+    // TODO(tk) There's a bug with python_upgrade when pyodide is installed which leads to
+    // `error: No download found for request: pyodide-3.13-emscripten-wasm32-musl`
+    //// Recompilation where pyodide isn't explicitly specified shouldn't warn
+    //uv_snapshot!(context.filters(), context.python_upgrade().arg("--compile-bytecode"), @r"TODO");
+}
+
+#[test]
+fn python_install_compile_bytecode_graalpy() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should work for graalpy
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.0 in [TIME]
+     + graalpy-3.12.0-[PLATFORM] (python3.12)
+    Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_compile_bytecode_pypy() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_compiled_file_count()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Should work for pypy
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.13 in [TIME]
+     + pypy-3.11.13-[PLATFORM] (python3.11)
+    Bytecode compiled [COUNT] files in [TIME]
     ");
 }
