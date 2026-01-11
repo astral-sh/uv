@@ -1046,6 +1046,12 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
+    /// Set the request body.
+    pub fn body<T: Into<reqwest::Body>>(mut self, body: T) -> Self {
+        self.builder = self.builder.body(body);
+        self
+    }
+
     /// Build a `Request`.
     pub fn build(self) -> reqwest::Result<Request> {
         self.builder.build()
