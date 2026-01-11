@@ -196,7 +196,7 @@ uuid = { version = "1.16.0" }
 version-ranges = { version = "0.1.3", package = "astral-version-ranges" }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0", features = ["regex"] }
-windows = { version = "0.59.0", features = ["std", "Win32_Globalization", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Registry", "Win32_System_IO", "Win32_System_Ioctl"] }
+windows = { version = "0.59.0", features = ["std", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_UI_WindowsAndMessaging"] }
 windows-registry = { version = "0.5.0" }
 wiremock = { version = "0.6.4" }
 wmi = { version = "0.16.0", default-features = false }
