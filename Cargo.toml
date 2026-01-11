@@ -202,7 +202,7 @@ wiremock = { version = "0.6.4" }
 wmi = { version = "0.16.0", default-features = false }
 xz2 = { version = "0.1.7" }
 zeroize = { version = "1.8.1" }
-zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
+zip = { version = ">=2.2.3, <8", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 zstd = { version = "0.13.3" }
 
 # dev-dependencies
