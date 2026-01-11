@@ -597,8 +597,7 @@ class PyodideFinder(Finder):
         releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
 
-        python_version_seen = set()
-        results = []
+        results = {}
         for release in releases:
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
@@ -606,9 +605,6 @@ class PyodideFinder(Finder):
                 continue
 
             python_version = Version.from_str(meta["python_version"])
-            # Only keep latest Pyodide version of each Python version
-            if python_version in python_version_seen:
-                continue
 
             # Find xbuildenv asset
             for asset in release["assets"]:
@@ -618,23 +614,24 @@ class PyodideFinder(Finder):
                 # not found: should not happen but just in case
                 continue
 
-            python_version_seen.add(python_version)
-
             url = asset["browser_download_url"]
-            results.append(
-                PythonDownload(
-                    release=0,
-                    version=python_version,
-                    triple=self.TRIPLE,
-                    flavor=pyodide_version,
-                    implementation=self.implementation,
-                    filename=asset["name"],
-                    url=url,
-                    build=pyodide_version,
-                )
+            download = PythonDownload(
+                release=0,
+                version=python_version,
+                triple=self.TRIPLE,
+                flavor=pyodide_version,
+                implementation=self.implementation,
+                filename=asset["name"],
+                url=url,
+                build=pyodide_version,
             )
 
-        return results
+            # Only keep latest Pyodide version of each Python version
+            # arch/platform are all the same for Pyodide (wasm32, emscripten)
+            if python_version not in results:
+                results[python_version] = download
+
+        return list(results.values())
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         for idx, batch in enumerate(batched(downloads, n)):
