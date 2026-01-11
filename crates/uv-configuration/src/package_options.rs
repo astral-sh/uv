@@ -151,11 +151,9 @@ impl Upgrade {
     pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
         match upgrade {
             Some(true) => Some(Self::All),
-            // TODO(charlie): `--no-upgrade` with `--upgrade-package` should allow the specified
-            // packages to be upgraded. Right now, `--upgrade-package` is silently ignored.
-            Some(false) => Some(Self::None),
+            Some(false) if upgrade_package.is_empty() => Some(Self::None),
             None if upgrade_package.is_empty() => None,
-            None => Some(Self::Packages(upgrade_package.into_iter().fold(
+            Some(false) | None => Some(Self::Packages(upgrade_package.into_iter().fold(
                 FxHashMap::default(),
                 |mut map, requirement| {
                     map.entry(requirement.name.clone())
