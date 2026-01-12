@@ -18,7 +18,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
@@ -549,13 +549,36 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
             let current_tag = tags.python_tag();
 
             if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                // Check if the current Python is free-threaded by looking at the ABI tag.
+                // If it's a CPython ABI tag with gil_disabled, include the 't' suffix.
+                let (current_tag_str, current_pretty, is_free_threaded) =
+                    if let Some(abi_tag) = tags.abi_tag() {
+                        match (current, abi_tag) {
+                            (
+                                LanguageTag::CPython { .. },
+                                AbiTag::CPython {
+                                    gil_disabled: true, ..
+                                },
+                            ) => {
+                                // Use the ABI tag's string representation which includes the 't' suffix
+                                let tag_str = abi_tag.to_string();
+                                // Also update the pretty name to include the 't' suffix
+                                let pretty = current.pretty().map(|p| format!("{p}t"));
+                                (tag_str, pretty, true)
+                            }
+                            _ => (current.to_string(), current.pretty(), false),
+                        }
+                    } else {
+                        (current.to_string(), current.pretty(), false)
+                    };
+
+                let message = if let Some(pretty) = current_pretty {
+                    format!("{} (`{}`)", pretty.cyan(), current_tag_str.cyan())
                 } else {
-                    format!("`{}`", current.cyan())
+                    format!("`{}`", current_tag_str.cyan())
                 };
 
-                Some(format!(
+                let base_message = format!(
                     "The wheel is compatible with {}, but you're using {}",
                     wheel_tags
                         .iter()
@@ -567,7 +590,15 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                         .collect::<Vec<_>>()
                         .join(", "),
                     message
-                ))
+                );
+
+                if is_free_threaded {
+                    Some(format!(
+                        "{base_message}\nNote: Your environment is using free-threaded Python (indicated by the 't' suffix), which is incompatible with GIL-based wheels."
+                    ))
+                } else {
+                    Some(base_message)
+                }
             } else {
                 Some(format!(
                     "The wheel requires {}",
