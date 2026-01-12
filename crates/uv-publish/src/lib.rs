@@ -40,7 +40,10 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
+use crate::trusted_publishing::pyx::PyxPublishingService;
+use crate::trusted_publishing::{
+    TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
+};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -402,6 +405,7 @@ pub async fn check_trusted_publishing(
     username: Option<&str>,
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
+    token_store: &PyxTokenStore,
     trusted_publishing: TrustedPublishing,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -417,9 +421,21 @@ pub async fn check_trusted_publishing(
             }
 
             debug!("Attempting to get a token for trusted publishing");
+
             // Attempt to get a token for trusted publishing.
-            let service = PyPIPublishingService::new(registry, client);
-            match trusted_publishing::get_token(&service).await {
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            };
+
+            match token {
                 // Success: we have a token for trusted publishing.
                 Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
                 // Failed to discover an ambient OIDC token.
@@ -447,11 +463,22 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            let service = PyPIPublishingService::new(registry, client);
-            let Some(token) = trusted_publishing::get_token(&service)
-                .await
-                .map_err(Box::new)?
-            else {
+            // Attempt to get a token for trusted publishing.
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+                    .map_err(Box::new)?
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+                    .map_err(Box::new)?
+            };
+
+            let Some(token) = token else {
                 return Err(PublishError::TrustedPublishing(
                     TrustedPublishingError::NoToken.into(),
                 ));

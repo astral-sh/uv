@@ -304,7 +304,7 @@ jobs:
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
 
-      - name: "Request GitLab OIDC token for impersonation"
+      - name: "Request GitLab OIDC tokens for impersonation"
         uses: digital-blueprint/gitlab-pipeline-trigger-action@20e77989b24af658ba138a0aa5291bdc657f1505 # v1.3.0
         with:
           host: gitlab.com
@@ -316,21 +316,31 @@ jobs:
           fail_if_no_artifacts: true
           download_path: ./gitlab-artifacts
 
-      - name: "Load GitLab OIDC token from GitLab job artifacts"
+      - name: "Load GitLab OIDC tokens from GitLab job artifacts"
         id: load-gitlab-oidc-token
         run: |
-          # we expect ./gitlab-artifacts/*/artifacts/id-token to exist
-          id_token_file=$(find ./gitlab-artifacts -type f -name id-token | head -n 1)
-          if [ -z "${id_token_file}" ]; then
-            echo "No id-token file found in GitLab artifacts"
+          # we expect ./gitlab-artifacts/*/artifacts/pypi-id-token to exist
+          pypi_id_token_file=$(find ./gitlab-artifacts -type f -name pypi-id-token | head -n 1)
+          if [ -z "${pypi_id_token_file}" ]; then
+            echo "No pypi-id-token file found in GitLab artifacts"
             exit 1
           fi
-          GITLAB_OIDC_TOKEN=$(cat "${id_token_file}")
+          GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
 
-          # Add a secret mask for the token.
-          echo "::add-mask::$GITLAB_OIDC_TOKEN"
+          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
+          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
+          if [ -z "${pyx_id_token_file}" ]; then
+            echo "No pyx-id-token file found in GitLab artifacts"
+            exit 1
+          fi
+          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
 
-          echo "GITLAB_OIDC_TOKEN=${GITLAB_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
+          # Add secret masks for the tokens.
+          echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
+          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
+
+          echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
+          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
 
       - name: "Add password to keyring"
         run: |
@@ -358,7 +368,8 @@ jobs:
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
           UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
-          UV_TEST_PUBLISH_GITLAB_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_OIDC_TOKEN }}
+          UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
+          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"
