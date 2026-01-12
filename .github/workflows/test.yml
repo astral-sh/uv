@@ -111,7 +111,11 @@ jobs:
   cargo-test-windows:
     timeout-minutes: 15
     runs-on: depot-windows-2022-16
-    name: "cargo test on windows"
+    name: "cargo test on windows (${{ matrix.partition }}/2)"
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -160,4 +164,5 @@ jobs:
             --no-default-features \
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
-            --profile ci-windows
+            --profile ci-windows \
+            --partition count:${{ matrix.partition }}/2
