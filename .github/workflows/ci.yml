@@ -26,6 +26,8 @@ jobs:
       run-checks: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') }}
       # Run publish test if publish-related files changed
       test-publish: ${{ steps.changed.outputs.publish_changed == 'true' || github.ref == 'refs/heads/main' }}
+      # Run trampoline checks if trampoline-related code changed
+      test-windows-trampoline: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.trampoline_any_changed == 'true' || github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -42,6 +44,7 @@ jobs:
           SCHEMA_CHANGED=false
           RELEASE_BUILD_CHANGED=false
           PUBLISH_CHANGED=false
+          TRAMPOLINE_CHANGED=false
 
           while IFS= read -r file; do
             # Check if the schema file changed (e.g., in a release PR)
@@ -60,6 +63,12 @@ jobs:
             if [[ "${file}" =~ ^crates/uv-publish/ || "${file}" =~ ^scripts/publish/ || "${file}" == ".github/workflows/ci.yml" ]]; then
               echo "Detected publish change: ${file}"
               PUBLISH_CHANGED=true
+            fi
+
+            # Check if trampoline-related files changed
+            if [[ "${file}" =~ ^crates/uv-trampoline/ ]] || [[ "${file}" =~ ^crates/uv-trampoline-builder/ ]]; then
+              echo "Detected trampoline change: ${file}"
+              TRAMPOLINE_CHANGED=true
             fi
 
             if [[ "${file}" =~ ^docs/ ]]; then
@@ -85,13 +94,13 @@ jobs:
 
             echo "Detected code change in: ${file}"
             CODE_CHANGED=true
-            break
 
           done <<< "${CHANGED_FILES}"
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "schema_changed=${SCHEMA_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "release_build_changed=${RELEASE_BUILD_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "publish_changed=${PUBLISH_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "trampoline_any_changed=${TRAMPOLINE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
@@ -135,7 +144,7 @@ jobs:
 
   test-windows-trampolines:
     needs: plan
-    if: ${{ needs.plan.outputs.test-code == 'true' }}
+    if: ${{ needs.plan.outputs.test-windows-trampoline == 'true' }}
     uses: ./.github/workflows/test-windows-trampolines.yml
 
   build-dev-binaries:

@@ -6114,6 +6114,36 @@ pub struct PythonDirArgs {
 }
 
 #[derive(Args)]
+pub struct PythonInstallCompileBytecodeArgs {
+    /// Compile Python's standard library to bytecode after installation.
+    ///
+    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
+    /// in which start time is important, such as CLI applications and Docker containers, this
+    /// option can be enabled to trade longer installation times and some additional disk space for
+    /// faster start times.
+    ///
+    /// When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+    /// compilation errors.
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        env = EnvVars::UV_COMPILE_BYTECODE,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub compile_bytecode: bool,
+
+    #[arg(
+        long,
+        alias = "no-compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub no_compile_bytecode: bool,
+}
+
+#[derive(Args)]
 pub struct PythonInstallArgs {
     /// The directory to store the Python installation in.
     ///
@@ -6232,6 +6262,9 @@ pub struct PythonInstallArgs {
     /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
+
+    #[command(flatten)]
+    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonInstallArgs {
@@ -6292,6 +6325,9 @@ pub struct PythonUpgradeArgs {
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
+
+    #[command(flatten)]
+    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonUpgradeArgs {

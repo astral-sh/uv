@@ -15376,3 +15376,113 @@ fn sync_fails_ambiguous_url() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that when a local directory dependency's version changes, the planner reinstalls it
+/// even if the source directory content (cache info) hasn't changed.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/17370>
+#[test]
+fn sync_reinstalls_on_version_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace with a local directory dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "packages/child" }
+        "#,
+    )?;
+
+    // Create the child package with version 0.1.0.
+    let child = context.temp_dir.child("packages/child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Lock and sync (installs child v0.1.0).
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    // Now bump the child's version to 0.1.1.
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Lock again; lockfile should show v0.1.1.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated child v0.1.0 -> v0.1.1
+    ");
+
+    // Sync should reinstall child with the new version. Before the fix for #17370,
+    // this would incorrectly say "Audited 2 packages" and not reinstall the child package.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.1 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    Ok(())
+}

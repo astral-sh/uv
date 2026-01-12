@@ -620,6 +620,7 @@ impl RunSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -677,7 +678,7 @@ impl RunSettings {
             all_packages,
             package,
             no_project,
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
             python_platform,
@@ -1279,6 +1280,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonInstallSettings {
@@ -1318,6 +1320,7 @@ impl PythonInstallSettings {
             pypy_mirror: _,
             python_downloads_json_url: _,
             default,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1337,6 +1340,12 @@ impl PythonInstallSettings {
             pypy_install_mirror,
             python_downloads_json_url,
             default,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
@@ -1355,6 +1364,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonUpgradeSettings {
@@ -1392,6 +1402,7 @@ impl PythonUpgradeSettings {
             pypy_mirror: _,
             reinstall,
             python_downloads_json_url: _,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1405,6 +1416,12 @@ impl PythonUpgradeSettings {
             python_downloads_json_url,
             default,
             bin,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
