@@ -1822,10 +1822,8 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @r###"
-            Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
-            Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-            https://localhost:8080/
-            ^^^^^^^^^^^^^^^^^^^^^^^
+            Unsupported editable requirement in `<REQUIREMENTS_TXT>`
+            Editable must refer to a local directory, not an HTTPS URL: `https://localhost:8080/`
             "###);
         });
 

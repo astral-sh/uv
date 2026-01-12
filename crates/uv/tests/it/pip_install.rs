@@ -9082,24 +9082,29 @@ fn invalid_extension() {
     "###);
 }
 
-/// Install a package without unsupported extension.
+/// Install a package from a GitHub tarball API URL without extension
+/// See <https://github.com/astral-sh/uv/issues/17425>
 #[test]
-fn no_extension() {
+#[cfg(feature = "git")]
+fn github_tarball_url_no_extension() {
     let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
+    // Test with a real GitHub tarball URL (public repository)
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6")
+        .arg("uv-public-pypackage @ https://api.github.com/repos/astral-test/uv-public-pypackage/tarball/0dacfd662c64cb4ceb16e6cf65a157a8b715b979")
         , @r###"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
-      Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from https://api.github.com/repos/astral-test/uv-public-pypackage/tarball/0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "###);
+
+    context.assert_installed("uv_public_pypackage", "0.1.0");
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
