@@ -290,4 +290,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Check required jobs passed"
-        run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
+        run: |
+          needs_json='${{ toJSON(needs) }}'
+          failing=$(echo "$needs_json" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          if [ -n "$failing" ]; then
+            echo "Failing jobs:"
+            echo "$failing"
+            exit 1
+          fi
