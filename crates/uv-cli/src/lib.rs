@@ -1265,12 +1265,8 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
     }
     let mut indices = Vec::new();
     for token in input.split_whitespace() {
-        match Index::from_str(token) {
-            Ok(index) => indices.push(Maybe::Some(Index {
-                default: false,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match Index::from_cli(token, false) {
+            Ok(index) => indices.push(Maybe::Some(index)),
             Err(e) => return Err(e.to_string()),
         }
     }
@@ -1282,12 +1278,8 @@ fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match Index::from_str(input) {
-            Ok(index) => Ok(Maybe::Some(Index {
-                default: true,
-                origin: Some(Origin::Cli),
-                ..index
-            })),
+        match Index::from_cli(input, true) {
+            Ok(index) => Ok(Maybe::Some(index)),
             Err(err) => Err(err.to_string()),
         }
     }
