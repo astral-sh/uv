@@ -21,7 +21,7 @@ jobs:
       # Run schema check if schema file changed
       check-schema: ${{ steps.changed.outputs.schema_changed == 'true' }}
       # Run release build test if release files changed
-      build-release: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && steps.changed.outputs.release_build_changed == 'true' }}
+      build-release-binaries: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && steps.changed.outputs.release_build_changed == 'true' }}
       # Run format/lint checks (always unless no-test label)
       run-checks: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') }}
       # Run publish test if publish-related files changed
@@ -179,9 +179,9 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
-  build-release:
+  build-release-binaries:
     needs: plan
-    if: ${{ needs.plan.outputs.build-release == 'true' }}
+    if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
     secrets: inherit
 
