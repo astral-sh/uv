@@ -28,6 +28,7 @@ bitflags::bitflags! {
         const SBOM_EXPORT = 1 << 16;
         const AUTH_HELPER = 1 << 17;
         const DIRECT_PUBLISH = 1 << 18;
+        const TARGET_WORKSPACE_DISCOVERY = 1 << 19;
     }
 }
 
@@ -56,6 +57,7 @@ impl PreviewFeatures {
             Self::SBOM_EXPORT => "sbom-export",
             Self::AUTH_HELPER => "auth-helper",
             Self::DIRECT_PUBLISH => "direct-publish",
+            Self::TARGET_WORKSPACE_DISCOVERY => "target-workspace-discovery",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -112,6 +114,7 @@ impl FromStr for PreviewFeatures {
                 "sbom-export" => Self::SBOM_EXPORT,
                 "auth-helper" => Self::AUTH_HELPER,
                 "direct-publish" => Self::DIRECT_PUBLISH,
+                "target-workspace-discovery" => Self::TARGET_WORKSPACE_DISCOVERY,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -291,6 +294,10 @@ mod tests {
         assert_eq!(
             PreviewFeatures::DIRECT_PUBLISH.flag_as_str(),
             "direct-publish"
+        );
+        assert_eq!(
+            PreviewFeatures::TARGET_WORKSPACE_DISCOVERY.flag_as_str(),
+            "target-workspace-discovery"
         );
     }
 
