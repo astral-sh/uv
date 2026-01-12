@@ -110,7 +110,7 @@ jobs:
 
   cargo-test-windows:
     timeout-minutes: 15
-    runs-on: depot-windows-2022-16
+    runs-on: github-windows-2025-x86_64-16
     name: "cargo test on windows (${{ matrix.partition }}/2)"
     strategy:
       fail-fast: false
