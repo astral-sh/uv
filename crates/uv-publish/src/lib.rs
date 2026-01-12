@@ -639,7 +639,9 @@ pub async fn upload(
     }
 }
 
-/// Validate a file against a registry.
+/// Validate a distribution before uploading.
+///
+/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
 pub async fn validate(
     file: &Path,
     form_metadata: &FormMetadata,
@@ -648,7 +650,7 @@ pub async fn validate(
     store: &PyxTokenStore,
     client: &BaseClient,
     credentials: &Credentials,
-) -> Result<(), PublishError> {
+) -> Result<bool, PublishError> {
     if store.is_known_url(registry) {
         debug!("Performing validation request for {registry}");
 
@@ -674,16 +676,45 @@ pub async fn validate(
             )
         })?;
 
+        let status_code = response.status();
+        debug!("Response code for {validation_url}: {status_code}");
+
+        if status_code.is_success() {
+            #[derive(Deserialize)]
+            struct ValidateResponse {
+                exists: bool,
+            }
+
+            // Check if the file already exists.
+            match response.text().await {
+                Ok(body) => {
+                    trace!("Response content for {validation_url}: {body}");
+                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
+                        if response.exists {
+                            debug!("File already uploaded: {raw_filename}");
+                            return Ok(false);
+                        }
+                    }
+                }
+                Err(err) => {
+                    trace!("Failed to read response content for {validation_url}: {err}");
+                }
+            }
+            return Ok(true);
+        }
+
+        // Handle error response.
         handle_response(&validation_url, response)
             .await
             .map_err(|err| {
                 PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
             })?;
+
+        Ok(true)
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
+        Ok(true)
     }
-
-    Ok(())
 }
 
 /// Upload a file using the two-phase upload protocol for pyx.
