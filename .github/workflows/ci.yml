@@ -2238,39 +2238,38 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
-  # Currently failing, see https://github.com/astral-sh/uv/issues/13811
-  # system-test-opensuse:
-  #   timeout-minutes: 5
-  #   needs: build-binary-linux-libc
-  #   name: "check system | python on opensuse"
-  #   runs-on: ubuntu-latest
-  #   container: opensuse/tumbleweed
-  #   steps:
-  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  system-test-opensuse:
+    timeout-minutes: 5
+    needs: build-binary-linux-libc
+    name: "check system | python on opensuse"
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-  #     - name: "Install Python"
-  #       run: >
-  #         until
-  #         zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
-  #         do sleep 10;
-  #         done
+      - name: "Install Python"
+        run: >
+          until
+          zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
+          do sleep 10;
+          done
 
-  #         # We retry because `zypper` can fail during remote repository updates
-  #         # The above will not sleep forever due to the job level timeout
+          # We retry because `zypper` can fail during remote repository updates
+          # The above will not sleep forever due to the job level timeout
 
-  #     - name: "Download binary"
-  #       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-  #       with:
-  #         name: uv-linux-libc-${{ github.sha }}
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
 
-  #     - name: "Prepare binary"
-  #       run: chmod +x ./uv
+      - name: "Prepare binary"
+        run: chmod +x ./uv
 
-  #     - name: "Print Python path"
-  #       run: echo $(which python3)
+      - name: "Print Python path"
+        run: echo $(which python3)
 
-  #     - name: "Validate global Python install"
-  #       run: python3 scripts/check_system_python.py --uv ./uv
+      - name: "Validate global Python install"
+        run: python3 scripts/check_system_python.py --uv ./uv
 
   # Note: rockylinux is a 1-1 code compatible distro to rhel
   # rockylinux mimics centos but with added maintenance stability
