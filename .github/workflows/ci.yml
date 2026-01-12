@@ -278,7 +278,7 @@ jobs:
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
 
   required-checks-passed:
-    name: "Check required jobs passed"
+    name: "all required jobs passed"
     if: always()
     needs:
       - check-fmt
