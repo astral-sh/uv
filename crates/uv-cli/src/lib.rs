@@ -1211,10 +1211,7 @@ fn parse_index_url(input: &str) -> Result<Maybe<PipIndex>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_index_url)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipIndex::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
@@ -1228,10 +1225,7 @@ fn parse_extra_index_url(input: &str) -> Result<Maybe<PipExtraIndex>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_extra_index_url)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipExtraIndex::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
@@ -1245,10 +1239,7 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
     } else {
         IndexUrl::from_str(input)
             .map(Index::from_find_links)
-            .map(|index| Index {
-                origin: Some(Origin::Cli),
-                ..index
-            })
+            .map(|index| index.with_origin(Origin::Cli))
             .map(PipFindLinks::from)
             .map(Maybe::Some)
             .map_err(|err| err.to_string())
