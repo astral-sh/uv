@@ -1035,6 +1035,10 @@ pub enum ProjectCommand {
     /// or a parent directory, the command will be run in that environment. Otherwise, the command
     /// will be run in the environment of the discovered interpreter.
     ///
+    /// By default, the project or workspace is discovered from the current working directory.
+    /// However, when using `--preview-features target-workspace-discovery`, the project or
+    /// workspace is instead discovered from the target script's directory.
+    ///
     /// Arguments following the command (or script) are not interpreted as arguments to uv. All
     /// options to uv must be provided before the command, e.g., `uv run --verbose foo`. A `--` can
     /// be used to separate the command from uv options for clarity, e.g., `uv run --python 3.12 --
