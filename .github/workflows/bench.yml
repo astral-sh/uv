@@ -14,7 +14,7 @@ jobs:
     name: "walltime on aarch64 linux"
     runs-on: codspeed-macro
     if: ${{ github.repository == 'astral-sh/uv' }}
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
