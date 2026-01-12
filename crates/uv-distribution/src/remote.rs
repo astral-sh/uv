@@ -65,6 +65,23 @@ struct CacheKeyResponse {
     key: String,
 }
 
+/// Response from the cache validate endpoint.
+#[derive(Debug, Deserialize)]
+struct ValidateCacheResponse {
+    exists: bool,
+}
+
+/// Result of validating a cache upload.
+#[derive(Debug)]
+enum ValidateCacheResult {
+    /// The wheel should be uploaded.
+    Upload,
+    /// The wheel already exists in the cache.
+    AlreadyExists,
+    /// The server rejected the wheel (e.g., invalid filename, unsupported platform).
+    Rejected,
+}
+
 impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
     /// Initialize a [`RemoteCacheResolver`] from a [`BuildContext`].
     pub(crate) fn new(build_context: &'a T) -> Self {
@@ -390,6 +407,64 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
         Ok(entries)
     }
 
+    /// Validate a wheel before uploading to the remote cache.
+    async fn validate_cache_upload(
+        &self,
+        workspace: &str,
+        cache_key: &str,
+        filename: &WheelFilename,
+        client: &ManagedClient<'a>,
+    ) -> Result<ValidateCacheResult, Error> {
+        let Some(store) = &self.store else {
+            return Ok(ValidateCacheResult::Upload);
+        };
+
+        // Build the validate URL.
+        let url = {
+            let mut url = store.api().clone();
+            url.set_path(&format!("v1/upload/{workspace}/cache/{cache_key}/validate"));
+            url
+        };
+        debug!("Validating cache upload at: {url}");
+
+        // Build the form data.
+        let form = reqwest::multipart::Form::new().text("filename", filename.to_string());
+
+        // Send the validate request.
+        let response = match client
+            .unmanaged
+            .uncached_client(&url)
+            .post(Url::from(url.clone()))
+            .multipart(form)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                return Err(Error::from(err));
+            }
+        };
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            if status.is_client_error() {
+                debug!("Cache validate rejected wheel: {status} {body}");
+                return Ok(ValidateCacheResult::Rejected);
+            }
+            debug!("Cache validate returned server error: {status} {body}");
+            return Ok(ValidateCacheResult::Upload);
+        }
+
+        // Parse the JSON response.
+        let response: ValidateCacheResponse = response.json().await?;
+        if response.exists {
+            Ok(ValidateCacheResult::AlreadyExists)
+        } else {
+            Ok(ValidateCacheResult::Upload)
+        }
+    }
+
     /// Upload a built wheel to the remote cache.
     pub(crate) async fn upload_to_cache(
         &self,
@@ -439,10 +514,29 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
             return Ok(());
         };
 
+        // Validate before uploading to avoid uploading duplicates.
+        match self
+            .validate_cache_upload(workspace, &cache_key, filename, client)
+            .await
+        {
+            Ok(ValidateCacheResult::Upload) => {}
+            Ok(ValidateCacheResult::AlreadyExists) => {
+                debug!("Wheel already exists in remote cache; skipping upload");
+                return Ok(());
+            }
+            Ok(ValidateCacheResult::Rejected) => {
+                debug!("Server rejected wheel; skipping upload");
+                return Ok(());
+            }
+            Err(err) => {
+                debug!("Failed to validate cache upload; proceeding with upload: {err}");
+            }
+        }
+
         // Build the upload URL using the server-provided cache key.
         let url = {
             let mut url = store.api().clone();
-            url.set_path(&format!("v1/cache/{workspace}/{cache_key}"));
+            url.set_path(&format!("v1/upload/{workspace}/cache/{cache_key}"));
             url
         };
         debug!("Uploading wheel to remote cache: {url}");
@@ -453,7 +547,7 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
             .map_err(Error::CacheRead)?
             .len();
 
-        // Open the wheel file.
+        // Open the wheel file for streaming upload.
         let file = fs_err::tokio::File::open(wheel_path)
             .await
             .map_err(Error::CacheRead)?;
@@ -487,6 +581,8 @@ impl<'a, T: BuildContext> RemoteCacheResolver<'a, T> {
                 response.status(),
                 response.text().await.unwrap_or_default()
             );
+        } else {
+            debug!("Successfully uploaded {file_size} bytes to cache");
         }
 
         Ok(())
