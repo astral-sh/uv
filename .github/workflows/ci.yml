@@ -130,6 +130,11 @@ jobs:
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: ./.github/workflows/check-publish.yml
 
+  check-release:
+    needs: plan
+    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    uses: ./.github/workflows/check-release.yml
+
   check-generated-files:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
