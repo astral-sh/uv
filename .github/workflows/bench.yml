@@ -10,11 +10,11 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
-  benchmarks-walltime:
-    name: "walltime on aarch64 linux"
-    runs-on: codspeed-macro
+  benchmarks-walltime-build:
+    name: "walltime build"
+    runs-on: depot-ubuntu-22.04-arm-4
     if: ${{ github.repository == 'astral-sh/uv' }}
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -40,7 +40,41 @@ jobs:
           cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build --profile profiling -p uv-bench
+        run: cargo codspeed build -m walltime --profile profiling -p uv-bench
+
+      - name: "Upload benchmark artifacts"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: benchmarks-walltime
+          path: |
+            target/codspeed
+            .cache
+            .venv
+          retention-days: 1
+
+  benchmarks-walltime-run:
+    name: "walltime on aarch64 linux"
+    runs-on: codspeed-macro
+    needs: benchmarks-walltime-build
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Branch"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Install codspeed"
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        with:
+          tool: cargo-codspeed
+
+      - name: "Download benchmark artifacts"
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: benchmarks-walltime
+
+      - name: "Restore binary permissions"
+        run: chmod -R +x target/codspeed
 
       - name: "Run benchmarks"
         uses: CodSpeedHQ/action@346a2d8a8d9d38909abd0bc3d23f773110f076ad # v4.4.1
