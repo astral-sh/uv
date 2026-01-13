@@ -69,12 +69,12 @@ impl<'a> InstallRequest<'a> {
             Ok(download) => download,
             Err(downloads::Error::NoDownloadFound(request))
                 if request.libc().is_some_and(Libc::is_musl)
-                    && request
-                        .arch()
-                        .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
+                    && request.arch().is_some_and(|arch| {
+                        arch.inner() == Arch::from(&uv_platform_tags::Arch::Armv7L)
+                    }) =>
             {
                 return Err(anyhow::anyhow!(
-                    "uv does not yet provide musl Python distributions on aarch64."
+                    "uv does not yet provide musl Python distributions on armv7."
                 ));
             }
             Err(err) => return Err(err.into()),
