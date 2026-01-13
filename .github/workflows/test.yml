@@ -115,7 +115,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2]
+        partition: [1, 2, 3]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -165,4 +165,4 @@ jobs:
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
-            --partition hash:${{ matrix.partition }}/2
+            --partition hash:${{ matrix.partition }}/3
