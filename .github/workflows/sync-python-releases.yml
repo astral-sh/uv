@@ -24,6 +24,9 @@ jobs:
         with:
           version: "latest"
           enable-cache: true
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: false
       - name: Sync Python Releases
         run: |
           uv run -- fetch-download-metadata.py
