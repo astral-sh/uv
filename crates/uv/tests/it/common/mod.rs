@@ -39,9 +39,8 @@ static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 pub const PACKSE_VERSION: &str = "0.3.53";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
-// The latest patch versions of each Python minor version.
-// These should be updated when new Python versions are released via the
-// `sync-python-releases` workflow.
+// The expected latest patch version for each Python minor version.
+pub const LATEST_PYTHON_3_15: &str = "3.15.0a3";
 pub const LATEST_PYTHON_3_14: &str = "3.14.2";
 pub const LATEST_PYTHON_3_13: &str = "3.13.11";
 pub const LATEST_PYTHON_3_12: &str = "3.12.12";
@@ -477,16 +476,12 @@ impl TestContext {
         self
     }
 
-    /// Adds a filter that replaces the latest Python patch versions with `[X]` placeholder.
-    ///
-    /// This allows snapshots to remain stable when new patch versions are released.
-    /// Note: This only filters the "latest" versions for each minor version - tests that
-    /// use specific older patch versions (e.g., for testing patch version behavior) are
-    /// not affected.
+    /// Adds a filter that replaces the latest Python patch versions with `[LATEST]` placeholder.
     pub fn with_filtered_latest_python_versions(mut self) -> Self {
-        // Filter the latest patch versions with [X] placeholder
+        // Filter the latest patch versions with [LATEST] placeholder
         // The order matters - we want to match the full version first
         for (minor, patch) in [
+            ("3.15", LATEST_PYTHON_3_15.strip_prefix("3.15.").unwrap()),
             ("3.14", LATEST_PYTHON_3_14.strip_prefix("3.14.").unwrap()),
             ("3.13", LATEST_PYTHON_3_13.strip_prefix("3.13.").unwrap()),
             ("3.12", LATEST_PYTHON_3_12.strip_prefix("3.12.").unwrap()),
@@ -495,7 +490,7 @@ impl TestContext {
         ] {
             // Match the full version in various contexts (cpython-X.Y.Z, Python X.Y.Z, etc.)
             let pattern = format!(r"(\b){minor}\.{patch}(\b)");
-            let replacement = format!("${{1}}{minor}.[X]${{2}}");
+            let replacement = format!("${{1}}{minor}.[LATEST]${{2}}");
             self.filters.push((pattern, replacement));
         }
         self

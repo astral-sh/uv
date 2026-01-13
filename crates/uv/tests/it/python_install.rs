@@ -35,8 +35,8 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     let bin_python = context
@@ -56,7 +56,7 @@ fn python_install() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -64,7 +64,7 @@ fn python_install() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -107,8 +107,8 @@ fn python_install() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     ~ cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     ~ cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -136,8 +136,8 @@ fn python_install() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
-    Uninstalled Python 3.14.[X] in [TIME]
-     - cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     // The executable should be removed
@@ -161,8 +161,8 @@ fn python_reinstall() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.12.[X]-[PLATFORM] (python3.12)
-     + cpython-3.13.[X]-[PLATFORM] (python3.13)
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Reinstall a single version
@@ -172,8 +172,8 @@ fn python_reinstall() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     ~ cpython-3.13.[X]-[PLATFORM] (python3.13)
+    Installed Python 3.13.[LATEST] in [TIME]
+     ~ cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Reinstall multiple versions
@@ -184,8 +184,8 @@ fn python_reinstall() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     ~ cpython-3.12.[X]-[PLATFORM] (python3.12)
-     ~ cpython-3.13.[X]-[PLATFORM] (python3.13)
+     ~ cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+     ~ cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Reinstalling a version that is not installed should also work
@@ -195,8 +195,8 @@ fn python_reinstall() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.[X] in [TIME]
-     + cpython-3.11.[X]-[PLATFORM] (python3.11)
+    Installed Python 3.11.[LATEST] in [TIME]
+     + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 }
 
@@ -395,8 +395,8 @@ fn python_install_force() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     let bin_python = context
@@ -410,8 +410,8 @@ fn python_install_force() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -427,7 +427,7 @@ fn python_install_force() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to install executable for cpython-3.14.[X]-[PLATFORM]
+    warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
@@ -437,8 +437,8 @@ fn python_install_force() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     bin_python.assert(predicate::path::exists());
@@ -459,8 +459,8 @@ fn python_install_minor() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.[X] in [TIME]
-     + cpython-3.11.[X]-[PLATFORM] (python3.11)
+    Installed Python 3.11.[LATEST] in [TIME]
+     + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 
     let bin_python = context
@@ -476,7 +476,7 @@ fn python_install_minor() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[X]-[PLATFORM]/bin/python3.11"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[LATEST]-[PLATFORM]/bin/python3.11"
             );
         });
     } else if cfg!(windows) {
@@ -484,7 +484,7 @@ fn python_install_minor() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[X]-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -496,8 +496,8 @@ fn python_install_minor() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.11
-    Uninstalled Python 3.11.[X] in [TIME]
-     - cpython-3.11.[X]-[PLATFORM] (python3.11)
+    Uninstalled Python 3.11.[LATEST] in [TIME]
+     - cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 
     // The executable should be removed
@@ -600,8 +600,8 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     let bin_python = context
@@ -662,8 +662,8 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     ~ cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     ~ cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -676,8 +676,8 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -693,7 +693,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to install executable for cpython-3.14.[X]-[PLATFORM]
+    warning: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
@@ -704,7 +704,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install executable for cpython-3.14.[X]-[PLATFORM]
+    error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.14").env(EnvVars::UV_PYTHON_INSTALL_BIN, "1"), @r"
@@ -713,7 +713,7 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to install executable for cpython-3.14.[X]-[PLATFORM]
+    error: Failed to install executable for cpython-3.14.[LATEST]-[PLATFORM]
       Caused by: Executable already exists at `[BIN]/python3.14` but is not managed by uv; use `--force` to replace it
     ");
 
@@ -741,8 +741,8 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     bin_python.assert(predicate::path::exists());
@@ -773,8 +773,8 @@ fn python_install_preview() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
-    Uninstalled Python 3.14.[X] in [TIME]
-     - cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executable should be removed
@@ -787,8 +787,8 @@ fn python_install_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.[X] in [TIME]
-     + cpython-3.11.[X]-[PLATFORM] (python3.11)
+    Installed Python 3.11.[LATEST] in [TIME]
+     + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 
     let bin_python = context
@@ -821,11 +821,11 @@ fn python_install_preview() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.11
-    Uninstalled Python 3.11.[X] in [TIME]
-     - cpython-3.11.[X]-[PLATFORM] (python3.11)
+    Uninstalled Python 3.11.[LATEST] in [TIME]
+     - cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 
-    // Install multiple patch versions (these specific versions are intentionally kept, not filtered)
+    // Install multiple patch versions
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8").arg("3.12.6"), @r"
     success: true
     exit_code: 0
@@ -877,8 +877,8 @@ fn python_install_preview_no_bin() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM]
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM]
     ");
 
     let bin_python = context
@@ -1086,8 +1086,8 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]+freethreaded-[PLATFORM] (python3.13t)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
     ");
 
     let bin_python = context
@@ -1139,7 +1139,7 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.13.[X]+freethreaded
+    Using CPython 3.13.[LATEST]+freethreaded
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -1198,8 +1198,8 @@ fn python_install_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]-[PLATFORM] (python3.13)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Should not work with older Python versions
@@ -1220,8 +1220,8 @@ fn python_install_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
-     - cpython-3.13.[X]+freethreaded-[PLATFORM] (python3.13t)
-     - cpython-3.13.[X]-[PLATFORM] (python3.13)
+     - cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 }
 
@@ -1270,8 +1270,8 @@ fn python_install_debug() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]+debug-[PLATFORM] (python3.13d)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
     ");
 
     let bin_python = context
@@ -1323,8 +1323,8 @@ fn python_install_debug() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]-[PLATFORM] (python3.13)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Now we should prefer the non-debug version without opt-in
@@ -1332,7 +1332,7 @@ fn python_install_debug() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[X]-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1364,8 +1364,8 @@ fn python_install_debug() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.[X] in [TIME]
-     + cpython-3.12.[X]+debug-[PLATFORM] (python3.12d)
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]+debug-[PLATFORM] (python3.12d)
     ");
 
     uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r"
@@ -1376,9 +1376,9 @@ fn python_install_debug() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 3 versions in [TIME]
-     - cpython-3.12.[X]+debug-[PLATFORM] (python3.12d)
-     - cpython-3.13.[X]+debug-[PLATFORM] (python3.13d)
-     - cpython-3.13.[X]-[PLATFORM] (python3.13)
+     - cpython-3.12.[LATEST]+debug-[PLATFORM] (python3.12d)
+     - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
+     - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 }
 
@@ -1400,8 +1400,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]+freethreaded+debug-[PLATFORM] (python3.13td)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+freethreaded+debug-[PLATFORM] (python3.13td)
     ");
 
     let bin_python = context
@@ -1464,8 +1464,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]-[PLATFORM] (python3.13)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     // Should be distinct from 3.13t
@@ -1475,8 +1475,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]+freethreaded-[PLATFORM] (python3.13t)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
     ");
 
     // Should be distinct from 3.13d
@@ -1486,8 +1486,8 @@ fn python_install_debug_freethreaded() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]+debug-[PLATFORM] (python3.13d)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
     ");
 
     // Now we should prefer the non-debug version without opt-in
@@ -1495,7 +1495,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[X]-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1504,7 +1504,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[X]+freethreaded-[PLATFORM]/bin/python3.13t
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/bin/python3.13t
 
     ----- stderr -----
     ");
@@ -1527,10 +1527,10 @@ fn python_install_debug_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 4 versions in [TIME]
-     - cpython-3.13.[X]+freethreaded+debug-[PLATFORM] (python3.13td)
-     - cpython-3.13.[X]+freethreaded-[PLATFORM] (python3.13t)
-     - cpython-3.13.[X]+debug-[PLATFORM] (python3.13d)
-     - cpython-3.13.[X]-[PLATFORM] (python3.13)
+     - cpython-3.13.[LATEST]+freethreaded+debug-[PLATFORM] (python3.13td)
+     - cpython-3.13.[LATEST]+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.[LATEST]+debug-[PLATFORM] (python3.13d)
+     - cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 }
 
@@ -1601,8 +1601,8 @@ fn python_install_default() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     // Only the minor versioned executable should be installed
@@ -1618,8 +1618,8 @@ fn python_install_default() {
 
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python, python3)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3)
     ");
 
     // Now all the executables should be installed
@@ -1635,8 +1635,8 @@ fn python_install_default() {
 
     ----- stderr -----
     Searching for Python installations
-    Uninstalled Python 3.14.[X] in [TIME]
-     - cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executables should be removed
@@ -1652,8 +1652,8 @@ fn python_install_default() {
 
     ----- stderr -----
     warning: The `--default` option is experimental and may change without warning. Pass `--preview-features python-install-default` to disable this warning
-    Installed Python 3.14.[X] in [TIME]
-     + cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // Since it's a default install, we should include all of the executables
@@ -1667,7 +1667,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1675,7 +1675,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1683,7 +1683,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -1691,7 +1691,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/python"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -1699,7 +1699,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/python"
+                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -1707,7 +1707,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[X]-[PLATFORM]/python"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -1720,8 +1720,8 @@ fn python_install_default() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
-    Uninstalled Python 3.14.[X] in [TIME]
-     - cpython-3.14.[X]-[PLATFORM] (python, python3, python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // We should remove all the executables
@@ -1818,6 +1818,7 @@ fn python_install_default_preview() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
         .with_python_download_cache();
 
@@ -1840,8 +1841,8 @@ fn python_install_default_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 
     // Only the minor versioned executable should be installed
@@ -1856,8 +1857,8 @@ fn python_install_default_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python, python3)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3)
     ");
 
     // Now all the executables should be installed
@@ -1873,8 +1874,8 @@ fn python_install_default_preview() {
 
     ----- stderr -----
     Searching for Python installations
-    Uninstalled Python 3.14.2 in [TIME]
-     - cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executables should be removed
@@ -1889,8 +1890,8 @@ fn python_install_default_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // Since it's a default install, we should include all of the executables
@@ -1907,7 +1908,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1918,7 +1919,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1929,7 +1930,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -1940,7 +1941,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -1951,7 +1952,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -1962,7 +1963,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -1975,8 +1976,8 @@ fn python_install_default_preview() {
 
     ----- stderr -----
     Searching for Python versions matching: Python 3.14
-    Uninstalled Python 3.14.2 in [TIME]
-     - cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
+    Uninstalled Python 3.14.[LATEST] in [TIME]
+     - cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // We should remove all the executables
@@ -2001,8 +2002,8 @@ fn python_install_default_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python, python3, python3.12)
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python, python3, python3.12)
     ");
 
     let bin_python_minor_12 = context
@@ -2023,7 +2024,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -2034,7 +2035,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -2045,7 +2046,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -2056,7 +2057,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -2067,7 +2068,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -2078,7 +2079,7 @@ fn python_install_default_preview() {
                 read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -2090,8 +2091,8 @@ fn python_install_default_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python, python3, python3.14)
     ");
 
     // All the executables should exist
@@ -2106,7 +2107,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -2114,7 +2115,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -2122,7 +2123,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -2130,7 +2131,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -2138,7 +2139,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -2146,7 +2147,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -2154,7 +2155,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.12-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
             );
         });
 
@@ -2162,7 +2163,7 @@ fn python_install_default_preview() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/python"
+                canonicalize_link_path(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
             );
         });
     }
@@ -2312,6 +2313,7 @@ fn python_install_default_from_env() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
         .with_python_download_cache();
 
@@ -2322,8 +2324,8 @@ fn python_install_default_from_env() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
     ");
 
     // But prefer explicit requests
@@ -2333,8 +2335,8 @@ fn python_install_default_from_env() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.14 in [TIME]
-     + cpython-3.11.14-[PLATFORM] (python3.11)
+    Installed Python 3.11.[LATEST] in [TIME]
+     + cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
     ");
 
     // We should ignore `UV_PYTHON` here and complain there is not a target
@@ -2361,8 +2363,8 @@ fn python_install_default_from_env() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
-     - cpython-3.11.14-[PLATFORM] (python3.11)
-     - cpython-3.12.12-[PLATFORM] (python3.12)
+     - cpython-3.11.[LATEST]-[PLATFORM] (python3.11)
+     - cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
     ");
 
     // Uninstall with no targets should error
@@ -2446,6 +2448,7 @@ fn python_install_patch_dylib() {
 fn python_install_prerelease() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
         .with_python_download_cache()
         .with_filtered_python_install_bin()
@@ -2459,8 +2462,8 @@ fn python_install_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.15.0a3 in [TIME]
-     + cpython-3.15.0a3-[PLATFORM] (python3.15)
+    Installed Python 3.15.[LATEST] in [TIME]
+     + cpython-3.15.[LATEST]-[PLATFORM] (python3.15)
     ");
 
     // Install a specific pre-release
@@ -2479,6 +2482,7 @@ fn python_install_prerelease() {
 fn python_find_prerelease() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
         .with_python_download_cache()
         .with_filtered_python_install_bin()
@@ -2495,7 +2499,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2505,7 +2509,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2514,7 +2518,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.0a3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2526,15 +2530,15 @@ fn python_find_prerelease() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.11 in [TIME]
-     + cpython-3.13.11-[PLATFORM] (python3.13)
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.11-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

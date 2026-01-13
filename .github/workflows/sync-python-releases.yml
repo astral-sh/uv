@@ -37,55 +37,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update Python Version Constants
-        run: |
-          # Extract the latest stable patch version for each minor version from the download metadata
-          # We filter out prereleases (those with 'prerelease' field set)
-          python3 << 'EOF'
-          import json
-          import re
-          from pathlib import Path
-
-          # Read the download metadata
-          metadata_path = Path("crates/uv-python/download-metadata.json")
-          with open(metadata_path) as f:
-              metadata = json.load(f)
-
-          # Find the latest stable patch version for each minor version
-          # We store (patch_number, full_version_string) tuples for proper numeric comparison
-          latest_versions = {}
-          for key, info in metadata.items():
-              if info["name"] != "cpython":
-                  continue
-              if info.get("prerelease"):
-                  continue
-              if info.get("variant"):
-                  continue
-
-              minor = f"3.{info['minor']}"
-              patch = info['patch']
-              version = f"{info['major']}.{info['minor']}.{info['patch']}"
-
-              if minor not in latest_versions or patch > latest_versions[minor][0]:
-                  latest_versions[minor] = (patch, version)
-
-          # Update the constants in common/mod.rs
-          mod_path = Path("crates/uv/tests/it/common/mod.rs")
-          content = mod_path.read_text()
-
-          for minor in ["3.14", "3.13", "3.12", "3.11", "3.10"]:
-              if minor not in latest_versions:
-                  continue
-              const_name = f"LATEST_PYTHON_{minor.replace('.', '_')}"
-              old_pattern = rf'pub const {const_name}: &str = "[^"]+";'
-              new_value = f'pub const {const_name}: &str = "{latest_versions[minor][1]}";'
-              content = re.sub(old_pattern, new_value, content)
-
-          mod_path.write_text(content)
-          print("Updated Python version constants:")
-          for minor in sorted(latest_versions.keys(), key=lambda x: int(x.split('.')[1]), reverse=True):
-              print(f"  {minor}: {latest_versions[minor][1]}")
-          EOF
+      - name: "Update Python version constants"
+        run: uv run scripts/sync-python-version-constants.py
 
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
