@@ -1111,9 +1111,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Enabled"
-          ]
+          "required": ["Enabled"]
         }
       ]
     },
