@@ -583,7 +583,13 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 ))
             }
         }
-        IncompatibleTag::Abi3Freethreaded => {
+        IncompatibleTag::FreethreadedAbi => {
+            let wheel_abi = filename
+                .abi_tags()
+                .iter()
+                .map(|tag| format!("`{}`", tag.cyan()))
+                .collect::<Vec<_>>()
+                .join(", ");
             let message = if let Some(current) = tags.abi_tag() {
                 if let Some(pretty) = current.pretty() {
                     format!("{} (`{}`)", pretty.cyan(), current.cyan())
@@ -594,8 +600,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 "free-threaded Python".to_string()
             };
             Some(format!(
-                "The wheel uses the stable ABI (`{abi3}`), but you're using {message} which does not support it",
-                abi3 = "abi3".cyan()
+                "The wheel uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
             ))
         }
         IncompatibleTag::Abi => {
@@ -803,24 +808,8 @@ mod tests {
         // Generate the hint
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
-        // Strip ANSI escape codes for snapshot comparison
-        let hint: String = hint
-            .chars()
-            .scan(false, |in_escape, c| {
-                if *in_escape {
-                    *in_escape = c != 'm';
-                    Some(None)
-                } else if c == '\x1b' {
-                    *in_escape = true;
-                    Some(None)
-                } else {
-                    Some(Some(c))
-                }
-            })
-            .flatten()
-            .collect();
-
-        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`) which does not support it");
+        let hint = anstream::adapter::strip_str(&hint);
+        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`), which is incompatible");
     }
 
     #[test]

@@ -32,8 +32,8 @@ pub enum IncompatibleTag {
     Python,
     /// The ABI tag is incompatible.
     Abi,
-    /// The wheel uses the stable ABI (`abi3`), which is not supported by free-threaded Python.
-    Abi3Freethreaded,
+    /// The wheel uses an ABI, e.g., `abi3`, which is incompatible with free-threaded Python.
+    FreethreadedAbi,
     /// The Python version component of the ABI tag is incompatible with `requires-python`.
     AbiPythonVersion,
     /// The platform tag is incompatible.
@@ -88,7 +88,7 @@ pub struct Tags {
     /// Whether the tags are for a different Python interpreter than the current one, for error
     /// messages.
     is_cross: bool,
-    /// Whether this is free-threaded Python (GIL disabled).
+    /// Whether this is free-threaded Python.
     is_freethreaded: bool,
 }
 
@@ -296,12 +296,9 @@ impl Tags {
         wheel_abi_tags: &[AbiTag],
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
-        // Check for abi3 on free-threaded Python (stable ABI is not supported)
-        if wheel_abi_tags
-            .iter()
-            .all(|abi| self.is_abi_incompatible(*abi))
-        {
-            return TagCompatibility::Incompatible(IncompatibleTag::Abi3Freethreaded);
+        // The stable ABI (abi3) is not supported on free-threaded Python
+        if self.is_freethreaded && wheel_abi_tags.iter().all(|abi| *abi == AbiTag::Abi3) {
+            return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
         }
 
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
@@ -367,15 +364,6 @@ impl Tags {
 
     pub fn is_cross(&self) -> bool {
         self.is_cross
-    }
-
-    /// Returns `true` if the given ABI tag is explicitly incompatible with this Python.
-    ///
-    /// This is used for ABI-level incompatibilities that aren't captured by the tag map,
-    /// such as `abi3` on free-threaded Python.
-    fn is_abi_incompatible(&self, abi: AbiTag) -> bool {
-        // The stable ABI (abi3) is not supported by free-threaded Python
-        self.is_freethreaded && matches!(abi, AbiTag::Abi3)
     }
 }
 

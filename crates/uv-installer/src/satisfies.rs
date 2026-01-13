@@ -457,7 +457,12 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 ))
             }
         }
-        IncompatibleTag::Abi3Freethreaded => {
+        IncompatibleTag::FreethreadedAbi => {
+            let wheel_abi = wheel_tags
+                .abi_tags()
+                .map(|tag| format!("`{tag}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
             let message = if let Some(current) = tags.abi_tag() {
                 if let Some(pretty) = current.pretty() {
                     format!("{pretty} (`{current}`)")
@@ -468,11 +473,11 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 "free-threaded Python".to_string()
             };
             Some(format!(
-                "The distribution uses the stable ABI (`abi3`), but you're using {message} which does not support it"
+                "The distribution uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
             ))
         }
         IncompatibleTag::Abi => {
-            let wheel_abi_tags: Vec<_> = wheel_tags.abi_tags().copied().collect();
+            let wheel_tags = wheel_tags.abi_tags();
             let current_tag = tags.abi_tag();
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
@@ -482,8 +487,7 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 };
                 Some(format!(
                     "The distribution is compatible with {}, but you're using {}",
-                    wheel_abi_tags
-                        .iter()
+                    wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
                             format!("{pretty} (`{tag}`)")
                         } else {
@@ -496,8 +500,7 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
             } else {
                 Some(format!(
                     "The distribution requires {}",
-                    wheel_abi_tags
-                        .iter()
+                    wheel_tags
                         .map(|tag| if let Some(pretty) = tag.pretty() {
                             format!("{pretty} (`{tag}`)")
                         } else {

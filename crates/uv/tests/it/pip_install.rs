@@ -13729,7 +13729,7 @@ fn record_uses_forward_slashes() -> Result<()> {
 /// a clear error message when a user tries to install an abi3 wheel.
 #[test]
 #[cfg(unix)]
-fn abi3_wheel_on_freethreaded_python() -> Result<()> {
+fn abi3_wheel_on_freethreaded_python() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
@@ -13769,8 +13769,6 @@ fn abi3_wheel_on_freethreaded_python() -> Result<()> {
     error: Failed to determine installation plan
       Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
 
-    hint: The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`) which does not support it
+    hint: The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`), which is incompatible
     ");
-
-    Ok(())
 }

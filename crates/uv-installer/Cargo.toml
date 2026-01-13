@@ -54,4 +54,5 @@ url = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+anstream = { workspace = true }
 insta = { workspace = true }

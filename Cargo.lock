@@ -6235,6 +6235,7 @@ dependencies = [
 name = "uv-installer"
 version = "0.0.13"
 dependencies = [
+ "anstream",
  "anyhow",
  "async-channel",
  "fs-err",
