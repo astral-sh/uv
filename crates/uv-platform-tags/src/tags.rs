@@ -32,6 +32,8 @@ pub enum IncompatibleTag {
     Python,
     /// The ABI tag is incompatible.
     Abi,
+    /// The wheel requires the stable ABI (`abi3`), which is not supported by free-threaded Python.
+    AbiFreethreaded,
     /// The Python version component of the ABI tag is incompatible with `requires-python`.
     AbiPythonVersion,
     /// The platform tag is incompatible.
@@ -86,6 +88,8 @@ pub struct Tags {
     /// Whether the tags are for a different Python interpreter than the current one, for error
     /// messages.
     is_cross: bool,
+    /// Whether this is free-threaded Python (GIL disabled).
+    is_freethreaded: bool,
 }
 
 impl Tags {
@@ -98,6 +102,7 @@ impl Tags {
         python_platform: Platform,
         python_version: (u8, u8),
         is_cross: bool,
+        is_freethreaded: bool,
     ) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
@@ -119,6 +124,7 @@ impl Tags {
             python_platform,
             python_version,
             is_cross,
+            is_freethreaded,
         }
     }
 
@@ -235,7 +241,13 @@ impl Tags {
                 ));
             }
         }
-        Ok(Self::new(tags, platform.clone(), python_version, is_cross))
+        Ok(Self::new(
+            tags,
+            platform.clone(),
+            python_version,
+            is_cross,
+            gil_disabled,
+        ))
     }
 
     /// Returns true when there exists at least one tag for this platform
@@ -288,8 +300,18 @@ impl Tags {
 
         for wheel_py in wheel_python_tags {
             let Some(abis) = self.map.get(wheel_py) else {
-                max_compatibility =
-                    max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Python));
+                // Check if this is an abi3 wheel on free-threaded Python, which would otherwise
+                // be reported as a Python version mismatch (because abi3 tags aren't in the map).
+                if self.is_freethreaded
+                    && wheel_abi_tags.iter().any(|abi| matches!(abi, AbiTag::Abi3))
+                {
+                    max_compatibility = max_compatibility.max(TagCompatibility::Incompatible(
+                        IncompatibleTag::AbiFreethreaded,
+                    ));
+                } else {
+                    max_compatibility = max_compatibility
+                        .max(TagCompatibility::Incompatible(IncompatibleTag::Python));
+                }
                 continue;
             };
             for wheel_abi in wheel_abi_tags {

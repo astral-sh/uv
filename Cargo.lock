@@ -6239,6 +6239,7 @@ dependencies = [
  "async-channel",
  "fs-err",
  "futures",
+ "insta",
  "owo-colors",
  "rayon",
  "rustc-hash",

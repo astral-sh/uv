@@ -192,6 +192,7 @@ impl IncompatibleDist {
                     let tag = tags?.abi_tag().as_ref().map(ToString::to_string)?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
+                IncompatibleWheel::Tag(IncompatibleTag::AbiFreethreaded) => None,
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
                     let tag = requires_python?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
@@ -224,6 +225,9 @@ impl Display for IncompatibleDist {
                         f.write_str("no wheels with a matching Python implementation tag")
                     }
                     IncompatibleTag::Abi => f.write_str("no wheels with a matching Python ABI tag"),
+                    IncompatibleTag::AbiFreethreaded => {
+                        f.write_str("no wheels with a matching ABI tag (stable ABI is not supported by free-threaded Python)")
+                    }
                     IncompatibleTag::AbiPythonVersion => {
                         f.write_str("no wheels with a matching Python version tag")
                     }

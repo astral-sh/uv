@@ -52,3 +52,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
