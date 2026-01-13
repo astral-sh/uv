@@ -3,6 +3,33 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.25
+
+Released on 2026-01-13.
+
+### Python
+
+- Add CPython 3.15.0a4
+- Upgrade Tcl/Tk used by CPython to 9.0
+
+### Enhancements
+
+- Add `--compile-bytecode` to `uv python install` and `uv python upgrade` to compile the standard library ([#17088](https://github.com/astral-sh/uv/pull/17088))
+- Allow disabling `exclude-newer` per package ([#16854](https://github.com/astral-sh/uv/pull/16854))
+- Broadcast `WM_SETTINGCHANGE` on `uv tool update-shell` ([#17404](https://github.com/astral-sh/uv/pull/17404))
+
+### Preview features
+
+- Detect workspace from `uv run` target ([#17423](https://github.com/astral-sh/uv/pull/17423))
+
+### Bug fixes
+
+- Avoid unwrapping size for file responses ([#17434](https://github.com/astral-sh/uv/pull/17434))
+- Use keyring authentication when retrieving `tool@latest` version ([#17448](https://github.com/astral-sh/uv/pull/17448))
+- Use latest Pyodide version for each python version ([#17372](https://github.com/astral-sh/uv/pull/17372))
+- Improve trampoline file handle closing ([#17374](https://github.com/astral-sh/uv/pull/17374))
+- Fix error message when installing musl python on armv7 ([#17213](https://github.com/astral-sh/uv/pull/17213))
+
 ## 0.9.24
 
 Released on 2026-01-09.
