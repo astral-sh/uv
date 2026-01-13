@@ -1,5 +1,10 @@
 on:
   workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -22,6 +27,8 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         run: cargo build --profile no-debug
@@ -47,6 +54,8 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         run: cargo build --profile no-debug
@@ -77,6 +86,8 @@ jobs:
           rustup target add x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
@@ -102,6 +113,8 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
 
@@ -126,6 +139,8 @@ jobs:
       - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
 
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Build"
         run: cargo build --profile no-debug --bin uv --bin uvx
 
@@ -158,6 +173,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -193,6 +209,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install cross target"
         run: rustup target add aarch64-pc-windows-msvc
@@ -230,6 +247,8 @@ jobs:
       - name: "Install mold"
         uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --profile no-debug
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
@@ -244,6 +263,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
         run: |
           # Install cross from `freebsd-firecracker`

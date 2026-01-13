@@ -4,6 +4,10 @@ on:
       code-changed:
         required: true
         type: string
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -98,7 +102,7 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
         uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
         with:
@@ -130,6 +134,7 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Install Rust toolchain"
         run: rustup component add clippy

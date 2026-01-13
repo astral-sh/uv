@@ -4,6 +4,10 @@ on:
       schema-changed:
         required: true
         type: string
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -24,7 +28,7 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Generate all"
         run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
