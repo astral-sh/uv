@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 10
     name: "python on debian"
     runs-on: ubuntu-latest
-    container: debian:bookworm
+    container: debian:bookworm@sha256:23f8d499dcf5559a92ef814c309d747268420cf5e5e60f067f495d509f0aeb93
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 10
     name: "python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:43
+    container: fedora:43@sha256:6cd815d862109208adf6040ea13391fe6aeb87a9dc80735c2ab07083fdf5e03a
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -248,7 +248,7 @@ jobs:
     timeout-minutes: 10
     name: "pyston on linux"
     runs-on: ubuntu-latest
-    container: pyston/pyston:2.3.5
+    container: pyston/pyston:2.3.5@sha256:3e8c851140fb52a183b1d7f478e2a534374275516426acfeda5c2b0a032fc6bb
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -272,7 +272,7 @@ jobs:
     timeout-minutes: 10
     name: "python on alpine"
     runs-on: ubuntu-latest
-    container: alpine:latest
+    container: alpine:latest@sha256:865b95f46d98cf867a156fe4a135ad3fe50d2056aa3f25ed31662dff6da4eb62
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -680,7 +680,7 @@ jobs:
     timeout-minutes: 10
     name: "python on amazonlinux"
     runs-on: ubuntu-latest
-    container: amazonlinux:2023
+    container: amazonlinux:2023@sha256:57f00a32ff213e126c59e03f8a7ecb662b1887c1ef31c709865e6fd5c72cac07
     steps:
       - name: "Install base requirements"
         run: |
