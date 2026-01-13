@@ -32,8 +32,8 @@ pub enum IncompatibleTag {
     Python,
     /// The ABI tag is incompatible.
     Abi,
-    /// The wheel requires the stable ABI (`abi3`), which is not supported by free-threaded Python.
-    AbiFreethreaded,
+    /// The wheel uses the stable ABI (`abi3`), which is not supported by free-threaded Python.
+    Abi3Freethreaded,
     /// The Python version component of the ABI tag is incompatible with `requires-python`.
     AbiPythonVersion,
     /// The platform tag is incompatible.
@@ -296,22 +296,20 @@ impl Tags {
         wheel_abi_tags: &[AbiTag],
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
+        // Check for abi3 on free-threaded Python (stable ABI is not supported)
+        if wheel_abi_tags
+            .iter()
+            .all(|abi| self.is_abi_incompatible(*abi))
+        {
+            return TagCompatibility::Incompatible(IncompatibleTag::Abi3Freethreaded);
+        }
+
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
 
         for wheel_py in wheel_python_tags {
             let Some(abis) = self.map.get(wheel_py) else {
-                // Check if this is an abi3 wheel on free-threaded Python, which would otherwise
-                // be reported as a Python version mismatch (because abi3 tags aren't in the map).
-                if self.is_freethreaded
-                    && wheel_abi_tags.iter().any(|abi| matches!(abi, AbiTag::Abi3))
-                {
-                    max_compatibility = max_compatibility.max(TagCompatibility::Incompatible(
-                        IncompatibleTag::AbiFreethreaded,
-                    ));
-                } else {
-                    max_compatibility = max_compatibility
-                        .max(TagCompatibility::Incompatible(IncompatibleTag::Python));
-                }
+                max_compatibility =
+                    max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Python));
                 continue;
             };
             for wheel_abi in wheel_abi_tags {
@@ -369,6 +367,15 @@ impl Tags {
 
     pub fn is_cross(&self) -> bool {
         self.is_cross
+    }
+
+    /// Returns `true` if the given ABI tag is explicitly incompatible with this Python.
+    ///
+    /// This is used for ABI-level incompatibilities that aren't captured by the tag map,
+    /// such as `abi3` on free-threaded Python.
+    fn is_abi_incompatible(&self, abi: AbiTag) -> bool {
+        // The stable ABI (abi3) is not supported by free-threaded Python
+        self.is_freethreaded && matches!(abi, AbiTag::Abi3)
     }
 }
 

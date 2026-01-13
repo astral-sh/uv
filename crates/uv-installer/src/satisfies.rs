@@ -420,20 +420,6 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
     };
 
     match incompatible_tag {
-        IncompatibleTag::AbiFreethreaded => {
-            let message = if let Some(current) = tags.abi_tag() {
-                if let Some(pretty) = current.pretty() {
-                    format!("{pretty} (`{current}`)")
-                } else {
-                    format!("`{current}`")
-                }
-            } else {
-                "free-threaded Python".to_string()
-            };
-            Some(format!(
-                "The distribution uses the stable ABI (`abi3`), but you're using {message} which does not support it"
-            ))
-        }
         IncompatibleTag::Python => {
             let wheel_tags = wheel_tags.python_tags();
             let current_tag = tags.python_tag();
@@ -471,10 +457,23 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 ))
             }
         }
+        IncompatibleTag::Abi3Freethreaded => {
+            let message = if let Some(current) = tags.abi_tag() {
+                if let Some(pretty) = current.pretty() {
+                    format!("{pretty} (`{current}`)")
+                } else {
+                    format!("`{current}`")
+                }
+            } else {
+                "free-threaded Python".to_string()
+            };
+            Some(format!(
+                "The distribution uses the stable ABI (`abi3`), but you're using {message} which does not support it"
+            ))
+        }
         IncompatibleTag::Abi => {
-            let wheel_tags = wheel_tags.abi_tags();
+            let wheel_abi_tags: Vec<_> = wheel_tags.abi_tags().copied().collect();
             let current_tag = tags.abi_tag();
-
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
                     format!("{pretty} (`{current}`)")
@@ -483,7 +482,8 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 };
                 Some(format!(
                     "The distribution is compatible with {}, but you're using {}",
-                    wheel_tags
+                    wheel_abi_tags
+                        .iter()
                         .map(|tag| if let Some(pretty) = tag.pretty() {
                             format!("{pretty} (`{tag}`)")
                         } else {
@@ -496,7 +496,8 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
             } else {
                 Some(format!(
                     "The distribution requires {}",
-                    wheel_tags
+                    wheel_abi_tags
+                        .iter()
                         .map(|tag| if let Some(pretty) = tag.pretty() {
                             format!("{pretty} (`{tag}`)")
                         } else {

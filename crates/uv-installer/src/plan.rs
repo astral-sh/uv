@@ -544,21 +544,6 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
     };
 
     match incompatible_tag {
-        IncompatibleTag::AbiFreethreaded => {
-            let message = if let Some(current) = tags.abi_tag() {
-                if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                }
-            } else {
-                "free-threaded Python".to_string()
-            };
-            Some(format!(
-                "The wheel uses the stable ABI (`{abi3}`), but you're using {message} which does not support it",
-                abi3 = "abi3".cyan()
-            ))
-        }
         IncompatibleTag::Python => {
             let wheel_tags = filename.python_tags();
             let current_tag = tags.python_tag();
@@ -598,10 +583,24 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 ))
             }
         }
+        IncompatibleTag::Abi3Freethreaded => {
+            let message = if let Some(current) = tags.abi_tag() {
+                if let Some(pretty) = current.pretty() {
+                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                } else {
+                    format!("`{}`", current.cyan())
+                }
+            } else {
+                "free-threaded Python".to_string()
+            };
+            Some(format!(
+                "The wheel uses the stable ABI (`{abi3}`), but you're using {message} which does not support it",
+                abi3 = "abi3".cyan()
+            ))
+        }
         IncompatibleTag::Abi => {
             let wheel_tags = filename.abi_tags();
             let current_tag = tags.abi_tag();
-
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
                     format!("{} (`{}`)", pretty.cyan(), current.cyan())
