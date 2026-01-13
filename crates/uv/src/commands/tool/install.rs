@@ -241,12 +241,17 @@ pub(crate) async fn install(
     } = &request
     {
         // Build the registry client to fetch the latest version.
-        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
-            .index_locations(settings.resolver.index_locations.clone())
-            .index_strategy(settings.resolver.index_strategy)
-            .markers(interpreter.markers())
-            .platform(interpreter.platform())
-            .build();
+        let client = RegistryClientBuilder::new(
+            client_builder
+                .clone()
+                .keyring(settings.resolver.keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(settings.resolver.index_locations.clone())
+        .index_strategy(settings.resolver.index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
 
         // Initialize the capabilities.
         let capabilities = IndexCapabilities::default();
