@@ -203,7 +203,7 @@ impl<'de> Deserialize<'de> for PyxFile {
                                         .map(VersionSpecifiers::from)
                                 });
                         }
-                        "size" => size = Some(access.next_value()?),
+                        "size" => size = access.next_value()?,
                         "upload-time" => upload_time = Some(access.next_value()?),
                         "url" => url = Some(access.next_value()?),
                         "yanked" => yanked = Some(access.next_value()?),
