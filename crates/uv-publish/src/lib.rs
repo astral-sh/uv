@@ -39,6 +39,7 @@ use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
+use crate::trusted_publishing::pypi::PyPIPublishingService;
 use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
 
 #[derive(Error, Debug)]
@@ -417,9 +418,8 @@ pub async fn check_trusted_publishing(
 
             debug!("Attempting to get a token for trusted publishing");
             // Attempt to get a token for trusted publishing.
-            match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                .await
-            {
+            let service = PyPIPublishingService::new(registry, client);
+            match trusted_publishing::get_token(&service).await {
                 // Success: we have a token for trusted publishing.
                 Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
                 // Failed to discover an ambient OIDC token.
@@ -447,10 +447,10 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            let Some(token) =
-                trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await
-                    .map_err(Box::new)?
+            let service = PyPIPublishingService::new(registry, client);
+            let Some(token) = trusted_publishing::get_token(&service)
+                .await
+                .map_err(Box::new)?
             else {
                 return Err(PublishError::TrustedPublishing(
                     TrustedPublishingError::NoToken.into(),
