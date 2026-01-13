@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -423,19 +424,31 @@ impl From<IndexUrl> for Index {
     }
 }
 
-/// A potentially unresolved index
-#[derive(Debug, Clone)]
+/// A potentially unresolved index.
+///
+/// With `#[serde(untagged)]`, deserialization tries `Index` first (which requires `url`),
+/// then falls back to `UnresolvedIndex` (which only requires `name`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged)]
 pub enum IndexArg {
     Resolved(Index),
     Unresolved(UnresolvedIndex),
 }
 
-/// An unresolved index passed by the user by its name
-#[derive(Debug, Clone)]
+/// An unresolved index passed by the user by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
 pub struct UnresolvedIndex {
     pub name: IndexName,
+    #[serde(default)]
     pub default: bool,
 }
+
+#[derive(Debug, Error)]
+#[error("Could not find an index named `{0}`")]
+pub struct ResolveIndexArgError(IndexName);
 
 impl IndexArg {
     /// Parse an Index passed on the command line
@@ -480,19 +493,38 @@ impl IndexArg {
             cache_control: None,
         }))
     }
-}
 
-/// The index argument was unresolved
-#[derive(Error, Debug)]
-#[error("cannot convert an unresolved index to a resolved index")]
-pub struct IntoResolvedError;
+    /// Converts from `IndexArg` to `Option<Index>`.
+    ///
+    /// Useful when filtering out unresolved indices.
+    pub fn index(self) -> Option<Index> {
+        match self {
+            Self::Resolved(index) => Some(index),
+            Self::Unresolved(_) => None,
+        }
+    }
 
-impl TryFrom<IndexArg> for Index {
-    type Error = IntoResolvedError;
-    fn try_from(index_arg: IndexArg) -> Result<Self, Self::Error> {
-        match index_arg {
-            IndexArg::Resolved(index) => Ok(index),
-            IndexArg::Unresolved(_) => Err(IntoResolvedError),
+    pub fn try_resolve<I>(self, indexes: I) -> Result<Index, ResolveIndexArgError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Index>,
+    {
+        match self {
+            Self::Resolved(index) => Ok(index),
+            Self::Unresolved(unresolved) => {
+                if let Some(index) = indexes
+                    .into_iter()
+                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved.name))
+                {
+                    Ok(Index {
+                        default: unresolved.default,
+                        origin: Some(Origin::Cli),
+                        ..index.borrow().clone()
+                    })
+                } else {
+                    Err(ResolveIndexArgError(unresolved.name))
+                }
+            }
         }
     }
 }
