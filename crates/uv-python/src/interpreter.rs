@@ -217,17 +217,7 @@ impl Interpreter {
     }
 
     pub fn variant(&self) -> PythonVariant {
-        if self.gil_disabled() {
-            if self.debug_enabled() {
-                PythonVariant::FreethreadedDebug
-            } else {
-                PythonVariant::Freethreaded
-            }
-        } else if self.debug_enabled() {
-            PythonVariant::Debug
-        } else {
-            PythonVariant::default()
-        }
+        PythonVariant::from_interpreter(self)
     }
 
     /// Return the [`Arch`] reported by the interpreter platform tags.
