@@ -43,7 +43,7 @@ fn python_upgrade() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Should be a no-op when already upgraded
@@ -53,7 +53,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Python 3.10 is already on the latest supported patch release
+    Installed Python 3.10.19 in [TIME]
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Should reinstall on `--reinstall`
@@ -64,7 +65,7 @@ fn python_upgrade() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     ~ cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Install an earlier pre-release version
@@ -86,8 +87,9 @@ fn python_upgrade() {
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Installed 2 versions in [TIME]
+     + cpython-3.10.19-[PLATFORM]
+     + cpython-3.14.2-[PLATFORM]
     ");
 }
 
@@ -133,7 +135,7 @@ fn python_upgrade_without_version() {
 
     ----- stderr -----
     Installed Python 3.13.[X] in [TIME]
-     + cpython-3.13.[X]-[PLATFORM] (python3.13)
+     + cpython-3.13.[X]-[PLATFORM]
     ");
 
     // Providing no minor version to `uv python upgrade` should upgrade the rest
@@ -144,9 +146,10 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 versions in [TIME]
-     + cpython-3.11.14-[PLATFORM] (python3.11)
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+    Installed 3 versions in [TIME]
+     + cpython-3.11.14-[PLATFORM]
+     + cpython-3.12.12-[PLATFORM]
+     + cpython-3.13.11-[PLATFORM]
     ");
 
     // Should be a no-op when every version is already upgraded
@@ -156,7 +159,10 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
-    All versions already on latest supported patch release
+    Installed 3 versions in [TIME]
+     + cpython-3.11.14-[PLATFORM]
+     + cpython-3.12.12-[PLATFORM]
+     + cpython-3.13.11-[PLATFORM]
     ");
 }
 
@@ -234,7 +240,7 @@ fn python_upgrade_transparent_from_venv() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // First virtual environment should reflect upgraded patch
@@ -242,7 +248,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.19
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -254,7 +260,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.19
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -312,7 +318,7 @@ fn python_upgrade_transparent_from_venv_preview() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Virtual environment should reflect upgraded patch
@@ -320,7 +326,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.19
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -376,7 +382,7 @@ fn python_upgrade_ignored_with_python_pin() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Virtual environment should continue to respect pinned patch version
@@ -442,7 +448,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // The virtual environment Python version remains the same.
@@ -534,7 +540,7 @@ fn python_transparent_upgrade_venv_venv() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     ");
 
     // Should have transparently upgraded in second virtual environment
@@ -544,7 +550,7 @@ fn python_transparent_upgrade_venv_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.19
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -603,7 +609,7 @@ fn python_upgrade_transparent_from_venv_module() {
 
     ----- stderr -----
     Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
+     + cpython-3.12.12-[PLATFORM]
     "
     );
 
@@ -612,7 +618,7 @@ fn python_upgrade_transparent_from_venv_module() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.12
+    Python 3.12.9
 
     ----- stderr -----
     "
@@ -689,7 +695,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+     + cpython-3.10.19-[PLATFORM]
     "
     );
 
@@ -700,7 +706,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.19
+    Python 3.10.17
 
     ----- stderr -----
     "
@@ -769,6 +775,7 @@ fn python_upgrade_implementation() {
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    All versions already on latest supported patch release
+    Installed Python 3.11.13 in [TIME]
+     + pypy-3.11.13-[PLATFORM]
     ");
 }

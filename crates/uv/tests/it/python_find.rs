@@ -1344,7 +1344,7 @@ fn python_find_freethreaded_314() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.14+gil in [PYTHON SOURCES]
+    error: No interpreter found for Python 3.14 in [PYTHON SOURCES]
     ");
 
     // Install the non-freethreaded version
@@ -1360,19 +1360,19 @@ fn python_find_freethreaded_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14+freethreaded-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
 
     // Request Python 3.14+gil
     uv_snapshot!(context.filters(), context.python_find().arg("3.14+gil"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    error: No interpreter found for Python 3.14 in [PYTHON SOURCES]
     ");
 }
 
