@@ -1,4 +1,4 @@
-use crate::common::{TestContext, uv_snapshot};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -3505,4 +3505,58 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
     "###);
 
     Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/17436>
+#[test]
+fn tool_run_latest_keyring_auth() {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Combine keyring venv bin with tool bin directory to avoid PATH warnings.
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])
+        .unwrap();
+
+    // Test that the keyring is consulted during the @latest version lookup.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--index")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("executable-application@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
 }
