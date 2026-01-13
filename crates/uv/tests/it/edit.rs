@@ -17,6 +17,7 @@ use std::path::Path;
 use url::Url;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
+#[cfg(feature = "git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -629,16 +630,6 @@ fn add_git_error() -> Result<()> {
 
     ----- stderr -----
     error: `flask` did not resolve to a Git repository, but a Git reference (`--branch 0.0.1`) was provided.
-    "###);
-
-    // Request lfs without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("flask").arg("--lfs"), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: `flask` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
     "###);
 
     Ok(())
@@ -14828,6 +14819,66 @@ fn add_no_install_project() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git-lfs")]
+fn add_git_lfs_error() -> Result<()> {
+    let context = TestContext::new("3.13").with_git_lfs_config();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    // Request lfs (via arg) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--lfs"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    "###);
+
+    // Request lfs (via env var) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    // Request lfs (both arg and env var) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "true").arg("--lfs"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    "###);
+
+    // Request lfs from arg and disable lfs from env var (should be ignored) without a Git source.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").env(EnvVars::UV_GIT_LFS, "false").arg("--lfs"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `typing-extensions` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided.
+    "###);
 
     Ok(())
 }

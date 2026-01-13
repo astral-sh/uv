@@ -5,10 +5,11 @@ use tokio::task::JoinError;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
+use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
-use uv_fs::{LockedFileError, Simplified};
+use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -42,7 +43,7 @@ pub enum Error {
     #[error("Failed to write to the distribution cache")]
     CacheWrite(#[source] std::io::Error),
     #[error("Failed to acquire lock on the distribution cache")]
-    CacheLock(#[source] LockedFileError),
+    CacheLock(#[source] CacheError),
     #[error("Failed to deserialize cache entry")]
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]

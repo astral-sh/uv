@@ -407,17 +407,22 @@ fn token_native_auth_realm() -> Result<()> {
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
+    context
+        .auth_logout()
+        .arg("pypi-proxy.fly.dev")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
 
     // Without persisted credentials
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -479,28 +484,28 @@ fn token_native_auth_realm() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Without the username
+    // Without the username (defaults to __token__ which wasn't stored)
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
-    // Without the username
+    // Without the username (defaults to __token__ which wasn't stored)
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // With a mismatched username

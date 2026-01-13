@@ -4,8 +4,8 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion,
-    TargetTriple, TrustedPublishing, Upgrade,
+    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, ProxyUrl, Reinstall,
+    RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
@@ -100,6 +100,7 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
+impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);
 impl_combine_or!(PythonVersion);

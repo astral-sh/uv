@@ -3,8 +3,33 @@
 # Terminate after 120s as a stop-gap measure to terminate on deadlock.
 slow-timeout =  { period = "10s", terminate-after = 12 }
 
+[profile.ci-linux]
+slow-timeout =  { period = "10s", terminate-after = 12 }
+test-threads = 20
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate-final"
+fail-fast = false
+
+[profile.ci-macos]
+slow-timeout =  { period = "10s", terminate-after = 12 }
+test-threads = 12
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate-final"
+fail-fast = false
+
+[profile.ci-windows]
+slow-timeout =  { period = "10s", terminate-after = 12 }
+test-threads = 20
+status-level = "skip"
+final-status-level = "slow"
+failure-output = "immediate-final"
+fail-fast = false
+
 [test-groups]
 serial = { max-threads = 1 }
+io-bound = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'test(native_auth)'
@@ -13,3 +38,9 @@ test-group = 'serial'
 [[profile.default.overrides]]
 filter = 'package(uv-keyring)'
 test-group = 'serial'
+
+[[profile.ci-windows.overrides]]
+platform = 'cfg(target_os = "windows")'
+filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
+test-group = 'io-bound'
+priority = 1 # Start earlier so these can complete before the end

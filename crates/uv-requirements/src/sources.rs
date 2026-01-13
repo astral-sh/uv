@@ -78,6 +78,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
     pub fn from_requirements_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -110,6 +114,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
     pub fn from_constraints_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -142,6 +150,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
     pub fn from_overrides_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(

@@ -3,6 +3,155 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.24
+
+Released on 2026-01-09.
+
+### Bug fixes
+
+- Fix handling of `UV_NO_SYNC=1 uv run ...` ([#17391](https://github.com/astral-sh/uv/pull/17391))
+- Rebuild dynamic distribution when version changes with `--no-cache` ([#17387](https://github.com/astral-sh/uv/pull/17387))
+
+### Documentation
+
+- Add Rust language classifier ([#17389](https://github.com/astral-sh/uv/pull/17389))
+
+## 0.9.23
+
+Released on 2026-01-09.
+
+### Enhancements
+
+- Only write portable paths in `RECORD` files ([#17339](https://github.com/astral-sh/uv/pull/17339))
+- Support relative paths in `UV_PYTHON_BIN_DIR` and `UV_TOOL_BIN_DIR` ([#17367](https://github.com/astral-sh/uv/pull/17367))
+
+### Preview features
+
+- Enable uploads to S3 via pre-signed URLs ([#17349](https://github.com/astral-sh/uv/pull/17349))
+
+### Configuration
+
+- Allow setting proxy variables via global / user configuration ([#16918](https://github.com/astral-sh/uv/pull/16918))
+- Manually parse and reconcile Boolean environment variables ([#17321](https://github.com/astral-sh/uv/pull/17321))
+
+### Bug fixes
+
+- Avoid broken build artifacts on build failure ([#17276](https://github.com/astral-sh/uv/pull/17276))
+- Fix missing dependencies on synthetic root in SBOM export ([#17363](https://github.com/astral-sh/uv/pull/17363))
+- Recognize `armv8l` as an alias for `armv7l` in platform tag parsing ([#17384](https://github.com/astral-sh/uv/pull/17384))
+- Fix redaction of a URL in a middleware trace log ([#17346](https://github.com/astral-sh/uv/pull/17346))
+
+### Documentation
+
+- Add `index.md` suggestion to `llms.txt` ([#17362](https://github.com/astral-sh/uv/pull/17362))
+- Clarify that `uv run` uses inexact syncing by default ([#17366](https://github.com/astral-sh/uv/pull/17366))
+
+## 0.9.22
+
+Released on 2026-01-06.
+
+### Enhancements
+
+- Use a dedicated error message when lockfile can't be found ([#17318](https://github.com/astral-sh/uv/pull/17318))
+
+### Bug fixes
+
+- Filter unusable wheels from the lockfile for more architectures ([#17317](https://github.com/astral-sh/uv/pull/17317))
+- Correctly count retries originating from early middleware errors ([#17274](https://github.com/astral-sh/uv/pull/17274))
+
+### Documentation
+
+- Clarify requirements file format in docs ([#17284](https://github.com/astral-sh/uv/pull/17284))
+
+## 0.9.21
+
+Released on 2025-12-30.
+
+### Bug fixes
+
+- Fix regression where zstd distribution hashes were not considered valid ([#17265](https://github.com/astral-sh/uv/pull/17265))
+
+### Documentation
+
+- Fix a typo in the resolution documentation ([#17258](https://github.com/astral-sh/uv/pull/17258))
+- Fix a typo in `python install --default` documentation ([#9826](https://github.com/astral-sh/uv/pull/9826))
+
+## 0.9.20
+
+Released on 2025-12-29.
+
+This is a re-release of 0.9.19, with internal crate versions incremented to enable publishing to crates.io.
+
+## 0.9.19
+
+Released on 2025-12-29.
+
+### Python
+
+- Add CPython 3.15.0a3 ([#17165](https://github.com/astral-sh/uv/pull/17165))
+
+### Enhancements
+
+- Allow `uv pip compile` to install missing python interpreters in cases where it would otherwise fail ([#17216](https://github.com/astral-sh/uv/pull/17216))
+- Avoid creating file contents with `uv init --bare --script` ([#17162](https://github.com/astral-sh/uv/pull/17162))
+- Respect `--torch-backend` in `uv tool` commands ([#17117](https://github.com/astral-sh/uv/pull/17117))
+- Support comma-separated values in `--no-binary` and `--only-binary` ([#17185](https://github.com/astral-sh/uv/pull/17185))
+
+### Preview features
+
+- Summarize package changes in `uv sync` with JSON output format ([#16981](https://github.com/astral-sh/uv/pull/16981))
+
+### Performance
+
+- Avoid two hot `String` allocations in deserialization ([#17221](https://github.com/astral-sh/uv/pull/17221))
+- Cache NVIDIA-hosted wheels by default ([#17164](https://github.com/astral-sh/uv/pull/17164))
+
+### Bug fixes
+
+- Avoid enforcing incorrect hash in mixed-hash settings ([#17157](https://github.com/astral-sh/uv/pull/17157))
+- Fix retry counts in cached client ([#17104](https://github.com/astral-sh/uv/pull/17104))
+- Respect `UV_PYTHON_DOWNLOAD_MIRROR` in `uv python list` ([#16673](https://github.com/astral-sh/uv/pull/16673))
+- Support remote `pylock.toml` files ([#17119](https://github.com/astral-sh/uv/pull/17119))
+- Avoid flagging proxied Git URLs as ambiguous authority ([#17234](https://github.com/astral-sh/uv/pull/17234))
+- Fix dropped support of `-` in pip constraints, overrides, and excludes ([#17188](https://github.com/astral-sh/uv/pull/17188))
+
+## 0.9.18
+
+Released on 2025-12-16.
+
+### Enhancements
+
+- Add value hints to command line arguments to improve shell completion accuracy ([#17080](https://github.com/astral-sh/uv/pull/17080))
+- Improve error handling in `uv publish` ([#17096](https://github.com/astral-sh/uv/pull/17096))
+- Improve rendering of multiline error messages ([#17132](https://github.com/astral-sh/uv/pull/17132))
+- Support redirects in `uv publish` ([#17130](https://github.com/astral-sh/uv/pull/17130))
+- Include Docker images with the alpine version, e.g., `python3.x-alpine3.23` ([#17100](https://github.com/astral-sh/uv/pull/17100))
+
+### Configuration
+
+- Accept `--torch-backend` in `[tool.uv]` ([#17116](https://github.com/astral-sh/uv/pull/17116))
+
+### Performance
+
+- Speed up `uv cache size` ([#17015](https://github.com/astral-sh/uv/pull/17015))
+- Initialize S3 signer once ([#17092](https://github.com/astral-sh/uv/pull/17092))
+
+### Bug fixes
+
+- Avoid panics due to reads on failed requests ([#17098](https://github.com/astral-sh/uv/pull/17098))
+- Enforce latest-version in `@latest` requests ([#17114](https://github.com/astral-sh/uv/pull/17114))
+- Explicitly set `EntryType` for file entries in tar ([#17043](https://github.com/astral-sh/uv/pull/17043))
+- Ignore `pyproject.toml` index username in lockfile comparison ([#16995](https://github.com/astral-sh/uv/pull/16995))
+- Relax error when using `uv add` with `UV_GIT_LFS` set ([#17127](https://github.com/astral-sh/uv/pull/17127))
+- Support file locks on ExFAT on macOS ([#17115](https://github.com/astral-sh/uv/pull/17115))
+- Change schema for `exclude-newer` into optional string ([#17121](https://github.com/astral-sh/uv/pull/17121))
+
+### Documentation
+
+- Drop arm musl caveat from Docker documentation ([#17111](https://github.com/astral-sh/uv/pull/17111))
+- Fix version reference in resolver example ([#17085](https://github.com/astral-sh/uv/pull/17085))
+- Better documentation for `exclude-newer*` ([#17079](https://github.com/astral-sh/uv/pull/17079))
+
 ## 0.9.17
 
 Released on 2025-12-09.

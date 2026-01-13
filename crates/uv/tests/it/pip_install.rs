@@ -2765,6 +2765,37 @@ fn install_no_binary_overrides_only_binary_all() {
     context.assert_command("import anyio").success();
 }
 
+/// Accept comma-separated values for `--no-binary` (pip compatibility)
+#[test]
+fn install_no_binary_comma_separated() {
+    let context = TestContext::new("3.12");
+
+    // Use comma-separated format for `--no-binary`
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--no-binary=idna,sniffio")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
 /// Disable binaries with an environment variable
 /// TODO(zanieb): This is not yet implemented
 #[test]
@@ -2855,6 +2886,37 @@ fn install_only_binary_overrides_no_binary_all() {
         .arg(":all:")
         .arg("--only-binary")
         .arg("idna")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Accept comma-separated values for `--only-binary` (pip compatibility)
+#[test]
+fn install_only_binary_comma_separated() {
+    let context = TestContext::new("3.12");
+
+    // Use comma-separated format for `--only-binary`
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--only-binary=idna,sniffio")
         .arg("--strict");
     uv_snapshot!(
         command,
@@ -3544,6 +3606,40 @@ fn install_constraints_txt() -> Result<()> {
             .arg("requirements.txt")
             .arg("--constraint")
             .arg("constraints.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_constraints_txt_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraint")
+            .arg("-")
+            .stdin(std::fs::File::open(constraints_txt)?), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7303,6 +7399,64 @@ fn require_hashes_override() -> Result<()> {
     Ok(())
 }
 
+/// Install with overrides from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_with_overrides_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--override")
+        .arg("-")
+        .stdin(std::fs::File::open(overrides_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install with excludes from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_with_excludes_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt.write_str("anyio>4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--exclude")
+        .arg("-")
+        .stdin(std::fs::File::open(excludes_txt)?), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Provide valid hashes for all dependencies with `--require-hashes` with accompanying markers.
 /// Critically, one package (`requests`) depends on another (`urllib3`).
 #[test]
@@ -8587,6 +8741,35 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with an incompatible constraint from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn incompatible_build_constraint_from_stdin() -> Result<()> {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("-")
+        .stdin(std::fs::File::open(constraints_txt)?), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12090,6 +12273,25 @@ fn conflicting_flags_clap_bug() {
     );
 }
 
+/// Test that `--offline` and `--refresh` conflict.
+#[test]
+fn offline_refresh_conflict() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `--offline` cannot be used with `--refresh`
+    "
+    );
+}
+
 /// Test that shebang arguments are stripped when installing scripts
 #[test]
 #[cfg(unix)]
@@ -13455,6 +13657,68 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
       ├─▶ Failed to build `py313 @ file://[TEMP_DIR]/child`
       ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
     ");
+
+    Ok(())
+}
+
+/// Test that RECORD entries use forward slashes on all platforms.
+///
+/// See <https://github.com/astral-sh/uv/issues/14446>.
+#[test]
+fn record_uses_forward_slashes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a package with scripts via uv_build data directory.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend.data]
+        scripts = "scripts"
+        headers = "headers"
+    "#})?;
+
+    let module_dir = context.temp_dir.child("src").child("project");
+    module_dir.child("__init__.py").touch()?;
+
+    // Create a script that uses the install_script path.
+    let scripts_dir = context.temp_dir.child("scripts");
+    scripts_dir.child("my_script").write_str(indoc! {r#"
+        #!python
+        print("Hello from script")
+    "#})?;
+
+    let scripts_dir = context.temp_dir.child("headers");
+    scripts_dir.child("project.h").write_str(indoc! {r"
+        #include <stdio.h>
+    "})?;
+
+    context.pip_install().arg(".").assert().success();
+
+    // Read the RECORD file and check that all paths use forward slashes.
+    let record_path = context
+        .site_packages()
+        .join("project-0.1.0.dist-info")
+        .join("RECORD");
+
+    let record = fs::read_to_string(&record_path)?;
+    let record_lines: Vec<_> = record
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert!(record_lines.iter().any(|line| line.contains("/my_script")));
+    assert!(record_lines.iter().any(|line| line.contains("/project.h")));
+    for line in record_lines {
+        // Each RECORD line is: path,hash,size
+        let path = line.split(',').next().unwrap();
+        assert!(!path.contains('\\'), "{path}");
+    }
 
     Ok(())
 }

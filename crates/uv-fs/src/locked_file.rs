@@ -1,3 +1,4 @@
+use std::convert::Into;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -59,10 +60,18 @@ pub enum LockedFileError {
         source: io::Error,
     },
     #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
     #[cfg(feature = "tokio")]
     JoinError(#[from] tokio::task::JoinError),
+    #[error("Could not create temporary file")]
+    CreateTemporary(#[source] io::Error),
+    #[error("Could not persist temporary file `{}`", path.user_display())]
+    PersistTemporary {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 impl LockedFileError {
@@ -72,6 +81,8 @@ impl LockedFileError {
             #[cfg(feature = "tokio")]
             Self::JoinError(_) => None,
             Self::Lock { source, .. } => Some(source),
+            Self::CreateTemporary(err) => Some(err),
+            Self::PersistTemporary { source, .. } => Some(source),
             Self::Io(err) => Some(err),
         }
     }
@@ -201,7 +212,7 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
+        let file = Self::create(&path)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -222,9 +233,24 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
-        use std::os::unix::fs::PermissionsExt;
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+        use rustix::io::Errno;
+        #[allow(clippy::disallowed_types)]
+        use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
+
+        /// The permissions the lockfile should end up with
+        const DESIRED_MODE: u32 = 0o666;
+
+        #[allow(clippy::disallowed_types)]
+        fn try_set_permissions(file: &File, path: &Path) {
+            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
+                warn!(
+                    "Failed to set permissions on temporary file `{path}`: {err}",
+                    path = path.user_display()
+                );
+            }
+        }
 
         // If path already exists, return it.
         if let Ok(file) = fs_err::OpenOptions::new()
@@ -238,16 +264,12 @@ impl LockedFile {
         // Otherwise, create a temporary file with 666 permissions. We must set
         // permissions _after_ creating the file, to override the `umask`.
         let file = if let Some(parent) = path.as_ref().parent() {
-            NamedTempFile::new_in(parent)?
+            NamedTempFile::new_in(parent)
         } else {
-            NamedTempFile::new()?
-        };
-        if let Err(err) = file
-            .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o666))
-        {
-            warn!("Failed to set permissions on temporary file: {err}");
+            NamedTempFile::new()
         }
+        .map_err(LockedFileError::CreateTemporary)?;
+        try_set_permissions(file.as_file(), file.path());
 
         // Try to move the file to path, but if path exists now, just open path
         match file.persist_noclobber(path.as_ref()) {
@@ -258,20 +280,60 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
+                        .map_err(Into::into)
+                } else if matches!(
+                    Errno::from_io_error(&err.error),
+                    Some(Errno::NOTSUP | Errno::INVAL)
+                ) {
+                    // Fallback in case `persist_noclobber`, which uses `renameat2` or
+                    // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
+                    // with `EINVAL` and MacOS with `ENOTSUP`. For these reasons and many others,
+                    // there isn't an ErrorKind we can use here, and in fact on MacOS `ENOTSUP` gets
+                    // mapped to `ErrorKind::Other`
+
+                    // There is a race here where another process has just created the file, and we
+                    // try to open it and get permission errors because the other process hasn't set
+                    // the permission bits yet. This will lead to a transient failure, but unlike
+                    // alternative approaches it won't ever lead to a situation where two processes
+                    // are locking two different files. Also, since `persist_noclobber` is more
+                    // likely to not be supported on special filesystems which don't have permission
+                    // bits, it's less likely to ever matter.
+                    let file = fs_err::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(path.as_ref())?;
+
+                    // We don't want to `try_set_permissions` in cases where another user's process
+                    // has already created the lockfile and changed its permissions because we might
+                    // not have permission to change the permissions which would produce a confusing
+                    // warning.
+                    if file
+                        .metadata()
+                        .is_ok_and(|metadata| metadata.permissions().mode() != DESIRED_MODE)
+                    {
+                        try_set_permissions(file.file(), path.as_ref());
+                    }
+                    Ok(file)
                 } else {
-                    Err(err.error)
+                    let temp_path = err.file.into_temp_path();
+                    Err(LockedFileError::PersistTemporary {
+                        path: <tempfile::TempPath as AsRef<Path>>::as_ref(&temp_path).to_path_buf(),
+                        source: err.error,
+                    })
                 }
             }
         }
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path.as_ref())
+            .map_err(Into::into)
     }
 }
 

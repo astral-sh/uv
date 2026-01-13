@@ -176,8 +176,8 @@ local_targets: dict[str, TargetConfiguration] = {
     ),
     "pyx-token": TargetConfiguration(
         "astral-test-token",
-        "https://astral-sh-staging-api.pyx.dev/v1/upload/uv-publish-integration/main",
-        "https://astral-sh-staging-api.pyx.dev/simple/uv-publish-integration/main/",
+        "https://api.pyx.dev/v1/upload/astral-test/main",
+        "https://api.pyx.dev/simple/astral-test/main/",
     ),
 }
 
@@ -641,9 +641,7 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     elif target == "pyx-token":
         extra_args = []
         env = {
-            "UV_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
-            # So that uv accesses the right API for check-url.
-            "PYX_API_URL": "https://astral-sh-staging-api.pyx.dev",
+            "PYX_API_KEY": os.environ["UV_TEST_PUBLISH_PYX_TOKEN"],
         }
     else:
         raise ValueError(f"Unknown target: {target}")

@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::{
     ops::{Deref, DerefMut},
@@ -204,7 +203,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerSpan {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         let span: Span = s.parse().map_err(serde::de::Error::custom)?;
         Ok(Self(span))
     }
@@ -811,7 +810,6 @@ impl schemars::JsonSchema for ExcludeNewerValue {
     fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
             "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`), as well as relative durations (e.g., `1 week`, `30 days`, `6 months`). Relative durations are resolved to a timestamp at lock time.",
         })
     }

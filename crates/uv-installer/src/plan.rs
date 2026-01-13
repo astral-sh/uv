@@ -126,6 +126,7 @@ impl<'a> Planner<'a> {
                             dist.name(),
                             installed,
                             &source,
+                            dist.version(),
                             installation,
                             tags,
                             config_settings,

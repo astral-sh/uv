@@ -10,8 +10,8 @@ use thiserror::Error;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -310,7 +310,7 @@ pub(crate) async fn venv(
             .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
-        DefaultInstallLogger.on_complete(&changelog, printer)?;
+        DefaultInstallLogger.on_complete(&changelog, printer, DryRun::Disabled)?;
     }
 
     // Determine the appropriate activation command.

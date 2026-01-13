@@ -2174,7 +2174,7 @@ fn run_locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     "###);
 
     // Lock the initial requirements.
@@ -2338,7 +2338,7 @@ fn run_frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     "###);
 
     context.lock().assert().success();
@@ -2422,6 +2422,65 @@ fn run_no_sync() -> Result<()> {
 
     // But it should have access to the installed packages.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+/// Test that `UV_NO_SYNC=1` environment variable works for `uv run`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17390>
+#[test]
+fn run_no_sync_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.lock().assert().success();
+
+    // Running with `UV_NO_SYNC=1` should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    "###);
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6089,6 +6148,70 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 
     For more information, try '--help'.
     "###);
+
+    Ok(())
+}
+
+/// Test that `--preview-features target-workspace-discovery` discovers the workspace
+/// from the target's directory rather than the current working directory.
+#[test]
+fn run_target_workspace_discovery() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace in a subdirectory.
+    let workspace = context.temp_dir.child("project");
+    workspace.create_dir_all()?;
+
+    workspace.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // Create a script in the workspace that imports from the project.
+    workspace.child("script.py").write_str(indoc! { r"
+        import iniconfig
+        print('success')
+        "
+    })?;
+
+    // Without the preview feature, running from the parent directory fails to find the workspace,
+    // so the dependency is not installed.
+    uv_snapshot!(context.filters(), context.run().arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/project/script.py", line 1, in <module>
+        import iniconfig
+    ModuleNotFoundError: No module named 'iniconfig'
+    "#);
+
+    // With the preview feature, the workspace is discovered from the target's directory.
+    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: project/.venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/project)
+     + iniconfig==2.0.0
+    ");
 
     Ok(())
 }

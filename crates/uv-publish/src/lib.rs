@@ -3,18 +3,17 @@ mod trusted_publishing;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
 use std::{fmt, io};
 
 use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
-use reqwest::header::AUTHORIZATION;
+use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
+use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use thiserror::Error;
@@ -24,11 +23,11 @@ use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
 use url::Url;
 
-use uv_auth::{Credentials, PyxTokenStore};
+use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
-    RetryParsingError, UvRetryableStrategy,
+    BaseClient, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive, RegistryClientBuilder,
+    RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -37,7 +36,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
@@ -89,6 +88,12 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
+    #[error("Failed to reserve upload slot for `{}`", _0.user_display())]
+    Reserve(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to upload to S3 for `{}`", _0.user_display())]
+    S3Upload(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to finalize upload for `{}`", _0.user_display())]
+    Finalize(PathBuf, #[source] Box<PublishSendError>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -132,11 +137,16 @@ pub enum PublishSendError {
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
-    /// See inline comment.
-    #[error(
-        "The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`"
-    )]
-    RedirectError(Url),
+    #[error("Too many redirects, only {0} redirects are allowed")]
+    TooManyRedirects(u32),
+    #[error("Redirected URL is not in the same realm. Redirected to: {0}")]
+    RedirectRealmMismatch(String),
+    #[error("Request was redirected, but no location header was provided")]
+    RedirectNoLocation,
+    #[error("Request was redirected, but location header is not a UTF-8 string")]
+    RedirectLocationInvalidStr(#[source] ToStrError),
+    #[error("Request was redirected, but location header is not a URL")]
+    RedirectInvalidLocation(#[source] DisplaySafeUrlError),
 }
 
 pub trait Reporter: Send + Sync + 'static {
@@ -469,12 +479,15 @@ pub async fn upload(
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    let mut n_past_retries = 0;
-    let start_time = SystemTime::now();
+    let mut n_past_redirections = 0;
+    let max_redirects = DEFAULT_MAX_REDIRECTS;
+    let mut current_registry = registry.clone();
+    let mut retry_state = RetryState::start(retry_policy, registry.clone());
+
     loop {
         let (request, idx) = build_upload_request(
             group,
-            registry,
+            &current_registry,
             client,
             credentials,
             form_metadata,
@@ -484,33 +497,86 @@ pub async fn upload(
         .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
         let result = request.send().await;
-        if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
-            let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
-            if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+        let response = match result {
+            Ok(response) => {
+                // When the user accidentally uses https://test.pypi.org/legacy (no slash) as publish URL, we
+                // get a redirect to https://test.pypi.org/legacy/ (the canonical index URL).
+                // In the above case we get 308, where reqwest or `RedirectClientWithMiddleware` would try
+                // cloning the streaming body, which is not possible.
+                // For https://test.pypi.org/simple (no slash), we get 301, which means we should make a GET request:
+                // https://fetch.spec.whatwg.org/#http-redirect-fetch).
+                // Reqwest doesn't support redirect policies conditional on the HTTP
+                // method (https://github.com/seanmonstar/reqwest/issues/1777#issuecomment-2303386160), so we're
+                // implementing our custom redirection logic.
+                if response.status().is_redirection() {
+                    if n_past_redirections >= max_redirects {
+                        return Err(PublishError::PublishSend(
+                            group.file.clone(),
+                            current_registry.clone().into(),
+                            PublishSendError::TooManyRedirects(n_past_redirections).into(),
+                        ));
+                    }
+                    let location = response
+                        .headers()
+                        .get(LOCATION)
+                        .ok_or_else(|| {
+                            PublishError::PublishSend(
+                                group.file.clone(),
+                                current_registry.clone().into(),
+                                PublishSendError::RedirectNoLocation.into(),
+                            )
+                        })?
+                        .to_str()
+                        .map_err(|err| {
+                            PublishError::PublishSend(
+                                group.file.clone(),
+                                current_registry.clone().into(),
+                                PublishSendError::RedirectLocationInvalidStr(err).into(),
+                            )
+                        })?;
+                    current_registry = DisplaySafeUrl::parse(location).map_err(|err| {
+                        PublishError::PublishSend(
+                            group.file.clone(),
+                            current_registry.clone().into(),
+                            PublishSendError::RedirectInvalidLocation(err).into(),
+                        )
+                    })?;
+                    if Realm::from(&current_registry) != Realm::from(registry) {
+                        return Err(PublishError::PublishSend(
+                            group.file.clone(),
+                            current_registry.clone().into(),
+                            PublishSendError::RedirectRealmMismatch(current_registry.to_string())
+                                .into(),
+                        ));
+                    }
+                    debug!("Redirecting the request to: {}", current_registry);
+                    n_past_redirections += 1;
+                    continue;
+                }
                 reporter.on_upload_complete(idx);
-                let duration = execute_after
-                    .duration_since(SystemTime::now())
-                    .unwrap_or_else(|_| Duration::default());
-                warn_user!(
-                    "Transient failure while handling response for {}; retrying after {}s...",
-                    registry,
-                    duration.as_secs()
-                );
-                tokio::time::sleep(duration).await;
-                n_past_retries += 1;
-                continue;
+                response
             }
-        }
+            Err(err) => {
+                let middleware_retries = if let Some(RetryError::WithRetries { retries, .. }) =
+                    (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                {
+                    *retries
+                } else {
+                    0
+                };
+                if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                    retry_state.sleep_backoff(backoff).await;
+                    continue;
+                }
+                return Err(PublishError::PublishSend(
+                    group.file.clone(),
+                    current_registry.clone().into(),
+                    PublishSendError::ReqwestMiddleware(err).into(),
+                ));
+            }
+        };
 
-        let response = result.map_err(|err| {
-            PublishError::PublishSend(
-                group.file.clone(),
-                registry.clone().into(),
-                PublishSendError::ReqwestMiddleware(err).into(),
-            )
-        })?;
-
-        return match handle_response(registry, response).await {
+        return match handle_response(&current_registry, response).await {
             Ok(()) => {
                 // Upload successful; for PyPI this can also mean a hash match in a raced upload
                 // (but it doesn't tell us), for other registries it should mean a fresh upload.
@@ -538,7 +604,7 @@ pub async fn upload(
                 }
                 Err(PublishError::PublishSend(
                     group.file.clone(),
-                    registry.clone().into(),
+                    current_registry.clone().into(),
                     err.into(),
                 ))
             }
@@ -565,7 +631,7 @@ pub async fn validate(
             .expect("URL must have path segments")
             .push("validate");
 
-        let request = build_validation_request(
+        let request = build_metadata_request(
             raw_filename,
             &validation_url,
             client,
@@ -591,6 +657,222 @@ pub async fn validate(
     }
 
     Ok(())
+}
+
+/// Upload a file using the two-phase upload protocol for pyx.
+///
+/// This is a more efficient upload method that:
+/// 1. Reserves an upload slot and gets a pre-signed S3 URL.
+/// 2. Uploads the file directly to S3.
+/// 3. Finalizes the upload with the registry.
+///
+/// Returns `true` if the file was newly uploaded and `false` if it already existed.
+pub async fn upload_two_phase(
+    group: &UploadDistribution,
+    form_metadata: &FormMetadata,
+    registry: &DisplaySafeUrl,
+    client: &BaseClient,
+    s3_client: &BaseClient,
+    retry_policy: ExponentialBackoff,
+    credentials: &Credentials,
+    reporter: Arc<impl Reporter>,
+) -> Result<bool, PublishError> {
+    #[derive(Debug, Deserialize)]
+    struct ReserveResponse {
+        upload_url: Option<String>,
+        upload_headers: Option<FxHashMap<String, String>>,
+    }
+
+    // Step 1: Reserve an upload slot.
+    let mut reserve_url = registry.clone();
+    reserve_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("reserve");
+
+    debug!("Reserving upload slot at {reserve_url}");
+
+    let reserve_request = build_metadata_request(
+        &group.raw_filename,
+        &reserve_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = reserve_request.send().await.map_err(|err| {
+        PublishError::Reserve(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    let status = response.status();
+
+    let reserve_response: ReserveResponse = match status {
+        StatusCode::OK => {
+            debug!("File already uploaded: {}", group.raw_filename);
+            return Ok(false);
+        }
+        StatusCode::CREATED => {
+            let body = response.text().await.map_err(|err| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::StatusNoBody(status, err).into(),
+                )
+            })?;
+            serde_json::from_str(&body).map_err(|_| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::Status(status, format!("Invalid JSON response: {body}"))
+                        .into(),
+                )
+            })?
+        }
+        _ => {
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::Reserve(
+                group.file.clone(),
+                PublishSendError::Status(status, body).into(),
+            ));
+        }
+    };
+
+    // Step 2: Upload the file directly to S3 (if needed).
+    // When upload_url is None, the file already exists on S3 with the correct hash.
+    if let Some(upload_url) = reserve_response.upload_url {
+        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
+            PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid S3 URL in reserve response".to_string(),
+                )
+                .into(),
+            )
+        })?;
+
+        debug!("Got pre-signed URL for upload: {s3_url}");
+
+        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
+        let file_size = fs_err::tokio::metadata(&group.file)
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?
+            .len();
+
+        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
+        loop {
+            let file = File::open(&group.file).await.map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?;
+
+            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
+            let reporter_clone = reporter.clone();
+            let reader = ProgressReader::new(file, move |read| {
+                reporter_clone.on_upload_progress(idx, read as u64);
+            });
+            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+
+            let mut request = s3_client
+                .for_host(&s3_url)
+                .raw_client()
+                .put(Url::from(s3_url.clone()))
+                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                .header(reqwest::header::CONTENT_LENGTH, file_size);
+
+            // Add any required headers from the reserve response (e.g., x-amz-tagging).
+            if let Some(headers) = &reserve_response.upload_headers {
+                for (key, value) in headers {
+                    request = request.header(key, value);
+                }
+            }
+
+            let result = request.body(file_reader).send().await;
+
+            let response = match result {
+                Ok(response) => {
+                    reporter.on_upload_complete(idx);
+                    response
+                }
+                Err(err) => {
+                    let middleware_retries =
+                        if let Some(RetryError::WithRetries { retries, .. }) =
+                            (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                        {
+                            *retries
+                        } else {
+                            0
+                        };
+                    if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(PublishError::S3Upload(
+                        group.file.clone(),
+                        PublishSendError::ReqwestMiddleware(err).into(),
+                    ));
+                }
+            };
+
+            if response.status().is_success() {
+                break;
+            }
+
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
+            ));
+        }
+
+        debug!("S3 upload complete for {}", group.raw_filename);
+    } else {
+        debug!(
+            "File already exists on S3, skipping upload: {}",
+            group.raw_filename
+        );
+    }
+
+    // Step 3: Finalize the upload.
+    let mut finalize_url = registry.clone();
+    finalize_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("finalize");
+
+    debug!("Finalizing upload at {finalize_url}");
+
+    let finalize_request = build_metadata_request(
+        &group.raw_filename,
+        &finalize_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = finalize_request.send().await.map_err(|err| {
+        PublishError::Finalize(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    handle_response(&finalize_url, response)
+        .await
+        .map_err(|err| PublishError::Finalize(group.file.clone(), err.into()))?;
+
+    debug!("Upload finalized for {}", group.raw_filename);
+
+    Ok(true)
 }
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
@@ -1007,10 +1289,8 @@ async fn build_upload_request<'a>(
     Ok((request, idx))
 }
 
-/// Build the validation request, to validate the upload without actually uploading the file.
-///
-/// Returns the [`RequestBuilder`].
-fn build_validation_request<'a>(
+/// Build a request with form metadata but without the file content.
+fn build_metadata_request<'a>(
     raw_filename: &str,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
@@ -1070,17 +1350,6 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
     debug!("Response code for {registry}: {status_code}");
     trace!("Response headers for {registry}: {response:?}");
 
-    // When the user accidentally uses https://test.pypi.org/simple (no slash) as publish URL, we
-    // get a redirect to https://test.pypi.org/simple/ (the canonical index URL), while changing the
-    // method to GET (see https://en.wikipedia.org/wiki/Post/Redirect/Get and
-    // https://fetch.spec.whatwg.org/#http-redirect-fetch). The user gets a 200 OK while we actually
-    // didn't upload anything! Reqwest doesn't support redirect policies conditional on the HTTP
-    // method (https://github.com/seanmonstar/reqwest/issues/1777#issuecomment-2303386160), so we're
-    // checking after the fact.
-    if response.url() != registry {
-        return Err(PublishSendError::RedirectError(response.url().clone()));
-    }
-
     if status_code.is_success() {
         if enabled!(Level::TRACE) {
             match response.text().await {
@@ -1137,13 +1406,21 @@ mod tests {
 
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
-
+    use thiserror::__private17::AsDynError;
     use uv_auth::Credentials;
-    use uv_client::BaseClientBuilder;
+    use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
     use uv_redacted::DisplaySafeUrl;
 
-    use crate::{FormMetadata, Reporter, UploadDistribution, build_upload_request, group_files};
+    use crate::{
+        FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
+        group_files, upload,
+    };
+    use tokio::sync::Semaphore;
+    use uv_warnings::owo_colors::AnsiColors;
+    use uv_warnings::write_error_chain;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
 
@@ -1154,6 +1431,44 @@ mod tests {
         }
         fn on_upload_progress(&self, _id: usize, _inc: u64) {}
         fn on_upload_complete(&self, _id: usize) {}
+    }
+
+    async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let file = PathBuf::from("../../test/links/").join(raw_filename);
+        let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
+
+        let group = UploadDistribution {
+            file,
+            raw_filename: raw_filename.to_string(),
+            filename,
+            attestations: vec![],
+        };
+
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
+            .await
+            .unwrap();
+
+        let client = BaseClientBuilder::default()
+            .redirect(RedirectPolicy::NoRedirect)
+            .retries(0)
+            .auth_integration(AuthIntegration::NoAuthMiddleware)
+            .build();
+
+        let download_concurrency = Arc::new(Semaphore::new(1));
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
+        upload(
+            &group,
+            &form_metadata,
+            &registry,
+            &client,
+            client.retry_policy(),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
+            None,
+            &download_concurrency,
+            Arc::new(DummyReporter),
+        )
+        .await
     }
 
     #[test]
@@ -1716,5 +2031,89 @@ mod tests {
             }
             "#);
         });
+    }
+
+    #[tokio::test]
+    async fn upload_redirect_308() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/final/"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&mock_server)
+            .await;
+
+        assert!(mock_server_upload(&mock_server).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn upload_infinite_redirects() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+            )
+            .mount(&mock_server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/final/"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", format!("{}/final", &mock_server.uri())),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @r"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Too many redirects, only 10 redirects are allowed
+        "
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_redirect_different_realm() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(308)
+                    .insert_header("Location", "https://different.auth.tld/final/"),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @r"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
+          Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+        "
+        );
     }
 }

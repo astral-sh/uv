@@ -8231,13 +8231,358 @@ fn lock_invalid_hash() -> Result<()> {
       ╰─▶ Hash mismatch for `idna==3.6`
 
           Expected:
-            sha256:aecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca
             sha256:d05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
 
           Computed:
             sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
       help: `idna` (v3.6) was included because `project` (v0.1.0) depends on `anyio` (v3.7.0) which depends on `idna`
     ");
+
+    Ok(())
+}
+
+/// Ensure that we can install from a lockfile when the index switches hash algorithms.
+/// First lock and sync with SHA256 hashes, then switch to SHA512 and lock/sync again
+/// without clearing the cache.
+#[test]
+fn lock_mixed_hashes() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let root = context.temp_dir.child("simple-html");
+    fs_err::create_dir_all(&root)?;
+
+    let basic_package = root.child("basic-package");
+    fs_err::create_dir_all(&basic_package)?;
+
+    // Copy the wheel and sdist from `test/links`.
+    let wheel = basic_package.child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel,
+    )?;
+
+    let sdist = basic_package.child("basic_package-0.1.0.tar.gz");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0.tar.gz"),
+        &sdist,
+    )?;
+
+    // Phase 1: Create an `index.html` with SHA256 hashes for both wheel and sdist.
+    let index = basic_package.child("index.html");
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for basic-package</h1>
+            <a
+              href="{}#sha256=7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            >
+              basic_package-0.1.0-py3-none-any.whl
+            </a>
+            <a
+              href="{}#sha256=af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4"
+            >
+              basic_package-0.1.0.tar.gz
+            </a>
+          </body>
+        </html>
+    "#,
+        Url::from_file_path(&wheel).unwrap().as_str(),
+        Url::from_file_path(&sdist).unwrap().as_str(),
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv]
+        extra-index-url = ["{}"]
+        "#,
+        Url::from_file_path(&root).unwrap().as_str()
+    })?;
+
+    let index_url = Url::from_file_path(&root).unwrap().to_string();
+    let filters = [(index_url.as_str(), "file://[TMP]")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    // Lock with SHA256 hashes.
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => filters.clone(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "simple-html" }
+        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        wheels = [
+            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package" }]
+        "#
+        );
+    });
+
+    // Sync with SHA256 hashes to populate the cache.
+    uv_snapshot!(filters.clone(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-package==0.1.0
+    ");
+
+    // Phase 2: Update the index to use a SHA512 hash for the wheel instead.
+    index.write_str(&formatdoc! {r#"
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta name="pypi:repository-version" content="1.1" />
+          </head>
+          <body>
+            <h1>Links for basic-package</h1>
+            <a
+              href="{}#sha512=765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
+            >
+              basic_package-0.1.0-py3-none-any.whl
+            </a>
+            <a
+              href="{}#sha256=af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4"
+            >
+              basic_package-0.1.0.tar.gz
+            </a>
+          </body>
+        </html>
+    "#,
+        Url::from_file_path(&wheel).unwrap().as_str(),
+        Url::from_file_path(&sdist).unwrap().as_str(),
+    })?;
+
+    // Lock again with `--refresh` to pick up the SHA512 hash from the updated index.
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => filters.clone(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "simple-html" }
+        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        wheels = [
+            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha512:765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package" }]
+        "#
+        );
+    });
+
+    // Reinstalling should re-compute the hash for the `basic-package` wheel to reflect SHA512.
+    uv_snapshot!(filters, context.sync().arg("--frozen").arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ basic-package==0.1.0
+    ");
+
+    Ok(())
+}
+
+/// Lock with an index which serves zstd-compressed wheels.
+#[tokio::test]
+async fn lock_zstd_wheel() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = TestContext::new("3.13");
+    let server = MockServer::start().await;
+
+    // Copy the wheel to serve it
+    let wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel_path,
+    )?;
+
+    let wheel_url = format!(
+        "{}/files/basic_package-0.1.0-py3-none-any.whl",
+        server.uri()
+    );
+
+    // Serve the wheel file
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .mount(&server)
+        .await;
+
+    // JSON API response with zstd metadata
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": wheel_url,
+            "hashes": {
+                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            },
+            "size": 1548,
+            "zstd": {
+                "hashes": {
+                    "sha256": "21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4"
+                },
+                "size": 786
+            }
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv.sources]
+        basic-package = {{ index = "test-registry" }}
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.13"
+
+        [[package]]
+        name = "basic-package"
+        version = "0.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82", size = 1548, zstd = { hash = "sha256:21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4", size = 786 } },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "basic-package" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "basic-package", index = "http://[LOCALHOST]/simple" }]
+        "#);
+    });
 
     Ok(())
 }
@@ -8772,7 +9117,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     "###);
 
     Ok(())
@@ -9596,6 +9941,84 @@ fn lock_redact_https() -> Result<()> {
     Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
     "###);
+
+    Ok(())
+}
+
+/// Test that packages aren't unnecessarily updated when an index URL contains a username.
+#[test]
+fn lock_index_url_username_change_no_update() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create initial lockfile with exact version constraint
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==4.0.0"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://fakeuser@pypi.org/simple"
+
+        [tool.uv.sources]
+        anyio = { index = "test-index" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock = context.read("uv.lock");
+
+    // Verify anyio 4.0.0 is locked
+    assert!(lock.contains("name = \"anyio\""));
+    assert!(lock.contains("version = \"4.0.0\""));
+
+    // Update pyproject.toml to simulate availability of newer package with more open but still compatible constraint
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio>=4.0.0"]
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://fakeuser@pypi.org/simple"
+
+        [tool.uv.sources]
+        anyio = { index = "test-index" }
+        "#,
+    )?;
+
+    // Run `uv lock`  to update the lockfile
+    // The package should stay at 4.0.0
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let lock_after = context.read("uv.lock");
+
+    assert!(
+        lock_after.contains("version = \"4.0.0\""),
+        "anyio should remain at version 4.0.0, not update despite >=4.0.0 constraint"
+    );
 
     Ok(())
 }
@@ -13339,7 +13762,7 @@ fn check_no_lock() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--check` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
     Ok(())
 }

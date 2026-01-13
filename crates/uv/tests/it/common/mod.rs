@@ -481,6 +481,16 @@ impl TestContext {
         self
     }
 
+    /// Add a filter for (bytecode) compilation file counts
+    #[must_use]
+    pub fn with_filtered_compiled_file_count(mut self) -> Self {
+        self.filters.push((
+            r"compiled \d+ files".to_string(),
+            "compiled [COUNT] files".to_string(),
+        ));
+        self
+    }
+
     /// Adds filters for non-deterministic `CycloneDX` data
     pub fn with_cyclonedx_filters(mut self) -> Self {
         self.filters.push((

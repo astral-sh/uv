@@ -42,7 +42,7 @@ An extremely fast Python package and project manager, written in Rust.
 - 🖥️ Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of
-[Ruff](https://github.com/astral-sh/ruff).
+[Ruff](https://github.com/astral-sh/ruff) and [ty](https://github.com/astral-sh/ty).
 
 ## Installation
 
@@ -268,19 +268,12 @@ Installed 43 packages in 208ms
 
 See the [pip interface documentation](https://docs.astral.sh/uv/pip/index/) to get started.
 
-## Platform support
-
-See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
-
-## Versioning policy
-
-See uv's [versioning policy](https://docs.astral.sh/uv/reference/versioning/) document.
-
 ## Contributing
 
 We are passionate about supporting contributors of all levels of experience and would love to see
 you get involved in the project. See the
-[contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
+[contributing guide](https://github.com/astral-sh/uv?tab=contributing-ov-file#contributing) to get
+started.
 
 ## FAQ
 
@@ -291,6 +284,15 @@ It's pronounced as "you - vee" ([`/juː viː/`](https://en.wikipedia.org/wiki/He
 #### How should I stylize uv?
 
 Just "uv", please. See the [style guide](./STYLE.md#styling-uv) for details.
+
+#### What platforms does uv support?
+
+See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
+
+#### Is uv ready for production?
+
+Yes, uv is stable and widely used in production. See uv's
+[versioning policy](https://docs.astral.sh/uv/reference/versioning/) document for details.
 
 ## Acknowledgements
 

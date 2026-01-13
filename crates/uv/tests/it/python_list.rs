@@ -591,3 +591,96 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn python_list_with_mirrors() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace()
+        // Add filters to normalize file paths in URLs
+        .with_filter((
+            r"(https://mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://python-mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://pypy-mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://downloads\.python\.org/pypy/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://github\.com/oracle/graalpython/releases/download/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ));
+
+    // Test with UV_PYTHON_INSTALL_MIRROR environment variable - verify mirror URL is used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython@3.10.19")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://mirror.example.com/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test with UV_PYPY_INSTALL_MIRROR environment variable - verify PyPy mirror URL is used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy@3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test with both mirror environment variables set
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://python-mirror.example.com")
+        .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test without mirrors - verify default URLs are used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+}

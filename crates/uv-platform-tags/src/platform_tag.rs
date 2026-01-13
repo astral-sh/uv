@@ -257,6 +257,140 @@ impl PlatformTag {
             } | Self::Win32
         )
     }
+
+    /// Returns `true` if the tag is only applicable on ppc64le platforms.
+    pub fn is_ppc64le(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Powerpc64Le,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Powerpc64Le,
+                ..
+            } | Self::Linux {
+                arch: Arch::Powerpc64Le,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Powerpc64Le,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on ppc64 platforms.
+    pub fn is_ppc64(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Powerpc64,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Powerpc64,
+                ..
+            } | Self::Linux {
+                arch: Arch::Powerpc64,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Powerpc64,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on s390x platforms.
+    pub fn is_s390x(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::S390X,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::S390X,
+                ..
+            } | Self::Linux {
+                arch: Arch::S390X,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::S390X,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on riscv64 platforms.
+    pub fn is_riscv64(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Riscv64,
+                ..
+            } | Self::Linux {
+                arch: Arch::Riscv64,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Riscv64,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on loongarch64 platforms.
+    pub fn is_loongarch64(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::LoongArch64,
+                ..
+            } | Self::Linux {
+                arch: Arch::LoongArch64,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::LoongArch64,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on armv7l platforms.
+    pub fn is_armv7l(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Armv7L,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Armv7L,
+                ..
+            } | Self::Linux {
+                arch: Arch::Armv7L,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Armv7L,
+                ..
+            }
+        )
+    }
+
+    /// Returns `true` if the tag is only applicable on armv6l platforms.
+    pub fn is_armv6l(&self) -> bool {
+        matches!(
+            self,
+            Self::Manylinux {
+                arch: Arch::Armv6L,
+                ..
+            } | Self::Manylinux2014 {
+                arch: Arch::Armv6L,
+                ..
+            } | Self::Linux {
+                arch: Arch::Armv6L,
+                ..
+            } | Self::Musllinux {
+                arch: Arch::Armv6L,
+                ..
+            }
+        )
+    }
 }
 
 impl std::fmt::Display for PlatformTag {
