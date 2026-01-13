@@ -165,4 +165,4 @@ jobs:
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
-            --partition count:${{ matrix.partition }}/2
+            --partition hash:${{ matrix.partition }}/2
