@@ -706,8 +706,6 @@ fn logout_native_auth() -> Result<()> {
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
-
-    // Clear `__token__` credentials too (this is the default username when not specified)
     context
         .auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
