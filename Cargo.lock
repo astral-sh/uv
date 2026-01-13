@@ -5865,6 +5865,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-static",
 ]
@@ -5874,6 +5875,29 @@ name = "uv-console"
 version = "0.0.13"
 dependencies = [
  "console 0.16.1",
+]
+
+[[package]]
+name = "uv-delocate"
+version = "0.0.11"
+dependencies = [
+ "base64 0.22.1",
+ "fs-err",
+ "goblin",
+ "pathdiff",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-extract",
+ "uv-fs",
+ "uv-install-wheel",
+ "uv-platform",
+ "uv-platform-tags",
+ "uv-static",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]
@@ -5983,9 +6007,11 @@ dependencies = [
  "nanoid",
  "owo-colors",
  "reqwest",
+ "rkyv",
  "rmp-serde",
  "rustc-hash",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
@@ -5996,6 +6022,7 @@ dependencies = [
  "uv-auth",
  "uv-cache",
  "uv-cache-info",
+ "uv-cache-key",
  "uv-client",
  "uv-configuration",
  "uv-distribution-filename",
@@ -6012,6 +6039,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-static",
  "uv-types",
  "uv-workspace",
  "walkdir",

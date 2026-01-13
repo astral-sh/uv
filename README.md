@@ -302,6 +302,8 @@ their support.
 
 uv's Git implementation is based on [Cargo](https://github.com/rust-lang/cargo).
 
+uv's macOS wheel delocating is based on [delocate](https://github.com/matthew-brett/delocate).
+
 Some of uv's optimizations are inspired by the great work we've seen in [pnpm](https://pnpm.io/),
 [Orogene](https://github.com/orogene/orogene), and [Bun](https://github.com/oven-sh/bun). We've also
 learned a lot from Nathaniel J. Smith's [Posy](https://github.com/njsmith/posy) and adapted its

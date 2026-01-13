@@ -16,5 +16,6 @@ mod download;
 mod error;
 mod index;
 mod metadata;
+mod remote;
 mod reporter;
 mod source;
