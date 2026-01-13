@@ -4,13 +4,119 @@ use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use http::StatusCode;
 use serde_json::json;
 use uv_static::EnvVars;
-use wiremock::matchers::method;
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::matchers::{any, method};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::common::{TestContext, uv_snapshot};
 
+/// Creates a CONNECT tunnel proxy that forwards connections to the target.
+///
+/// Returns the proxy address. The proxy runs in a background thread.
+fn start_connect_tunnel_proxy() -> std::net::SocketAddr {
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    // Spawn a real OS thread for the proxy server
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut client) = stream else { break };
+
+            // Handle each connection in its own thread
+            std::thread::spawn(move || {
+                // Read the CONNECT request
+                let mut buf = vec![0u8; 4096];
+                let mut total_read = 0;
+                loop {
+                    let n = match client.read(&mut buf[total_read..]) {
+                        Ok(0) | Err(_) => return,
+                        Ok(n) => n,
+                    };
+                    total_read += n;
+                    if buf[..total_read].windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+
+                let request = String::from_utf8_lossy(&buf[..total_read]);
+
+                // Parse "CONNECT host:port HTTP/1.1\r\n"
+                let Some(target_addr) = request
+                    .lines()
+                    .next()
+                    .and_then(|line| line.strip_prefix("CONNECT "))
+                    .and_then(|s| s.split_whitespace().next())
+                    .map(ToString::to_string)
+                else {
+                    return;
+                };
+
+                // Connect to the target
+                let Ok(mut target) = TcpStream::connect(&target_addr) else {
+                    return;
+                };
+
+                // Send 200 Connection Established
+                if client
+                    .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    .is_err()
+                {
+                    return;
+                }
+
+                // Bidirectionally forward data using two threads
+                let mut client_read = client.try_clone().unwrap();
+                let mut target_write = target.try_clone().unwrap();
+
+                let c2t =
+                    std::thread::spawn(move || std::io::copy(&mut client_read, &mut target_write));
+
+                let _ = std::io::copy(&mut target, &mut client);
+                let _ = c2t.join();
+            });
+        }
+    });
+
+    addr
+}
+
+/// Creates a mock that serves a Simple API index page for iniconfig.
+async fn mock_simple_api(server: &MockServer) {
+    // Simple API response for iniconfig pointing to the real PyPI wheel.
+    // Uses upload-time before EXCLUDE_NEWER (2024-03-25) so the package is available.
+    let body = json!({
+        "name": "iniconfig",
+        "files": [{
+            "filename": "iniconfig-2.0.0-py3-none-any.whl",
+            "url": "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+            "hashes": {
+                "sha256": "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"
+            },
+            "requires-python": ">=3.8",
+            "upload-time": "2024-01-01T00:00:00Z"
+        }]
+    });
+
+    // Serve the simple index for iniconfig - use any() matcher since HTTP proxy
+    // requests may have the full URL in the path
+    Mock::given(any())
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw(body.to_string(), "application/vnd.pypi.simple.v1+json"),
+        )
+        .mount(server)
+        .await;
+}
+
 fn connection_reset(_request: &wiremock::Request) -> io::Error {
     io::Error::new(io::ErrorKind::ConnectionReset, "Connection reset by peer")
+}
+
+/// Returns true if the mock server has received any requests.
+async fn has_received_requests(server: &MockServer) -> bool {
+    !server.received_requests().await.unwrap().is_empty()
 }
 
 /// Answers with a retryable HTTP status 500.
@@ -392,6 +498,7 @@ async fn install_http_retries() {
     // Create a server that always fails, so we can see the number of retries used
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(503))
+        .expect(6)
         .mount(&server)
         .await;
 
@@ -455,6 +562,40 @@ async fn install_http_retries() {
     );
 }
 
+#[tokio::test]
+async fn install_http_retry_low_level() {
+    let context = TestContext::new("3.12");
+
+    let server = MockServer::start().await;
+
+    // Create a server that fails with a more fundamental error so we trigger
+    // earlier error paths
+    Mock::given(method("GET"))
+        .respond_with_err(|_: &'_ Request| io::Error::new(io::ErrorKind::ConnectionReset, "error"))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--index")
+        .arg(server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "1")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 1 retry
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: error sending request for url (http://[LOCALHOST]/anyio/)
+      Caused by: client error (SendRequest)
+      Caused by: connection closed before message completed
+    "
+    );
+}
+
 /// Test problem details with a 403 error containing license compliance information
 #[tokio::test]
 async fn rfc9457_problem_details_license_violation() {
@@ -502,4 +643,291 @@ async fn rfc9457_problem_details_license_violation() {
       ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
       ╰─▶ HTTP status client error (403 Forbidden) for url ([SERVER]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
+}
+
+/// Test that invalid proxy URL in uv.toml produces a helpful error message.
+#[tokio::test]
+async fn proxy_invalid_url_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(indoc::indoc! {r#"
+            http-proxy = "ftp://proxy.example.com:8080"
+        "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig")
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: TOML parse error at line 1, column 14
+      |
+    1 | http-proxy = "ftp://proxy.example.com:8080"
+      |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
+    "#);
+}
+
+/// Test that invalid proxy URL (not a URL) in uv.toml produces a helpful error message.
+#[tokio::test]
+async fn proxy_invalid_url_not_a_url_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(indoc::indoc! {r#"
+            http-proxy = "not a valid url"
+        "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig")
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `uv.toml`
+      Caused by: TOML parse error at line 1, column 14
+      |
+    1 | http-proxy = "not a valid url"
+      |              ^^^^^^^^^^^^^^^^^
+    invalid proxy URL: invalid international domain name
+    "#);
+}
+
+/// Test that valid proxy URL in uv.toml routes requests through the proxy.
+#[tokio::test]
+async fn proxy_valid_url_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let target_server = MockServer::start().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&target_server)
+        .await;
+
+    let proxy_server = MockServer::start().await;
+    mock_simple_api(&proxy_server).await;
+
+    let target_uri = target_server.uri();
+    let proxy_uri = proxy_server.uri();
+
+    let context = context
+        .with_filter((target_uri.clone(), "[TARGET]"))
+        .with_filter((proxy_uri.clone(), "[PROXY]"));
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(&format!(r#"http-proxy = "{proxy_uri}""#))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig")
+        .arg("--index-url")
+        .arg(&target_uri)
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY)
+        .env_remove(EnvVars::ALL_PROXY)
+        .env_remove(EnvVars::NO_PROXY), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    assert!(
+        has_received_requests(&proxy_server).await,
+        "Proxy should have received the request"
+    );
+    assert!(
+        !has_received_requests(&target_server).await,
+        "Target should NOT have been called directly when proxy is configured"
+    );
+}
+
+/// Test that https-proxy in uv.toml routes HTTPS requests through a CONNECT tunnel proxy.
+#[test]
+fn proxy_https_proxy_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let proxy_addr = start_connect_tunnel_proxy();
+    let proxy_uri = format!("http://{proxy_addr}");
+
+    let context = context.with_filter((proxy_uri.clone(), "[PROXY]"));
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(&format!(r#"https-proxy = "{proxy_uri}""#))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .arg("iniconfig")
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY)
+        .env_remove(EnvVars::ALL_PROXY)
+        .env_remove(EnvVars::NO_PROXY), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+}
+
+/// Test that no-proxy in uv.toml bypasses the proxy for specified hosts.
+#[tokio::test]
+async fn proxy_no_proxy_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let target_server = MockServer::start().await;
+    mock_simple_api(&target_server).await;
+
+    let proxy_server = MockServer::start().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&proxy_server)
+        .await;
+
+    let target_uri = target_server.uri();
+    let proxy_uri = proxy_server.uri();
+
+    // Note: reqwest's NoProxy matches on host only, not host:port
+    let target_url = url::Url::parse(&target_uri).unwrap();
+    let target_host = target_url.host_str().unwrap();
+
+    let context = context
+        .with_filter((target_uri.clone(), "[TARGET]"))
+        .with_filter((proxy_uri.clone(), "[PROXY]"));
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(&format!(
+            r#"
+http-proxy = "{proxy_uri}"
+no-proxy = ["{target_host}"]
+"#
+        ))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig")
+        .arg("--index-url")
+        .arg(&target_uri)
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY)
+        .env_remove(EnvVars::ALL_PROXY)
+        .env_remove(EnvVars::NO_PROXY), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    assert!(
+        has_received_requests(&target_server).await,
+        "Target should have received the request directly when in no-proxy list"
+    );
+    assert!(
+        !has_received_requests(&proxy_server).await,
+        "Proxy should NOT have received requests when target is in no-proxy list"
+    );
+}
+
+/// Test that proxy URLs without a scheme in uv.toml default to http://.
+#[tokio::test]
+async fn proxy_schemeless_url_in_uv_toml() {
+    let context = TestContext::new("3.12");
+
+    let target_server = MockServer::start().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&target_server)
+        .await;
+
+    let proxy_server = MockServer::start().await;
+    mock_simple_api(&proxy_server).await;
+
+    let target_uri = target_server.uri();
+    let proxy_uri = proxy_server.uri();
+
+    // Strip scheme to test schemeless URL handling
+    let proxy_host = proxy_uri
+        .strip_prefix("http://")
+        .unwrap_or(proxy_uri.as_str());
+
+    let context = context
+        .with_filter((target_uri.clone(), "[TARGET]"))
+        .with_filter((proxy_uri.clone(), "[PROXY]"))
+        .with_filter((proxy_host, "[PROXY_HOST]"));
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml
+        .write_str(&format!(r#"http-proxy = "{proxy_host}""#))
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig")
+        .arg("--index-url")
+        .arg(&target_uri)
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env_remove(EnvVars::HTTP_PROXY)
+        .env_remove(EnvVars::HTTPS_PROXY)
+        .env_remove(EnvVars::ALL_PROXY)
+        .env_remove(EnvVars::NO_PROXY), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    assert!(
+        has_received_requests(&proxy_server).await,
+        "Proxy should have received the request even with schemeless URL"
+    );
+    assert!(
+        !has_received_requests(&target_server).await,
+        "Target should NOT have been called directly when proxy is configured"
+    );
 }

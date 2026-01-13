@@ -61,7 +61,7 @@ use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, InMemoryIndex, MetadataResponse,
-    PrereleaseMode, ResolutionMode, ResolverOutput,
+    PackageExcludeNewer, PrereleaseMode, ResolutionMode, ResolverOutput,
 };
 
 mod export;
@@ -110,6 +110,36 @@ static X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     .unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
+static PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64le'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'ppc64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 's390x'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'riscv64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'loongarch64'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 =
+        MarkerTree::from_str("platform_machine == 'armv7l' or platform_machine == 'armv8l'")
+            .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+static ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("platform_machine == 'armv6l'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
 static LINUX_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*ARM_MARKERS);
@@ -123,6 +153,41 @@ static LINUX_X86_64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 static LINUX_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *LINUX_MARKERS;
     marker.and(*X86_MARKERS);
+    marker
+});
+static LINUX_PPC64LE_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64LE_MARKERS);
+    marker
+});
+static LINUX_PPC64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*PPC64_MARKERS);
+    marker
+});
+static LINUX_S390X_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*S390X_MARKERS);
+    marker
+});
+static LINUX_RISCV64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*RISCV64_MARKERS);
+    marker
+});
+static LINUX_LOONGARCH64_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*LOONGARCH64_MARKERS);
+    marker
+});
+static LINUX_ARMV7L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV7L_MARKERS);
+    marker
+});
+static LINUX_ARMV6L_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let mut marker = *LINUX_MARKERS;
+    marker.and(*ARMV6L_MARKERS);
     marker
 });
 static WINDOWS_ARM_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
@@ -425,6 +490,55 @@ impl Lock {
                     {
                         return false;
                     }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64LE_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_PPC64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_S390X_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_RISCV64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV7L_MARKERS)
+                    {
+                        return false;
+                    }
+                } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                    if graph.graph[node_index]
+                        .marker()
+                        .is_disjoint(*LINUX_ARMV6L_MARKERS)
+                    {
+                        return false;
+                    }
                 } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
                     return false;
                 }
@@ -534,6 +648,63 @@ impl Lock {
 
             if platform_tags.iter().all(PlatformTag::is_x86) {
                 if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*PPC64LE_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_ppc64) {
+                if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_s390x) {
+                if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_riscv64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*RISCV64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*LOONGARCH64_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv7l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV7L_MARKERS)
+                {
+                    return false;
+                }
+            }
+
+            if platform_tags.iter().all(PlatformTag::is_armv6l) {
+                if graph.graph[node_index]
+                    .marker()
+                    .is_disjoint(*ARMV6L_MARKERS)
+                {
                     return false;
                 }
             }
@@ -1080,20 +1251,29 @@ impl Lock {
                 // Serialize package-specific exclusions as a separate field
                 if !exclude_newer.package.is_empty() {
                     let mut package_table = toml_edit::Table::new();
-                    for (name, exclude_newer_value) in &exclude_newer.package {
-                        if let Some(span) = exclude_newer_value.span() {
-                            // Serialize as inline table with timestamp and span
-                            let mut inline = toml_edit::InlineTable::new();
-                            inline.insert(
-                                "timestamp",
-                                exclude_newer_value.timestamp().to_string().into(),
-                            );
-                            inline.insert("span", span.to_string().into());
-                            package_table.insert(name.as_ref(), Item::Value(inline.into()));
-                        } else {
-                            // Serialize as simple string
-                            package_table
-                                .insert(name.as_ref(), value(exclude_newer_value.to_string()));
+                    for (name, setting) in &exclude_newer.package {
+                        match setting {
+                            PackageExcludeNewer::Enabled(exclude_newer_value) => {
+                                if let Some(span) = exclude_newer_value.span() {
+                                    // Serialize as inline table with timestamp and span
+                                    let mut inline = toml_edit::InlineTable::new();
+                                    inline.insert(
+                                        "timestamp",
+                                        exclude_newer_value.timestamp().to_string().into(),
+                                    );
+                                    inline.insert("span", span.to_string().into());
+                                    package_table.insert(name.as_ref(), Item::Value(inline.into()));
+                                } else {
+                                    // Serialize as simple string
+                                    package_table.insert(
+                                        name.as_ref(),
+                                        value(exclude_newer_value.to_string()),
+                                    );
+                                }
+                            }
+                            PackageExcludeNewer::Disabled => {
+                                package_table.insert(name.as_ref(), value(false));
+                            }
                         }
                     }
                     options_table.insert("exclude-newer-package", Item::Table(package_table));
@@ -2601,11 +2781,17 @@ impl Package {
 
         if !no_binary {
             if let Some(best_wheel_index) = self.find_best_wheel(tag_policy) {
-                let hashes = self.wheels[best_wheel_index]
-                    .hash
-                    .as_ref()
-                    .map(|hash| HashDigests::from(vec![hash.0.clone()]))
-                    .unwrap_or_else(|| HashDigests::from(vec![]));
+                let hashes = {
+                    let wheel = &self.wheels[best_wheel_index];
+                    HashDigests::from(
+                        wheel
+                            .hash
+                            .iter()
+                            .chain(wheel.zstd.iter().flat_map(|z| z.hash.iter()))
+                            .map(|h| h.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                };
 
                 let dist = match &self.id.source {
                     Source::Registry(source) => {

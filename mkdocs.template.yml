@@ -92,6 +92,10 @@ plugins:
         uv includes both a pip-compatible CLI (prepend `uv` to a pip command, e.g., `uv pip install ruff`)
         and a first-class project interface (e.g., `uv add ruff`) complete with lockfiles and
         workspace support.
+
+        When fetching documentation, use explicit `index.md` paths for directories, e.g.,
+        `https://docs.astral.sh/uv/concepts/projects/dependencies/index.md`. This returns
+        clean markdown instead of rendered HTML with JS/CSS.
       sections:
         Getting started:
           - getting-started/installation.md

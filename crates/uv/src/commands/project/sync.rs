@@ -51,7 +51,8 @@ use crate::commands::project::{
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 /// Sync the project environment.
@@ -59,7 +60,7 @@ use crate::settings::{
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
@@ -99,7 +100,7 @@ pub(crate) async fn sync(
         SyncTarget::Script(script)
     } else {
         // Identify the project.
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
@@ -225,7 +226,7 @@ pub(crate) async fn sync(
     if let SyncTarget::Script(script) = &target {
         let lockfile = LockTarget::from(script).lock_path();
         if !lockfile.is_file() {
-            if frozen {
+            if frozen.is_some() {
                 return Err(anyhow::anyhow!(
                     "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
@@ -329,8 +330,8 @@ pub(crate) async fn sync(
     let state = UniversalState::default();
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
@@ -1388,8 +1389,8 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                 Outcome::Success(result) => {
                     match result {
                         LockResult::Unchanged(..) => match mode {
-                            // When `--frozen` is used, we don't check the lockfile
-                            LockMode::Frozen => LockAction::Use,
+                            // When `--frozen` is used, we don't check the lockfile.
+                            LockMode::Frozen(_) => LockAction::Use,
                             LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }

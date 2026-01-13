@@ -32,6 +32,8 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Failed to persist temporary file to {}", _0.user_display())]
+    Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
     #[error("Invalid project metadata")]
@@ -1037,6 +1039,155 @@ mod tests {
         assert_snapshot!(
             err_message,
             @"Expected a Python module at: [TEMP_PATH]/src/camel_case/__init__.py"
+        );
+    }
+
+    /// Test that no partial files are left in dist directory when build fails.
+    #[test]
+    fn no_partial_files_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Source dist build should fail
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        // Wheel build should fail
+        let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
+        assert!(wheel_result.is_err());
+
+        // dist directory should be empty (no partial files)
+        let dist_contents: Vec<_> = fs_err::read_dir(dist.path()).unwrap().collect();
+        assert!(
+            dist_contents.is_empty(),
+            "Expected empty dist directory, but found: {dist_contents:?}"
+        );
+    }
+
+    /// Test that pre-existing files in the dist directory are deleted before build starts.
+    #[test]
+    fn existing_files_deleted_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory
+        let sdist_path = dist.path().join("failing_build-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("failing_build-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should fail and delete existing files
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        let wheel_result = build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false);
+        assert!(wheel_result.is_err());
+
+        // Verify pre-existing files were deleted
+        assert!(
+            !sdist_path.exists(),
+            "Pre-existing sdist should have been deleted"
+        );
+        assert!(
+            !wheel_path.exists(),
+            "Pre-existing wheel should have been deleted"
+        );
+    }
+
+    /// Test that existing files are overwritten on successful build.
+    #[test]
+    fn existing_files_overwritten_on_success() {
+        let src = TempDir::new().unwrap();
+
+        // Create a valid project
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "overwrite-test"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("overwrite_test")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("overwrite_test")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory with known content
+        let sdist_path = dist.path().join("overwrite_test-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("overwrite_test-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should succeed and overwrite existing files
+        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_wheel(src.path(), dist.path(), None, MOCK_UV_VERSION, false).unwrap();
+
+        // Verify files were overwritten (content should be different)
+        assert_ne!(
+            &fs_err::read(&sdist_path).unwrap()[..],
+            &old_content[..],
+            "Source dist should have been overwritten"
+        );
+        assert_ne!(
+            &fs_err::read(&wheel_path).unwrap()[..],
+            &old_content[..],
+            "Wheel should have been overwritten"
+        );
+
+        // Verify the new files are valid archives
+        assert!(
+            !sdist_contents(&sdist_path).is_empty(),
+            "sdist should be a valid archive"
+        );
+        assert!(
+            !wheel_contents(&wheel_path).is_empty(),
+            "wheel should be a valid archive"
         );
     }
 

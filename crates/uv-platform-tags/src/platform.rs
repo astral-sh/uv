@@ -163,7 +163,8 @@ impl FromStr for Arch {
             "aarch64" => Ok(Self::Aarch64),
             "armv5tel" => Ok(Self::Armv5TEL),
             "armv6l" => Ok(Self::Armv6L),
-            "armv7l" => Ok(Self::Armv7L),
+            // armv8l is 32-bit ARM running on ARMv8 hardware, compatible with armv7l
+            "armv7l" | "armv8l" => Ok(Self::Armv7L),
             "ppc64le" => Ok(Self::Powerpc64Le),
             "ppc64" => Ok(Self::Powerpc64),
             "ppc" => Ok(Self::Powerpc),

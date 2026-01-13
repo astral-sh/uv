@@ -199,7 +199,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.preview,
                 settings.network_settings.timeout,
                 settings.network_settings.retries,
-            );
+            )
+            .http_proxy(settings.network_settings.http_proxy)
+            .https_proxy(settings.network_settings.https_proxy)
+            .no_proxy(settings.network_settings.no_proxy);
             Some(
                 RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
                     .await?,
@@ -472,7 +475,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.preview,
         globals.network_settings.timeout,
         globals.network_settings.retries,
-    );
+    )
+    .http_proxy(globals.network_settings.http_proxy.clone())
+    .https_proxy(globals.network_settings.https_proxy.clone())
+    .no_proxy(globals.network_settings.no_proxy.clone());
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
@@ -561,6 +567,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = PipCompileSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -645,6 +656,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.install_mirrors,
                 args.settings.python_version,
                 args.settings.python_platform,
+                globals.python_downloads,
                 args.settings.universal,
                 args.settings.exclude_newer,
                 args.settings.sources,
@@ -669,6 +681,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipSyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -832,6 +849,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     }
                 }
             }
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1094,6 +1116,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::BuildSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -1154,6 +1181,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VenvSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1318,6 +1350,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             );
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -1402,6 +1439,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -1603,6 +1645,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
             commands::python_install(
                 &project_dir,
                 args.install_dir,
@@ -1619,6 +1664,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                args.compile_bytecode,
+                &globals.concurrency,
+                &cache,
                 globals.preview,
                 printer,
             )
@@ -1631,6 +1679,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
             let upgrade = commands::PythonUpgrade::Enabled(commands::PythonUpgradeSource::Upgrade);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
 
             commands::python_install(
                 &project_dir,
@@ -1648,6 +1699,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.default,
                 globals.python_downloads,
                 cli.top_level.no_config,
+                args.compile_bytecode,
+                &globals.concurrency,
+                &cache,
                 globals.preview,
                 printer,
             )
@@ -1772,6 +1826,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 password,
                 dry_run,
                 no_attestations,
+                direct,
                 publish_url,
                 trusted_publishing,
                 keyring_provider,
@@ -1794,6 +1849,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 index_locations,
                 dry_run,
                 no_attestations,
+                direct,
+                globals.preview,
                 &cache,
                 printer,
             )
@@ -1944,6 +2001,11 @@ async fn run_project(
             let args = settings::RunSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2008,6 +2070,11 @@ async fn run_project(
             let args = settings::SyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2057,6 +2124,11 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::LockSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
@@ -2170,6 +2242,11 @@ async fn run_project(
                 }
             }
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2233,6 +2310,11 @@ async fn run_project(
             let args = settings::RemoveSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
+
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(
                 args.refresh
@@ -2276,6 +2358,11 @@ async fn run_project(
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::VersionSettings::resolve(args, filesystem, environment);
             show_settings!(args);
+
+            // Check for conflicts between offline and refresh.
+            globals
+                .network_settings
+                .check_refresh_conflict(&args.refresh);
 
             // Initialize the cache.
             let cache = cache.init().await?.with_refresh(

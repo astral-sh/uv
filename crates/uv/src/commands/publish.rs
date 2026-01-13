@@ -13,9 +13,10 @@ use uv_client::{
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
-    group_files_for_publishing, upload,
+    group_files_for_publishing, upload, upload_two_phase,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -39,11 +40,21 @@ pub(crate) async fn publish(
     index_locations: IndexLocations,
     dry_run: bool,
     no_attestations: bool,
+    direct: bool,
+    preview: Preview,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
+    }
+
+    if direct && !preview.is_enabled(PreviewFeatures::DIRECT_PUBLISH) {
+        warn_user_once!(
+            "The `--direct` option is experimental and may change without warning. \
+            Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::DIRECT_PUBLISH
+        );
     }
 
     let token_store = PyxTokenStore::from_settings()?;
@@ -130,10 +141,19 @@ pub(crate) async fn publish(
         .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
         .build();
+    // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
+    // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .wrap_existing(&upload_client);
+        .build();
+    // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
+    let s3_client = client_builder
+        .clone()
+        .retries(0)
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .timeout(environment.upload_http_timeout)
+        .build();
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -216,36 +236,68 @@ pub(crate) async fn publish(
             .await
             .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
-        // Run validation checks on the file, but don't upload it (if possible).
-        uv_publish::validate(
-            &group.file,
-            &form_metadata,
-            &group.raw_filename,
-            &publish_url,
-            &token_store,
-            &upload_client,
-            &credentials,
-        )
-        .await?;
+        let uploaded = if direct {
+            if dry_run {
+                // For dry run, call validate since we won't call reserve.
+                uv_publish::validate(
+                    &group.file,
+                    &form_metadata,
+                    &group.raw_filename,
+                    &publish_url,
+                    &token_store,
+                    &upload_client,
+                    &credentials,
+                )
+                .await?;
+                continue;
+            }
 
-        if dry_run {
-            continue;
-        }
+            debug!("Using two-phase upload (direct mode)");
+            let reporter = PublishReporter::single(printer);
+            upload_two_phase(
+                &group,
+                &form_metadata,
+                &publish_url,
+                &upload_client,
+                &s3_client,
+                retry_policy,
+                &credentials,
+                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                Arc::new(reporter),
+            )
+            .await?
+        } else {
+            // Run validation checks on the file, but don't upload it (if possible).
+            uv_publish::validate(
+                &group.file,
+                &form_metadata,
+                &group.raw_filename,
+                &publish_url,
+                &token_store,
+                &upload_client,
+                &credentials,
+            )
+            .await?;
 
-        let reporter = PublishReporter::single(printer);
-        let uploaded = upload(
-            &group,
-            &form_metadata,
-            &publish_url,
-            &upload_client,
-            retry_policy,
-            &credentials,
-            check_url_client.as_ref(),
-            &download_concurrency,
-            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-            Arc::new(reporter),
-        )
-        .await?; // Filename and/or URL are already attached, if applicable.
+            if dry_run {
+                continue;
+            }
+
+            let reporter = PublishReporter::single(printer);
+            upload(
+                &group,
+                &form_metadata,
+                &publish_url,
+                &upload_client,
+                retry_policy,
+                &credentials,
+                check_url_client.as_ref(),
+                &download_concurrency,
+                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                Arc::new(reporter),
+            )
+            .await? // Filename and/or URL are already attached, if applicable.
+        };
         info!("Upload succeeded");
 
         if !uploaded {

@@ -165,33 +165,27 @@ pub struct GlobalArgs {
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Require use of uv-managed Python versions.
+    /// Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
     ///
-    /// By default, uv prefers using Python versions it manages. However, it
-    /// will use system Python versions if a uv-managed Python is not
-    /// installed. This option disables use of system Python versions.
+    /// By default, uv prefers using Python versions it manages. However, it will use system Python
+    /// versions if a uv-managed Python is not installed. This option disables use of system Python
+    /// versions.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        env = EnvVars::UV_MANAGED_PYTHON,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with = "no_managed_python",
-        conflicts_with = "python_preference"
+        overrides_with = "no_managed_python"
     )]
     pub managed_python: bool,
 
-    /// Disable use of uv-managed Python versions.
+    /// Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
     ///
     /// Instead, uv will search for a suitable Python version on the system.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        env = EnvVars::UV_NO_MANAGED_PYTHON,
-        value_parser = clap::builder::BoolishValueParser::new(),
-        overrides_with = "managed_python",
-        conflicts_with = "python_preference"
+        overrides_with = "managed_python"
     )]
     pub no_managed_python: bool,
 
@@ -241,7 +235,7 @@ pub struct GlobalArgs {
     )]
     pub color: Option<ColorChoice>,
 
-    /// Whether to load TLS certificates from the platform's native certificate store.
+    /// Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
     ///
     /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
     /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -250,16 +244,16 @@ pub struct GlobalArgs {
     /// However, in some cases, you may want to use the platform's native certificate store,
     /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
     /// included in your system's certificate store.
-    #[arg(global = true, long, env = EnvVars::UV_NATIVE_TLS, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_native_tls"))]
     pub native_tls: bool,
 
     #[arg(global = true, long, overrides_with("native_tls"), hide = true)]
     pub no_native_tls: bool,
 
-    /// Disable network access.
+    /// Disable network access [env: UV_OFFLINE=]
     ///
     /// When disabled, uv will only use locally cached data and locally available files.
-    #[arg(global = true, long, overrides_with("no_offline"), env = EnvVars::UV_OFFLINE, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(global = true, long, overrides_with("no_offline"))]
     pub offline: bool,
 
     #[arg(global = true, long, overrides_with("offline"), hide = true)]
@@ -286,10 +280,10 @@ pub struct GlobalArgs {
     )]
     pub allow_insecure_host: Option<Vec<Maybe<TrustedHost>>>,
 
-    /// Whether to enable all experimental preview features.
+    /// Whether to enable all experimental preview features [env: UV_PREVIEW=]
     ///
     /// Preview features may change without warning.
-    #[arg(global = true, long, hide = true, env = EnvVars::UV_PREVIEW, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
+    #[arg(global = true, long, hide = true, value_parser = clap::builder::BoolishValueParser::new(), overrides_with("no_preview"))]
     pub preview: bool,
 
     #[arg(global = true, long, overrides_with("preview"), hide = true)]
@@ -314,13 +308,13 @@ pub struct GlobalArgs {
     )]
     pub preview_features: Vec<PreviewFeatures>,
 
-    /// Avoid discovering a `pyproject.toml` or `uv.toml` file.
+    /// Avoid discovering a `pyproject.toml` or `uv.toml` file [env: UV_ISOLATED=]
     ///
     /// Normally, configuration files are discovered in the current directory,
     /// parent directories, or user configuration directories.
     ///
     /// This option is deprecated in favor of `--no-config`.
-    #[arg(global = true, long, hide = true, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(global = true, long, hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Show the resolved settings for the current command.
@@ -329,14 +323,15 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub show_settings: bool,
 
-    /// Hide all progress outputs.
+    /// Hide all progress outputs [env: UV_NO_PROGRESS=]
     ///
     /// For example, spinners or progress bars.
-    #[arg(global = true, long, env = EnvVars::UV_NO_PROGRESS, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(global = true, long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_progress: bool,
 
-    /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
-    #[arg(global = true, long, hide = true, env = EnvVars::UV_NO_INSTALLER_METADATA, value_parser = clap::builder::BoolishValueParser::new())]
+    /// Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and
+    /// `direct_url.json`) to site-packages `.dist-info` directories [env: UV_NO_INSTALLER_METADATA=]
+    #[arg(global = true, long, hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_installer_metadata: bool,
 
     /// Change to the given directory prior to running the command.
@@ -612,8 +607,8 @@ pub struct VersionArgs {
     #[arg(long, value_enum, default_value = "text")]
     pub output_format: VersionFormat,
 
-    /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    /// Avoid syncing the virtual environment after re-locking the project [env: UV_NO_SYNC=]
+    #[arg(long)]
     pub no_sync: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -629,17 +624,17 @@ pub struct VersionArgs {
     #[arg(long, overrides_with = "active", hide = true)]
     pub no_active: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Update the version without re-locking the project.
+    /// Update the version without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -1039,6 +1034,10 @@ pub enum ProjectCommand {
     /// When used outside a project, if a virtual environment can be found in the current directory
     /// or a parent directory, the command will be run in that environment. Otherwise, the command
     /// will be run in the environment of the discovered interpreter.
+    ///
+    /// By default, the project or workspace is discovered from the current working directory.
+    /// However, when using `--preview-features target-workspace-discovery`, the project or
+    /// workspace is instead discovered from the target script's directory.
     ///
     /// Arguments following the command (or script) are not interpreted as arguments to uv. All
     /// options to uv must be provided before the command, e.g., `uv run --verbose foo`. A `--` can
@@ -3088,18 +3087,19 @@ pub struct VenvArgs {
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
 
-    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment.
+    /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual
+    /// environment [env: UV_VENV_SEED=]
     ///
     /// Note that `setuptools` and `wheel` are not included in Python 3.12+ environments.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_SEED)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub seed: bool,
 
-    /// Remove any existing files or directories at the target path.
+    /// Remove any existing files or directories at the target path [env: UV_VENV_CLEAR=]
     ///
     /// By default, `uv venv` will exit with an error if the given path is non-empty. The
     /// `--clear` option will instead clear a non-empty path before creating a new virtual
     /// environment.
-    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_VENV_CLEAR)]
+    #[clap(long, short, overrides_with = "allow_existing", value_parser = clap::builder::BoolishValueParser::new())]
     pub clear: bool,
 
     /// Fail without prompting if any existing files or directories are present at the target path.
@@ -3481,7 +3481,7 @@ pub struct RunArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group.
+    /// Include the development dependency group [env: UV_DEV=]
     ///
     /// Development dependencies are defined via `dependency-groups.dev` or
     /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
@@ -3489,16 +3489,16 @@ pub struct RunArgs {
     /// This option is an alias for `--group dev`.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
-    /// Disable the development dependency group.
+    /// Disable the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
     ///
     /// This option is only available when running in a project.
-    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -3557,8 +3557,8 @@ pub struct RunArgs {
     pub editable: bool,
 
     /// Install any editable dependencies, including the project and any workspace members, as
-    /// non-editable.
-    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    /// non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3579,8 +3579,8 @@ pub struct RunArgs {
     #[arg(long, env = EnvVars::UV_ENV_FILE, value_hint = ValueHint::FilePath)]
     pub env_file: Vec<String>,
 
-    /// Avoid reading environment variables from a `.env` file.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    /// Avoid reading environment variables from a `.env` file [env: UV_NO_ENV_FILE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_env_file: bool,
 
     /// The command to run.
@@ -3617,7 +3617,7 @@ pub struct RunArgs {
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path, value_hint = ValueHint::FilePath)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
-    /// Run the command in an isolated virtual environment.
+    /// Run the command in an isolated virtual environment [env: UV_ISOLATED=]
     ///
     /// Usually, the project environment is reused for performance. This option forces a fresh
     /// environment to be used for the project, enforcing strict isolation between dependencies and
@@ -3627,7 +3627,7 @@ pub struct RunArgs {
     ///
     /// When used with `--with` or `--with-requirements`, the additional dependencies will still be
     /// layered in a second environment.
-    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -3643,27 +3643,27 @@ pub struct RunArgs {
     #[arg(long, overrides_with = "active", hide = true)]
     pub no_active: bool,
 
-    /// Avoid syncing the virtual environment.
+    /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
     ///
     /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
     /// be updated, since the environment will not be synced regardless).
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_sync: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or
     /// needs to be updated, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Run without updating the `uv.lock` file.
+    /// Run without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
     /// Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Run the given path as a Python script.
@@ -3731,10 +3731,11 @@ pub struct RunArgs {
     )]
     pub python: Option<Maybe<String>>,
 
-    /// Whether to show resolver and installer output from any environment modifications.
+    /// Whether to show resolver and installer output from any environment modifications [env:
+    /// UV_SHOW_RESOLUTION=]
     ///
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
-    #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
 
     /// Number of times that `uv run` will allow recursive invocations.
@@ -3813,17 +3814,17 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group.
+    /// Include the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
-    /// Disable the development dependency group.
+    /// Disable the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -3879,8 +3880,8 @@ pub struct SyncArgs {
     pub editable: bool,
 
     /// Install any editable dependencies, including the project and any workspace members, as
-    /// non-editable.
-    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    /// non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
     /// Do not remove extraneous packages present in the environment.
@@ -3972,20 +3973,20 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "no_install_package", hide = true, value_hint = ValueHint::Other)]
     pub only_install_package: Vec<PackageName>,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Sync without updating the `uv.lock` file.
+    /// Sync without updating the `uv.lock` file [env: UV_FROZEN=]
     ///
     /// Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the
     /// source of truth. If the lockfile is missing, uv will exit with an error. If the
     /// `pyproject.toml` includes changes to dependencies that have not been included in the
     /// lockfile yet, they will not be present in the environment.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Perform a dry run, without writing the lockfile or modifying the project environment.
@@ -4114,19 +4115,19 @@ pub struct LockArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
     pub check: bool,
 
-    /// Check if the lockfile is up-to-date.
+    /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
     /// missing or needs to be updated, uv will exit with an error.
     ///
     /// Equivalent to `--check`.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
     pub locked: bool,
 
-    /// Assert that a `uv.lock` exists without checking if it is up-to-date.
+    /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
     ///
     /// Equivalent to `--frozen`.
-    #[arg(long, alias = "frozen", env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check", "locked"])]
+    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
     pub check_exists: bool,
 
     /// Perform a dry run, without writing the lockfile.
@@ -4221,7 +4222,7 @@ pub struct AddArgs {
     #[arg(long, short, value_parser = MarkerTree::from_str, value_hint = ValueHint::Other)]
     pub marker: Option<MarkerTree>,
 
-    /// Add the requirements to the development dependency group.
+    /// Add the requirements to the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
     #[arg(
@@ -4229,7 +4230,6 @@ pub struct AddArgs {
         conflicts_with("optional"),
         conflicts_with("group"),
         conflicts_with("script"),
-        env = EnvVars::UV_DEV,
         value_parser = clap::builder::BoolishValueParser::new()
     )]
     pub dev: bool,
@@ -4258,7 +4258,8 @@ pub struct AddArgs {
     #[arg(long, overrides_with = "no_editable")]
     pub editable: bool,
 
-    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    /// Don't add the requirements as editable [env: UV_NO_EDITABLE=]
+    #[arg(long, overrides_with = "editable", hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
     /// Add a dependency as provided.
@@ -4317,21 +4318,21 @@ pub struct AddArgs {
     #[arg(long, value_hint = ValueHint::Other)]
     pub extra: Option<Vec<ExtraName>>,
 
-    /// Avoid syncing the virtual environment.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
+    #[arg(long)]
     pub no_sync: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Add dependencies without re-locking the project.
+    /// Add dependencies without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -4523,10 +4524,10 @@ pub struct RemoveArgs {
     #[arg(required = true, value_hint = ValueHint::Other)]
     pub packages: Vec<Requirement<VerbatimParsedUrl>>,
 
-    /// Remove the packages from the development dependency group.
+    /// Remove the packages from the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"), env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, conflicts_with("optional"), conflicts_with("group"), value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
@@ -4549,8 +4550,8 @@ pub struct RemoveArgs {
     )]
     pub group: Option<GroupName>,
 
-    /// Avoid syncing the virtual environment after re-locking the project.
-    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    /// Avoid syncing the virtual environment after re-locking the project [env: UV_NO_SYNC=]
+    #[arg(long)]
     pub no_sync: bool,
 
     /// Prefer the active virtual environment over the project's virtual environment.
@@ -4566,17 +4567,17 @@ pub struct RemoveArgs {
     #[arg(long, overrides_with = "active", hide = true)]
     pub no_active: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Remove dependencies without re-locking the project.
+    /// Remove dependencies without re-locking the project [env: UV_FROZEN=]
     ///
     /// The project environment will not be synced.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -4628,13 +4629,13 @@ pub struct TreeArgs {
     #[command(flatten)]
     pub tree: DisplayTreeArgs,
 
-    /// Include the development dependency group.
+    /// Include the development dependency group [env: UV_DEV=]
     ///
     /// Development dependencies are defined via `dependency-groups.dev` or
     /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
     /// Only include the development dependency group.
@@ -4645,11 +4646,11 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
     pub only_dev: bool,
 
-    /// Disable the development dependency group.
+    /// Disable the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Include dependencies from the specified dependency group.
@@ -4688,17 +4689,17 @@ pub struct TreeArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Display the requirements without locking the project.
+    /// Display the requirements without locking the project [env: UV_FROZEN=]
     ///
     /// If the lockfile is missing, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -4808,17 +4809,17 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
 
-    /// Include the development dependency group.
+    /// Include the development dependency group [env: UV_DEV=]
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, overrides_with("no_dev"), hide = true, env = EnvVars::UV_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
     pub dev: bool,
 
-    /// Disable the development dependency group.
+    /// Disable the development dependency group [env: UV_NO_DEV=]
     ///
     /// This option is an alias of `--no-group dev`.
     /// See `--no-default-groups` to disable all default groups instead.
-    #[arg(long, overrides_with("dev"), env = EnvVars::UV_NO_DEV, value_parser = clap::builder::BoolishValueParser::new())]
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
     pub no_dev: bool,
 
     /// Only include the development dependency group.
@@ -4885,8 +4886,8 @@ pub struct ExportArgs {
     pub editable: bool,
 
     /// Export any editable dependencies, including the project and any workspace members, as
-    /// non-editable.
-    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_EDITABLE)]
+    /// non-editable [env: UV_NO_EDITABLE=]
+    #[arg(long, overrides_with = "editable", value_parser = clap::builder::BoolishValueParser::new())]
     pub no_editable: bool,
 
     /// Include hashes for all dependencies.
@@ -4994,17 +4995,17 @@ pub struct ExportArgs {
     )]
     pub only_emit_package: Vec<PackageName>,
 
-    /// Assert that the `uv.lock` will remain unchanged.
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Do not update the `uv.lock` before exporting.
+    /// Do not update the `uv.lock` before exporting [env: UV_FROZEN=]
     ///
     /// If a `uv.lock` does not exist, uv will exit with an error.
-    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
     #[command(flatten)]
@@ -5302,8 +5303,9 @@ pub struct ToolRunArgs {
     )]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
-    #[arg(long, env = EnvVars::UV_ISOLATED, value_parser = clap::builder::BoolishValueParser::new())]
+    /// Run the tool in an isolated virtual environment, ignoring any already-installed tools [env:
+    /// UV_ISOLATED=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
     /// Load environment variables from a `.env` file.
@@ -5313,8 +5315,8 @@ pub struct ToolRunArgs {
     #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE, value_hint = ValueHint::FilePath)]
     pub env_file: Vec<PathBuf>,
 
-    /// Avoid reading environment variables from a `.env` file.
-    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    /// Avoid reading environment variables from a `.env` file [env: UV_NO_ENV_FILE=]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_env_file: bool,
 
     #[command(flatten)]
@@ -5344,10 +5346,11 @@ pub struct ToolRunArgs {
     )]
     pub python: Option<Maybe<String>>,
 
-    /// Whether to show resolver and installer output from any environment modifications.
+    /// Whether to show resolver and installer output from any environment modifications [env:
+    /// UV_SHOW_RESOLUTION=]
     ///
     /// By default, environment modifications are omitted, but enabled under `--verbose`.
-    #[arg(long, env = EnvVars::UV_SHOW_RESOLUTION, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), hide = true)]
     pub show_resolution: bool,
 
     /// The platform for which requirements should be installed.
@@ -6115,6 +6118,36 @@ pub struct PythonDirArgs {
 }
 
 #[derive(Args)]
+pub struct PythonInstallCompileBytecodeArgs {
+    /// Compile Python's standard library to bytecode after installation.
+    ///
+    /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+    /// instead, compilation is performed lazily the first time a module is imported. For use-cases
+    /// in which start time is important, such as CLI applications and Docker containers, this
+    /// option can be enabled to trade longer installation times and some additional disk space for
+    /// faster start times.
+    ///
+    /// When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+    /// compilation errors.
+    #[arg(
+        long,
+        alias = "compile",
+        overrides_with("no_compile_bytecode"),
+        env = EnvVars::UV_COMPILE_BYTECODE,
+        value_parser = clap::builder::BoolishValueParser::new(),
+    )]
+    pub compile_bytecode: bool,
+
+    #[arg(
+        long,
+        alias = "no-compile",
+        overrides_with("compile_bytecode"),
+        hide = true
+    )]
+    pub no_compile_bytecode: bool,
+}
+
+#[derive(Args)]
 pub struct PythonInstallArgs {
     /// The directory to store the Python installation in.
     ///
@@ -6227,12 +6260,15 @@ pub struct PythonInstallArgs {
     /// also installed.
     ///
     /// Alternative Python variants will still include their tag. For example, installing
-    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-    /// and `python`.
+    /// 3.13+freethreaded with `--default` will include `python3t` and `pythont` instead of
+    /// `python3` and `python`.
     ///
     /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long, conflicts_with("no_bin"))]
     pub default: bool,
+
+    #[command(flatten)]
+    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonInstallArgs {
@@ -6293,6 +6329,9 @@ pub struct PythonUpgradeArgs {
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,
+
+    #[command(flatten)]
+    pub compile_bytecode: PythonInstallCompileBytecodeArgs,
 }
 
 impl PythonUpgradeArgs {
@@ -6649,17 +6688,11 @@ pub struct IndexArgs {
 #[derive(Args)]
 pub struct RefreshArgs {
     /// Refresh all cached data.
-    #[arg(
-        long,
-        conflicts_with("offline"),
-        overrides_with("no_refresh"),
-        help_heading = "Cache options"
-    )]
+    #[arg(long, overrides_with("no_refresh"), help_heading = "Cache options")]
     pub refresh: bool,
 
     #[arg(
         long,
-        conflicts_with("offline"),
         overrides_with("refresh"),
         hide = true,
         help_heading = "Cache options"
@@ -7593,6 +7626,13 @@ pub struct PublishArgs {
     /// that is published.
     #[arg(long, env = EnvVars::UV_PUBLISH_NO_ATTESTATIONS)]
     pub no_attestations: bool,
+
+    /// Use direct upload to the registry.
+    ///
+    /// When enabled, the publish command will use a direct two-phase upload protocol
+    /// that uploads files directly to storage, bypassing the registry's upload endpoint.
+    #[arg(long, hide = true)]
+    pub direct: bool,
 }
 
 #[derive(Args)]

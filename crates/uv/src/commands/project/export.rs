@@ -32,7 +32,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -68,7 +68,7 @@ pub(crate) async fn export(
     groups: DependencyGroups,
     editable: Option<EditableMode>,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     include_annotations: bool,
     include_header: bool,
     script: Option<Pep723Script>,
@@ -90,7 +90,7 @@ pub(crate) async fn export(
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
@@ -142,7 +142,7 @@ pub(crate) async fn export(
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
-    let interpreter = if frozen {
+    let interpreter = if frozen.is_some() {
         None
     } else {
         Some(match &target {
@@ -184,8 +184,8 @@ pub(crate) async fn export(
     };
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))

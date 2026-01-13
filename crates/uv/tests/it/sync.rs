@@ -66,7 +66,7 @@ fn locked() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     "###);
 
     // Lock the initial requirements.
@@ -126,7 +126,7 @@ fn frozen() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`.
+    error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     "###);
 
     context.lock().assert().success();
@@ -14572,6 +14572,122 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     Ok(())
 }
 
+/// Sync with an index which serves zstd-compressed wheels.
+#[tokio::test]
+async fn sync_zstd_wheel() -> Result<()> {
+    use serde_json::json;
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{method, path},
+    };
+
+    let context = TestContext::new("3.13");
+    let server = MockServer::start().await;
+
+    // Copy the wheel files to serve them
+    let wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl"),
+        &wheel_path,
+    )?;
+
+    let zstd_wheel_path = context
+        .temp_dir
+        .child("basic_package-0.1.0-py3-none-any.whl.tar.zst");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/basic_package-0.1.0-py3-none-any.whl.tar.zst"),
+        &zstd_wheel_path,
+    )?;
+
+    let wheel_url = format!(
+        "{}/files/basic_package-0.1.0-py3-none-any.whl",
+        server.uri()
+    );
+
+    // Serve the uncompressed wheel file
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&wheel_path)?))
+        .mount(&server)
+        .await;
+
+    // Serve the zstd-compressed wheel file
+    Mock::given(method("GET"))
+        .and(path("/files/basic_package-0.1.0-py3-none-any.whl.tar.zst"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(&zstd_wheel_path)?))
+        .mount(&server)
+        .await;
+
+    // JSON API response with zstd metadata
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "basic-package",
+        "files": [{
+            "filename": "basic_package-0.1.0-py3-none-any.whl",
+            "url": wheel_url,
+            "hashes": {
+                "sha256": "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82"
+            },
+            "size": 1548,
+            "zstd": {
+                "hashes": {
+                    "sha256": "21c09ddf899e2ecc0a3d0a0ae8fb44ba50b839b899a0db47f5d30c5cc55e60c4"
+                },
+                "size": 786
+            }
+        }]
+    });
+
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string().into_bytes(),
+            "application/vnd.pyx.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! { r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["basic-package"]
+
+        [tool.uv.sources]
+        basic-package = {{ index = "test-registry" }}
+
+        [[tool.uv.index]]
+        name = "test-registry"
+        url = "{}/simple"
+        "#,
+        server.uri()
+    })?;
+
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-package==0.1.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 #[cfg(not(windows))]
 fn toggle_workspace_editable() -> Result<()> {
@@ -15257,6 +15373,116 @@ fn sync_fails_ambiguous_url() -> Result<()> {
        |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
     "#);
+
+    Ok(())
+}
+
+/// Test that when a local directory dependency's version changes, the planner reinstalls it
+/// even if the source directory content (cache info) hasn't changed.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/17370>
+#[test]
+fn sync_reinstalls_on_version_change() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a workspace with a local directory dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.sources]
+        child = { path = "packages/child" }
+        "#,
+    )?;
+
+    // Create the child package with version 0.1.0.
+    let child = context.temp_dir.child("packages/child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Lock and sync (installs child v0.1.0).
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+    ");
+
+    // Now bump the child's version to 0.1.1.
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Lock again; lockfile should show v0.1.1.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated child v0.1.0 -> v0.1.1
+    ");
+
+    // Sync should reinstall child with the new version. Before the fix for #17370,
+    // this would incorrectly say "Audited 2 packages" and not reinstall the child package.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - child==0.1.0 (from file://[TEMP_DIR]/packages/child)
+     + child==0.1.1 (from file://[TEMP_DIR]/packages/child)
+    ");
 
     Ok(())
 }

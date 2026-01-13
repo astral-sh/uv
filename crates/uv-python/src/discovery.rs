@@ -74,7 +74,7 @@ impl<'a> serde::Deserialize<'a> for PythonRequest {
     where
         D: serde::Deserializer<'a>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Ok(Self::parse(&s))
     }
 }

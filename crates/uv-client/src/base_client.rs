@@ -16,7 +16,7 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipart};
+use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -29,7 +29,8 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
-use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_configuration::ProxyUrlKind;
+use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -84,6 +85,9 @@ pub struct BaseClientBuilder<'a> {
     timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     redirect_policy: RedirectPolicy,
     /// Whether credentials should be propagated during cross-origin redirects.
     ///
@@ -148,6 +152,9 @@ impl Default for BaseClientBuilder<'_> {
             timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
@@ -262,6 +269,24 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn proxy(mut self, proxy: Proxy) -> Self {
         self.proxies.push(proxy);
+        self
+    }
+
+    #[must_use]
+    pub fn http_proxy(mut self, http_proxy: Option<ProxyUrl>) -> Self {
+        self.http_proxy = http_proxy;
+        self
+    }
+
+    #[must_use]
+    pub fn https_proxy(mut self, https_proxy: Option<ProxyUrl>) -> Self {
+        self.https_proxy = https_proxy;
+        self
+    }
+
+    #[must_use]
+    pub fn no_proxy(mut self, no_proxy: Option<Vec<String>>) -> Self {
+        self.no_proxy = no_proxy;
         self
     }
 
@@ -526,6 +551,24 @@ impl<'a> BaseClientBuilder<'a> {
         for p in &self.proxies {
             client_builder = client_builder.proxy(p.clone());
         }
+
+        let no_proxy = self
+            .no_proxy
+            .as_ref()
+            .and_then(|no_proxy| NoProxy::from_string(&no_proxy.join(",")));
+
+        if let Some(http_proxy) = &self.http_proxy {
+            let proxy = http_proxy
+                .as_proxy(ProxyUrlKind::Http)
+                .no_proxy(no_proxy.clone());
+            client_builder = client_builder.proxy(proxy);
+        }
+
+        if let Some(https_proxy) = &self.https_proxy {
+            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            client_builder = client_builder.proxy(proxy);
+        }
+
         let client_builder = client_builder;
 
         client_builder
@@ -1064,7 +1107,10 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
-        trace!("Considering retry of response HTTP {status} for {url}");
+        trace!(
+            "Considering retry of response HTTP {status} for {url}",
+            url = DisplaySafeUrl::from_url(url.clone())
+        );
     } else {
         trace!("Considering retry of error: {err:?}");
     }

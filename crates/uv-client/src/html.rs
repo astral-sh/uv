@@ -1,18 +1,22 @@
 use std::str::FromStr;
 
 use jiff::Timestamp;
-use tl::HTMLTag;
+use tl::{HTMLTag, Node, Parser};
 use tracing::{debug, instrument, warn};
 
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
+use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Status, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_small_str::SmallString;
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
 pub(crate) struct SimpleDetailHTML {
+    /// The PEP 792 project status information.
+    #[allow(dead_code)]
+    pub(crate) project_status: ProjectStatus,
     /// The [`BaseUrl`] to which all relative URLs should be resolved.
     pub(crate) base: BaseUrl,
     /// The list of [`PypiFile`]s available for download sorted by filename.
@@ -24,6 +28,22 @@ impl SimpleDetailHTML {
     #[instrument(skip_all, fields(url = % url))]
     pub(crate) fn parse(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
         let dom = tl::parse(text, tl::ParserOptions::default())?;
+
+        // Project status information appears in the `<meta>` tags in the `<head>`.
+        // Specifically, it appears as `name="pypi:project-status"`
+        // and `name="pypi:project-status-reason"` with corresponding
+        // `content` attributes.
+        let project_status = dom
+            .nodes()
+            .iter()
+            .find(|node| {
+                node.as_tag()
+                    .is_some_and(|tag| tag.name().as_bytes() == b"head")
+            })
+            .map(|head| Self::parse_project_status(dom.parser(), head))
+            .transpose()?
+            .flatten()
+            .unwrap_or_default();
 
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
@@ -63,7 +83,79 @@ impl SimpleDetailHTML {
         // probably be the thing that does the sorting.)
         files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
 
-        Ok(Self { base, files })
+        Ok(Self {
+            project_status,
+            base,
+            files,
+        })
+    }
+
+    /// Parse a [`ProjectStatus`] from the `<meta>` tags in the given `<head>`.
+    ///
+    /// Precondition: `head` is a `<head>` tag.
+    fn parse_project_status(parser: &Parser, head: &Node) -> Result<Option<ProjectStatus>, Error> {
+        /// Extract the value of the `content` attribute from a tag.
+        fn content<'a>(tag: &'a HTMLTag<'a>) -> Result<Option<&'a str>, Error> {
+            let Some(content) = tag
+                .attributes()
+                .get("content")
+                .and_then(|bytes| bytes)
+                .map(|bytes| std::str::from_utf8(bytes.as_bytes()))
+                .transpose()?
+            else {
+                return Ok(None);
+            };
+            Ok(Some(content))
+        }
+
+        let Some(children) = head.children() else {
+            return Ok(None);
+        };
+
+        let mut status: Option<Status> = None;
+        let mut reason: Option<SmallString> = None;
+        for node in children.all(parser) {
+            let tag = match node.as_tag() {
+                Some(tag) if tag.name().as_bytes() == b"meta" => tag,
+                _ => continue,
+            };
+
+            let name = match tag.attributes().get("name").and_then(|bytes| bytes) {
+                Some(name) => std::str::from_utf8(name.as_bytes())?,
+                None => continue,
+            };
+
+            // Per PEP 792: both `pypi:project-status` and `pypi:project-status-reason`
+            // are optional, but if present should be well-formed.
+            match name {
+                "pypi:project-status" => {
+                    status = {
+                        let Some(status) = content(tag)?.and_then(Status::new) else {
+                            return Ok(None);
+                        };
+                        Some(status)
+                    };
+                }
+                "pypi:project-status-reason" => {
+                    reason = {
+                        let Some(content) = content(tag)?.map(SmallString::from) else {
+                            // TODO: Make this a hard error instead?
+                            warn!("Invalid project status reason (missing)");
+                            return Ok(None);
+                        };
+                        Some(content)
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(status) = status {
+            let status = ProjectStatus { status, reason };
+            Ok(Some(status))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Parse the `href` from a `<base>` tag.
@@ -329,6 +421,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -386,6 +482,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -446,6 +546,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -503,6 +607,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -560,6 +668,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -617,6 +729,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -672,6 +788,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -727,6 +847,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -765,6 +889,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -803,6 +931,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -858,6 +990,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -914,6 +1050,10 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -971,6 +1111,10 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -1047,6 +1191,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1129,6 +1277,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1232,6 +1384,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1305,6 +1461,10 @@ mod tests {
         let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
         SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1426,6 +1586,142 @@ mod tests {
             ],
         }
         "#);
+    }
+
+    /// Test parsing with project status metadata (status, no reason).
+    #[test]
+    fn parse_simple_detail_with_project_status_no_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="archived">
+    <title>Links for pepy</title>
+</head>
+<body>
+    <h1>Links for pepy</h1>
+    <a href="https://files.pythonhosted.org/packages/48/99/fa422e3fb74e6c7a9d735222aa6fceb717c8cd528468aeae13cd22a1d40b/pepy-1.0.0rc2.tar.gz#sha256=67736757345c4dad74725c520986f82c55a7404ad1b35435474a16111d68b270">pepy-1.0.0rc2.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(result.project_status, @r"
+        ProjectStatus {
+            status: Archived,
+            reason: None,
+        }
+        ");
+    }
+
+    /// Test parsing with project status metadata (status and reason).
+    #[test]
+    fn parse_simple_detail_with_project_status_and_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="archived">
+    <meta name="pypi:project-status-reason" content="This project is haunted.">
+    <title>Links for fakeproject</title>
+</head>
+<body>
+    <h1>Links for fakeproject</h1>
+    <a href="https://example.com/fakeproject">fakeproject-1.2.3.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(result.project_status, @r#"
+        ProjectStatus {
+            status: Archived,
+            reason: Some(
+                "This project is haunted.",
+            ),
+        }
+        "#);
+    }
+
+    // Test parsing project status metadata with emojis in the reason.
+    #[test]
+    fn parse_simple_detail_with_project_status_and_emoji_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="deprecated">
+    <meta name="pypi:project-status-reason" content="This project is haunted 👻.">
+    <title>Links for spookyproject</title>
+</head>
+<body>
+    <h1>Links for spookyproject</h1>
+    <a href="https://example.com/spookyproject">spookyproject-0.9.9.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/spookyproject/").unwrap(),
+        );
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @r#"
+        ProjectStatus {
+            status: Deprecated,
+            reason: Some(
+                "This project is haunted 👻.",
+            ),
+        }
+        "#);
+    }
+
+    /// Test parsing project status metadata with an unknown status marker.
+    #[test]
+    fn parse_simple_detail_with_unknown_project_status() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="unknown-status">
+    <title>Links for unknownproject</title>
+</head>
+<body>
+    <h1>Links for unknownproject</h1>
+    <a href="https://example.com/unknownproject">unknownproject-0.1.0.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
+        );
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @r"
+        ProjectStatus {
+            status: Active,
+            reason: None,
+        }
+        ");
     }
 
     /// Test parsing Simple API index (root) HTML.

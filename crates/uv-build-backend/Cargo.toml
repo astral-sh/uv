@@ -1,6 +1,6 @@
 [package]
 name = "uv-build-backend"
-version = "0.0.8"
+version = "0.0.13"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -38,6 +38,7 @@ serde = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
 tar = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
@@ -59,4 +60,3 @@ schemars = ["dep:schemars", "uv-pypi-types/schemars"]
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true }
-tempfile = { workspace = true }
