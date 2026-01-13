@@ -110,8 +110,12 @@ jobs:
 
   cargo-test-windows:
     timeout-minutes: 15
-    runs-on: depot-windows-2022-16
-    name: "cargo test on windows"
+    runs-on: github-windows-2025-x86_64-16
+    name: "cargo test on windows ${{ matrix.partition }} of 3"
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [1, 2, 3]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -135,6 +139,8 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
+          # Use the same cache entry across the partitions
+          add-job-id-key: false
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -160,4 +166,5 @@ jobs:
             --no-default-features \
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
-            --profile ci-windows
+            --profile ci-windows \
+            --partition hash:${{ matrix.partition }}/3
