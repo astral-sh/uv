@@ -706,6 +706,11 @@ fn logout_native_auth() -> Result<()> {
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
 
     // Without a service name
     uv_snapshot!(context.auth_logout(), @r"
@@ -726,12 +731,13 @@ fn logout_native_auth() -> Result<()> {
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
+    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth
+      Caused by: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
