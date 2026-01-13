@@ -800,7 +800,7 @@
     "ExcludeNewerPackage": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/ExcludeNewerTimestamp"
+        "$ref": "#/definitions/PackageExcludeNewer"
       }
     },
     "ExcludeNewerTimestamp": {
@@ -1093,6 +1093,27 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
+    },
+    "PackageExcludeNewer": {
+      "description": "Per-package exclude-newer setting.\n\nThis enum represents whether exclude-newer should be disabled for a package,\nor if a specific cutoff (absolute or relative) should be used.",
+      "oneOf": [
+        {
+          "description": "Disable exclude-newer for this package (allow all versions regardless of upload date).",
+          "type": "string",
+          "const": "Disabled"
+        },
+        {
+          "description": "Enable exclude-newer with this cutoff for this package.",
+          "type": "object",
+          "properties": {
+            "Enabled": {
+              "$ref": "#/definitions/ExcludeNewerTimestamp"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Enabled"]
+        }
+      ]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
