@@ -291,9 +291,10 @@ jobs:
     steps:
       - name: "Check required jobs passed"
         run: |
-          needs_json='${{ toJSON(needs) }}'
-          failing=$(echo "$needs_json" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
           if [ -n "$failing" ]; then
             echo "$failing"
             exit 1
           fi
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
