@@ -182,6 +182,20 @@ where
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
+struct ToolTable {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uv: Option<UvToolMetadata>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct UvToolMetadata {
+    version: String,
+    command: Vec<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
     lock_version: Version,
     created_by: String,
@@ -197,6 +211,8 @@ pub struct PylockToml {
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool: Option<ToolTable>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -660,6 +676,20 @@ impl<'lock> PylockToml {
             default_groups,
             packages,
             attestation_identities,
+            tool: Some(ToolTable {
+                uv: Some(UvToolMetadata {
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    command: {
+                        let mut args: Vec<String> = std::env::args().collect();
+                        if let Some(first) = args.first_mut() {
+                            if let Some(name) = std::path::Path::new(first).file_name() {
+                                *first = name.to_string_lossy().to_string();
+                            }
+                        }
+                        args
+                    },
+                }),
+            }),
         })
     }
 
@@ -943,6 +973,20 @@ impl<'lock> PylockToml {
             default_groups,
             packages,
             attestation_identities,
+            tool: Some(ToolTable {
+                uv: Some(UvToolMetadata {
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    command: {
+                        let mut args: Vec<String> = std::env::args().collect();
+                        if let Some(first) = args.first_mut() {
+                            if let Some(name) = std::path::Path::new(first).file_name() {
+                                *first = name.to_string_lossy().to_string();
+                            }
+                        }
+                        args
+                    },
+                }),
+            }),
         })
     }
 
@@ -956,6 +1000,19 @@ impl<'lock> PylockToml {
         doc.insert("created-by", value(self.created_by.as_str()));
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
+        }
+        if let Some(ref tool) = self.tool {
+            let mut tool_table = Table::new();
+            if let Some(ref uv_metadata) = tool.uv {
+                let mut uv_table = Table::new();
+                uv_table.insert("version", value(uv_metadata.version.as_str()));
+                uv_table.insert(
+                    "command",
+                    value(each_element_on_its_line_array(uv_metadata.command.iter())),
+                );
+                tool_table.insert("uv", Item::Table(uv_table));
+            }
+            doc.insert("tool", Item::Table(tool_table));
         }
         if !self.extras.is_empty() {
             doc.insert(
