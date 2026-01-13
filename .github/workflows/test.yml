@@ -111,7 +111,7 @@ jobs:
   cargo-test-windows:
     timeout-minutes: 15
     runs-on: github-windows-2025-x86_64-16
-    name: "cargo test on windows shard ${{ matrix.partition }} of 3"
+    name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
       fail-fast: false
       matrix:
@@ -139,6 +139,8 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
+          # Use the same cache entry across the partitions
+          add-job-id-key: false
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
