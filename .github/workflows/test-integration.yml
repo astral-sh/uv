@@ -297,6 +297,24 @@ jobs:
         run: |
           ./uv run -p $env:LOCALAPPDATA\Python\pythoncore-3.14-64\python.exe --with numpy python -c "import sys; print(sys.executable)"
 
+  # Test PEP 514 integration that installs Python into the Windows registry.
+  integration-test-windows-registry:
+    name: "windows registry"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Test PEP 514 registration"
+        run: python ./scripts/check_registry.py --uv ./uv.exe
+
   integration-test-pypy-linux:
     name: "pypy on linux"
     timeout-minutes: 10
