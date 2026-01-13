@@ -45,7 +45,7 @@ The query parameter a horrible hack stolen from
 https://github.com/pypa/twine/issues/565#issue-555219267
 to prevent the other projects from implicitly using the same credentials.
 
-**pypi-trusted-publishing**
+**pypi-trusted-publishing-github**
 This one only works in GitHub Actions on astral-sh/uv in `ci.yml` - sorry!
 
 **gitlab**
@@ -182,12 +182,22 @@ local_targets: dict[str, TargetConfiguration] = {
 }
 
 all_targets: dict[str, TargetConfiguration] = local_targets | {
-    "pypi-trusted-publishing": TargetConfiguration(
+    "pypi-trusted-publishing-github": TargetConfiguration(
         "astral-test-trusted-publishing",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
         index=None,
         attestations=True,
+    ),
+    "pypi-trusted-publishing-gitlab": TargetConfiguration(
+        "astral-test-pypi-trusted-publishing-gitlab",
+        publish_url=TEST_PYPI_PUBLISH_URL,
+        index_url="https://test.pypi.org/simple/",
+        index=None,
+        # We're impersonating GitLab, so we can't easily test attestations here.
+        # TODO: In principle we could test this by having GitLab issue us an `aud:sigstore`
+        # OIDC token in addition to the `aud:testpypi` one.
+        attestations=False,
     ),
     # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
     # "pyx-trusted-publishing": TargetConfiguration(
@@ -515,8 +525,12 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         wait_for_index(index_url, project_name, version, uv, env)
         check_index_for_provenance(index_url, project_name, version, client)
 
-    if publish_url == TEST_PYPI_PUBLISH_URL:
+    if publish_url == TEST_PYPI_PUBLISH_URL and target not in (
+        "pypi-trusted-publishing-gitlab",
+    ):
         # Confirm pypi behaviour: Uploading the same file again is fine.
+        # This doesn't work for Trusted Publishing with GitLab, since
+        # there's a single static OIDC token that can't be reused.
         print(
             f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===",
             file=sys.stderr,
@@ -621,9 +635,20 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
     elif target == "pypi-text-store":
         extra_args = ["--username", "__token__"]
         env = {}
-    elif target == "pypi-trusted-publishing":
+    elif target == "pypi-trusted-publishing-github":
         extra_args = ["--trusted-publishing", "always"]
         env = {}
+    elif target == "pypi-trusted-publishing-gitlab":
+        extra_args = ["--trusted-publishing", "always"]
+        # We need to impersonate a Gitlab CI environment here.
+        # To do that, we set the CI environment variables accordingly.
+        env = {
+            "CI": "true",
+            "GITLAB_CI": "true",
+            # NOTE: We may or may not be running in GitHub Actions, so we explicitly toggle this off.
+            "GITHUB_ACTIONS": "false",
+            "TESTPYPI_ID_TOKEN": os.environ["UV_TEST_PUBLISH_GITLAB_OIDC_TOKEN"],
+        }
     elif target == "gitlab":
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
         extra_args = ["--username", "astral-test-gitlab-pat"]
