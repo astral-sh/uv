@@ -11314,9 +11314,8 @@ async fn add_index_empty_directory() -> Result<()> {
 }
 
 #[test]
-fn add_index_with_ambiguous_relative_path() -> Result<()> {
+fn add_index_by_name_missing() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11327,26 +11326,13 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @"
+    uv_snapshot!(context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
-
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index` or `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    error: Could not find an index named `test-index`
     ");
 
     Ok(())
