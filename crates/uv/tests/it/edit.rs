@@ -289,7 +289,7 @@ fn add_git() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -385,7 +385,7 @@ fn add_git_private_source() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -479,7 +479,7 @@ fn add_git_private_raw() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-private-pypackage#d780faf0ac91257d4d5a4f0c5a0e4509608c0071" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -757,7 +757,7 @@ fn add_git_lfs() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
         "#
-        );
+            );
     });
 
     // Change revision as an unnamed requirement
@@ -1026,7 +1026,7 @@ fn add_git_raw() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -1285,7 +1285,7 @@ fn add_unnamed() -> Result<()> {
         version = "0.1.0"
         source = { git = "https://github.com/astral-test/uv-public-pypackage?tag=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -1948,7 +1948,7 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child2" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -2026,7 +2026,7 @@ fn add_remove_workspace() -> Result<()> {
         version = "0.1.0"
         source = { editable = "child2" }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -2616,7 +2616,7 @@ fn add_workspace_editable() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         "#
-        );
+            );
     });
 
     // Install from the lockfile.
@@ -3820,7 +3820,7 @@ fn add_update_git_reference_script() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("https://github.com/astral-test/uv-public-pypackage.git"),
-        @"
+    @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3853,7 +3853,7 @@ fn add_update_git_reference_script() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("uv-public-pypackage").arg("--branch=test-branch"),
-        @"
+    @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7531,7 +7531,7 @@ fn remove_repeated() -> Result<()> {
         [tool.uv.sources]
         anyio = {{ path = "{anyio_local}" }}
     "#,
-        anyio_local = anyio_local.portable_display(),
+    anyio_local = anyio_local.portable_display(),
     })?;
 
     uv_snapshot!(context.filters(), context.remove().arg("anyio"), @"
@@ -11003,7 +11003,7 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
     let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
     fs_err::copy(&wheel_src, &wheel_dst)?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11026,20 +11026,20 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-    "#})?;
+            name = "project"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+                dependencies = []
+                "#})?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
+        ----- stderr -----
+        error: Directory not found for index: file://[TEMP_DIR]/test-index
+        ");
 
     Ok(())
 }
@@ -11062,18 +11062,18 @@ async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> 
         [[tool.uv.index]]
         name = "test-index"
         url = "{proxy_uri}/simple"
-    "#,
+        "#,
         proxy_uri = proxy.uri()
     ))?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
+        ----- stderr -----
+        error: Directory not found for index: file://[TEMP_DIR]/test-index
+        ");
 
     Ok(())
 }
@@ -11095,14 +11095,14 @@ async fn add_index_empty_directory() -> Result<()> {
         [[tool.uv.index]]
         name = "test-index"
         url = "{proxy_uri}/simple"
-    "#,
+        "#,
         proxy_uri = proxy.uri()
     ))?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11119,9 +11119,8 @@ async fn add_index_empty_directory() -> Result<()> {
 }
 
 #[test]
-fn add_index_with_ambiguous_relative_path() -> Result<()> {
+fn add_index_by_name_missing() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11132,26 +11131,13 @@ fn add_index_with_ambiguous_relative_path() -> Result<()> {
         dependencies = []
     "#})?;
 
-    #[cfg(unix)]
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @"
+    uv_snapshot!(context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
-    ");
-
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `[PREFIX]test-index` or `[PREFIX]test-index`). Support for ambiguous values will be removed in the future
-    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    error: Could not find an index named `test-index`
     ");
 
     Ok(())
