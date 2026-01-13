@@ -35,22 +35,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
-          cargo build --bin uv
-          ./target/debug/uv venv --cache-dir .cache
-          ./target/debug/uv pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
-          ./target/debug/uv pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile test/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
         run: cargo codspeed build -m walltime --profile profiling -p uv-bench
+
+      - name: "Create artifact archive"
+        run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
 
       - name: "Upload benchmark artifacts"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: benchmarks-walltime
-          path: |
-            target/codspeed
-            target/debug/uv
-            .cache
+          path: benchmarks-walltime.tar
           retention-days: 1
 
   benchmarks-walltime-run:
@@ -74,10 +73,8 @@ jobs:
         with:
           name: benchmarks-walltime
 
-      - name: "Restore binary permissions"
-        run: |
-          chmod -R +x target/codspeed
-          chmod +x target/debug/uv
+      - name: "Extract artifact archive"
+        run: tar -xvf benchmarks-walltime.tar
 
       - name: "Create venv"
         run: ./target/debug/uv venv --cache-dir .cache
