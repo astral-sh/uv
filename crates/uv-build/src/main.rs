@@ -46,9 +46,9 @@ fn main() -> Result<()> {
         if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
             PreviewFeatures::all()
         } else if let Some(preview_features) = env::var_os(EnvVars::UV_PREVIEW_FEATURES) {
-            let preview_features = preview_features.to_str().with_context(|| {
-                format!("`{}` is not valid UTF-8", EnvVars::UV_PREVIEW_FEATURES)
-            })?;
+            let preview_features = preview_features
+                .to_str()
+                .with_context(|| format!("Invalid UTF-8 in `{}`", EnvVars::UV_PREVIEW_FEATURES))?;
             PreviewFeatures::from_str(preview_features).with_context(|| {
                 format!(
                     "Invalid preview features list in `{}`",

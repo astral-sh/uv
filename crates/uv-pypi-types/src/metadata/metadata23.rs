@@ -1,12 +1,13 @@
 //! Vendored from <https://github.com/PyO3/python-pkginfo-rs>
+use std::fmt::Display;
+use std::fmt::Write;
+use std::str;
+use std::str::FromStr;
+
+use indexmap::IndexMap;
 
 use crate::MetadataError;
 use crate::metadata::Headers;
-use indexmap::IndexMap;
-use std::fmt::Write;
-use std::fmt::{Display, Formatter};
-use std::str;
-use std::str::FromStr;
 
 /// Code Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
@@ -239,7 +240,11 @@ impl Metadata23 {
         write_all(&mut writer, "Platform", &self.platforms);
         write_all(&mut writer, "Supported-Platform", &self.supported_platforms);
         write_all(&mut writer, "Summary", &self.summary);
-        write_opt_str(&mut writer, "Keywords", self.keywords.as_ref());
+        write_opt_str(
+            &mut writer,
+            "Keywords",
+            self.keywords.as_ref().map(Keywords::as_metadata).as_ref(),
+        );
         write_opt_str(&mut writer, "Home-Page", self.home_page.as_ref());
         write_opt_str(&mut writer, "Download-URL", self.download_url.as_ref());
         write_opt_str(&mut writer, "Author", self.author.as_ref());
@@ -305,19 +310,19 @@ impl Keywords {
     pub fn from_metadata(keywords: &str) -> Self {
         Self(keywords.split(',').map(ToString::to_string).collect())
     }
-}
 
-impl Display for Keywords {
     /// Write the `METADATA` format.
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    pub fn as_metadata(&self) -> String {
         let mut keywords = self.0.iter();
+        let mut rendered = String::new();
         if let Some(keyword) = keywords.next() {
-            write!(f, "{keyword}")?;
+            rendered.push_str(keyword);
         }
         for keyword in keywords {
-            write!(f, ",{keyword}")?;
+            rendered.push(',');
+            rendered.push_str(keyword);
         }
-        Ok(())
+        rendered
     }
 }
 

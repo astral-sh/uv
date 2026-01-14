@@ -1156,7 +1156,7 @@ impl FormMetadata {
         add_option("description_content_type", description_content_type);
         add_option("download_url", download_url);
         add_option("home_page", home_page);
-        add_option("keywords", keywords.map(|keywords| keywords.to_string()));
+        add_option("keywords", keywords.map(|keywords| keywords.as_metadata()));
         add_option("license", license);
         add_option("license_expression", license_expression);
         add_option("maintainer", maintainer);
