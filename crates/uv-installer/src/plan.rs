@@ -809,7 +809,7 @@ mod tests {
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
         let hint = anstream::adapter::strip_str(&hint);
-        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`), which is incompatible");
+        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible");
     }
 
     #[test]

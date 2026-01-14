@@ -13769,6 +13769,6 @@ fn abi3_wheel_on_freethreaded_python() {
     error: Failed to determine installation plan
       Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
 
-    hint: The wheel uses the stable ABI (`abi3`), but you're using CPython 3.14 (`cp314t`), which is incompatible
+    hint: The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible
     ");
 }
