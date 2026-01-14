@@ -13265,7 +13265,9 @@ fn sync_python_preference() -> Result<()> {
 
 #[test]
 fn sync_python_missing_download_hint() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]).with_managed_python_dirs();
+    let context = TestContext::new_with_versions(&["3.12"])
+        .with_managed_python_dirs()
+        .with_filtered_python_sources();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13278,23 +13280,15 @@ fn sync_python_missing_download_hint() -> Result<()> {
         "#,
     )?;
 
-    let mut filters = context.filters();
-    if cfg!(windows) {
-        filters.push((
-            "managed installations, search path, or registry",
-            "managed installations or search path",
-        ));
-    }
-
-    uv_snapshot!(filters, context.sync().arg("-p").arg("3.100"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.100"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python 3.100 in managed installations or search path
+    error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
 
-    hint: No Python download is available for Python 3.100. This version might be newer than your uv. Update uv and retry.
+    hint: This uv release may not support managed Python 3.100 yet. Update uv and retry.
     ");
 
     Ok(())

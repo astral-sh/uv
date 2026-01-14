@@ -163,7 +163,7 @@ impl PythonInstallation {
                         return Err(err);
                     }
                     return Err(err.with_missing_python_hint(format!(
-                        "No Python download is available{request_suffix}. This version might be newer than your uv. Update uv and retry."
+                        "This uv release may not support managed {request} yet. Update uv and retry."
                     )));
                 }
                 None
