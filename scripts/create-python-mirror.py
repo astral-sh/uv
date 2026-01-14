@@ -194,7 +194,10 @@ async def download_file(
 
 
 async def download_files(
-    urls: Set[Tuple[str, Optional[str]]], target: Path, max_concurrent: int
+    urls: Set[Tuple[str, Optional[str]]],
+    target: Path,
+    max_concurrent: int,
+    dry_run: bool = False,
 ):
     """Download files with a limit on concurrent downloads using httpx."""
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -206,13 +209,17 @@ async def download_files(
         async def sem_download(url, sha256):
             nonlocal success_count
             async with sem:
+                dest = target / sanitize_url(url)
+                if dry_run:
+                    print(f"Would download {url} to {dest}")
+                    return
                 success = await download_file(
-                    client,
-                    url,
-                    target / sanitize_url(url),
-                    sha256,
-                    progress_bar,
-                    errors,
+                    client=client,
+                    url=url,
+                    dest=dest,
+                    expected_sha256=sha256,
+                    progress_bar=progress_bar,
+                    errors=errors,
                 )
                 if success:
                     success_count += 1
@@ -281,6 +288,11 @@ def parse_arguments():
     parser.add_argument(
         "--mirror-url", help="Saved metadata has URLs updated to this root path."
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Perform a dry run without downloading files.",
+    )
     return parser.parse_args()
 
 
@@ -308,7 +320,7 @@ def main():
     logger.info(f"Downloading {len(urls)} files to {target}...")
     try:
         success_count, errors = asyncio.run(
-            download_files(urls, target, args.max_concurrent)
+            download_files(urls, target, args.max_concurrent, dry_run=args.dry_run)
         )
         print(f"Successfully downloaded: {success_count} files.")
         if errors:
