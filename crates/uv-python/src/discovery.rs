@@ -1591,9 +1591,10 @@ pub(crate) async fn find_best_python_installation(
             _ => return Ok(result?),
         }
 
-        // Attempt to download the relaxed version if downloads are enabled
-        // Only report errors if the previous download didn't.
+        // Attempt to download the relaxed version if downloads are enabled and
+        // the previous attempt didn't fail.
         if downloads_enabled
+            && !previous_fetch_failed
             && let Some(installation) = match attempt_download(
                 &request,
                 download_list,
@@ -1609,11 +1610,9 @@ pub(crate) async fn find_best_python_installation(
             {
                 Ok(maybe_installation) => maybe_installation,
                 Err(error) => {
-                    if !previous_fetch_failed {
-                        warn_user!(
-                            "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
-                        );
-                    }
+                    warn_user!(
+                        "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
+                    );
                     None
                 }
             }
