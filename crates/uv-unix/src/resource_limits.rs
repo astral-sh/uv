@@ -24,7 +24,7 @@ use tracing::debug;
 /// `OpenJDK` uses this same cap because:
 ///
 /// 1. Some code breaks if `RLIMIT_NOFILE` exceeds `i32::MAX` (despite the type being `u64`)
-/// 2. Code that iterates over all possible FDs to close them can timeout with very high limits
+/// 2. Code that iterates over all possible FDs, e.g., to close them, can timeout
 ///
 /// See: <https://bugs.openjdk.org/browse/JDK-8324577>
 /// See: <https://github.com/oracle/graal/issues/11136>
