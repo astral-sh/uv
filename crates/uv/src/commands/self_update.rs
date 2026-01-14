@@ -5,12 +5,11 @@ use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_client::WrappedReqwestError;
+use uv_client::{BaseClientBuilder, WrappedReqwestError};
 use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
@@ -18,16 +17,14 @@ pub(crate) async fn self_update(
     token: Option<String>,
     dry_run: bool,
     printer: Printer,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
 ) -> Result<ExitStatus> {
-    if network_settings.connectivity.is_offline() {
+    if client_builder.is_offline() {
         writeln!(
             printer.stderr(),
             "{}",
             format_args!(
-                concat!(
-                    "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)"
-                ),
+                "{}{} Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)",
                 "error".red().bold(),
                 ":".bold()
             )

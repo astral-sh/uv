@@ -9,7 +9,7 @@ Important:
 
 Requirements:
 
-    $ uv pip install -r scripts/scenarios/requirements.txt
+    $ uv pip install -r scripts/scenarios/pylock.toml
 
     Uses `git`, `rustfmt`, and `cargo insta test` requirements from the project.
 
@@ -27,7 +27,7 @@ Usage:
 
         Override the uv package index and update the tests
 
-        $ UV_TEST_INDEX_URL="http://localhost:3141/simple/" ./scripts/scenarios/generate.py <path to scenarios>
+        $ UV_TEST_PACKSE_INDEX="http://localhost:3141" ./scripts/scenarios/generate.py <path to scenarios>
 
         If an editable version of packse is installed, this script will use its bundled scenarios by default.
 
@@ -41,20 +41,16 @@ import re
 import subprocess
 import sys
 import textwrap
+from enum import StrEnum, auto
 from pathlib import Path
+from typing import Any
 
 TOOL_ROOT = Path(__file__).parent
 TEMPLATES = TOOL_ROOT / "templates"
-INSTALL_TEMPLATE = TEMPLATES / "install.mustache"
-COMPILE_TEMPLATE = TEMPLATES / "compile.mustache"
-LOCK_TEMPLATE = TEMPLATES / "lock.mustache"
 PACKSE = TOOL_ROOT / "packse-scenarios"
-REQUIREMENTS = TOOL_ROOT / "requirements.txt"
+REQUIREMENTS = TOOL_ROOT / "pylock.toml"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
-INSTALL_TESTS = TESTS / "pip_install_scenarios.rs"
-COMPILE_TESTS = TESTS / "pip_compile_scenarios.rs"
-LOCK_TESTS = TESTS / "lock_scenarios.rs"
 TESTS_COMMON_MOD_RS = TESTS / "common" / "mod.rs"
 
 try:
@@ -77,13 +73,37 @@ except ImportError:
     exit(1)
 
 
-def main(scenarios: list[Path], snapshot_update: bool = True):
+class TemplateKind(StrEnum):
+    install = auto()
+    compile = auto()
+    lock = auto()
+
+    def template_file(self) -> Path:
+        return TEMPLATES / f"{self.name}.mustache"
+
+    def test_file(self) -> Path:
+        match self.value:
+            case TemplateKind.install:
+                return TESTS / "pip_install_scenarios.rs"
+            case TemplateKind.compile:
+                return TESTS / "pip_compile_scenarios.rs"
+            case TemplateKind.lock:
+                return TESTS / "lock_scenarios.rs"
+            case _:
+                raise NotImplementedError()
+
+
+def main(
+    scenarios: list[Path],
+    template_kinds: list[TemplateKind],
+    snapshot_update: bool = True,
+):
     # Fetch packse version
     packse_version = importlib.metadata.version("packse")
 
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
 
-    # Don't update the version to `0.0.0` to preserve the `UV_TEST_VENDOR_LINKS_URL`
+    # Don't update the version to `0.0.0` to preserve the `UV_TEST_PACKSE_URL`
     # in local tests.
     if packse_version != "0.0.0":
         update_common_mod_rs(packse_version)
@@ -116,7 +136,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             targets.append(target)
 
     logging.info("Loading scenario metadata...")
-    data = packse.inspect.inspect(
+    data = packse.inspect.variables_for_templates(
         targets=targets,
         no_hash=True,
     )
@@ -163,6 +183,10 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
     for scenario in data["scenarios"]:
         resolver_options = scenario["resolver_options"] or {}
+        # Avoid writing the empty `required-environments = []`
+        resolver_options["has_required_environments"] = bool(
+            resolver_options["required_environments"]
+        )
         if resolver_options.get("universal"):
             lock_scenarios.append(scenario)
         elif resolver_options.get("python") is not None:
@@ -170,11 +194,15 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         else:
             install_scenarios.append(scenario)
 
-    for template, tests, scenarios in [
-        (INSTALL_TEMPLATE, INSTALL_TESTS, install_scenarios),
-        (COMPILE_TEMPLATE, COMPILE_TESTS, compile_scenarios),
-        (LOCK_TEMPLATE, LOCK_TESTS, lock_scenarios),
-    ]:
+    template_kinds_and_scenarios: list[tuple[TemplateKind, list[Any]]] = [
+        (TemplateKind.install, install_scenarios),
+        (TemplateKind.compile, compile_scenarios),
+        (TemplateKind.lock, lock_scenarios),
+    ]
+    for template_kind, scenarios in template_kinds_and_scenarios:
+        if template_kind not in template_kinds:
+            continue
+
         data = {"scenarios": scenarios}
 
         ref = "HEAD" if packse_version == "0.0.0" else packse_version
@@ -188,22 +216,28 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             f"https://raw.githubusercontent.com/astral-sh/packse/{ref}/vendor/links.html"
         )
 
-        data["index_url"] = os.environ.get(
-            "UV_TEST_INDEX_URL",
-            f"https://astral-sh.github.io/packse/{ref}/simple-html/",
+        data["index_url"] = (
+            os.environ.get(
+                "UV_TEST_PACKSE_INDEX",
+                f"https://astral-sh.github.io/packse/{ref}",
+            )
+            + "/simple-html"
         )
 
         # Render the template
-        logging.info(f"Rendering template {template.name}")
+        logging.info(f"Rendering template {template_kind.name}")
         output = chevron_blue.render(
-            template=template.read_text(), data=data, no_escape=True, warn=True
+            template=template_kind.template_file().read_text(),
+            data=data,
+            no_escape=True,
+            warn=True,
         )
 
         # Update the test files
         logging.info(
-            f"Updating test file at `{tests.relative_to(PROJECT_ROOT)}`...",
+            f"Updating test file at `{template_kind.test_file().relative_to(PROJECT_ROOT)}`...",
         )
-        with open(tests, "w") as test_file:
+        with open(template_kind.test_file(), "w") as test_file:
             test_file.write(output)
 
         # Format
@@ -211,7 +245,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
             "Formatting test file...",
         )
         subprocess.check_call(
-            ["rustfmt", str(tests)],
+            ["rustfmt", template_kind.test_file()],
             stderr=subprocess.STDOUT,
             stdout=sys.stderr if debug else subprocess.DEVNULL,
         )
@@ -232,7 +266,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                 "--test",
                 "it",
                 "--",
-                tests.with_suffix("").name,
+                template_kind.test_file().with_suffix("").name,
             ]
             logging.debug(f"Running {' '.join(command)}")
             exit_code = subprocess.call(
@@ -289,6 +323,14 @@ if __name__ == "__main__":
         help="The scenario files to use",
     )
     parser.add_argument(
+        "--templates",
+        type=TemplateKind,
+        choices=list(TemplateKind),
+        default=list(TemplateKind),
+        nargs="*",
+        help="The templates to render. By default, all templates are rendered",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -317,4 +359,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=log_level, format="%(message)s")
 
-    main(args.scenarios, snapshot_update=not args.no_snapshot_update)
+    main(args.scenarios, args.templates, snapshot_update=not args.no_snapshot_update)

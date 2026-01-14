@@ -8,19 +8,23 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
-/// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
+/// Error converting [`uv_pypi_types::PypiFile`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
     #[error("Failed to parse URL: {0}")]
     Url(String, #[source] url::ParseError),
+    #[error("Failed to parse filename from URL: {0}")]
+    MissingPathSegments(String),
+    #[error(transparent)]
+    Utf8(#[from] std::str::Utf8Error),
 }
 
-/// Internal analog to [`uv_pypi_types::File`].
+/// Internal analog to [`uv_pypi_types::PypiFile`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct File {
@@ -36,12 +40,13 @@ pub struct File {
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
     pub yanked: Option<Box<Yanked>>,
+    pub zstd: Option<Box<Zstd>>,
 }
 
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
-    pub fn try_from(
-        file: uv_pypi_types::File,
+    pub fn try_from_pypi(
+        file: uv_pypi_types::PypiFile,
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
@@ -59,6 +64,59 @@ impl File {
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
             yanked: file.yanked,
+            zstd: None,
+        })
+    }
+
+    pub fn try_from_pyx(
+        file: uv_pypi_types::PyxFile,
+        base: &SmallString,
+    ) -> Result<Self, FileConversionError> {
+        let filename = if let Some(filename) = file.filename {
+            filename
+        } else {
+            // Remove any query parameters or fragments from the URL to get the filename.
+            let base_url = file
+                .url
+                .as_ref()
+                .split_once('?')
+                .or_else(|| file.url.as_ref().split_once('#'))
+                .map(|(path, _)| path)
+                .unwrap_or(file.url.as_ref());
+
+            // Take the last segment, stripping any query or fragment.
+            let last = base_url
+                .split('/')
+                .next_back()
+                .ok_or_else(|| FileConversionError::MissingPathSegments(file.url.to_string()))?;
+
+            // Decode the filename, which may be percent-encoded.
+            let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
+
+            SmallString::from(filename)
+        };
+        Ok(Self {
+            filename,
+            dist_info_metadata: file
+                .core_metadata
+                .as_ref()
+                .is_some_and(CoreMetadata::is_available),
+            hashes: HashDigests::from(file.hashes),
+            requires_python: file
+                .requires_python
+                .transpose()
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
+            size: file.size,
+            upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
+            url: FileLocation::new(file.url, base),
+            yanked: file.yanked,
+            zstd: file
+                .zstd
+                .map(|zstd| Zstd {
+                    hashes: HashDigests::from(zstd.hashes),
+                    size: zstd.size,
+                })
+                .map(Box::new),
         })
     }
 }
@@ -80,8 +138,8 @@ impl FileLocation {
     /// that page.
     pub fn new(url: SmallString, base: &SmallString) -> Self {
         match split_scheme(&url) {
-            Some(..) => FileLocation::AbsoluteUrl(UrlString::new(url)),
-            None => FileLocation::RelativeUrl(base.clone(), url),
+            Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
+            None => Self::RelativeUrl(base.clone(), url),
         }
     }
 
@@ -97,8 +155,8 @@ impl FileLocation {
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
     pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
-        match *self {
-            FileLocation::RelativeUrl(ref base, ref path) => {
+        match self {
+            Self::RelativeUrl(base, path) => {
                 let base_url =
                     DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
                         base: base.to_string(),
@@ -111,7 +169,7 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            FileLocation::AbsoluteUrl(ref absolute) => absolute.to_url(),
+            Self::AbsoluteUrl(absolute) => absolute.to_url(),
         }
     }
 }
@@ -174,7 +232,7 @@ impl UrlString {
     pub fn without_fragment(&self) -> Cow<'_, Self> {
         self.as_ref()
             .split_once('#')
-            .map(|(path, _)| Cow::Owned(UrlString(SmallString::from(path))))
+            .map(|(path, _)| Cow::Owned(Self(SmallString::from(path))))
             .unwrap_or(Cow::Borrowed(self))
     }
 }
@@ -214,7 +272,7 @@ pub enum ToUrlError {
         base: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
     /// An error that occurs when the base URL could not be joined with
     /// the relative path in a [`FileLocation::Relative`].
@@ -226,7 +284,7 @@ pub enum ToUrlError {
         path: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
     /// An error that occurs when the absolute URL in [`FileLocation::Absolute`]
     /// could not be parsed as a valid URL.
@@ -236,8 +294,14 @@ pub enum ToUrlError {
         absolute: String,
         /// The underlying URL parse error.
         #[source]
-        err: url::ParseError,
+        err: DisplaySafeUrlError,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+pub struct Zstd {
+    pub hashes: HashDigests,
+    pub size: Option<u64>,
 }
 
 #[cfg(test)]

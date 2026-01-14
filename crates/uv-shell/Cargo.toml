@@ -1,8 +1,13 @@
 [package]
 name = "uv-shell"
-version = "0.0.1"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
-description = "Utilities for detecting and manipulating shell environments"
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -15,11 +20,18 @@ uv-fs = { workspace = true }
 uv-static = { workspace = true }
 
 anyhow = { workspace = true }
-home = { workspace = true }
+fs-err = { workspace = true }
 same-file = { workspace = true }
 tracing = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
 windows-registry = { workspace = true }
-windows-result = { workspace = true }
-windows-sys = { workspace = true }
+
+[dev-dependencies]
+fs-err = { workspace = true }
+temp-env = { workspace = true }
+tempfile = { workspace = true }

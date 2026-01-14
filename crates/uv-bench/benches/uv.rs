@@ -1,9 +1,9 @@
+use std::hint::black_box;
 use std::str::FromStr;
 
-use std::hint::black_box;
-use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
+use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
@@ -59,11 +59,14 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
         .build()
         .unwrap();
 
-    let cache = Cache::from_path("../../.cache").init().unwrap();
+    let cache = Cache::from_path("../../.cache")
+        .init_no_wait()
+        .expect("No cache contention when running benchmarks")
+        .unwrap();
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
-    let client = RegistryClientBuilder::new(cache.clone()).build();
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone()).build();
 
     move |universal| {
         runtime
@@ -85,17 +88,18 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, NoSources,
-        PackageConfigSettings, Preview,
-    };
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
-    use uv_distribution_types::{DependencyMetadata, IndexLocations, RequiresPython};
+    use uv_distribution_types::{
+        ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
+        IndexLocations, PackageConfigSettings, RequiresPython,
+    };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
+    use uv_preview::Preview;
     use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
     use uv_python::Interpreter;
     use uv_resolver::{
@@ -130,7 +134,7 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
     });
 
     pub(crate) async fn resolve(
@@ -141,7 +145,8 @@ mod resolver {
         universal: bool,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
-        let extra_build_requires = uv_distribution::ExtraBuildRequires::default();
+        let extra_build_requires = ExtraBuildRequires::default();
+        let extra_build_variables = ExtraBuildVariables::default();
         let build_options = BuildOptions::default();
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
@@ -160,7 +165,9 @@ mod resolver {
         let index = InMemoryIndex::default();
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
-        let options = OptionsBuilder::new().exclude_newer(exclude_newer).build();
+        let options = OptionsBuilder::new()
+            .exclude_newer(exclude_newer.clone())
+            .build();
         let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
@@ -178,7 +185,7 @@ mod resolver {
         let build_context = BuildDispatch::new(
             client,
             &cache,
-            build_constraints,
+            &build_constraints,
             interpreter,
             &index_locations,
             &flat_index,
@@ -189,6 +196,7 @@ mod resolver {
             &config_settings_package,
             build_isolation,
             &extra_build_requires,
+            &extra_build_variables,
             LinkMode::default(),
             &build_options,
             &hashes,

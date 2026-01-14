@@ -1,0 +1,36 @@
+[package]
+name = "uv-bin-install"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-cache = { workspace = true }
+uv-client = { workspace = true }
+uv-distribution-filename = { workspace = true }
+uv-extract = { workspace = true }
+uv-pep440 = { workspace = true }
+uv-platform = { workspace = true }
+uv-redacted = { workspace = true }
+
+fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+reqwest-retry = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+url = { workspace = true }

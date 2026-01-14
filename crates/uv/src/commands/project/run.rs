@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::fmt::Write;
+use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -18,14 +19,16 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
-    InstallOptions, Preview,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, EnvFile, ExtrasSpecification,
+    InstallOptions, TargetTriple,
 };
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -42,6 +45,17 @@ use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::child::run_to_completion;
+
+/// GitHub Gist API response structure
+#[derive(serde::Deserialize)]
+struct GistResponse {
+    files: std::collections::HashMap<String, GistFile>,
+}
+
+#[derive(serde::Deserialize)]
+struct GistFile {
+    raw_url: String,
+}
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
@@ -59,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -69,8 +83,8 @@ pub(crate) async fn run(
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
-    locked: bool,
-    frozen: bool,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     isolated: bool,
@@ -80,20 +94,20 @@ pub(crate) async fn run(
     no_config: bool,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
     modifications: Modifications,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: Cache,
     printer: Printer,
-    env_file: Vec<PathBuf>,
-    no_env_file: bool,
+    env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
 ) -> anyhow::Result<ExitStatus> {
@@ -126,7 +140,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::RequirementsTxt(path) => {
+            RequirementsSource::Extensionless(path) => {
                 if path == Path::new("-") {
                     requirements_from_stdin = true;
                 }
@@ -150,39 +164,37 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let workspace_cache = WorkspaceCache::default();
 
     // Read from the `.env` file, if necessary.
-    if !no_env_file {
-        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-            match dotenvy::from_path(env_file_path) {
-                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                    bail!(
-                        "No environment file found at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::Io(err)) => {
-                    bail!(
-                        "Failed to read environment file `{}`: {err}",
-                        env_file_path.simplified_display()
-                    );
-                }
-                Err(dotenvy::Error::LineParse(content, position)) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}` at position {position}: {content}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Err(err) => {
-                    warn_user!(
-                        "Failed to parse environment file `{}`: {err}",
-                        env_file_path.simplified_display(),
-                    );
-                }
-                Ok(()) => {
-                    debug!(
-                        "Read environment file at: `{}`",
-                        env_file_path.simplified_display()
-                    );
-                }
+    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+        match dotenvy::from_path(env_file_path) {
+            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "No environment file found at: `{}`",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::Io(err)) => {
+                bail!(
+                    "Failed to read environment file `{}`: {err}",
+                    env_file_path.simplified_display()
+                );
+            }
+            Err(dotenvy::Error::LineParse(content, position)) => {
+                warn_user!(
+                    "Failed to parse environment file `{}` at position {position}: {content}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Err(err) => {
+                warn_user!(
+                    "Failed to parse environment file `{}`: {err}",
+                    env_file_path.simplified_display(),
+                );
+            }
+            Ok(()) => {
+                debug!(
+                    "Read environment file at: `{}`",
+                    env_file_path.simplified_display()
+                );
             }
         }
     }
@@ -226,14 +238,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let environment = ScriptEnvironment::get_or_init(
                 (&script).into(),
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
                 no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
-                cache,
+                &cache,
                 DryRun::Disabled,
                 printer,
                 preview,
@@ -250,38 +262,40 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .ok();
 
             // Determine the lock mode.
-            let mode = if frozen {
-                LockMode::Frozen
-            } else if locked {
-                LockMode::Locked(environment.interpreter())
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
+            } else if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(environment.interpreter(), lock_check)
             } else {
                 LockMode::Write(environment.interpreter())
             };
 
             // Generate a lockfile.
-            let lock = match project::lock::LockOperation::new(
-                mode,
-                &settings.resolver,
-                &network_settings,
-                &lock_state,
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                concurrency,
-                cache,
-                &workspace_cache,
-                printer,
-                preview,
+            let lock = match Box::pin(
+                project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    concurrency,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                    preview,
+                )
+                .execute(target),
             )
-            .execute(target)
             .await
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("script")
                     .report(err)
@@ -306,9 +320,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 editable,
                 install_options,
                 modifications,
-                None,
+                python_platform.as_ref(),
                 (&settings).into(),
-                &network_settings,
+                &client_builder,
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultInstallLogger)
@@ -317,7 +331,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
                 printer,
@@ -325,10 +339,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             )
             .await
             {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("script")
                     .report(err)
@@ -344,13 +358,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
-            if locked {
+            if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!(
-                    "No lockfile found for Python script (ignoring `--locked`); run `{}` to generate a lockfile",
+                    "No lockfile found for Python script (ignoring `{lock_check}`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
                 );
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
@@ -358,20 +372,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
-                let script_extra_build_requires =
-                    script_extra_build_requires((&script).into(), &settings.resolver)?;
+            if let Some(spec) = script_specification(
+                (&script).into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )? {
+                let script_extra_build_requires = script_extra_build_requires(
+                    (&script).into(),
+                    &settings.resolver,
+                    client_builder.credentials_cache(),
+                )?
+                .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -408,10 +430,11 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     environment,
                     spec,
                     modifications,
+                    python_platform.as_ref(),
                     build_constraints.unwrap_or_default(),
                     script_extra_build_requires,
                     &settings,
-                    &network_settings,
+                    &client_builder,
                     &sync_state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
@@ -425,7 +448,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -436,7 +459,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .with_context("script")
                         .report(err)
@@ -449,14 +472,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let interpreter = ScriptInterpreter::discover(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     &install_mirrors,
                     no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
-                    cache,
+                    &cache,
                     printer,
                     preview,
                 )
@@ -469,7 +492,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -521,18 +546,35 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         script_interpreter
     } else {
+        // When running a target with the preview flag enabled, discover the workspace starting
+        // from the target's directory rather than the current working directory.
+        let discovery_dir: Cow<'_, Path> =
+            if preview.is_enabled(PreviewFeatures::TARGET_WORKSPACE_DISCOVERY) {
+                if let Some(dir) = command.as_ref().and_then(RunCommand::script_dir) {
+                    Cow::Owned(std::path::absolute(dir)?)
+                } else {
+                    Cow::Borrowed(project_dir)
+                }
+            } else {
+                Cow::Borrowed(project_dir)
+            };
+
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(
+                    &discovery_dir,
+                    &DiscoveryOptions::default(),
+                    &workspace_cache,
+                )
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
             match VirtualProject::discover(
-                project_dir,
+                &discovery_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,
             )
@@ -573,10 +615,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used alongside `--no-project`");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
             if no_sync {
@@ -590,8 +632,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if locked {
-                warn_user!("`--locked` has no effect when used outside of a project");
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                warn_user!("`{lock_check}` has no effect when used outside of a project",);
             }
             if no_sync {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
@@ -621,11 +663,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
                 // If we're isolating the environment, use an ephemeral virtual environment as the
                 // base environment for the project.
-                let client_builder = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
                 // Resolve the Python request and requirement for the workspace.
                 let WorkspacePython {
@@ -647,7 +684,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -674,7 +711,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -688,13 +727,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &groups,
                     python.as_deref().map(PythonRequest::parse),
                     &install_mirrors,
-                    &network_settings,
+                    &client_builder,
                     python_preference,
                     python_downloads,
                     no_sync,
                     no_config,
                     active,
-                    cache,
+                    &cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -726,37 +765,41 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .ok();
 
                 // Determine the lock mode.
-                let mode = if frozen {
-                    LockMode::Frozen
-                } else if locked {
-                    LockMode::Locked(venv.interpreter())
+                let mode = if let Some(frozen_source) = frozen {
+                    LockMode::Frozen(frozen_source.into())
+                } else if let LockCheck::Enabled(lock_check) = lock_check {
+                    LockMode::Locked(venv.interpreter(), lock_check)
+                } else if isolated {
+                    LockMode::DryRun(venv.interpreter())
                 } else {
                     LockMode::Write(venv.interpreter())
                 };
 
-                let result = match project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &network_settings,
-                    &lock_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    concurrency,
-                    cache,
-                    &workspace_cache,
-                    printer,
-                    preview,
+                let result = match Box::pin(
+                    project::lock::LockOperation::new(
+                        mode,
+                        &settings.resolver,
+                        &client_builder,
+                        &lock_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        concurrency,
+                        &cache,
+                        &workspace_cache,
+                        printer,
+                        preview,
+                    )
+                    .execute(project.workspace().into()),
                 )
-                .execute(project.workspace().into())
                 .await
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -822,9 +865,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     editable,
                     install_options,
                     modifications,
-                    None,
+                    python_platform.as_ref(),
                     (&settings).into(),
-                    &network_settings,
+                    &client_builder,
                     &sync_state,
                     if show_resolution {
                         Box::new(DefaultInstallLogger)
@@ -833,7 +876,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
                     printer,
@@ -841,10 +884,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await
                 {
-                    Ok(()) => {}
+                    Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -863,12 +906,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             debug!("No project found; searching for Python interpreter");
 
             let interpreter = {
-                let client_builder = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
                 // (1) Explicit request from user
                 let python_request = if let Some(request) = python.as_deref() {
                     Some(PythonRequest::parse(request))
@@ -889,7 +926,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &client_builder,
-                    cache,
+                    &cache,
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
@@ -911,7 +948,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     interpreter,
                     uv_virtualenv::Prompt::None,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                    ),
                     false,
                     false,
                     false,
@@ -934,12 +973,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let spec = if requirements.is_empty() {
         None
     } else {
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let spec =
             RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
 
@@ -983,8 +1016,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 spec,
                 build_constraints.unwrap_or_default(),
                 &base_interpreter,
+                python_platform.as_ref(),
                 &settings,
-                &network_settings,
+                &client_builder,
                 &sync_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
@@ -998,7 +1032,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 },
                 installer_metadata,
                 concurrency,
-                cache,
+                &cache,
                 printer,
                 preview,
             )
@@ -1008,7 +1042,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
+                        client_builder.is_native_tls(),
                     )
                     .with_context("`--with`")
                     .report(err)
@@ -1042,7 +1076,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 base_interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -1064,16 +1100,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 requirements_env.site_packages().next().ok_or_else(|| {
                     anyhow!("Requirements environment has no site packages directory")
                 })?;
-            let base_site_packages = base_interpreter
-                .site_packages()
-                .next()
-                .ok_or_else(|| anyhow!("Base environment has no site packages directory"))?;
+            let mut base_site_packages = base_interpreter
+                .runtime_site_packages()
+                .iter()
+                .map(|path| Cow::Borrowed(path.as_path()))
+                .chain(base_interpreter.site_packages())
+                .peekable();
+            if base_site_packages.peek().is_none() {
+                return Err(anyhow!("Base environment has no site packages directory"));
+            }
 
-            ephemeral_env.set_overlay(format!(
-                "import site; site.addsitedir(\"{}\"); site.addsitedir(\"{}\");",
-                requirements_site_packages.escape_for_python(),
-                base_site_packages.escape_for_python(),
-            ))?;
+            let overlay_content = format!(
+                "import site; {}",
+                std::iter::once(requirements_site_packages)
+                    .chain(base_site_packages)
+                    .dedup()
+                    .inspect(|path| debug!("Adding `{}` to site packages", path.display()))
+                    .map(|path| format!("site.addsitedir(\"{}\")", path.escape_for_python()))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+
+            ephemeral_env.set_overlay(overlay_content)?;
 
             // N.B. The order here matters — earlier interpreters take precedence over the
             // later ones.
@@ -1081,7 +1129,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Copy each entrypoint from the base environments to the ephemeral environment,
                 // updating the Python executable target to ensure they run in the ephemeral
                 // environment.
-                for entry in fs_err::read_dir(interpreter.scripts())? {
+                let scripts = match fs_err::read_dir(interpreter.scripts()) {
+                    Ok(scripts) => scripts,
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                    Err(err) => return Err(err.into()),
+                };
+                for entry in scripts {
                     let entry = entry?;
                     if !entry.file_type()?.is_file() {
                         continue;
@@ -1099,6 +1152,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: already exists",
+                                &entry.path().display()
+                            );
+                        }
+                        Err(CopyEntrypointError::Io(err))
+                            if err.kind() == std::io::ErrorKind::PermissionDenied =>
+                        {
+                            trace!(
+                                "Skipping copy of entrypoint `{}`: permission denied",
                                 &entry.path().display()
                             );
                         }
@@ -1174,23 +1235,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             "Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.\n"
         )?;
 
-        #[allow(clippy::map_identity)]
-        let commands = interpreter
-            .scripts()
-            .read_dir()
-            .ok()
-            .into_iter()
-            .flatten()
-            .map(|entry| match entry {
-                Ok(entry) => Ok(entry),
-                Err(err) => {
-                    // If we can't read the entry, fail.
-                    // This could be a symptom of a more serious problem.
-                    warn!("Failed to read entry: {}", err);
-                    Err(err)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?
+        let scripts = match fs_err::read_dir(interpreter.scripts()) {
+            Ok(scripts) => scripts.into_iter().collect::<Result<Vec<_>, _>>()?,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => return Err(err.into()),
+        };
+
+        let commands = scripts
             .into_iter()
             .filter(|entry| {
                 entry
@@ -1200,7 +1251,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             .map(|entry| entry.path())
             .filter(|path| is_executable(path))
             .map(|path| {
-                if cfg!(windows)
+                let path = if cfg!(windows)
                     && path
                         .extension()
                         .is_some_and(|exe| exe == std::env::consts::EXE_EXTENSION)
@@ -1209,9 +1260,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     path.with_extension("")
                 } else {
                     path
-                }
-            })
-            .map(|path| {
+                };
+
                 path.file_name()
                     .unwrap_or_default()
                     .to_string_lossy()
@@ -1300,15 +1350,47 @@ fn can_skip_ephemeral(
     site_packages: &SitePackages,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
+    // Extract the build settings.
+    let ResolverInstallerSettings {
+        resolver:
+            ResolverSettings {
+                config_setting,
+                config_settings_package,
+                extra_build_dependencies,
+                extra_build_variables,
+                ..
+            },
+        reinstall,
+        ..
+    } = settings;
+
+    // If any packages were marked for reinstallation, we cannot skip the ephemeral environment.
+    if !reinstall.is_none() {
         return false;
     }
+
+    // Determine the markers and tags to use for resolution.
+    let markers = interpreter.resolver_marker_environment();
+    let Ok(tags) = interpreter.tags() else {
+        return false;
+    };
+
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires =
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
 
     match site_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
-        &interpreter.resolver_marker_environment(),
+        InstallationStrategy::Permissive,
+        &markers,
+        tags,
+        config_setting,
+        config_settings_package,
+        &extra_build_requires,
+        extra_build_variables,
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
@@ -1524,6 +1606,23 @@ impl RunCommand {
             Self::Empty => Command::new(interpreter.sys_executable()),
         }
     }
+
+    /// Return the directory containing the script, if any.
+    fn script_dir(&self) -> Option<&Path> {
+        match self {
+            Self::PythonScript(target, _)
+            | Self::PythonGuiScript(target, _)
+            | Self::PythonZipapp(target, _) => target.parent(),
+            Self::PythonPackage(_, path, _) => path.parent(),
+            Self::Python(_)
+            | Self::PythonModule(..)
+            | Self::PythonStdin(..)
+            | Self::PythonGuiStdin(..)
+            | Self::PythonRemote(..)
+            | Self::External(..)
+            | Self::Empty => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RunCommand {
@@ -1588,12 +1687,67 @@ impl std::fmt::Display for RunCommand {
     }
 }
 
+/// Resolve a GitHub Gist URL to its raw file URL using the GitHub API.
+async fn resolve_gist_url(
+    url: &DisplaySafeUrl,
+    client_builder: &BaseClientBuilder<'_>,
+) -> anyhow::Result<DisplaySafeUrl> {
+    // Extract the Gist ID from the URL.
+    let gist_id = url
+        .path_segments()
+        .and_then(|mut segments| segments.nth(1))
+        .ok_or_else(|| anyhow!("Invalid Gist URL format"))?;
+
+    // Build the API URL.
+    let api_url = format!("https://api.github.com/gists/{gist_id}");
+
+    let client = client_builder.build();
+
+    // Build the request with appropriate headers.
+    let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;
+    let mut request = client
+        .for_host(&api_url_parsed)
+        .get(Url::from(api_url_parsed));
+    request = request.header("Accept", "application/vnd.github.v3+json");
+
+    // Add GitHub token, if available.
+    if let Ok(token) = std::env::var(EnvVars::UV_GITHUB_TOKEN) {
+        request = request.header("Authorization", format!("Bearer {token}"));
+    }
+
+    // Make the API request.
+    let response = request.send().await?;
+    response.error_for_status_ref()?;
+
+    // Parse the response
+    let gist_data: GistResponse = response.json().await?;
+
+    // Get the raw URL of the first `.py` file (or just the first file).
+    let raw_url = gist_data
+        .files
+        .iter()
+        .filter(|(name, _)| {
+            Path::new(name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+        })
+        .map(|(_, file)| &file.raw_url)
+        .next()
+        // If no `.py` file is found, use the first file.
+        .or_else(|| gist_data.files.values().next().map(|file| &file.raw_url))
+        .ok_or_else(|| anyhow!("No files found in the Gist"))?;
+
+    let url = DisplaySafeUrl::parse(raw_url)?;
+
+    Ok(url)
+}
+
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
     #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
-        network_settings: NetworkSettings,
+        client_builder: BaseClientBuilder<'_>,
         module: bool,
         script: bool,
         gui_script: bool,
@@ -1625,7 +1779,27 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+
+                let client = client_builder.build();
+                let mut response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
+
+                // If it's a Gist URL, use the GitHub API to get the raw URL.
+                if response.url().host_str() == Some("gist.github.com") {
+                    url =
+                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
+                            .await?;
+
+                    response = client
+                        .for_host(&url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await?;
+                }
 
                 let file_stem = url
                     .path_segments()
@@ -1636,18 +1810,6 @@ impl RunCommand {
                     .prefix(file_stem)
                     .suffix(".py")
                     .tempfile()?;
-
-                let client = BaseClientBuilder::new()
-                    .retries_from_env()?
-                    .connectivity(network_settings.connectivity)
-                    .native_tls(network_settings.native_tls)
-                    .allow_insecure_host(network_settings.allow_insecure_host.clone())
-                    .build();
-                let response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();
@@ -1853,12 +2015,20 @@ fn copy_entrypoint(
         return Ok(());
     };
 
-    let launcher = launcher.with_python_path(python_executable.to_path_buf());
+    let is_gui = launcher.python_path.ends_with("pythonw.exe");
+
+    let python_path = if is_gui {
+        python_executable.with_file_name("pythonw.exe")
+    } else {
+        python_executable.to_path_buf()
+    };
+
+    let launcher = launcher.with_python_path(python_path);
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file)?;
+    launcher.write_to_file(&mut file, is_gui)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 

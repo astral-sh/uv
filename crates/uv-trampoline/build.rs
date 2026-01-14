@@ -4,11 +4,14 @@
 // don't have to mess with utf-16.
 use embed_manifest::{embed_manifest, new_manifest};
 
+use uv_static::EnvVars;
+
 fn main() {
-    if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
+    if std::env::var_os(EnvVars::CARGO_CFG_WINDOWS).is_some() {
         let manifest =
             new_manifest("uv.Trampoline").remove_dependency("Microsoft.Windows.Common-Controls");
         embed_manifest(manifest).expect("unable to embed manifest");
+        println!("cargo::rustc-link-lib=ucrt"); // https://github.com/rust-lang/rust/issues/143172
         println!("cargo:rerun-if-changed=build.rs");
     }
 }

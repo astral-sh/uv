@@ -11,7 +11,7 @@ use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
     RemoteSource, Resolution,
 };
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, HashStrategy, InFlight};
@@ -204,7 +204,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     }
                     Ok(cached.clone())
                 }
-                Err(err) => Err(Error::Thread(err.to_string())),
+                Err(err) => Err(Error::Thread(err.to_owned())),
             }
         }
     }

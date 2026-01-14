@@ -4,18 +4,16 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use fs_err as fs;
 use fs_err::File;
 use tracing::{instrument, trace};
 
-use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::Version;
 use uv_pypi_types::{DirectUrl, Metadata10};
 
 use crate::linker::{LinkMode, Locks};
 use crate::wheel::{
-    LibKind, dist_info_metadata, find_dist_info, install_data, parse_scripts, parse_wheel_file,
+    LibKind, WheelFile, dist_info_metadata, find_dist_info, install_data, parse_scripts,
     read_record_file, write_installer_metadata, write_script_entrypoints,
 };
 use crate::{Error, Layout};
@@ -28,13 +26,14 @@ use crate::{Error, Layout};
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[instrument(skip_all, fields(wheel = %filename))]
-pub fn install_wheel(
+pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     layout: &Layout,
     relocatable: bool,
     wheel: impl AsRef<Path>,
     filename: &WheelFilename,
     direct_url: Option<&DirectUrl>,
-    cache_info: Option<&CacheInfo>,
+    cache_info: Option<&Cache>,
+    build_info: Option<&Build>,
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
@@ -48,7 +47,7 @@ pub fn install_wheel(
     let version = Version::from_str(&version)?;
 
     // Validate the wheel name and version.
-    {
+    if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
         if name != filename.name {
             return Err(Error::MismatchedName(name, filename.name.clone()));
         }
@@ -65,8 +64,8 @@ pub fn install_wheel(
     let wheel_file_path = wheel
         .as_ref()
         .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = fs::read_to_string(wheel_file_path)?;
-    let lib_kind = parse_wheel_file(&wheel_text)?;
+    let wheel_text = fs_err::read_to_string(wheel_file_path)?;
+    let lib_kind = WheelFile::parse(&wheel_text)?.lib_kind();
 
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
@@ -75,7 +74,7 @@ pub fn install_wheel(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks)?;
+    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks, filename)?;
     trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
@@ -130,7 +129,7 @@ pub fn install_wheel(
         // 2.c If applicable, update scripts starting with #!python to point to the correct interpreter.
         // Script are unsupported through data
         // 2.e Remove empty distribution-1.0.data directory.
-        fs::remove_dir_all(data_dir)?;
+        fs_err::remove_dir_all(data_dir)?;
     } else {
         trace!(?name, "No data");
     }
@@ -143,6 +142,7 @@ pub fn install_wheel(
             true,
             direct_url,
             cache_info,
+            build_info,
             installer,
             &mut record,
         )?;

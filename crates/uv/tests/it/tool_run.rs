@@ -1,4 +1,4 @@
-use crate::common::{TestContext, uv_snapshot};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -734,7 +734,7 @@ fn tool_run_cache() {
     Resolved [N] packages in [TIME]
     "###);
 
-    // Verify that `--refresh` recreates everything.
+    // Verify that `--refresh` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -742,7 +742,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -751,17 +751,9 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
-    // Verify that `--refresh-package` recreates everything. We may want to change this.
+    // Verify that `--refresh-package` allows cache reuse.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -770,7 +762,7 @@ fn tool_run_cache() {
         .arg("black")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -779,15 +771,7 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + black==24.3.0
-     + click==8.1.7
-     + mypy-extensions==1.0.0
-     + packaging==24.0
-     + pathspec==0.12.1
-     + platformdirs==4.2.0
-    "###);
+    ");
 
     // Verify that varying the interpreter leads to a fresh environment.
     uv_snapshot!(context.filters(), context.tool_run()
@@ -945,6 +929,269 @@ fn tool_run_url() {
     ----- stderr -----
     Resolved [N] packages in [TIME]
     "###);
+}
+
+/// Test running a tool with a Git requirement.
+#[test]
+#[cfg(feature = "git")]
+fn tool_run_git() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("git+https://github.com/psf/black@24.2.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.2.0 (compiled: no)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.2.0 (compiled: no)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir).expect("Failed to remove cache dir.");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("git+https://github.com/psf/black@24.2.0")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.2.0 (compiled: no)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .arg("black")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.2.0 (compiled: no)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+}
+
+/// Test running a tool with a Git LFS enabled requirement.
+#[test]
+#[cfg(feature = "git-lfs")]
+fn tool_run_git_lfs() {
+    let context = TestContext::new("3.13")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_git_lfs_config();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--lfs")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo!
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo!
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir).expect("Failed to remove cache dir.");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("--lfs")
+        .arg("test-lfs-repo-assets")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo! LFS_TEST=True ANOTHER_LFS_TEST=True
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("--lfs")
+        .arg("test-lfs-repo-assets")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo! LFS_TEST=True ANOTHER_LFS_TEST=True
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir).expect("Failed to remove cache dir.");
+
+    // Attempt to run when LFS artifacts are missing and LFS is requested.
+
+    // The filters below will remove any boilerplate before what we actually want to match.
+    // They help handle slightly different output in uv-distribution/src/source/mod.rs between
+    // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
+    // In addition, we can get different error codes depending on where the failure occurs,
+    // although we know the error code cannot be 0.
+    let mut filters = context.filters();
+    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
+    filters.push((
+        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+    ));
+
+    uv_snapshot!(filters, context.tool_run()
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: [ERROR_CODE]
+    ----- stdout -----
+
+    ----- stderr -----
+    [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts
+    ");
+
+    // Attempt to run when LFS artifacts are missing but LFS was not requested.
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo-assets")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+    Traceback (most recent call last):
+      File "[CACHE_DIR]/archive-v0/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .arg("test-lfs-repo-assets")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+    Traceback (most recent call last):
+      File "<frozen runpy>", line 198, in _run_module_as_main
+      File "<frozen runpy>", line 88, in _run_code
+      File "[CACHE_DIR]/archive-v0/[HASH]/Scripts/test-lfs-repo-assets/__main__.py", line 10, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
 }
 
 /// Read requirements from a `requirements.txt` file.
@@ -1134,15 +1381,13 @@ fn tool_run_csv_with_shorthand() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1198,15 +1443,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1262,15 +1505,13 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1326,15 +1567,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1392,15 +1631,13 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -1457,15 +1694,13 @@ fn tool_run_with_editable() -> anyhow::Result<()> {
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
     let black_editable = context.temp_dir.child("src").child("black_editable");
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         &black_editable,
     )?;
 
@@ -2585,6 +2820,78 @@ fn tool_run_with_script_and_from_script() {
     ");
 }
 
+/// Test that when a user provides `--verbose` to the subcommand,
+/// we show a helpful hint.
+#[test]
+fn tool_run_verbose_hint() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Test with --verbose flag
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("nonexistent-package-foo")
+        .arg("--verbose")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because nonexistent-package-foo was not found in the package registry and you require nonexistent-package-foo, we can conclude that your requirements are unsatisfiable.
+      help: You provided `--verbose` to `nonexistent-package-foo`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run --verbose nonexistent-package-foo`
+    "###);
+
+    // Test with -v flag
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("nonexistent-package-bar")
+        .arg("-v")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
+      help: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
+    "###);
+
+    // Test with -vv flag
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("nonexistent-package-baz")
+        .arg("-vv")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because nonexistent-package-baz was not found in the package registry and you require nonexistent-package-baz, we can conclude that your requirements are unsatisfiable.
+      help: You provided `-vv` to `nonexistent-package-baz`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -vv nonexistent-package-baz`
+    "###);
+
+    // Test for false positives
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("nonexistent-package-quux")
+        .arg("-version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
+    ");
+}
+
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
     let context = TestContext::new("3.9")
@@ -2653,6 +2960,101 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_missing_file_error();
+
+    let script_contents = indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#};
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(script_contents)?;
+
+    let script_without_extension = context.temp_dir.child("script-no-ext");
+    script_without_extension.write_str(script_contents)?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .arg("script.py")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script-no-ext")
+        .arg("black")
+        .arg("script-no-ext")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    // Error when the script is not a valid PEP723 script.
+    let script = context.temp_dir.child("not_pep723_script.py");
+    script.write_str("import anyio")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("not_pep723_script.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `not_pep723_script.py` does not contain inline script metadata
+    ");
+
+    // Error when the script doesn't exist.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("missing_file.py")
+        .arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: failed to read from file `missing_file.py`: [OS ERROR 2]
     ");
 
     Ok(())
@@ -2745,9 +3147,9 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
     ----- stderr -----
     An executable named `does_not_exist` is not provided by package `foo`.
     The following executables are available:
-    - custom_pydoc.exe
     - custom_pydoc.bat
     - custom_pydoc.cmd
+    - custom_pydoc.exe
     - custom_pydoc.ps1
     "###);
 
@@ -3064,4 +3466,97 @@ fn tool_run_reresolve_python() -> anyhow::Result<()> {
     ");
 
     Ok(())
+}
+
+/// Test that Windows executable resolution works correctly for package names with dots.
+/// This test verifies the fix for the bug where package names containing dots were
+/// incorrectly handled when adding Windows executable extensions.
+#[cfg(windows)]
+#[test]
+fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Copy the test package to a temporary location
+    let workspace_packages = context.workspace_root.join("test").join("packages");
+    let test_package_source = workspace_packages.join("package.name.with.dots");
+    let test_package_dest = context.temp_dir.child("package.name.with.dots");
+
+    copy_dir_all(&test_package_source, &test_package_dest)?;
+
+    // Test that uv tool run can find and execute the dotted package name
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(test_package_dest.path())
+        .arg("package.name.with.dots")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package.name.with.dots version 0.1.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + package-name-with-dots==0.1.0 (from file://[TEMP_DIR]/package.name.with.dots)
+    "###);
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/17436>
+#[test]
+fn tool_run_latest_keyring_auth() {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("test")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Combine keyring venv bin with tool bin directory to avoid PATH warnings.
+    let path = std::env::join_paths([venv_bin_path(&keyring_context.venv), bin_dir.to_path_buf()])
+        .unwrap();
+
+    // Test that the keyring is consulted during the @latest version lookup.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--index")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg("--keyring-provider")
+        .arg("subprocess")
+        .arg("executable-application@latest")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    "###);
 }

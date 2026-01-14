@@ -82,7 +82,7 @@ explicitly updated using `uv lock`.
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually. The
 `uv.lock` format is specific to uv and not usable by other tools.
 
-### `pylock.toml`
+### Relationship to `pylock.toml`
 
 In [PEP 751](https://peps.python.org/pep-0751/), Python standardized a new resolution file format,
 `pylock.toml`.
@@ -99,6 +99,6 @@ However, uv supports `pylock.toml` as an export target and in the `uv pip` CLI. 
 
 - To export a `uv.lock` to the `pylock.toml` format, run: `uv export -o pylock.toml`
 - To generate a `pylock.toml` file from a set of requirements, run:
-  `uv pip compile -o pylock.toml -r requirements.in`
+  `uv pip compile requirements.in -o pylock.toml`
 - To install from a `pylock.toml` file, run: `uv pip sync pylock.toml` or
   `uv pip install -r pylock.toml`

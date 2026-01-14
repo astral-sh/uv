@@ -1372,7 +1372,7 @@ fn compile_python_312() -> Result<()> {
     // And `UV_PYTHON`
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env("UV_PYTHON", "3.12"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.12"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1556,28 +1556,32 @@ fn compile_fallback_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("-p")
-        .arg("pypy"), @r###"
+        .arg("pypy"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for PyPy, but Python downloads are set to 'never'
+    "
     );
 
     // Similarly, we fail if we receive a range request that cannot be satisfied
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-p")
-            .arg(">=3.12"), @r###"
+            .arg(">=3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for Python >=3.12, but Python downloads are set to 'never'
+    "
     );
 
     Ok(())
@@ -1614,7 +1618,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("-p")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1643,7 +1647,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1672,7 +1676,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-version")
         .arg("3.12")
-        .env("UV_PYTHON", "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1774,14 +1778,16 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("pypy@3.11")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy 3.11 in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for PyPy 3.11, but Python downloads are set to 'never'
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -1790,14 +1796,16 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.13")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for Python 3.13, but Python downloads are set to 'never'
+    "
     );
 
     // `UV_PYTHON` is ignored if `--python-version` is set
@@ -1892,7 +1900,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env("UV_TEST_PYTHON_PATH", context.bin_dir.as_os_str()), @r###"
+            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3038,7 +3046,7 @@ fn allowed_transitive_url_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("hatchling_editable @ ${HATCH_PATH}")?;
 
-    let hatchling_path = current_dir()?.join("../../scripts/packages/hatchling_editable");
+    let hatchling_path = current_dir()?.join("../../test/packages/hatchling_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .env(EnvVars::HATCH_PATH, hatchling_path.as_os_str()), @r###"
@@ -3403,7 +3411,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04+02:00"), @r###"
+        .arg("2022-04-04+02:00"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3412,7 +3420,7 @@ fn compile_exclude_newer() -> Result<()> {
     error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` could not be parsed as a valid date: parsed value '2022-04-04', but unparsed input "+02:00" remains (expected no unparsed input)
 
     For more information, try '--help'.
-    "###
+    "#
     );
 
     // Check the error message for the case of
@@ -3423,7 +3431,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r###"
+        .arg("2022-04-04T26:00:00+00"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3432,7 +3440,7 @@ fn compile_exclude_newer() -> Result<()> {
     error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "###
+    "#
     );
 
     Ok(())
@@ -3543,36 +3551,6 @@ fn compile_exclude_newer_package() -> Result<()> {
     "
     );
 
-    // Test exclude-newer-package without global exclude-newer
-    uv_snapshot!(context
-        .pip_compile()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("requirements.in")
-        .arg("--exclude-newer-package")
-        .arg("tqdm=2022-04-04T12:00:00Z"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --exclude-newer-package tqdm=2022-04-04T12:00:00Z
-    certifi==2025.7.14
-        # via requests
-    charset-normalizer==3.4.2
-        # via requests
-    idna==3.10
-        # via requests
-    requests==2.32.4
-        # via -r requirements.in
-    tqdm==4.64.0
-        # via -r requirements.in
-    urllib3==2.5.0
-        # via requests
-
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    "
-    );
-
     Ok(())
 }
 
@@ -3595,7 +3573,7 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE`
+    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE` or `PACKAGE=false`
 
     For more information, try '--help'.
     "
@@ -3607,16 +3585,16 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer-package")
-        .arg("tqdm=invalid-date"), @r#"
+        .arg("tqdm=invalid-date"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid date: failed to parse year in date "invalid-date": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i
+    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `invalid-date`: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
@@ -3982,7 +3960,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
     requirements_in.write_str("attrs>20.3.0,<21.2.0")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3990,12 +3968,12 @@ fn compile_yanked_version_indirect() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of attrs are available:
-              attrs<20.3.0
+              attrs<=20.3.0
               attrs==21.1.0
-              attrs>21.2.0
+              attrs>=21.2.0
           and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
           And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -4755,8 +4733,8 @@ fn compile_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e ../../scripts/packages/poetry_editable
-        -e file://../../scripts/packages/black_editable[dev]
+        -e ../../test/packages/poetry_editable
+        -e file://../../test/packages/black_editable[dev]
         boltons # normal dependency for comparison
         "
     })?;
@@ -4769,9 +4747,9 @@ fn compile_editable() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/poetry_editable
+    -e ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
-    -e file://../../scripts/packages/black_editable
+    -e file://../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     aiohttp==3.9.3
         # via black
@@ -4815,9 +4793,9 @@ fn deduplicate_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e file://../../scripts/packages/black_editable
-        -e ${PROJECT_ROOT}/../../scripts/packages/black_editable
-        -e file://../../scripts/packages/black_editable[dev]
+        -e file://../../test/packages/black_editable
+        -e ${PROJECT_ROOT}/../../test/packages/black_editable
+        -e file://../../test/packages/black_editable[dev]
         "
     })?;
 
@@ -4829,7 +4807,7 @@ fn deduplicate_editable() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e file://../../scripts/packages/black_editable
+    -e file://../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     aiohttp==3.9.3
         # via black
@@ -4864,7 +4842,7 @@ fn strip_fragment_unnamed() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/black_editable#egg=black
+        ../../test/packages/black_editable#egg=black
         "
     })?;
 
@@ -4876,7 +4854,7 @@ fn strip_fragment_unnamed() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    ../../scripts/packages/black_editable#egg=black
+    ../../test/packages/black_editable#egg=black
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
@@ -4891,7 +4869,7 @@ fn strip_fragment_named() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        black @ ../../scripts/packages/black_editable#egg=black
+        black @ ../../test/packages/black_editable#egg=black
         "
     })?;
 
@@ -4903,7 +4881,7 @@ fn strip_fragment_named() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    ../../scripts/packages/black_editable#egg=black
+    ../../test/packages/black_editable#egg=black
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
@@ -4917,7 +4895,7 @@ fn strip_fragment_named() -> Result<()> {
 fn recursive_extras_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("black[dev] @ ../../scripts/packages/black_editable")?;
+    requirements_in.write_str("black[dev] @ ../../test/packages/black_editable")?;
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
@@ -4934,7 +4912,7 @@ fn recursive_extras_direct_url() -> Result<()> {
         # via aiohttp
     attrs==23.2.0
         # via aiohttp
-    ../../scripts/packages/black_editable
+    ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     frozenlist==1.4.1
         # via
@@ -4964,7 +4942,7 @@ fn recursive_extras_direct_url() -> Result<()> {
 fn compile_editable_url_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/hatchling_editable")?;
+    requirements_in.write_str("-e ../../test/packages/hatchling_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
@@ -4974,7 +4952,7 @@ fn compile_editable_url_requirement() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/hatchling_editable
+    -e ../../test/packages/hatchling_editable
         # via -r [TEMP_DIR]/requirements.in
     iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4
         # via hatchling-editable
@@ -5279,7 +5257,7 @@ fn generate_hashes_local_directory() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/poetry_editable
+        ../../test/packages/poetry_editable
         "
     })?;
 
@@ -5300,7 +5278,7 @@ fn generate_hashes_local_directory() -> Result<()> {
         --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
         --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
         # via anyio
-    ../../scripts/packages/poetry_editable
+    ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     sniffio==1.3.1 \
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
@@ -5322,7 +5300,7 @@ fn generate_hashes_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e ../../scripts/packages/poetry_editable
+        -e ../../test/packages/poetry_editable
         "
     })?;
 
@@ -5335,7 +5313,7 @@ fn generate_hashes_editable() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --generate-hashes
-    -e ../../scripts/packages/poetry_editable
+    -e ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     anyio==4.3.0 \
         --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
@@ -5368,7 +5346,7 @@ fn generate_hashes_find_links_directory() -> Result<()> {
         .arg("requirements.in")
         .arg("--generate-hashes")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts").join("links")), @r###"
+        .arg(context.workspace_root.join("test").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5430,7 +5408,7 @@ fn find_links_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5580,7 +5558,7 @@ fn avoid_irrelevant_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5633,7 +5611,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts").join("links")), @r###"
+        .arg(context.workspace_root.join("test").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7043,7 +7021,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7074,7 +7052,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7104,7 +7082,7 @@ fn invalid_metadata_backtrack() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7223,7 +7201,7 @@ fn compile_unnamed_preference() -> Result<()> {
     requirements_in.write_str("black")?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("./scripts/packages/black_editable")?;
+    requirements_txt.write_str("./test/packages/black_editable")?;
 
     uv_snapshot!(context
         .pip_compile()
@@ -7566,7 +7544,7 @@ dependencies = [
 fn editable_invalid_extra() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/black_editable[empty]")?;
+    requirements_in.write_str("-e ../../test/packages/black_editable[empty]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg(requirements_in.path())
@@ -7576,12 +7554,12 @@ fn editable_invalid_extra() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/black_editable
+    -e ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `black @ file://[WORKSPACE]/scripts/packages/black_editable` does not have an extra named `empty`
+    warning: The package `black @ file://[WORKSPACE]/test/packages/black_editable` does not have an extra named `empty`
     "###);
 
     Ok(())
@@ -8152,7 +8130,7 @@ fn universal_platform_fork() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("-c")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8176,9 +8154,9 @@ fn universal_platform_fork() -> Result<()> {
         # via torch
     sympy==1.13.1
         # via torch
-    torch==2.5.1 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
+    torch==2.5.1 ; (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via -r requirements.in
-    torch==2.5.1+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.5.1+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
         # via -r requirements.in
     typing-extensions==4.9.0
         # via
@@ -8187,7 +8165,7 @@ fn universal_platform_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8582,7 +8560,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8608,7 +8586,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via torch
     sympy==1.13.3
         # via torch
-    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
+    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -8616,7 +8594,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version >= '3.11' and python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.13' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')
         # via
         #   -r requirements.in
         #   example
@@ -8628,7 +8606,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8663,7 +8641,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8694,7 +8672,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8705,9 +8683,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (implementation_name != 'cpython' and platform_machine == 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8716,7 +8694,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    "###
+    "
     );
 
     // A similar case, except the nested marker is now on the path requirement.
@@ -8827,7 +8805,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8858,7 +8836,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     sympy==1.13.3
         # via torch
@@ -8873,9 +8851,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (os_name != 'Linux' and platform_machine == 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; (python_full_version < '3.13' and os_name != 'Linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -8884,7 +8862,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 20 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9617,7 +9595,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     charset-normalizer==3.3.2
         # via requests
-    cmake==3.28.4 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    cmake==3.28.4 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     filelock==3.13.1
         # via
@@ -9629,7 +9607,7 @@ fn universal_marker_propagation() -> Result<()> {
         # via requests
     jinja2==3.1.3
         # via torch
-    lit==18.1.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    lit==18.1.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via pytorch-triton-rocm
     markupsafe==2.1.5
         # via jinja2
@@ -9645,17 +9623,17 @@ fn universal_marker_propagation() -> Result<()> {
         # via torchvision
     pillow==10.2.0
         # via torchvision
-    pytorch-triton-rocm==2.0.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    pytorch-triton-rocm==2.0.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via torch
     requests==2.31.0
         # via torchvision
     sympy==1.12
         # via torch
-    torch==2.0.0 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torch==2.0.0 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via
         #   -r requirements.in
         #   torchvision
-    torch==2.0.0+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torch==2.0.0+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via
         #   -r requirements.in
         #   pytorch-triton-rocm
@@ -9664,9 +9642,9 @@ fn universal_marker_propagation() -> Result<()> {
         # via
         #   -r requirements.in
         #   torchvision
-    torchvision==0.15.1 ; (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
+    torchvision==0.15.1 ; (python_full_version == '3.11.*' and platform_machine == 'x86_64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'win32')
         # via -r requirements.in
-    torchvision==0.15.1+rocm5.4.2 ; platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'win32'
+    torchvision==0.15.1+rocm5.4.2 ; (python_full_version != '3.11.*' and platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
         # via -r requirements.in
     torchvision==0.17.0 ; platform_machine != 'x86_64'
         # via -r requirements.in
@@ -10170,7 +10148,7 @@ fn editable_override() -> Result<()> {
 
     // Add an editable override.
     let overrides_txt = context.temp_dir.child("overrides.txt");
-    overrides_txt.write_str("-e ../../scripts/packages/black_editable")?;
+    overrides_txt.write_str("-e ../../test/packages/black_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
@@ -10182,7 +10160,7 @@ fn editable_override() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --override [TEMP_DIR]/overrides.txt
-    -e ../../scripts/packages/black_editable
+    -e ../../test/packages/black_editable
         # via
         #   --override [TEMP_DIR]/overrides.txt
         #   -r [TEMP_DIR]/requirements.in
@@ -10200,7 +10178,7 @@ fn editable_override() -> Result<()> {
 fn override_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/black_editable")?;
+    requirements_in.write_str("-e ../../test/packages/black_editable")?;
 
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("black==23.10.1")?;
@@ -10749,7 +10727,7 @@ qux = ["project[bop] ; python_version == '3.12'"]
 fn editable_direct_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/setuptools_editable")?;
+    requirements_in.write_str("-e ../../test/packages/setuptools_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg(requirements_in.path())
@@ -10761,7 +10739,7 @@ fn editable_direct_dependency() -> Result<()> {
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --resolution lowest-direct
-    -e ../../scripts/packages/setuptools_editable
+    -e ../../test/packages/setuptools_editable
         # via -r [TEMP_DIR]/requirements.in
     iniconfig==0.1
         # via setuptools-editable
@@ -11219,7 +11197,7 @@ fn compile_root_uri_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ${ROOT_PATH}")?;
 
-    let root_path = current_dir()?.join("../../scripts/packages/root_editable");
+    let root_path = current_dir()?.join("../../test/packages/root_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .env(EnvVars::ROOT_PATH, root_path.as_os_str()), @r###"
@@ -11230,7 +11208,7 @@ fn compile_root_uri_editable() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
     -e ${ROOT_PATH}
         # via -r requirements.in
-    black @ file://[WORKSPACE]/scripts/packages/root_editable/../black_editable
+    black @ file://[WORKSPACE]/test/packages/root_editable/../black_editable
         # via root-editable
 
     ----- stderr -----
@@ -11249,8 +11227,8 @@ fn compile_root_uri_non_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("${ROOT_PATH}\n${BLACK_PATH}")?;
 
-    let root_path = current_dir()?.join("../../scripts/packages/root_editable");
-    let black_path = current_dir()?.join("../../scripts/packages/black_editable");
+    let root_path = current_dir()?.join("../../test/packages/root_editable");
+    let black_path = current_dir()?.join("../../test/packages/black_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .env(EnvVars::ROOT_PATH, root_path.as_os_str())
@@ -11628,10 +11606,10 @@ fn unnamed_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/poetry_editable
-        ../../scripts/packages/black_editable
-        ../../scripts/packages/setup_py_editable
-        ../../scripts/packages/setup_cfg_editable
+        ../../test/packages/poetry_editable
+        ../../test/packages/black_editable
+        ../../test/packages/setup_py_editable
+        ../../test/packages/setup_cfg_editable
         "
     })?;
 
@@ -11647,7 +11625,7 @@ fn unnamed_path_requirement() -> Result<()> {
         # via
         #   httpx
         #   poetry-editable
-    ../../scripts/packages/black_editable
+    ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     certifi==2024.2.2
         # via
@@ -11667,13 +11645,13 @@ fn unnamed_path_requirement() -> Result<()> {
         #   anyio
         #   httpx
         #   requests
-    ../../scripts/packages/poetry_editable
+    ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     requests==2.31.0
         # via setup-cfg-editable
-    ../../scripts/packages/setup_cfg_editable
+    ../../test/packages/setup_cfg_editable
         # via -r [TEMP_DIR]/requirements.in
-    ../../scripts/packages/setup_py_editable
+    ../../test/packages/setup_py_editable
         # via -r [TEMP_DIR]/requirements.in
     sniffio==1.3.1
         # via
@@ -11772,7 +11750,7 @@ fn unnamed_https_requirement() -> Result<()> {
 fn dynamic_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("hatchling-dynamic @ ../../scripts/packages/hatchling_dynamic")?;
+    requirements_in.write_str("hatchling-dynamic @ ../../test/packages/hatchling_dynamic")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
@@ -11784,7 +11762,7 @@ fn dynamic_dependencies() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
     anyio==4.3.0
         # via hatchling-dynamic
-    ../../scripts/packages/hatchling_dynamic
+    ../../test/packages/hatchling_dynamic
         # via -r [TEMP_DIR]/requirements.in
     idna==3.6
         # via anyio
@@ -11950,7 +11928,7 @@ fn emit_marker_expression_pypy() -> Result<()> {
 #[test]
 fn local_version_of_remote_package() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages");
+    let root_path = context.workspace_root.join("test/packages");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
@@ -11987,7 +11965,7 @@ fn local_version_of_remote_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "###
     );
 
@@ -12013,7 +11991,7 @@ fn local_version_of_remote_package() -> Result<()> {
     // Write a lockfile with the local version
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-            anyio @ {workspace_root}/scripts/packages/anyio_local
+            anyio @ {workspace_root}/test/packages/anyio_local
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -13406,11 +13384,11 @@ fn tool_uv_sources() -> Result<()> {
     let project_root = fs_err::canonicalize(current_dir()?.join("../.."))?;
     fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
+        project_root.join("test/packages/poetry_editable/pyproject.toml"),
         context.temp_dir.join("poetry_editable/pyproject.toml"),
     )?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        project_root.join("test/packages/poetry_editable/poetry_editable/__init__.py"),
         context
             .temp_dir
             .join("poetry_editable/poetry_editable/__init__.py"),
@@ -14599,7 +14577,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (python_full_version >= '3.10'):
+      × No solution found when resolving dependencies for split (markers: python_full_version >= '3.10'):
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
           hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
@@ -16209,6 +16187,34 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn group_target_does_not_exist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv%%%"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("does/not/exist/pyproject.toml:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: does/not/exist/pyproject.toml
+      Caused by: No pyproject.toml found at: does/not/exist/pyproject.toml
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/10957>
 #[cfg(feature = "python-eol")]
 #[test]
@@ -17280,26 +17286,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
         { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
-        { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17359,26 +17346,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
-        { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
         { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17421,6 +17389,82 @@ fn pep_751_compile_non_universal() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--only-binary` excludes source distributions from pylock.toml output.
+#[test]
+fn pep_751_compile_only_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--only-binary iniconfig`, the sdist should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --only-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--no-binary` excludes wheels from pylock.toml output.
+#[test]
+fn pep_751_compile_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--no-binary iniconfig`, the wheels should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "#);
 
     Ok(())
@@ -17783,6 +17827,286 @@ fn omit_python_patch_universal() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    Ok(())
+}
+
+#[test]
+fn credentials_from_subdirectory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local dependency in a subdirectory.
+    let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal" }
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple/"
+        explicit = true
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("foo/pyproject.toml"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and foo depends on iniconfig, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("foo/pyproject.toml")
+        .env(EnvVars::index_username("INTERNAL"), "public")
+        .env(EnvVars::index_password("INTERNAL"), "heron"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] foo/pyproject.toml
+    iniconfig==2.0.0
+        # via foo (foo/pyproject.toml)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Install a package with a post-release version constraint.
+///
+/// `<V.postN` should include earlier post-releases but exclude pre-releases.
+///
+/// See: <https://github.com/astral-sh/uv/issues/16868>
+#[test]
+fn post_release_less_than() -> Result<()> {
+    let context = TestContext::new("3.10");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("hidapi>=0.12.0.post1,<0.12.0.post2")?;
+
+    // The constraint `>=0.12.0.post1, <0.12.0.post2` should only match 0.12.0.post1.
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    hidapi==0.12.0.post1
+        # via -r requirements.in
+    setuptools==69.2.0
+        # via hidapi
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// When using `uv pip compile --python-platform`, it should not matter what platform the built
+/// wheel is for. We want to ensure that uv accepts both wheels for the host platform and wheels for
+/// the target platform in `uv pip compile`. This is unlike `uv pip install --python-platform`,
+/// where a wheel for the target platform is required.
+///
+/// The main test (first snapshot) builds a Windows wheel, and targets macOS. If we run this test on
+/// Linux, the wheel tag is neither host nor target, but we don't have a reason to reject the
+/// Windows tag either.
+#[test]
+fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("./project")?;
+
+    let project = context.temp_dir.child("project");
+    // This pyproject.toml uses dynamic versioning to prevent uv from reading static metadata.
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dependencies = [
+          "sniffio; sys_platform == 'linux'",
+          "tqdm; sys_platform == 'darwin'"
+        ]
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build"
+
+        [tool.hatch.version]
+        path = "src/project/__init__.py"
+    "#})?;
+    // Rename the built wheel to a Windows wheel
+    project.child("build.py").write_str(indoc! {r#"
+        import os
+
+        import hatchling.build
+
+        __all__ = ["build_sdist", "build_wheel"]
+
+
+        def build_sdist(
+            sdist_directory: str, config_settings: "Mapping[Any, Any] | None" = None
+        ) -> str:
+            hatchling.build.build_sdist(sdist_directory, config_settings)
+
+
+        def build_wheel(
+            wheel_directory: str,
+            config_settings: "Mapping[Any, Any] | None" = None,
+            metadata_directory: "str | None" = None,
+        ) -> str:
+            name = hatchling.build.build_wheel(
+                wheel_directory, config_settings, metadata_directory
+            )
+            # Don't do this at home, ask your build backend instead so it also changes the
+            # `WHEEL` file.
+            new_name = "project-0.1.0-cp312-abi3-win_amd64.whl"
+            os.rename(
+                os.path.join(wheel_directory, name), os.path.join(wheel_directory, new_name)
+            )
+            return new_name
+    "#})?;
+    project
+        .child("src/project/__init__.py")
+        .write_str(r#"__version__ = "0.1.0"\n"#)?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform macos
+    ./project
+        # via -r requirements.in
+    tqdm==4.66.2
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform windows
+    ./project
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1 ; sys_platform == 'linux'
+        # via project
+    tqdm==4.66.2 ; sys_platform == 'darwin'
+        # via project
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn compile_missing_python() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("--python").arg("3.13")
+        .arg("--python-version").arg("3.13")
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.13 --python-version 3.13 requirements.in
+    anyio==3.7.0
+        # via -r requirements.in
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     Ok(())
 }

@@ -11,28 +11,25 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::{debug, warn};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    EditableMode, ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions, NoSources,
-    Preview, PreviewFeatures,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
-use uv_distribution::DistributionDatabase;
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, VersionId,
 };
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
-use uv_git_types::GitReference;
-use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, PackageName};
-use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
+use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -59,16 +56,24 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
-    locked: bool,
-    frozen: bool,
+    lock_check: LockCheck,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
+    no_install_project: bool,
+    only_install_project: bool,
+    no_install_workspace: bool,
+    only_install_workspace: bool,
+    no_install_local: bool,
+    only_install_local: bool,
+    no_install_package: Vec<PackageName>,
+    only_install_package: Vec<PackageName>,
     requirements: Vec<RequirementsSource>,
     constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
@@ -80,13 +85,14 @@ pub(crate) async fn add(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: GitLfsSetting,
     extras_of_dependency: Vec<ExtraName>,
     package: Option<PackageName>,
     python: Option<String>,
     workspace: Option<bool>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -121,6 +127,9 @@ pub(crate) async fn add(
             RequirementsSource::SetupPy(_) => {
                 bail!("Adding requirements from a `setup.py` is not supported in `uv add`");
             }
+            RequirementsSource::Pep723Script(_) => {
+                bail!("Adding requirements from a PEP 723 script is not supported in `uv add`");
+            }
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
             }
@@ -130,6 +139,7 @@ pub(crate) async fn add(
             RequirementsSource::Package(_)
             | RequirementsSource::Editable(_)
             | RequirementsSource::RequirementsTxt(_)
+            | RequirementsSource::Extensionless(_)
             | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
@@ -171,12 +181,12 @@ pub(crate) async fn add(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if locked {
+        if let LockCheck::Enabled(lock_check) = lock_check {
             warn_user_once!(
-                "`--locked` is a no-op for Python scripts with inline metadata, which always run in isolation"
+                "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if frozen {
+        if frozen.is_some() {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -186,12 +196,6 @@ pub(crate) async fn add(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
         // If we found a script, add to the existing metadata. Otherwise, create a new inline
         // metadata tag.
@@ -223,7 +227,7 @@ pub(crate) async fn add(
         let interpreter = ScriptInterpreter::discover(
             (&script).into(),
             python.as_deref().map(PythonRequest::parse),
-            &network_settings,
+            &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
@@ -286,14 +290,14 @@ pub(crate) async fn add(
         defaulted_groups =
             groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
 
-        if frozen || no_sync {
+        if frozen.is_some() || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
                 project_dir,
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 &install_mirrors,
@@ -315,7 +319,7 @@ pub(crate) async fn add(
                 &defaulted_groups,
                 python.as_deref().map(PythonRequest::parse),
                 &install_mirrors,
-                &network_settings,
+                &client_builder,
                 python_preference,
                 python_downloads,
                 no_sync,
@@ -341,12 +345,9 @@ pub(crate) async fn add(
         })
         .ok();
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(settings.resolver.keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder
+        .clone()
+        .keyring(settings.resolver.keyring_provider);
 
     // Read the requirements.
     let RequirementsSpecification {
@@ -356,6 +357,7 @@ pub(crate) async fn add(
     } = RequirementsSpecification::from_sources(
         &requirements,
         &constraints,
+        &[],
         &[],
         None,
         &client_builder,
@@ -371,11 +373,11 @@ pub(crate) async fn add(
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
             .into_iter()
             .map(|spec| {
-                augment_requirement(
-                    spec.requirement,
+                spec.requirement.augment_requirement(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    lfs.into(),
                     marker,
                 )
             })
@@ -395,11 +397,9 @@ pub(crate) async fn add(
             let hasher = HashStrategy::default();
             let sources = NoSources::None;
 
-            settings.resolver.index_locations.cache_index_credentials();
-
             // Initialize the registry client.
-            let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_locations(&settings.resolver.index_locations)
+            let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+                .index_locations(settings.resolver.index_locations.clone())
                 .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
@@ -407,17 +407,16 @@ pub(crate) async fn add(
 
             // Determine whether to enable build isolation.
             let environment;
-            let build_isolation = if settings.resolver.no_build_isolation {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::Shared(&environment)
-            } else if settings.resolver.no_build_isolation_package.is_empty() {
-                BuildIsolation::Isolated
-            } else {
-                environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::SharedPackage(
-                    &environment,
-                    &settings.resolver.no_build_isolation_package,
-                )
+            let build_isolation = match &settings.resolver.build_isolation {
+                uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+                uv_configuration::BuildIsolation::Shared => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::Shared(&environment)
+                }
+                uv_configuration::BuildIsolation::SharedPackage(packages) => {
+                    environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
+                    BuildIsolation::SharedPackage(&environment, packages)
+                }
             };
 
             // Resolve the flat indexes from `--find-links`.
@@ -436,23 +435,28 @@ pub(crate) async fn add(
                 FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
-            // Create a build dispatch.
+            // Lower the extra build dependencies, if any.
             let extra_build_requires = if let AddTarget::Project(project, _) = &target {
-                uv_distribution::ExtraBuildRequires::from_workspace(
+                LoweredExtraBuildDependencies::from_workspace(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
                     &settings.resolver.sources,
+                    client.credentials_cache(),
                 )?
             } else {
-                uv_distribution::ExtraBuildRequires::from_lowered(
+                LoweredExtraBuildDependencies::from_non_lowered(
                     settings.resolver.extra_build_dependencies.clone(),
                 )
-            };
+            }
+            .into_inner();
+
+            // Create a build dispatch.
+            let extra_build_variables = settings.resolver.extra_build_variables.clone();
             let build_dispatch = BuildDispatch::new(
                 &client,
                 cache,
-                build_constraints,
+                &build_constraints,
                 target.interpreter(),
                 &settings.resolver.index_locations,
                 &flat_index,
@@ -463,6 +467,7 @@ pub(crate) async fn add(
                 &settings.resolver.config_settings_package,
                 build_isolation,
                 &extra_build_requires,
+                &extra_build_variables,
                 settings.resolver.link_mode,
                 &settings.resolver.build_options,
                 &build_hasher,
@@ -641,10 +646,27 @@ pub(crate) async fn add(
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
+        lfs,
         &extras_of_dependency,
         index,
         &mut toml,
     )?;
+
+    // If no requirements were added but a dependency group or optional dependency was specified,
+    // ensure the group/extra exists. This handles the case where `uv add -r requirements.txt
+    // --group <name>` or `uv add -r requirements.txt --optional <extra>` is called with an empty
+    // requirements file.
+    if edits.is_empty() {
+        match &dependency_type {
+            DependencyType::Group(group) => {
+                toml.ensure_dependency_group(group)?;
+            }
+            DependencyType::Optional(extra) => {
+                toml.ensure_optional_dependency(extra)?;
+            }
+            _ => {}
+        }
+    }
 
     // Validate any indexes that were provided on the command-line to ensure
     // they point to existing non-empty directories when using path URLs.
@@ -683,21 +705,18 @@ pub(crate) async fn add(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
-    // If we're modifying a script, and lockfile doesn't exist, don't create it.
-    if let AddTarget::Script(ref script, _) = target {
-        if !LockTarget::from(script).lock_path().is_file() {
-            writeln!(
-                printer.stderr(),
-                "Updated `{}`",
-                script.path.user_display().cyan()
-            )?;
-            return Ok(ExitStatus::Success);
-        }
-    }
+    // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
+    // to perform resolution, since we want to use the resolved versions to populate lower bounds
+    // in the script.
+    let dry_run = if let AddTarget::Script(ref script, _) = target {
+        !LockTarget::from(script).lock_path().is_file()
+    } else {
+        false
+    };
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content)?;
@@ -729,14 +748,23 @@ pub(crate) async fn add(
         &edits,
         lock_state,
         sync_state,
-        locked,
+        lock_check,
+        no_install_project,
+        only_install_project,
+        no_install_workspace,
+        only_install_workspace,
+        no_install_local,
+        only_install_local,
+        no_install_package.clone(),
+        only_install_package.clone(),
         &defaulted_extras,
         &defaulted_groups,
         raw,
         bounds,
+        dry_run,
         constraints,
         &settings,
-        &network_settings,
+        &client_builder,
         installer_metadata,
         concurrency,
         cache,
@@ -751,7 +779,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
             match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls()).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
                 err => Err(err.into()),
@@ -769,6 +797,7 @@ fn edits(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    lfs: GitLfsSetting,
     extras: &[ExtraName],
     index: Option<&IndexName>,
     toml: &mut PyProjectTomlMut,
@@ -799,6 +828,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     script_dir,
                     existing_sources,
                 )?
@@ -823,6 +853,7 @@ fn edits(
                     rev.map(ToString::to_string),
                     tag.map(ToString::to_string),
                     branch.map(ToString::to_string),
+                    lfs,
                     project.root(),
                     existing_sources,
                 )?
@@ -841,6 +872,7 @@ fn edits(
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -859,6 +891,7 @@ fn edits(
                     rev,
                     tag,
                     branch,
+                    lfs,
                     marker,
                     extra,
                     group,
@@ -957,38 +990,51 @@ async fn lock_and_sync(
     edits: &[DependencyEdit],
     lock_state: UniversalState,
     sync_state: PlatformState,
-    locked: bool,
+    lock_check: LockCheck,
+    no_install_project: bool,
+    only_install_project: bool,
+    no_install_workspace: bool,
+    only_install_workspace: bool,
+    no_install_local: bool,
+    only_install_local: bool,
+    no_install_package: Vec<PackageName>,
+    only_install_package: Vec<PackageName>,
     extras: &ExtrasSpecificationWithDefaults,
     groups: &DependencyGroupsWithDefaults,
     raw: bool,
     bound_kind: Option<AddBoundsKind>,
+    dry_run: bool,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
 ) -> Result<(), ProjectError> {
-    let mut lock = project::lock::LockOperation::new(
-        if locked {
-            LockMode::Locked(target.interpreter())
-        } else {
-            LockMode::Write(target.interpreter())
-        },
-        &settings.resolver,
-        network_settings,
-        &lock_state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &WorkspaceCache::default(),
-        printer,
-        preview,
+    let mut lock = Box::pin(
+        project::lock::LockOperation::new(
+            if let LockCheck::Enabled(lock_check) = lock_check {
+                LockMode::Locked(target.interpreter(), lock_check)
+            } else if dry_run {
+                LockMode::DryRun(target.interpreter())
+            } else {
+                LockMode::Write(target.interpreter())
+            },
+            &settings.resolver,
+            client_builder,
+            &lock_state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .with_constraints(constraints)
+        .execute((&target).into()),
     )
-    .with_constraints(constraints)
-    .execute((&target).into())
     .await?
     .into_lock();
 
@@ -1083,8 +1129,7 @@ async fn lock_and_sync(
 
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
-                let url = Url::from_file_path(project.project_root())
-                    .map(DisplaySafeUrl::from)
+                let url = DisplaySafeUrl::from_file_path(project.project_root())
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
                 let existing = lock_state.index().distributions().remove(&version_id);
@@ -1093,23 +1138,27 @@ async fn lock_and_sync(
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = project::lock::LockOperation::new(
-                if locked {
-                    LockMode::Locked(target.interpreter())
-                } else {
-                    LockMode::Write(target.interpreter())
-                },
-                &settings.resolver,
-                network_settings,
-                &lock_state,
-                Box::new(SummaryResolveLogger),
-                concurrency,
-                cache,
-                &WorkspaceCache::default(),
-                printer,
-                preview,
+            lock = Box::pin(
+                project::lock::LockOperation::new(
+                    if let LockCheck::Enabled(lock_check) = lock_check {
+                        LockMode::Locked(target.interpreter(), lock_check)
+                    } else if dry_run {
+                        LockMode::DryRun(target.interpreter())
+                    } else {
+                        LockMode::Write(target.interpreter())
+                    },
+                    &settings.resolver,
+                    client_builder,
+                    &lock_state,
+                    Box::new(SummaryResolveLogger),
+                    concurrency,
+                    cache,
+                    &WorkspaceCache::default(),
+                    printer,
+                    preview,
+                )
+                .execute((&target).into()),
             )
-            .execute((&target).into())
             .await?
             .into_lock();
         }
@@ -1143,12 +1192,21 @@ async fn lock_and_sync(
         venv,
         extras,
         groups,
-        EditableMode::Editable,
-        InstallOptions::default(),
+        None,
+        InstallOptions::new(
+            no_install_project,
+            only_install_project,
+            no_install_workspace,
+            only_install_workspace,
+            no_install_local,
+            only_install_local,
+            no_install_package,
+            only_install_package,
+        ),
         Modifications::Sufficient,
         None,
         settings.into(),
-        network_settings,
+        client_builder,
         &sync_state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
@@ -1164,83 +1222,6 @@ async fn lock_and_sync(
     Ok(())
 }
 
-/// Augment a user-provided requirement by attaching any specification data that was provided
-/// separately from the requirement itself (e.g., `--branch main`).
-fn augment_requirement(
-    requirement: UnresolvedRequirement,
-    rev: Option<&str>,
-    tag: Option<&str>,
-    branch: Option<&str>,
-    marker: Option<MarkerTree>,
-) -> UnresolvedRequirement {
-    match requirement {
-        UnresolvedRequirement::Named(mut requirement) => {
-            UnresolvedRequirement::Named(Requirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                source: match requirement.source {
-                    RequirementSource::Git {
-                        git,
-                        subdirectory,
-                        url,
-                    } => {
-                        let git = if let Some(rev) = rev {
-                            git.with_reference(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            git.with_reference(GitReference::Tag(tag.to_string()))
-                        } else if let Some(branch) = branch {
-                            git.with_reference(GitReference::Branch(branch.to_string()))
-                        } else {
-                            git
-                        };
-                        RequirementSource::Git {
-                            git,
-                            subdirectory,
-                            url,
-                        }
-                    }
-                    _ => requirement.source,
-                },
-                ..requirement
-            })
-        }
-        UnresolvedRequirement::Unnamed(mut requirement) => {
-            UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                marker: marker
-                    .map(|marker| {
-                        requirement.marker.and(marker);
-                        requirement.marker
-                    })
-                    .unwrap_or(requirement.marker),
-                url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
-                        let reference = if let Some(rev) = rev {
-                            Some(GitReference::from_rev(rev.to_string()))
-                        } else if let Some(tag) = tag {
-                            Some(GitReference::Tag(tag.to_string()))
-                        } else {
-                            branch.map(|branch| GitReference::Branch(branch.to_string()))
-                        };
-                        if let Some(reference) = reference {
-                            git.url = git.url.with_reference(reference);
-                        }
-                        VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
-                            verbatim: requirement.url.verbatim,
-                        }
-                    }
-                    _ => requirement.url,
-                },
-                ..requirement
-            })
-        }
-    }
-}
-
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
     requirement: Requirement,
@@ -1250,6 +1231,7 @@ fn resolve_requirement(
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
+    lfs: GitLfsSetting,
     root: &Path,
     existing_sources: Option<&BTreeMap<PackageName, Sources>>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
@@ -1262,6 +1244,7 @@ fn resolve_requirement(
         rev,
         tag,
         branch,
+        lfs,
         root,
         existing_sources,
     );
@@ -1325,7 +1308,7 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 impl AddTarget {
     /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
     /// modifications.
-    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, LockedFileError> {
         match self {
             Self::Script(_, interpreter) => interpreter.lock().await,
             Self::Project(_, python_target) => python_target.interpreter().lock().await,
@@ -1380,7 +1363,7 @@ impl AddTarget {
                 let project = project
                     .with_pyproject_toml(
                         toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
-                    )
+                    )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project, venv))
             }

@@ -1,9 +1,12 @@
+use std::fmt;
+
 use anstream::eprintln;
 
 use uv_cache::Refresh;
-use uv_configuration::{ConfigSettings, PackageConfigSettings};
+use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
+use uv_distribution_types::{ConfigSettings, PackageConfigSettings, Requirement};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
-use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
+use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::{
@@ -32,6 +35,150 @@ pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
             {
                 std::process::exit(2);
             }
+        }
+    }
+}
+
+/// The source of a boolean flag value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlagSource {
+    /// The flag was set via command-line argument.
+    Cli,
+    /// The flag was set via environment variable.
+    Env(&'static str),
+    /// The flag was set via workspace/project configuration.
+    Config,
+}
+
+impl fmt::Display for FlagSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Cli => write!(f, "command-line argument"),
+            Self::Env(name) => write!(f, "environment variable `{name}`"),
+            Self::Config => write!(f, "workspace configuration"),
+        }
+    }
+}
+
+/// A boolean flag value with its source.
+#[derive(Debug, Clone, Copy)]
+pub enum Flag {
+    /// The flag is not set.
+    Disabled,
+    /// The flag is enabled with a known source.
+    Enabled {
+        source: FlagSource,
+        /// The CLI flag name (e.g., "locked" for `--locked`).
+        name: &'static str,
+    },
+}
+
+impl Flag {
+    /// Create a flag that is explicitly disabled.
+    pub const fn disabled() -> Self {
+        Self::Disabled
+    }
+
+    /// Create an enabled flag from a CLI argument.
+    pub const fn from_cli(name: &'static str) -> Self {
+        Self::Enabled {
+            source: FlagSource::Cli,
+            name,
+        }
+    }
+
+    /// Create an enabled flag from workspace/project configuration.
+    pub const fn from_config(name: &'static str) -> Self {
+        Self::Enabled {
+            source: FlagSource::Config,
+            name,
+        }
+    }
+
+    /// Returns `true` if the flag is set.
+    pub fn is_enabled(self) -> bool {
+        matches!(self, Self::Enabled { .. })
+    }
+
+    /// Returns the source of the flag, if it is set.
+    pub fn source(self) -> Option<FlagSource> {
+        match self {
+            Self::Disabled => None,
+            Self::Enabled { source, .. } => Some(source),
+        }
+    }
+
+    /// Returns the CLI flag name, if the flag is enabled.
+    pub fn name(self) -> Option<&'static str> {
+        match self {
+            Self::Disabled => None,
+            Self::Enabled { name, .. } => Some(name),
+        }
+    }
+}
+
+impl From<Flag> for bool {
+    fn from(flag: Flag) -> Self {
+        flag.is_enabled()
+    }
+}
+
+/// Resolve a boolean flag from CLI arguments and an environment variable.
+///
+/// The CLI argument takes precedence over the environment variable. Returns a [`Flag`] with the
+/// resolved value and source.
+pub fn resolve_flag(cli_flag: bool, name: &'static str, env_flag: EnvFlag) -> Flag {
+    if cli_flag {
+        Flag::Enabled {
+            source: FlagSource::Cli,
+            name,
+        }
+    } else if env_flag.value == Some(true) {
+        Flag::Enabled {
+            source: FlagSource::Env(env_flag.env_var),
+            name,
+        }
+    } else {
+        Flag::Disabled
+    }
+}
+
+/// Check if two flags conflict and exit with an error if they do.
+///
+/// This function checks if both flags are enabled (truthy) and reports an error if so, including
+/// the source of each flag (CLI or environment variable) in the error message.
+pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
+    if let (
+        Flag::Enabled {
+            source: source_a,
+            name: name_a,
+        },
+        Flag::Enabled {
+            source: source_b,
+            name: name_b,
+        },
+    ) = (flag_a, flag_b)
+    {
+        let display_a = match source_a {
+            FlagSource::Cli => format!("`--{name_a}`"),
+            FlagSource::Env(env) => format!("`{env}` (environment variable)"),
+            FlagSource::Config => format!("`{name_a}` (workspace configuration)"),
+        };
+        let display_b = match source_b {
+            FlagSource::Cli => format!("`--{name_b}`"),
+            FlagSource::Env(env) => format!("`{env}` (environment variable)"),
+            FlagSource::Config => format!("`{name_b}` (workspace configuration)"),
+        };
+        eprintln!(
+            "{}{} the argument {} cannot be used with {}",
+            "error".bold().red(),
+            ":".bold(),
+            display_a.green(),
+            display_b.green(),
+        );
+        #[allow(clippy::exit)]
+        {
+            std::process::exit(2);
         }
     }
 }
@@ -99,7 +246,7 @@ impl From<ResolverArgs> for PipOptions {
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -145,7 +292,7 @@ impl From<InstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -209,7 +356,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -227,7 +374,7 @@ impl From<FetchArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
-            ..PipOptions::from(index_args)
+            ..Self::from(index_args)
         }
     }
 }
@@ -268,7 +415,7 @@ impl From<IndexArgs> for PipOptions {
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
-            ..PipOptions::default()
+            ..Self::default()
         }
     }
 }
@@ -340,8 +487,10 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
-        upgrade_package: Some(upgrade_package),
+        upgrade: Upgrade::from_args(
+            flag(upgrade, no_upgrade, "no-upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
         index_strategy,
         keyring_provider,
         resolution,
@@ -359,14 +508,18 @@ pub fn resolver_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: Some(no_build_isolation_package),
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
+        extra_build_variables: None,
         exclude_newer: ExcludeNewer::from_args(
             exclude_newer,
             exclude_newer_package.unwrap_or_default(),
         ),
         link_mode,
+        torch_backend: None,
         no_build: flag(no_build, build, "build"),
         no_build_package: Some(no_build_package),
         no_binary: flag(no_binary, binary, "binary"),
@@ -450,18 +603,14 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
-        upgrade: flag(upgrade, no_upgrade, "upgrade"),
-        upgrade_package: if upgrade_package.is_empty() {
-            None
-        } else {
-            Some(upgrade_package)
-        },
-        reinstall: flag(reinstall, no_reinstall, "reinstall"),
-        reinstall_package: if reinstall_package.is_empty() {
-            None
-        } else {
-            Some(reinstall_package)
-        },
+        upgrade: Upgrade::from_args(
+            flag(upgrade, no_upgrade, "upgrade"),
+            upgrade_package.into_iter().map(Requirement::from).collect(),
+        ),
+        reinstall: Reinstall::from_args(
+            flag(reinstall, no_reinstall, "reinstall"),
+            reinstall_package,
+        ),
         index_strategy,
         keyring_provider,
         resolution,
@@ -479,13 +628,12 @@ pub fn resolver_installer_options(
                 .into_iter()
                 .collect::<PackageConfigSettings>()
         }),
-        no_build_isolation: flag(no_build_isolation, build_isolation, "build-isolation"),
-        no_build_isolation_package: if no_build_isolation_package.is_empty() {
-            None
-        } else {
-            Some(no_build_isolation_package)
-        },
+        build_isolation: BuildIsolation::from_args(
+            flag(no_build_isolation, build_isolation, "build-isolation"),
+            no_build_isolation_package,
+        ),
         extra_build_dependencies: None,
+        extra_build_variables: None,
         exclude_newer,
         exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
@@ -508,5 +656,6 @@ pub fn resolver_installer_options(
         } else {
             Some(no_sources_package)
         },
+        torch_backend: None,
     }
 }

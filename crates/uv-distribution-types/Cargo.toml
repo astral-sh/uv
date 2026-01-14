@@ -1,10 +1,10 @@
 [package]
 name = "uv-distribution-types"
-version = "0.0.1"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -25,6 +25,7 @@ uv-git-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-install-wheel = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }

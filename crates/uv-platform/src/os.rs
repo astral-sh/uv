@@ -19,6 +19,28 @@ impl Os {
     pub fn is_windows(&self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Windows)
     }
+
+    pub fn is_emscripten(&self) -> bool {
+        matches!(self.0, target_lexicon::OperatingSystem::Emscripten)
+    }
+
+    pub fn is_macos(&self) -> bool {
+        matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
+    }
+
+    /// Whether this OS can run the other OS.
+    pub fn supports(&self, other: Self) -> bool {
+        // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
+        if other.is_emscripten() {
+            return !self.is_windows();
+        }
+        if self.is_windows() && other.is_emscripten() {
+            return false;
+        }
+
+        // Otherwise, we require an exact match
+        *self == other
+    }
 }
 
 impl Display for Os {
@@ -58,30 +80,35 @@ impl From<&uv_platform_tags::Os> for Os {
     fn from(value: &uv_platform_tags::Os) -> Self {
         match value {
             uv_platform_tags::Os::Dragonfly { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Dragonfly)
+                Self::new(target_lexicon::OperatingSystem::Dragonfly)
             }
             uv_platform_tags::Os::FreeBsd { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Freebsd)
+                Self::new(target_lexicon::OperatingSystem::Freebsd)
             }
-            uv_platform_tags::Os::Haiku { .. } => Os::new(target_lexicon::OperatingSystem::Haiku),
+            uv_platform_tags::Os::Haiku { .. } => Self::new(target_lexicon::OperatingSystem::Haiku),
             uv_platform_tags::Os::Illumos { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Illumos)
+                Self::new(target_lexicon::OperatingSystem::Illumos)
             }
             uv_platform_tags::Os::Macos { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Darwin(None))
+                Self::new(target_lexicon::OperatingSystem::Darwin(None))
             }
             uv_platform_tags::Os::Manylinux { .. }
             | uv_platform_tags::Os::Musllinux { .. }
             | uv_platform_tags::Os::Android { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Linux)
+                Self::new(target_lexicon::OperatingSystem::Linux)
             }
-            uv_platform_tags::Os::NetBsd { .. } => Os::new(target_lexicon::OperatingSystem::Netbsd),
+            uv_platform_tags::Os::NetBsd { .. } => {
+                Self::new(target_lexicon::OperatingSystem::Netbsd)
+            }
             uv_platform_tags::Os::OpenBsd { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Openbsd)
+                Self::new(target_lexicon::OperatingSystem::Openbsd)
             }
-            uv_platform_tags::Os::Windows => Os::new(target_lexicon::OperatingSystem::Windows),
+            uv_platform_tags::Os::Windows => Self::new(target_lexicon::OperatingSystem::Windows),
             uv_platform_tags::Os::Pyodide { .. } => {
-                Os::new(target_lexicon::OperatingSystem::Emscripten)
+                Self::new(target_lexicon::OperatingSystem::Emscripten)
+            }
+            uv_platform_tags::Os::Ios { .. } => {
+                Self::new(target_lexicon::OperatingSystem::IOS(None))
             }
         }
     }

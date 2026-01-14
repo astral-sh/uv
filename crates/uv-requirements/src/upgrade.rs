@@ -2,7 +2,6 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
@@ -22,7 +21,7 @@ impl LockedRequirements {
     pub fn from_preferences(preferences: Vec<Preference>) -> Self {
         Self {
             preferences,
-            ..LockedRequirements::default()
+            ..Self::default()
         }
     }
 }
@@ -38,12 +37,7 @@ pub async fn read_requirements_txt(
     }
 
     // Parse the requirements from the lockfile.
-    let requirements_txt = RequirementsTxt::parse(
-        output_file,
-        &*CWD,
-        &BaseClientBuilder::new().connectivity(Connectivity::Offline),
-    )
-    .await?;
+    let requirements_txt = RequirementsTxt::parse(output_file, &*CWD).await?;
 
     // Map each entry in the lockfile to a preference.
     let preferences = requirements_txt

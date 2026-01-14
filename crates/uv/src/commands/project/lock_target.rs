@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
+use uv_auth::CredentialsCache;
 use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
@@ -12,7 +13,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
-use uv_workspace::{Workspace, WorkspaceMember};
+use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
 
@@ -55,6 +56,23 @@ impl<'lock> LockTarget<'lock> {
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.override_dependencies.as_ref())
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect(),
+        }
+    }
+
+    /// Returns the set of dependency exclusions for the [`LockTarget`].
+    pub(crate) fn exclude_dependencies(self) -> Vec<uv_normalize::PackageName> {
+        match self {
+            Self::Workspace(workspace) => workspace.exclude_dependencies(),
+            Self::Script(script) => script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.exclude_dependencies.as_ref())
                 .into_iter()
                 .flatten()
                 .cloned()
@@ -156,11 +174,11 @@ impl<'lock> LockTarget<'lock> {
 
     /// Return the set of required workspace members, i.e., those that are required by other
     /// members.
-    pub(crate) fn required_members(self) -> &'lock BTreeSet<PackageName> {
+    pub(crate) fn required_members(self) -> &'lock BTreeMap<PackageName, Editability> {
         match self {
             Self::Workspace(workspace) => workspace.required_members(),
             Self::Script(_) => {
-                static EMPTY: BTreeSet<PackageName> = BTreeSet::new();
+                static EMPTY: BTreeMap<PackageName, Editability> = BTreeMap::new();
                 &EMPTY
             }
         }
@@ -326,6 +344,7 @@ impl<'lock> LockTarget<'lock> {
         requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
         locations: &IndexLocations,
         sources: &NoSources,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Vec<Requirement>, uv_distribution::MetadataError> {
         match self {
             Self::Workspace(workspace) => {
@@ -345,6 +364,7 @@ impl<'lock> LockTarget<'lock> {
                     workspace,
                     locations,
                     sources,
+                    credentials_cache,
                 )?;
 
                 Ok(metadata
@@ -388,6 +408,7 @@ impl<'lock> LockTarget<'lock> {
                                 sources_map,
                                 indexes,
                                 locations,
+                                credentials_cache,
                             )
                             .map(move |requirement| match requirement {
                                 Ok(requirement) => Ok(requirement.into_inner()),

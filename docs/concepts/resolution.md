@@ -53,7 +53,7 @@ In this example, some version of both `foo` and `bar` must be selected; however,
 version requires considering the dependencies of each version of `foo` and `bar`. `foo 2.0.0` and
 `bar 2.0.0` cannot be installed together as they conflict on their required version of `lib`, so the
 resolver must select either `foo 1.0.0` (along with `bar 2.0.0`) or `bar 1.0.0` (along with
-`foo 1.0.0`). Both are valid solutions, and different resolution algorithms may yield either result.
+`foo 2.0.0`). Both are valid solutions, and different resolution algorithms may yield either result.
 
 ## Platform markers
 
@@ -139,7 +139,7 @@ bounds on `requires-python` often leads to formally correct but practically inco
 as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
 [`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
-### Limited resolution environments
+## Limited resolution environments
 
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
@@ -172,7 +172,7 @@ Entries in the `environments` setting must be disjoint (i.e., they must not over
 `sys_platform == 'darwin'` and `python_version >= '3.9'` are not, since both could be true at the
 same time.
 
-### Required environments
+## Required environments
 
 In the Python ecosystem, packages can be published as source distributions, built distributions
 (wheels), or both; but to install a package, a built distribution is required. If a package lacks a
@@ -413,12 +413,14 @@ requires-dist = ["numpy>=1.8.1", "scipy>=0.13.0", "six>=1.11.0"]
 ```
 
 These declarations are intended for cases in which a package does _not_ declare static metadata
-upfront, though they are also useful for packages that require disabling build isolation. In such
-cases, it may be easier to declare the package metadata upfront, rather than creating a custom build
-environment prior to resolving the package.
+upfront, though they are also useful for packages that require
+[disabling build isolation](./projects/config.md#build-isolation) In such cases, it may be easier to
+declare the package metadata upfront, rather than creating a custom build environment prior to
+resolving the package.
 
-For example, you can declare the metadata for `flash-attn`, allowing uv to resolve without building
-the package from source (which itself requires installing `torch`):
+For example, past versions of `flash-attn` did not declare static metadata. By declaring metadata
+for `flash-attn` upfront, uv can resolve `flash-attn` without building the package from source
+(which itself requires installing `torch`):
 
 ```toml
 [project]
@@ -455,14 +457,13 @@ versions of the specified package.
 
 ## Conflicting dependencies
 
-uv requires that all optional dependencies ("extras") declared by the project are compatible with
-each other and resolves all optional dependencies together when creating the lockfile.
+uv requires that all dependencies declared by a project are compatible with each other and resolves
+all dependencies together when creating the lockfile. This includes project dependencies, optional
+dependencies ("extras"), and dependency groups (development dependencies).
 
-If optional dependencies declared in one extra are not compatible with those in another extra, uv
-will fail to resolve the requirements of the project with an error.
-
-To work around this, uv supports declaring conflicting extras. For example, consider two sets of
-optional dependencies that conflict with one another:
+If dependencies declared in one extra are not compatible with those in another extra, uv will fail
+to resolve the requirements of the project with an error. For example, consider two sets of optional
+dependencies that conflict with one another:
 
 ```toml title="pyproject.toml"
 [project.optional-dependencies]
@@ -480,8 +481,9 @@ $ uv lock
       And because your project requires myproject[extra1] and myproject[extra2], we can conclude that your projects's requirements are unsatisfiable.
 ```
 
-But if you specify that `extra1` and `extra2` are conflicting, uv will resolve them separately.
-Specify conflicts in the `tool.uv` section:
+To work around this, uv supports explicit declaration of conflicts. If you specify that `extra1` and
+`extra2` are conflicting, uv will resolve them separately. Specify conflicts in the `tool.uv`
+section:
 
 ```toml title="pyproject.toml"
 [tool.uv]
@@ -493,8 +495,8 @@ conflicts = [
 ]
 ```
 
-Now, running `uv lock` will succeed. Note though, that now you cannot install both `extra1` and
-`extra2` at the same time:
+Now, running `uv lock` will succeed. However, now you cannot install both `extra1` and `extra2` at
+the same time:
 
 ```console
 $ uv sync --extra extra1 --extra extra2
@@ -505,7 +507,8 @@ error: extra `extra1`, extra `extra2` are incompatible with the declared conflic
 This error occurs because installing both `extra1` and `extra2` would result in installing two
 different versions of a package into the same environment.
 
-The above strategy for dealing with conflicting extras also works with dependency groups:
+The above strategy for dealing with conflicting optional dependencies also works with dependency
+groups:
 
 ```toml title="pyproject.toml"
 [dependency-groups]
@@ -524,10 +527,107 @@ conflicts = [
 The only difference from conflicting extras is that you need to use the `group` key instead of
 `extra`.
 
+When using a workspace with multiple projects, the same restrictions apply — uv requires all
+workspace members to be compatible with each other. Similarly, conflicts can be declared across
+workspace members.
+
+For example, consider the following workspace:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+
+[project.optional-dependencies]
+extra1 = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+
+[project.optional-dependencies]
+extra2 = ["numpy==2.0.0"]
+```
+
+To declare a conflict between extras in these different workspace members, use the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1", extra = "extra1" },
+      { package = "member2", extra = "extra2" },
+    ],
+]
+```
+
+It's also possible for the project dependencies (i.e., `project.dependencies`) of one workspace
+member to conflict with the extra of another member, for example:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+dependencies = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+
+[project.optional-dependencies]
+extra2 = ["numpy==2.0.0"]
+```
+
+This conflict can also be declared using the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1" },
+      { package = "member2", extra = "extra2" },
+    ],
+]
+```
+
+Similarly, it's possible for some workspace members to have conflicting project dependencies:
+
+```toml title="member1/pyproject.toml"
+[project]
+name = "member1"
+dependencies = ["numpy==2.1.2"]
+```
+
+```toml title="member2/pyproject.toml"
+[project]
+name = "member2"
+dependencies = ["numpy==2.0.0"]
+```
+
+This conflict can also be declared using the `package` key:
+
+```toml title="pyproject.toml"
+[tool.uv]
+conflicts = [
+    [
+      { package = "member1" },
+      { package = "member2" },
+    ],
+]
+```
+
+These workspace members will not be installable together, e.g., the workspace root cannot define:
+
+```toml title="pyproject.toml"
+[project]
+name = "root"
+dependencies = ["member1", "member2"]
+```
+
 ## Lower bounds
 
 By default, `uv add` adds lower bounds to dependencies and, when using uv to manage projects, uv
-will warn if direct dependencies don't have lower bound.
+will warn if direct dependencies don't have lower bounds.
 
 Lower bounds are not critical in the "happy path", but they are important for cases where there are
 dependency conflicts. For example, consider a project that requires two packages and those packages
@@ -554,10 +654,12 @@ may be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) t
 `2006-12-02T02:07:43Z`) or a local date in the same format (e.g., `2006-12-02`) in your system's
 configured time zone.
 
-Note the package index must support the `upload-time` field as specified in
-[`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
-distribution, the distribution will be treated as unavailable. PyPI provides `upload-time` for all
-packages.
+!!! important
+
+    The package index must support the `upload-time` field as specified in
+    [`PEP 700`](https://peps.python.org/pep-0700/). If the field is not present for a given
+    distribution, the distribution will be treated as unavailable unless the package is opted out
+    via `--exclude-newer-package <package>=false`. PyPI provides `upload-time` for all packages.
 
 To ensure reproducibility, messages for unsatisfiable resolutions will not mention that
 distributions were excluded due to the `--exclude-newer` flag — newer distributions will be treated
@@ -565,9 +667,72 @@ as if they do not exist.
 
 !!! note
 
-    The `--exclude-newer` option is only applied to packages that are read from a registry (as opposed to, e.g., Git
-    dependencies). Further, when using the `uv pip` interface, uv will not downgrade previously installed packages
-    unless the `--reinstall` flag is provided, in which case uv will perform a new resolution.
+    The `--exclude-newer` option is only applied to packages that are read from a registry (as
+    opposed to, e.g., Git dependencies). Further, when using the `uv pip` interface, uv will not
+    downgrade previously installed packages unless the `--reinstall` flag is provided, in which case
+    uv will perform a new resolution.
+
+This option is also supported in the `pyproject.toml`, e.g.:
+
+```pyproject.toml
+[tool.uv]
+exclude-newer = "2006-12-02T02:07:43Z"
+```
+
+When specified in persistent configuration, local date times are not allowed.
+
+Values may also be specified for specific packages, e.g.,
+`--exclude-newer-package setuptools=2006-12-02`, or:
+
+```pyproject.toml
+[tool.uv]
+exclude-newer-package = { setuptools = "2006-12-02T02:07:43Z" }
+```
+
+The same flag also accepts `<package>=false` to opt a package out of the `--exclude-newer`
+restriction, e.g., to allow resolving packages from an index that does not publish upload times.
+
+Package-specific values will take precedence over global values.
+
+## Dependency cooldowns
+
+uv also supports dependency "cooldowns" in which resolution will ignore packages newer than a
+duration. This is a good way to improve security posture by delaying package updates until the
+community has had the opportunity to vet new versions of packages.
+
+This feature is available via the [`exclude-newer` option](#reproducible-resolutions) and shares the
+same semantics.
+
+Define a dependency cooldown by specifying a duration instead of an absolute value. Either a
+"friendly" duration (e.g., `24 hours`, `1 week`, `30 days`) or an ISO 8601 duration (e.g., `PT24H`,
+`P7D`, `P30D`) can be used.
+
+!!! note
+
+    Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored). Calendar
+    units such as months and years are not allowed since they are inherently inconsistent lengths.
+
+When a duration is used for resolution, a timestamp is calculated relative to the current time. When
+using a `uv.lock` file, the timestamp is included in the lockfile. uv will not update the lockfile
+when the current time changes, instead, uv will update the timestamp when a new resolution is
+performed, e.g., when `--upgrade` or `--refresh` is used.
+
+This option is also supported in the `pyproject.toml`, e.g.:
+
+```pyproject.toml
+[tool.uv]
+exclude-newer = "1 week"
+```
+
+Values may also be specified for specific packages, e.g.,
+`--exclude-newer-package "setuptools=30 days"`, or:
+
+```pyproject.toml
+[tool.uv]
+exclude-newer = "1 week"
+exclude-newer-package = { setuptools = "30 days" }
+```
 
 ## Source distribution
 
@@ -609,4 +774,4 @@ versions of uv to error.
 ## Learn more
 
 For more details about the internals of the resolver, see the
-[resolver reference](../reference/resolver-internals.md) documentation.
+[resolver reference](../reference/internals/resolver.md) documentation.

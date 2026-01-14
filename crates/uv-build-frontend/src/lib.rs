@@ -3,6 +3,7 @@
 //! <https://packaging.python.org/en/latest/specifications/source-distribution-format/>
 
 mod error;
+mod pipreqs;
 
 use std::borrow::Cow;
 use std::ffi::OsString;
@@ -27,23 +28,25 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache_key::cache_digest;
-use uv_configuration::Preview;
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, NoSources};
+use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{IndexLocations, Requirement, Resolution};
-use uv_fs::LockedFile;
+use uv_distribution_types::{
+    ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
+    Resolution,
+};
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
+use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
-use uv_workspace::pyproject::ExtraBuildDependencies;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -283,12 +286,13 @@ impl SourceBuild {
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
-        extra_build_dependencies: &ExtraBuildDependencies,
+        extra_build_requires: &ExtraBuildRequires,
         build_stack: &BuildStack,
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        credentials_cache: &CredentialsCache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
@@ -299,7 +303,6 @@ impl SourceBuild {
             source.to_path_buf()
         };
 
-        let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
@@ -308,7 +311,7 @@ impl SourceBuild {
             locations,
             &no_sources,
             workspace_cache,
-            &default_backend,
+            credentials_cache,
         )
         .await
         .map_err(|err| *err)?;
@@ -324,13 +327,28 @@ impl SourceBuild {
             .or(fallback_package_version)
             .cloned();
 
-        let extra_build_dependencies: Vec<Requirement> = package_name
+        let extra_build_dependencies = package_name
             .as_ref()
-            .and_then(|name| extra_build_dependencies.get(name).cloned())
+            .and_then(|name| extra_build_requires.get(name).cloned())
             .unwrap_or_default()
             .into_iter()
-            .map(Requirement::from)
-            .collect();
+            .map(|requirement| {
+                match requirement {
+                    ExtraBuildRequirement {
+                        requirement,
+                        match_runtime: true,
+                    } if requirement.source.is_empty() => {
+                        Err(Error::UnmatchedRuntime(
+                            requirement.name.clone(),
+                            // SAFETY: if `package_name` is `None`, the iterator is empty.
+                            package_name.clone().unwrap(),
+                        ))
+                    }
+                    requirement => Ok(requirement),
+                }
+            })
+            .map_ok(Requirement::from)
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Create a virtual environment, or install into the shared environment if requested.
         let venv = if let Some(venv) = build_isolation.shared_environment(package_name.as_ref()) {
@@ -341,7 +359,9 @@ impl SourceBuild {
                 interpreter.clone(),
                 uv_virtualenv::Prompt::None,
                 false,
-                uv_virtualenv::OnExisting::Remove,
+                uv_virtualenv::OnExisting::Remove(
+                    uv_virtualenv::RemovalReason::TemporaryEnvironment,
+                ),
                 false,
                 false,
                 false,
@@ -363,7 +383,6 @@ impl SourceBuild {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
-                &default_backend,
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
@@ -435,6 +454,7 @@ impl SourceBuild {
                 &environment_variables,
                 &modified_path,
                 &temp_dir,
+                credentials_cache,
             )
             .await?;
         }
@@ -473,12 +493,16 @@ impl SourceBuild {
                 "uv-setuptools-{}.lock",
                 cache_digest(&canonical_source_path)
             ));
-            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
-                .await
-                .inspect_err(|err| {
-                    warn!("Failed to acquire build lock: {err}");
-                })
-                .ok();
+            source_tree_lock = LockedFile::acquire(
+                lock_path,
+                LockedFileMode::Exclusive,
+                self.source_tree.to_string_lossy(),
+            )
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire build lock: {err}");
+            })
+            .ok();
         }
         Ok(source_tree_lock)
     }
@@ -486,13 +510,12 @@ impl SourceBuild {
     async fn get_resolved_requirements(
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements
+            if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
@@ -500,7 +523,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&default_backend.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -540,7 +563,7 @@ impl SourceBuild {
         locations: &IndexLocations,
         no_sources: &NoSources,
         workspace_cache: &WorkspaceCache,
-        default_backend: &Pep517Backend,
+        credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -569,6 +592,7 @@ impl SourceBuild {
                             locations,
                             no_sources,
                             workspace_cache,
+                            credentials_cache,
                         )
                         .await
                         .map_err(Error::Lowering)?;
@@ -631,7 +655,7 @@ impl SourceBuild {
                         }
                     }
 
-                    default_backend.clone()
+                    DEFAULT_BACKEND.clone()
                 };
                 Ok((backend, pyproject_toml.project))
             }
@@ -645,9 +669,9 @@ impl SourceBuild {
 
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
-                // case,  but plans to make PEP 517 builds the default in the future.
+                // case, but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                Ok((default_backend.clone(), None))
+                Ok((DEFAULT_BACKEND.clone(), None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
@@ -934,6 +958,7 @@ async fn create_pep517_build_environment(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
     temp_dir: &TempDir,
+    credentials_cache: &CredentialsCache,
 ) -> Result<(), Error> {
     // Write the hook output to a file so that we can read it back reliably.
     let outfile = temp_dir
@@ -1029,6 +1054,7 @@ async fn create_pep517_build_environment(
             locations,
             &no_sources,
             workspace_cache,
+            credentials_cache,
         )
         .await
         .map_err(Error::Lowering)?;
@@ -1133,8 +1159,16 @@ impl PythonRunner {
             .envs(environment_variables)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
-            .env(EnvVars::CLICOLOR_FORCE, "1")
+            // NOTE: it would be nice to get colored output from build backends,
+            // but setting CLICOLOR_FORCE=1 changes the output of underlying
+            // tools, which might mess with wrappers trying to parse their
+            // output.
             .env(EnvVars::PYTHONIOENCODING, "utf-8:backslashreplace")
+            // Remove potentially-sensitive environment variables.
+            .env_remove(EnvVars::PYX_API_KEY)
+            .env_remove(EnvVars::UV_API_KEY)
+            .env_remove(EnvVars::PYX_AUTH_TOKEN)
+            .env_remove(EnvVars::UV_AUTH_TOKEN)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()

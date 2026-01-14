@@ -61,7 +61,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-    ) -> DisplayResolutionGraph<'a> {
+    ) -> Self {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),

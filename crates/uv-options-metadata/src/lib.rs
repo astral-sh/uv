@@ -59,8 +59,8 @@ pub enum OptionEntry {
 impl Display for OptionEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            OptionEntry::Set(set) => std::fmt::Display::fmt(set, f),
-            OptionEntry::Field(field) => std::fmt::Display::fmt(&field, f),
+            Self::Set(set) => std::fmt::Display::fmt(set, f),
+            Self::Field(field) => std::fmt::Display::fmt(&field, f),
         }
     }
 }
@@ -258,6 +258,8 @@ pub struct OptionField {
     pub example: &'static str,
     pub deprecated: Option<Deprecated>,
     pub possible_values: Option<Vec<PossibleValue>>,
+    /// If true, this option is only available in `uv.toml`, not `pyproject.toml`.
+    pub uv_toml_only: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -343,6 +345,7 @@ mod tests {
                         scope: None,
                         deprecated: None,
                         possible_values: None,
+                        uv_toml_only: false,
                     },
                 );
             }
@@ -368,6 +371,7 @@ mod tests {
                         scope: None,
                         deprecated: None,
                         possible_values: None,
+                        uv_toml_only: false,
                     },
                 );
 
@@ -389,6 +393,7 @@ mod tests {
                         scope: None,
                         deprecated: None,
                         possible_values: None,
+                        uv_toml_only: false,
                     },
                 );
             }
@@ -411,6 +416,7 @@ mod tests {
             scope: None,
             deprecated: None,
             possible_values: None,
+            uv_toml_only: false,
         };
 
         impl OptionsMetadata for WithOptions {
@@ -436,6 +442,7 @@ mod tests {
             scope: None,
             deprecated: None,
             possible_values: None,
+            uv_toml_only: false,
         };
 
         struct Root;
@@ -452,6 +459,7 @@ mod tests {
                         scope: None,
                         deprecated: None,
                         possible_values: None,
+                        uv_toml_only: false,
                     },
                 );
 

@@ -7,7 +7,7 @@ use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err as fs;
 use fs_err::File;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use predicates::prelude::predicate;
 use url::Url;
 use wiremock::{
@@ -19,7 +19,7 @@ use wiremock::{
 use crate::common::{self, decode_token};
 use crate::common::{
     DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
-    uv_snapshot, venv_bin_path,
+    packse_index_url, uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -555,7 +555,7 @@ fn install_requirements_txt() -> Result<()> {
 
     context.assert_command("import flask").success();
 
-    // Install Jinja2 (which should already be installed, but shouldn't remove other packages).
+    // Install iniconfig (which shouldn't remove other packages).
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
@@ -573,6 +573,81 @@ fn install_requirements_txt() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` passed via `-r -` into a virtual environment.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("-")
+        .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a `requirements.txt` passed via `-r /dev/stdin` into a virtual environment.
+#[test]
+#[cfg(not(windows))]
+#[allow(clippy::disallowed_types)]
+fn install_from_dev_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Install Flask.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("Flask")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("/dev/stdin")
+        .arg("--strict").stdin(std::fs::File::open(requirements_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
     );
 
     context.assert_command("import flask").success();
@@ -752,6 +827,71 @@ werkzeug==3.0.1
       ╰─▶ Because flask==3.0.2 depends on click>=8.1.3 and you require click==7.0.0, we can conclude that your requirements and flask==3.0.2 are incompatible.
           And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    // Update the script file.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("script.py")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
     );
 
     Ok(())
@@ -1237,7 +1377,7 @@ fn install_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1250,7 +1390,7 @@ fn install_extras() -> Result<()> {
     // Request extras for a source tree
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--all-extras")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1313,7 +1453,7 @@ fn install_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1324,7 +1464,7 @@ fn install_editable() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -1332,7 +1472,7 @@ fn install_editable() {
     // Install it again.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1342,14 +1482,14 @@ fn install_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
     "###
     );
 
     // Add another, non-editable dependency.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg(context.workspace_root.join("test/packages/poetry_editable"))
         .arg("black"), @r###"
     success: true
     exit_code: 0
@@ -1366,7 +1506,7 @@ fn install_editable() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
     "###
     );
 }
@@ -1398,7 +1538,7 @@ fn install_editable_and_registry() {
     // Install the editable version of Black. This should remove the registry-based version.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/black_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1409,7 +1549,7 @@ fn install_editable_and_registry() {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - black==24.3.0
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -1440,7 +1580,7 @@ fn install_editable_and_registry() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + black==23.10.0
     "###
     );
@@ -1453,7 +1593,7 @@ fn install_editable_no_binary() {
     // Install the editable package with no-binary enabled
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--no-binary")
         .arg(":all:"), @r###"
     success: true
@@ -1464,7 +1604,7 @@ fn install_editable_no_binary() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 }
@@ -1479,7 +1619,7 @@ fn install_editable_compatible_constraint() -> Result<()> {
     // Install the editable package with a compatible constraint.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @r###"
     success: true
@@ -1490,7 +1630,7 @@ fn install_editable_compatible_constraint() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -1507,7 +1647,7 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
     // Install the editable package with an incompatible constraint.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @r###"
     success: false
@@ -1533,7 +1673,7 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
     // Install the editable package with an incompatible constraint.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("--constraint")
         .arg("constraints.txt"), @r"
     success: false
@@ -1542,7 +1682,7 @@ fn install_editable_incompatible_constraint_url() -> Result<()> {
 
     ----- stderr -----
     error: Requirements contain conflicting URLs for package `black`:
-    - file://[WORKSPACE]/scripts/packages/black_editable (editable)
+    - file://[WORKSPACE]/test/packages/black_editable (editable)
     - https://files.pythonhosted.org/packages/0f/89/294c9a6b6c75a08da55e9d05321d0707e9418735e3062b12ef0f54c33474/black-24.4.2-py3-none-any.whl
     "
     );
@@ -1556,7 +1696,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        -e black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        -e black[d] @ file://{workspace_root}/test/packages/black_editable
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -1575,7 +1715,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -1584,7 +1724,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     );
 
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        --editable black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        --editable black[d] @ file://{workspace_root}/test/packages/black_editable
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -1602,7 +1742,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     );
 
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        --editable=black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        --editable=black[d] @ file://{workspace_root}/test/packages/black_editable
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -1620,7 +1760,7 @@ fn install_editable_pep_508_requirements_txt() -> Result<()> {
     );
 
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        --editable= black[d] @ file://{workspace_root}/scripts/packages/black_editable
+        --editable= black[d] @ file://{workspace_root}/test/packages/black_editable
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -1646,7 +1786,7 @@ fn install_editable_pep_508_cli() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(format!("black[d] @ file://{workspace_root}/scripts/packages/black_editable", workspace_root = context.workspace_root.simplified_display())), @r###"
+        .arg(format!("black[d] @ file://{workspace_root}/test/packages/black_editable", workspace_root = context.workspace_root.simplified_display())), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1658,7 +1798,7 @@ fn install_editable_pep_508_cli() {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -1671,7 +1811,7 @@ fn install_editable_pep_508_cli() {
 fn install_editable_bare_cli() {
     let context = TestContext::new("3.12");
 
-    let packages_dir = context.workspace_root.join("scripts/packages");
+    let packages_dir = context.workspace_root.join("test/packages");
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
@@ -1686,7 +1826,7 @@ fn install_editable_bare_cli() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 }
@@ -1698,7 +1838,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("-e black_editable")?;
 
-    let packages_dir = context.workspace_root.join("scripts/packages");
+    let packages_dir = context.workspace_root.join("test/packages");
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -1713,7 +1853,7 @@ fn install_editable_bare_requirements_txt() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -2101,7 +2241,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_403_response() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
-        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+        .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2361,14 +2501,10 @@ fn install_git_private_https_pat_at_ref() {
 
 /// Install a package from a private GitHub repository using a PAT and username
 /// An arbitrary username is supported when using a PAT.
-///
-/// TODO(charlie): This test modifies the user's keyring.
-/// See: <https://github.com/astral-sh/uv/issues/1980>.
 #[test]
 #[cfg(feature = "git")]
-#[ignore = "Modifies the user's keyring"]
 fn install_git_private_https_pat_and_username() {
-    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION).with_unset_git_credential_helper();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
@@ -2382,7 +2518,7 @@ fn install_git_private_https_pat_and_username() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2629,6 +2765,37 @@ fn install_no_binary_overrides_only_binary_all() {
     context.assert_command("import anyio").success();
 }
 
+/// Accept comma-separated values for `--no-binary` (pip compatibility)
+#[test]
+fn install_no_binary_comma_separated() {
+    let context = TestContext::new("3.12");
+
+    // Use comma-separated format for `--no-binary`
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--no-binary=idna,sniffio")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
 /// Disable binaries with an environment variable
 /// TODO(zanieb): This is not yet implemented
 #[test]
@@ -2636,7 +2803,7 @@ fn install_no_binary_env() {
     let context = TestContext::new("3.12");
 
     let mut command = context.pip_install();
-    command.arg("anyio").env("UV_NO_BINARY", "1");
+    command.arg("anyio").env(EnvVars::UV_NO_BINARY, "1");
     uv_snapshot!(
         command,
         @r###"
@@ -2658,7 +2825,7 @@ fn install_no_binary_env() {
     command
         .arg("anyio")
         .arg("--reinstall")
-        .env("UV_NO_BINARY", "anyio");
+        .env(EnvVars::UV_NO_BINARY, "anyio");
     uv_snapshot!(
         command,
         @r###"
@@ -2684,7 +2851,7 @@ fn install_no_binary_env() {
         .arg("anyio")
         .arg("--reinstall")
         .arg("idna")
-        .env("UV_NO_BINARY_PACKAGE", "idna");
+        .env(EnvVars::UV_NO_BINARY_PACKAGE, "idna");
     uv_snapshot!(
         command,
         @r###"
@@ -2719,6 +2886,37 @@ fn install_only_binary_overrides_no_binary_all() {
         .arg(":all:")
         .arg("--only-binary")
         .arg("idna")
+        .arg("--strict");
+    uv_snapshot!(
+        command,
+        @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+}
+
+/// Accept comma-separated values for `--only-binary` (pip compatibility)
+#[test]
+fn install_only_binary_comma_separated() {
+    let context = TestContext::new("3.12");
+
+    // Use comma-separated format for `--only-binary`
+    let mut command = context.pip_install();
+    command
+        .arg("anyio")
+        .arg("--only-binary=idna,sniffio")
         .arg("--strict");
     uv_snapshot!(
         command,
@@ -2876,7 +3074,7 @@ fn only_binary_editable() {
         .arg("--only-binary")
         .arg(":all:")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/anyio_local")), @r###"
+        .arg(context.workspace_root.join("test/packages/anyio_local")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2885,7 +3083,7 @@ fn only_binary_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "###
     );
 }
@@ -2896,7 +3094,7 @@ fn only_binary_dependent_editables() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_locals");
+        .join("test/packages/dependent_locals");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
@@ -2914,8 +3112,8 @@ fn only_binary_dependent_editables() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "###
     );
 }
@@ -2930,7 +3128,7 @@ fn only_binary_editable_setup_py() {
         .arg("--only-binary")
         .arg(":all:")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/setup_py_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/setup_py_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2945,7 +3143,7 @@ fn only_binary_editable_setup_py() {
      + httpcore==1.0.4
      + httpx==0.27.0
      + idna==3.6
-     + setup-py-editable==0.0.1 (from file://[WORKSPACE]/scripts/packages/setup_py_editable)
+     + setup-py-editable==0.0.1 (from file://[WORKSPACE]/test/packages/setup_py_editable)
      + sniffio==1.3.1
     "###
     );
@@ -3192,7 +3390,7 @@ fn no_deps_editable() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-deps")
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable[dev]")), @r###"
+        .arg(context.workspace_root.join("test/packages/black_editable[dev]")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3201,7 +3399,7 @@ fn no_deps_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -3425,6 +3623,40 @@ fn install_constraints_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_constraints_txt_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==3.7.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("idna<3.4")?;
+
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("requirements.txt")
+            .arg("--constraint")
+            .arg("-")
+            .stdin(std::fs::File::open(constraints_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.3
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn install_constraints_from_pyproject() -> Result<()> {
@@ -3620,6 +3852,50 @@ fn install_git_source_respects_offline_mode() {
     );
 }
 
+/// Build requirements should explain how to opt into prereleases when they are the only solution.
+#[test]
+fn build_prerelease_hint() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["transitive-package-only-prereleases-in-range-a"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let mut command = context.pip_install();
+    command.arg("--index-url").arg(packse_index_url()).arg(".");
+    command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+
+    uv_snapshot!(
+        context.filters(),
+        command,
+        @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
+      ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
+          And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+    "
+    );
+
+    Ok(())
+}
+
 /// Test that constraint markers are respected when validating the current environment (i.e., we
 /// skip resolution entirely).
 #[test]
@@ -3783,7 +4059,7 @@ fn launcher() -> Result<()> {
     uv_snapshot!(
         filters,
         context.pip_install()
-        .arg(format!("simple_launcher@{}", project_root.join("scripts/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
+        .arg(format!("simple_launcher@{}", project_root.join("test/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
@@ -3828,7 +4104,7 @@ fn launcher_with_symlink() -> Result<()> {
 
     uv_snapshot!(filters,
         context.pip_install()
-            .arg(format!("simple_launcher@{}", project_root.join("scripts/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
+            .arg(format!("simple_launcher@{}", project_root.join("test/links/simple_launcher-0.1.0-py3-none-any.whl").display()))
             .arg("--strict"),
         @r###"
     success: true
@@ -3927,7 +4203,6 @@ fn config_settings_registry() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
@@ -3972,7 +4247,7 @@ fn config_settings_path() -> Result<()> {
         "-e {}",
         context
             .workspace_root
-            .join("scripts/packages/setuptools_editable")
+            .join("test/packages/setuptools_editable")
             .display()
     ))?;
 
@@ -3989,7 +4264,7 @@ fn config_settings_path() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "###
     );
 
@@ -3999,43 +4274,13 @@ fn config_settings_path() -> Result<()> {
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
 
-    // Reinstalling with `editable_mode=compat` should be a no-op; changes in build configuration
-    // don't invalidate the environment.
+    // Reinstalling with `editable_mode=compat` should force a reinstall.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
-        , @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
-    );
-
-    // Uninstall the package.
-    uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("setuptools-editable"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###);
-
-    // Install the editable package with `editable_mode=compat`. We should ignore the cached
-    // build configuration and rebuild.
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-r")
-        .arg("requirements.txt")
-        .arg("-C")
-        .arg("editable_mode=compat")
-        , @r###"
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4043,9 +4288,10 @@ fn config_settings_path() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
-    "###
+     ~ setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
+    "
     );
 
     // When installed without `editable_mode=compat`, the `finder.py` file should _not_ be present.
@@ -4753,7 +4999,7 @@ fn path_name_version_change() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4762,13 +5008,13 @@ fn path_name_version_change() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + ok==1.0.0 (from file://[WORKSPACE]/scripts/links/ok-1.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
     "###
     );
 
     // Installing the same path again should be a no-op
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4780,7 +5026,7 @@ fn path_name_version_change() {
 
     // Installing a new path should succeed
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/links/ok-2.0.0-py3-none-any.whl")), @r###"
+        .arg(context.workspace_root.join("test/links/ok-2.0.0-py3-none-any.whl")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4790,14 +5036,14 @@ fn path_name_version_change() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - ok==1.0.0 (from file://[WORKSPACE]/scripts/links/ok-1.0.0-py3-none-any.whl)
-     + ok==2.0.0 (from file://[WORKSPACE]/scripts/links/ok-2.0.0-py3-none-any.whl)
+     - ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
+     + ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
     "###
     );
 
     // Installing a new path should succeed regardless of which version is "newer"
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("scripts/links/ok-1.0.0-py3-none-any.whl")), @r###"
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4806,8 +5052,8 @@ fn path_name_version_change() {
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - ok==2.0.0 (from file://[WORKSPACE]/scripts/links/ok-2.0.0-py3-none-any.whl)
-     + ok==1.0.0 (from file://[WORKSPACE]/scripts/links/ok-1.0.0-py3-none-any.whl)
+     - ok==2.0.0 (from file://[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl)
+     + ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
     "###
     );
 }
@@ -4819,7 +5065,7 @@ fn path_changes_with_same_name() -> Result<()> {
 
     let wheel = context
         .workspace_root
-        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
 
     let one = context.temp_dir.child("one");
     one.create_dir_all()?;
@@ -4955,7 +5201,7 @@ fn no_build_isolation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .arg("--no-build-isolation"), @r###"
+        .arg("--no-build-isolation"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4970,8 +5216,13 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -5023,7 +5274,7 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.in")
-        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r###"
+        .env(EnvVars::UV_NO_BUILD_ISOLATION, "yes"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5038,8 +5289,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          anyio = ["setuptools"]
+
+          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `setuptools` and `wheel`.
@@ -5620,7 +5876,7 @@ fn install_package_basic_auth_from_keyring() {
         .arg(
             context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -5667,7 +5923,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg(
             context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -5710,7 +5966,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg(
             context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -5822,7 +6078,7 @@ fn deptry_gitignore() {
 
     let source_dist_dir = context
         .workspace_root
-        .join("scripts/packages/deptry_reproducer");
+        .join("test/packages/deptry_reproducer");
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("deptry_reproducer @ {}", source_dist_dir.join("deptry_reproducer-0.1.0.tar.gz").simplified_display()))
@@ -5838,7 +6094,7 @@ fn deptry_gitignore() {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + cffi==1.16.0
-     + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/scripts/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
+     + deptry-reproducer==0.1.0 (from file://[WORKSPACE]/test/packages/deptry_reproducer/deptry_reproducer-0.1.0.tar.gz)
      + pycparser==2.21
     "###
     );
@@ -5952,7 +6208,7 @@ fn already_installed_dependent_editable() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_locals");
+        .join("test/packages/dependent_locals");
 
     // Install the first editable
     uv_snapshot!(context.filters(), context.pip_install()
@@ -5966,7 +6222,7 @@ fn already_installed_dependent_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 
@@ -5987,7 +6243,7 @@ fn already_installed_dependent_editable() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "###
     );
 
@@ -6005,7 +6261,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 
@@ -6047,7 +6303,7 @@ fn already_installed_dependent_editable() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 }
@@ -6058,7 +6314,7 @@ fn already_installed_local_path_dependent() {
     let context = TestContext::new("3.12");
     let root_path = context
         .workspace_root
-        .join("scripts/packages/dependent_locals");
+        .join("test/packages/dependent_locals");
 
     // Install the first local
     uv_snapshot!(context.filters(), context.pip_install()
@@ -6071,7 +6327,7 @@ fn already_installed_local_path_dependent() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     + first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 
@@ -6091,7 +6347,7 @@ fn already_installed_local_path_dependent() {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     + second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "###
     );
 
@@ -6108,7 +6364,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 
@@ -6125,7 +6381,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
     "###
     );
 
@@ -6166,8 +6422,8 @@ fn already_installed_local_path_dependent() {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "
     );
 
@@ -6190,7 +6446,7 @@ fn already_installed_local_path_dependent() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "###
     );
 
@@ -6215,8 +6471,8 @@ fn already_installed_local_path_dependent() {
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
-     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/first_local)
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/test/packages/dependent_locals/second_local)
     "###
     );
 }
@@ -6225,7 +6481,7 @@ fn already_installed_local_path_dependent() {
 #[test]
 fn already_installed_local_version_of_remote_package() {
     let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages");
+    let root_path = context.workspace_root.join("test/packages");
 
     // Install the local anyio first
     uv_snapshot!(context.filters(), context.pip_install()
@@ -6238,7 +6494,7 @@ fn already_installed_local_version_of_remote_package() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "###
     );
 
@@ -6303,7 +6559,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     ~ anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "###
     );
 
@@ -6321,7 +6577,7 @@ fn already_installed_local_version_of_remote_package() {
     Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 3 packages in [TIME]
-     - anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     - anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
@@ -6341,7 +6597,7 @@ fn already_installed_local_version_of_remote_package() {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
     "###
     );
 
@@ -6587,7 +6843,7 @@ fn find_links() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("tqdm")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6611,7 +6867,7 @@ fn find_links_no_binary() {
         .arg("--no-binary")
         .arg(":all:")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6662,6 +6918,49 @@ fn require_hashes() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     "###
+    );
+
+    Ok(())
+}
+
+/// Use `--require-hashes` when there are no hashes for build dependencies.
+#[test]
+fn require_hashes_build_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Write to a requirements file.
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==4.0.0 \
+            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
+            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        idna==3.6 \
+            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+            # via anyio
+        sniffio==1.3.1 \
+            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+            # via anyio
+    "})?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--no-binary").arg(":all:")
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--require-hashes"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
     );
 
     Ok(())
@@ -6782,7 +7081,7 @@ fn require_hashes_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        -e file://{workspace_root}/test/packages/black_editable[d]
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -6797,7 +7096,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/test/packages/black_editable[d]
     "###
     );
 
@@ -7094,6 +7393,64 @@ fn require_hashes_override() -> Result<()> {
 
     ----- stderr -----
     error: In `--require-hashes` mode, all requirements must have their versions pinned with `==`, but found: anyio
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install with overrides from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_with_overrides_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("anyio==4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--override")
+        .arg("-")
+        .stdin(std::fs::File::open(overrides_txt)?), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install with excludes from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn install_with_excludes_from_stdin() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt.write_str("anyio>4.0.0")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==4.0.1")
+        .arg("--exclude")
+        .arg("-")
+        .stdin(std::fs::File::open(excludes_txt)?), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of anyio==4.0.1 and you require anyio==4.0.1, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
@@ -7449,7 +7806,7 @@ fn verify_hashes_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        -e file://{workspace_root}/test/packages/black_editable[d]
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -7470,7 +7827,7 @@ fn verify_hashes_editable() -> Result<()> {
      + aiohttp==3.9.3
      + aiosignal==1.3.1
      + attrs==23.2.0
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + frozenlist==1.4.1
      + idna==3.6
      + multidict==6.0.5
@@ -7658,11 +8015,11 @@ fn tool_uv_sources() -> Result<()> {
     let project_root = fs_err::canonicalize(std::env::current_dir()?.join("../.."))?;
     fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
+        project_root.join("test/packages/poetry_editable/pyproject.toml"),
         context.temp_dir.join("poetry_editable/pyproject.toml"),
     )?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        project_root.join("test/packages/poetry_editable/poetry_editable/__init__.py"),
         context
             .temp_dir
             .join("poetry_editable/poetry_editable/__init__.py"),
@@ -7792,8 +8149,8 @@ fn prefer_editable() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
-        .arg(context.workspace_root.join("scripts/packages/black_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7802,7 +8159,7 @@ fn prefer_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -7814,13 +8171,13 @@ fn prefer_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
-        "black @ file://{}/scripts/packages/black_editable",
+        "black @ file://{}/test/packages/black_editable",
         context.workspace_root.simplified_display()
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .arg("-r")
         .arg("requirements.txt"), @r###"
     success: true
@@ -7831,7 +8188,7 @@ fn prefer_editable() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     "###
     );
 
@@ -7870,7 +8227,7 @@ fn local_index_absolute() -> Result<()> {
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -7921,7 +8278,7 @@ fn local_index_relative() -> Result<()> {
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -7972,7 +8329,7 @@ fn local_index_requirements_txt_absolute() -> Result<()> {
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
@@ -8028,7 +8385,7 @@ fn local_index_requirements_txt_relative() -> Result<()> {
             </a>
           </body>
         </html>
-    "#, Url::from_directory_path(context.workspace_root.join("scripts/links/")).unwrap().as_str()})?;
+    "#, Url::from_directory_path(context.workspace_root.join("test/links/")).unwrap().as_str()})?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -8202,11 +8559,7 @@ fn install_relocatable() -> Result<()> {
     // (we use black_editable because it's convenient, but we don't actually install it as editable)
     context
         .pip_install()
-        .arg(
-            context
-                .workspace_root
-                .join("scripts/packages/black_editable"),
-        )
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .assert()
         .success();
 
@@ -8310,7 +8663,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8337,7 +8690,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
         .arg("-p").arg("3.12")
         .arg("anyio")
         // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-        .env("UV_TEST_PYTHON_PATH", path.as_os_str()), @r###"
+        .env(EnvVars::UV_TEST_PYTHON_PATH, path.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8388,6 +8741,35 @@ fn incompatible_build_constraint() -> Result<()> {
         .arg("requests==1.2")
         .arg("--build-constraint")
         .arg("build_constraints.txt"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Include a `build_constraints.txt` file with an incompatible constraint from stdin.
+#[test]
+#[allow(clippy::disallowed_types)]
+fn incompatible_build_constraint_from_stdin() -> Result<()> {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("requests==1.2")
+        .arg("--build-constraint")
+        .arg("-")
+        .stdin(std::fs::File::open(constraints_txt)?), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8595,12 +8977,9 @@ build-constraint-dependencies = [
 fn install_build_isolation_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    // Create an package.
+    // Create a package.
     let package = context.temp_dir.child("project");
-    package.create_dir_all()?;
-    let pyproject_toml = package.child("pyproject.toml");
-
-    pyproject_toml.write_str(
+    package.child("pyproject.toml").write_str(
         r#"
         [project]
         name = "project"
@@ -8609,11 +8988,6 @@ fn install_build_isolation_package() -> Result<()> {
         dependencies = [
             "iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
         ]
-        [build-system]
-        requires = [
-          "setuptools >= 40.9.0",
-        ]
-        build-backend = "setuptools.build_meta"
         "#,
     )?;
 
@@ -8621,7 +8995,7 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8636,8 +9010,13 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This usually indicates a problem with the package or the build environment.
-    "###
+          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          iniconfig = ["hatchling"]
+
+          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    "#
     );
 
     // Install `hatchinling`, `hatch-vs` for iniconfig
@@ -8665,18 +9044,20 @@ fn install_build_isolation_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-build-isolation-package")
         .arg("iniconfig")
-        .arg(package.path()), @r###"
+        .arg(package.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Prepared 1 package without build isolation in [TIME]
+    Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz)
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -8723,7 +9104,7 @@ fn no_extension() {
 
 /// Regression test for: <https://github.com/astral-sh/uv/pull/6646>
 #[test]
-fn switch_platform() -> Result<()> {
+fn switch_python_version() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -8932,7 +9313,7 @@ fn missing_top_level() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top-level.txt` file. Installation may result in an incomplete environment.
+    warning: Failed to uninstall package at [SITE_PACKAGES]/suds_community.egg-info due to missing `top_level.txt` file. Installation may result in an incomplete environment.
     Uninstalled 2 packages in [TIME]
     Installed 1 package in [TIME]
      ~ suds-community==0.8.5
@@ -9135,7 +9516,7 @@ fn build_tag() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("build-tag")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9247,7 +9628,7 @@ fn bad_crc32() -> Result<()> {
     Resolved 7 packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
       ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+      ╰─▶ Bad uncompressed size (got 0007b829, expected 0007b828) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     "
     );
 
@@ -9698,6 +10079,74 @@ fn dependency_group() -> Result<()> {
 }
 
 #[test]
+fn recursive_dependency_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Test a self-referencing group.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "test" },
+            "requests"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `test` -> `test`
+    ");
+
+    // Test mutually recursive groups.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        test = [
+            { include-group = "dev" },
+            "requests"
+        ]
+        dev = [
+            { include-group = "test" },
+            "pytest"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: [TEMP_DIR]/pyproject.toml
+      Caused by: Project `myproject` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn virtual_dependency_group() -> Result<()> {
     // testing basic `uv pip install --group` functionality
     // when the pyproject.toml is virtual
@@ -9871,7 +10320,7 @@ fn other_sources_group() -> Result<()> {
     // and install an editable
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e").arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg("-e").arg(context.workspace_root.join("test/packages/poetry_editable"))
         .arg("--group").arg("foo"), @r"
     success: true
     exit_code: 0
@@ -9883,7 +10332,7 @@ fn other_sources_group() -> Result<()> {
     Installed 5 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
      + sortedcontainers==2.4.0
     ");
@@ -10329,10 +10778,12 @@ fn directory_and_group() -> Result<()> {
     Ok(())
 }
 
-/// Regression test that we don't discover workspaces with `--no-sources`.
+/// Regression test that we don't discover workspaces with `--no-sources` or the `UV_NO_SOURCES`
+/// environment variable.
 ///
 /// We have a workspace dependency shadowing a PyPI package and using this package's version to
-/// check that by default we respect workspace package, but with `--no-sources`, we ignore them.
+/// check that by default we respect workspace package, but with `--no-sources` or `UV_NO_SOURCES=true`,
+/// we ignore them.
 #[test]
 fn no_sources_workspace_discovery() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -10432,6 +10883,67 @@ fn no_sources_workspace_discovery() -> Result<()> {
      + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "###
+    );
+
+    // Test with UV_NO_SOURCES=true environment variable (should behave same as flag)
+    uv_snapshot!(context.filters(), context.pip_install()
+    .arg("--upgrade")
+    .arg(".")
+    .env(EnvVars::UV_NO_SOURCES, "true"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test UV_NO_SOURCES=false doesn't activate no-sources
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg(".")
+        .env(EnvVars::UV_NO_SOURCES, "false"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==4.3.0
+     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Test that CLI flag overrides env var
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--upgrade")
+        .arg("--no-sources")
+        .arg(".")
+        .env(EnvVars::UV_NO_SOURCES, "False"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
+    "
     );
 
     Ok(())
@@ -11338,7 +11850,7 @@ fn pep_751_mix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Cannot specify additional requirements with a `pylock.toml` file
+    error: Cannot specify constraints with a `pylock.toml` file
     "
     );
 
@@ -11560,7 +12072,7 @@ requires_python = "==3.13.*"
     "
     );
 
-    // `--group pylock.toml:test` should be rejeceted.
+    // `--group pylock.toml:test` should be rejected.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")
         .arg("-r")
@@ -11812,6 +12324,25 @@ fn conflicting_flags_clap_bug() {
     );
 }
 
+/// Test that `--offline` and `--refresh` conflict.
+#[test]
+fn offline_refresh_conflict() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--offline")
+        .arg("--refresh"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument `--offline` cannot be used with `--refresh`
+    "
+    );
+}
+
 /// Test that shebang arguments are stripped when installing scripts
 #[test]
 #[cfg(unix)]
@@ -11931,7 +12462,7 @@ fn install_python_preference() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
@@ -11964,7 +12495,7 @@ fn install_python_preference() {
 
     // This also works with `VIRTUAL_ENV` unset
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("anyio").arg("--no-managed-python").env_remove("VIRTUAL_ENV"), @r"
+        .arg("anyio").arg("--no-managed-python").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11983,7 +12514,7 @@ fn config_settings_package() -> Result<()> {
         "-e {}",
         context
             .workspace_root
-            .join("scripts/packages/setuptools_editable")
+            .join("test/packages/setuptools_editable")
             .display()
     ))?;
 
@@ -12000,7 +12531,7 @@ fn config_settings_package() -> Result<()> {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "###
     );
 
@@ -12019,7 +12550,7 @@ fn config_settings_package() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "###);
 
     // Install the editable package with `editable_mode=compat`, scoped to the package.
@@ -12036,7 +12567,7 @@ fn config_settings_package() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "
     );
 
@@ -12055,7 +12586,7 @@ fn config_settings_package() -> Result<()> {
 
     ----- stderr -----
     Uninstalled 1 package in [TIME]
-     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     - setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "###);
 
     // Install the editable package with `editable_mode=compat`, by scoped to a different package.
@@ -12072,7 +12603,7 @@ fn config_settings_package() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Installed 1 package in [TIME]
-     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/setuptools_editable)
+     + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "
     );
 
@@ -12081,6 +12612,1164 @@ fn config_settings_package() -> Result<()> {
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(finder.exists());
+
+    Ok(())
+}
+
+#[test]
+fn reject_invalid_archive_member_names() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-10-07T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheeldiff2==0.0.1`
+      ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_streaming_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelstreamtest==0.0.1"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheelstreamtest==0.0.1`
+      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_double_zip() {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-07-10T00:00:00Z");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelziptest==0.0.2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+      × Failed to download `cbwheelziptest==0.0.2`
+      ├─▶ Failed to extract archive: cbwheelziptest-0.0.2-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains trailing contents after the end-of-central-directory record
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_central_directory_offset() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ├─▶ Invalid zip file structure
+      ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_mismatch() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip2/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_crc32_non_data_descriptor() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip3/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad uncompressed size (got 0000001b, expected 0000000c) for file: sitecustomize.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_duplicate_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip4/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip5/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ Bad CRC (got 5100f20e, expected de0ffd6e) for file: attr/_make.py
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_chained_extra_field() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip6/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ an extra field with id 0x7075 was duplicated in the header
+    "
+    );
+}
+
+#[test]
+fn reject_invalid_short_usize_zip64() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip7/attrs-25.3.0-py3-none-any.whl`
+      ├─▶ Failed to unzip wheel: attrs-25.3.0-py3-none-any.whl
+      ╰─▶ zip64 extended information field was too long: expected 16 bytes, but 0 bytes were provided
+    "
+    );
+}
+
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16068>
+#[test]
+fn already_installed_url_dependency_no_sources() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    context
+        .temp_dir
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    context
+        .temp_dir
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("bar")
+        .child("src")
+        .child("bar")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install `foo`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+     + iniconfig==2.0.0
+    ");
+
+    // Install `bar` with `--no-sources`.
+    uv_snapshot!(context.filters(), context.pip_install().arg("./bar").arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + bar==0.1.0 (from file://[TEMP_DIR]/bar)
+    ");
+
+    Ok(())
+}
+
+/// Test that build dependencies respect locked versions from the resolution.
+#[test]
+fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // Write a test package that arbitrarily requires `anyio` at build time
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    let child_pyproject_toml = child.child("pyproject.toml");
+    child_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio
+    let build_backend = child.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src")
+        .child("parent")
+        .child("__init__.py")
+        .touch()?;
+
+    // Now add the child dependency.
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+    "#})?;
+
+    // Ensure our build backend is checking the version correctly
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 3.0 but got 4.3.0
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    // Now constrain the `anyio` build dependency to match the runtime
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<4.1", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be built with anyio 4.0
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.0.0
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
+     + idna==3.6
+     + parent==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    ");
+
+    // Change the constraints on anyio
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["anyio<3.8", "child"]
+
+        [tool.uv.sources]
+        child = { path = "child" }
+
+        [tool.uv.extra-build-dependencies]
+        child = [{ requirement = "anyio", match-runtime = true }]
+    "#})?;
+
+    // The child should be rebuilt with anyio 3.7, without `--reinstall`
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+      × Failed to build `child @ file://[TEMP_DIR]/child`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Expected `anyio` version 4.0 but got 3.7.1
+
+          hint: This usually indicates a problem with the package or the build environment.
+      help: `child` was included because `parent` (v0.1.0) depends on `child`
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - anyio==4.0.0
+     + anyio==3.7.1
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // With preview enabled, there's no warning
+    uv_snapshot!(context.filters(), context.pip_install().arg(".")
+        .arg("--preview-features").arg("extra-build-dependencies")
+        .arg("--reinstall-package").arg("child")
+        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
+     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    Ok(())
+}
+
+/// Check that we warn for overlapping packages but not for correctly overlapping namespace
+/// packages.
+#[test]
+fn overlapping_packages_warning() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let built_by_uv = context.workspace_root.join("test/packages/built-by-uv");
+
+    // Overlaps with `built-by-uv`
+    let also_build_by_uv = context.temp_dir.child("also-built-by-uv");
+    also_build_by_uv.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "also-built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "built_by_uv"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    also_build_by_uv
+        .child("src")
+        .child("built_by_uv")
+        .child("__init__.py")
+        .touch()?;
+
+    // Check that overlapping packages don't show a warning by default
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+    "
+    );
+
+    // Clean up for the next test
+    context.venv().arg("--clear").assert().success();
+
+    // Check that overlapping packages show a warning when preview feature is enabled
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg(&built_by_uv)
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The module `built_by_uv` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing your dependency on either `built-by-uv` (v0.1.0) or `also-built-by-uv` (v0.1.0).
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+    "
+    );
+
+    // Check that correctly overlapping namespace packages don't show a warning
+    uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
+        .arg("poetry")
+        .arg("poetry-core"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + poetry==1.8.2
+     + poetry-core==1.9.0
+    "
+    );
+
+    // Check that we can uninstall even if the venv is bogus.
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("built_by_uv"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+    "
+    );
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("also_built_by_uv"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Uninstalled 1 package in [TIME]
+     - also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
+
+    // Check that installing one of the packages on their own doesn't warn.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(built_by_uv), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
+    "
+    );
+    // Currently, we don't warn if we install them one wheel at a time.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(also_build_by_uv.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/15386>
+#[test]
+fn transitive_dependency_config_settings_invalidation() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local package named `idna`.
+    context
+        .temp_dir
+        .child("idna")
+        .child("pyproject.toml")
+        .write_str(indoc! {
+            r#"
+        [project]
+        name = "idna"
+        version = "3.6"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+        })?;
+    context
+        .temp_dir
+        .child("idna")
+        .child("src")
+        .child("idna")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install the local `idna` package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.temp_dir.child("idna").path()),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6 (from file://[TEMP_DIR]/idna)
+    "
+    );
+
+    // Install a package that depends on `idna`, with a `--config-settings` value.
+    //
+    // This "should" rebuild `idna`, but for now, we reuse the "stale" distribution. Prior to
+    // https://github.com/astral-sh/uv/pull/15389, this would panic.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--config-settings=foo=bar"),  @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn switch_platform() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + cffi==1.16.0
+     + pycparser==2.21
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("windows"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    uv_snapshot!(context.pip_check().arg("--python-platform").arg("linux"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 2 packages in [TIME]
+    Found 1 incompatibility
+    The package `cffi` was built for a different platform
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("cffi")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ cffi==1.16.0
+    "
+    );
+}
+
+/// `uv pip install --no-sources` should allow non-registry installations, for compatibility with `pip install`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15190>
+#[test]
+fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a simple local package.
+    let local_pkg = context.temp_dir.child("local_pkg");
+    local_pkg.create_dir_all()?;
+
+    local_pkg.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "iniconfig"
+        version = "2.0.0"
+        description = "Local test package"
+        requires-python = ">=3.7"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    local_pkg.child("src").child("iniconfig").create_dir_all()?;
+    local_pkg
+        .child("src")
+        .child("iniconfig")
+        .child("__init__.py")
+        .write_str("__version__ = '2.0.0'")?;
+
+    // Step 1: Install as editable first.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--editable")
+        .arg("./local_pkg"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/local_pkg)
+    "
+    );
+
+    // Step 2: Use `--no-sources`; we should retain the package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--no-sources"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_with_system_interpreter() {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        .with_filtered_python_keys();
+
+    // We use a managed Python version here to ensure consistent output across systems
+    context.python_install().arg("3.12").assert().success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--system")
+        .arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
+
+      This Python installation is managed by uv and should not be modified.
+
+    hint: Virtual environments were not considered due to the `--system` flag
+    "
+    );
+}
+
+/// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_missing_python_no_target() {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python").arg("3.12")
+        .arg("anyio"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+}
+
+// If there are no python interpreters available, `uv pip install` into a target should install one.
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_missing_python_with_target() {
+    // Create a context with no installed python interpreters.
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let target_dir = context.temp_dir.child("target-dir");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--target").arg(target_dir.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.14.2
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn install_missing_python_version_with_target() {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let target_dir = context.temp_dir.child("target-dir");
+
+    // Request Python 3.12 which is not installed in this context.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--python").arg("3.12")
+        .arg("--target").arg(target_dir.path()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Using CPython 3.12.12
+        Resolved 3 packages in [TIME]
+        Prepared 3 packages in [TIME]
+        Installed 3 packages in [TIME]
+         + anyio==4.3.0
+         + idna==3.6
+         + sniffio==1.3.1
+        "###
+    );
+}
+
+/// Use a wheel that is only compatible with Python 3.13 with Python 3.12 or Python 3.13 to simulate
+/// a wheel build for the wrong platform in a cross-install scenario. Ensure that we catch this case
+/// and error accordingly. Additionally, we ensure that for a build dependency, which builds and
+/// runs on the host, not the target, we accept wheel platforms for the host.
+#[test]
+fn build_backend_wrong_wheel_platform() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12", "3.13"])
+        .with_filter((r" on [^ ]+ [^ ]+\.", " on [ARCH] [OS]."))
+        .with_filter((r" on [^ ]+ [^ ]+$", " on [ARCH] [OS]"));
+
+    let py313 = context.temp_dir.child("child");
+    py313.create_dir_all()?;
+    let py313_pyproject_toml = py313.child("pyproject.toml");
+    py313_pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "py313"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    let build_backend = py313.child("build_backend.py");
+    build_backend.write_str(indoc! {r#"
+        import os
+
+        from hatchling.build import *
+        from hatchling.build import build_wheel as build_wheel_original
+
+
+        def build_wheel(
+            wheel_directory: str,
+            config_settings: "Mapping[Any, Any] | None" = None,
+            metadata_directory: "str | None" = None,
+        ) -> str:
+            filename = build_wheel_original(
+                wheel_directory, config_settings, metadata_directory
+            )
+            py313_wheel = "py313-0.1.0-py313-none-any.whl"
+            os.rename(
+                os.path.join(wheel_directory, filename),
+                os.path.join(wheel_directory, py313_wheel),
+            )
+            return py313_wheel
+    "#})?;
+    py313.child("src/py313/__init__.py").touch()?;
+
+    // Test the matrix of
+    // (compatible host, incompatible host) x (compatible target, incompatible target)
+
+    // A Python 3.13 host with a 3.13 implicit target works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + py313==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // A Python 3.13 host with a 3.12 explicit target fails.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    ");
+
+    // A python 3.12 host with a 3.13 explicit target works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ py313==0.1.0 (from file://[TEMP_DIR]/child)
+    ");
+
+    // A Python 3.13 host with a 3.12 explicit target fails.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    ");
+
+    // Create a project that will resolve to a non-latest version of `anyio`
+    let parent = &context.temp_dir;
+    let pyproject_toml = parent.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling", "py313 @ file://{py313}"]
+        build-backend = "hatchling.build"
+        "#,
+        py313 = py313.path().portable_display()
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("parent")
+        .child("__init__.py")
+        .touch()?;
+
+    // A build host of 3.13 works.
+    context.venv().arg("-p").arg("3.13").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + parent==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+
+    // A build host of 3.12 fails.
+    context.venv().arg("-p").arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to build `parent @ file://[TEMP_DIR]/`
+      ├─▶ Failed to install requirements from `build-system.requires`
+      ├─▶ Failed to build `py313 @ file://[TEMP_DIR]/child`
+      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the current Python 3.12 on [ARCH] [OS]
+    ");
+
+    Ok(())
+}
+
+/// Test that RECORD entries use forward slashes on all platforms.
+///
+/// See <https://github.com/astral-sh/uv/issues/14446>.
+#[test]
+fn record_uses_forward_slashes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a package with scripts via uv_build data directory.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+
+        [tool.uv.build-backend.data]
+        scripts = "scripts"
+        headers = "headers"
+    "#})?;
+
+    let module_dir = context.temp_dir.child("src").child("project");
+    module_dir.child("__init__.py").touch()?;
+
+    // Create a script that uses the install_script path.
+    let scripts_dir = context.temp_dir.child("scripts");
+    scripts_dir.child("my_script").write_str(indoc! {r#"
+        #!python
+        print("Hello from script")
+    "#})?;
+
+    let scripts_dir = context.temp_dir.child("headers");
+    scripts_dir.child("project.h").write_str(indoc! {r"
+        #include <stdio.h>
+    "})?;
+
+    context.pip_install().arg(".").assert().success();
+
+    // Read the RECORD file and check that all paths use forward slashes.
+    let record_path = context
+        .site_packages()
+        .join("project-0.1.0.dist-info")
+        .join("RECORD");
+
+    let record = fs::read_to_string(&record_path)?;
+    let record_lines: Vec<_> = record
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    assert!(record_lines.iter().any(|line| line.contains("/my_script")));
+    assert!(record_lines.iter().any(|line| line.contains("/project.h")));
+    for line in record_lines {
+        // Each RECORD line is: path,hash,size
+        let path = line.split(',').next().unwrap();
+        assert!(!path.contains('\\'), "{path}");
+    }
 
     Ok(())
 }

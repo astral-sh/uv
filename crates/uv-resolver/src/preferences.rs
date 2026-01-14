@@ -4,7 +4,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::{IndexUrl, InstalledDist};
+use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistKind};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
@@ -122,7 +122,7 @@ impl Preference {
 
     /// Create a [`Preference`] from an installed distribution.
     pub fn from_installed(dist: &InstalledDist) -> Option<Self> {
-        let InstalledDist::Registry(dist) = dist else {
+        let InstalledDistKind::Registry(dist) = &dist.kind else {
             return None;
         };
         Some(Self {
@@ -163,7 +163,11 @@ impl PreferenceIndex {
         match self {
             Self::Any => true,
             Self::Implicit => false,
-            Self::Explicit(preference) => preference == index,
+            Self::Explicit(preference) => {
+                // Preferences are stored in the lockfile without credentials, while the index URL
+                // in locations such as `pyproject.toml` may contain credentials.
+                *preference.url() == *index.without_credentials()
+            }
         }
     }
 }
@@ -379,5 +383,32 @@ impl From<Version> for Pin {
             version,
             hashes: HashDigests::empty(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    /// Test that [`PreferenceIndex::matches`] correctly ignores credentials when comparing URLs.
+    ///
+    /// This is relevant for matching lockfile preferences (stored without credentials)
+    /// against index URLs from pyproject.toml (which may include usernames for auth).
+    #[test]
+    fn test_preference_index_matches_ignores_credentials() {
+        // URL without credentials (as stored in lockfile)
+        let index_without_creds = IndexUrl::from_str("https:/pypi_index.com/simple").unwrap();
+
+        // URL with username (as specified in pyproject.toml)
+        let index_with_username =
+            IndexUrl::from_str("https://username@pypi_index.com/simple").unwrap();
+
+        let preference = PreferenceIndex::Explicit(index_without_creds.clone());
+
+        assert!(
+            preference.matches(&index_with_username),
+            "PreferenceIndex should match URLs that differ only in username"
+        );
     }
 }

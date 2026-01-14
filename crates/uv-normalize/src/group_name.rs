@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -17,8 +18,20 @@ use crate::{
 /// See:
 /// - <https://peps.python.org/pep-0735/>
 /// - <https://packaging.python.org/en/latest/specifications/name-normalization/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[rkyv(derive(Debug))]
 pub struct GroupName(SmallString);
 
 impl GroupName {
@@ -28,6 +41,11 @@ impl GroupName {
     #[allow(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
+    }
+
+    /// Return the underlying group name as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -129,7 +147,7 @@ impl<'de> Deserialize<'de> for PipGroupName {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
@@ -156,12 +174,36 @@ impl Display for PipGroupName {
 
 /// Either the literal "all" or a list of groups
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum DefaultGroups {
     /// All groups are defaulted
     All,
     /// A list of groups
     List(Vec<GroupName>),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for DefaultGroups {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("DefaultGroups")
+    }
+
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Either the literal \"all\" or a list of groups",
+            "oneOf": [
+                {
+                    "description": "All groups are defaulted",
+                    "type": "string",
+                    "const": "all"
+                },
+                {
+                    "description": "A list of groups",
+                    "type": "array",
+                    "items": generator.subschema_for::<GroupName>()
+                }
+            ]
+        })
+    }
 }
 
 /// Serialize a [`DefaultGroups`] struct into a list of marker strings.
@@ -171,8 +213,8 @@ impl serde::Serialize for DefaultGroups {
         S: serde::Serializer,
     {
         match self {
-            DefaultGroups::All => serializer.serialize_str("all"),
-            DefaultGroups::List(groups) => {
+            Self::All => serializer.serialize_str("all"),
+            Self::List(groups) => {
                 let mut seq = serializer.serialize_seq(Some(groups.len()))?;
                 for group in groups {
                     seq.serialize_element(&group)?;
@@ -185,7 +227,7 @@ impl serde::Serialize for DefaultGroups {
 
 /// Deserialize a "all" or list of [`GroupName`] into a [`DefaultGroups`] enum.
 impl<'de> serde::Deserialize<'de> for DefaultGroups {
-    fn deserialize<D>(deserializer: D) -> Result<DefaultGroups, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
@@ -231,7 +273,7 @@ impl<'de> serde::Deserialize<'de> for DefaultGroups {
 impl Default for DefaultGroups {
     /// Note this is an "empty" default unlike other contexts where `["dev"]` is the default
     fn default() -> Self {
-        DefaultGroups::List(Vec::new())
+        Self::List(Vec::new())
     }
 }
 

@@ -10,7 +10,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::LockedFile;
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
@@ -24,6 +24,8 @@ use crate::{
 pub enum GitResolverError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
     #[error("Git operation failed")]
@@ -45,10 +47,11 @@ impl GitResolver {
     }
 
     /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
-    fn get(&self, reference: &RepositoryReference) -> Option<Ref<RepositoryReference, GitOid>> {
+    fn get(&self, reference: &RepositoryReference) -> Option<Ref<'_, RepositoryReference, GitOid>> {
         self.0.get(reference)
     }
 
+    /// Return the [`GitOid`] for the given [`GitUrl`], if it is already known.
     pub fn get_precise(&self, url: &GitUrl) -> Option<GitOid> {
         // If the URL is already precise, return it.
         if let Some(precise) = url.precise() {
@@ -143,7 +146,6 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        client: impl Into<ClientWithMiddleware>,
         disable_ssl: bool,
         offline: bool,
         cache: PathBuf,
@@ -169,15 +171,16 @@ impl GitResolver {
         let repository_url = RepositoryUrl::new(url.repository());
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_digest(&repository_url)),
+            LockedFileMode::Exclusive,
             &repository_url,
         )
         .await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), client, cache, offline).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), cache, offline).with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), client, cache, offline)
+            GitSource::new(url.as_ref().clone(), cache, offline)
         };
 
         // If necessary, disable SSL.

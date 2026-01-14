@@ -11,7 +11,7 @@ pub struct SupportedEnvironments(Vec<MarkerTree>);
 impl SupportedEnvironments {
     /// Create a new [`SupportedEnvironments`] struct from a list of marker trees.
     pub fn from_markers(markers: Vec<MarkerTree>) -> Self {
-        SupportedEnvironments(markers)
+        Self(markers)
     }
 
     /// Return the list of marker trees.
@@ -25,8 +25,18 @@ impl SupportedEnvironments {
     }
 
     /// Returns an iterator over the marker trees.
-    pub fn iter(&self) -> std::slice::Iter<MarkerTree> {
+    pub fn iter(&self) -> std::slice::Iter<'_, MarkerTree> {
         self.0.iter()
+    }
+
+    /// Returns `true` if there are no supported environments.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the number of supported environments.
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -56,7 +66,7 @@ impl serde::Serialize for SupportedEnvironments {
 
 /// Deserialize a marker string or list of marker strings into a [`SupportedEnvironments`] struct.
 impl<'de> serde::Deserialize<'de> for SupportedEnvironments {
-    fn deserialize<D>(deserializer: D) -> Result<SupportedEnvironments, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {

@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
+use uv_python::LenientImplementationName;
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
@@ -19,13 +20,18 @@ pub(crate) async fn list(
     show_version_specifiers: bool,
     show_with: bool,
     show_extras: bool,
+    show_python: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
-        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err)
+            if err
+                .as_io_error()
+                .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+        {
             writeln!(printer.stderr(), "No tools installed")?;
             return Ok(ExitStatus::Success);
         }
@@ -50,8 +56,27 @@ pub(crate) async fn list(
             continue;
         };
 
-        // Output tool name and version
-        let version = match installed_tools.version(&name, cache) {
+        // Get the tool environment
+        let tool_env = match installed_tools.get_environment(&name, cache) {
+            Ok(Some(env)) => env,
+            Ok(None) => {
+                warn_user!(
+                    "Tool `{name}` environment not found (run `{}` to reinstall)",
+                    format!("uv tool install {name} --reinstall").green()
+                );
+                continue;
+            }
+            Err(e) => {
+                warn_user!(
+                    "{e} (run `{}` to reinstall)",
+                    format!("uv tool install {name} --reinstall").green()
+                );
+                continue;
+            }
+        };
+
+        // Get the tool version
+        let version = match tool_env.version() {
             Ok(version) => version,
             Err(e) => {
                 if let uv_tool::Error::EnvironmentError(e) = e {
@@ -97,6 +122,18 @@ pub(crate) async fn list(
             })
             .unwrap_or_default();
 
+        let python_version = if show_python {
+            let interpreter = tool_env.environment().interpreter();
+            let implementation = LenientImplementationName::from(interpreter.implementation_name());
+            format!(
+                " [{} {}]",
+                implementation.pretty(),
+                interpreter.python_full_version()
+            )
+        } else {
+            String::new()
+        };
+
         let with_requirements = show_with
             .then(|| {
                 tool.requirements()
@@ -118,7 +155,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{} ({})",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
@@ -128,7 +165,7 @@ pub(crate) async fn list(
                 printer.stdout(),
                 "{}",
                 format!(
-                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}{python_version}"
                 )
                 .bold()
             )?;

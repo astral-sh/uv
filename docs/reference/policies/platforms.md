@@ -17,10 +17,12 @@ following platforms:
 
 - Linux (PPC64)
 - Linux (PPC64LE)
+- Linux (RISC-V64)
 - Linux (aarch64)
 - Linux (armv7)
 - Linux (i686)
 - Linux (s390x)
+- Windows (arm64)
 
 uv ships pre-built wheels to [PyPI](https://pypi.org/project/uv/) for its Tier 1 and Tier 2
 platforms. However, while Tier 2 platforms are continuously built, they are not continuously tested

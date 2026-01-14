@@ -47,26 +47,26 @@ impl AbiTag {
     /// Return a pretty string representation of the ABI tag.
     pub fn pretty(self) -> Option<String> {
         match self {
-            AbiTag::None => None,
-            AbiTag::Abi3 => None,
-            AbiTag::CPython { python_version, .. } => {
+            Self::None => None,
+            Self::Abi3 => None,
+            Self::CPython { python_version, .. } => {
                 Some(format!("CPython {}.{}", python_version.0, python_version.1))
             }
-            AbiTag::PyPy {
+            Self::PyPy {
                 implementation_version,
                 ..
             } => Some(format!(
                 "PyPy {}.{}",
                 implementation_version.0, implementation_version.1
             )),
-            AbiTag::GraalPy {
+            Self::GraalPy {
                 implementation_version,
                 ..
             } => Some(format!(
                 "GraalPy {}.{}",
                 implementation_version.0, implementation_version.1
             )),
-            AbiTag::Pyston { .. } => Some("Pyston".to_string()),
+            Self::Pyston { .. } => Some("Pyston".to_string()),
         }
     }
 }

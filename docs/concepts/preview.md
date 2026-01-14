@@ -63,11 +63,18 @@ The following preview features are available:
 - `add-bounds`: Allows configuring the
   [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
 - `json-output`: Allows `--output-format json` for various uv commands.
+- `package-conflicts`: Allows defining workspace conflicts at the package level.
 - `pylock`: Allows installing from `pylock.toml` files.
 - `python-install-default`: Allows
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
 - `python-upgrade`: Allows
   [transparent Python version upgrades](./python-versions.md#upgrading-python-versions).
+- `format`: Allows using `uv format`.
+- `native-auth`: Enables storage of credentials in a
+  [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
+- `workspace-metadata`: Allows using `uv workspace metadata`.
+- `workspace-dir`: Allows using `uv workspace dir`.
+- `workspace-list`: Allows using `uv workspace list`.
 
 ## Disabling preview features
 

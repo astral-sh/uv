@@ -3,20 +3,19 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
   labels: ["internal"],
-  schedule: ["before 4am on Monday"],
+  schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
-  prHourlyLimit: 10,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    fileMatch: ["^crates/.*Cargo\\.toml$"],
+    managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
@@ -86,17 +85,74 @@
       description: "Weekly update of pyo3 dependencies",
       enabled: false,
     },
+    {
+      groupName: "pubgrub",
+      matchManagers: ["cargo"],
+      matchDepNames: ["pubgrub", "version-ranges"],
+      description: "version-ranges and pubgrub are in the same Git repository",
+    },
+    {
+      commitMessageTopic: "MSRV",
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["msrv"],
+      // We have a rolling support policy for the MSRV
+      // 2 releases back * 6 weeks per release * 7 days per week + 1
+      minimumReleaseAge: "85 days",
+      internalChecksFilter: "strict",
+      groupName: "MSRV",
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["rust"],
+      commitMessageTopic: "Rust",
+    },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["maturin"],
+      commitMessageTopic: "maturin",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
     {
       customType: "regex",
-      fileMatch: ["^docs/.*\\.md$"],
+      managerFilePatterns: ["/^docs/.*\\.md$/"],
       matchStrings: [
         "\\suses: (?<depName>[\\w-]+/[\\w-]+)(?<path>/.*)?@(?<currentValue>.+?)\\s",
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Maturin version used in maturin-action
+    {
+      customType: "regex",
+      managerFilePatterns: ["/.github/workflows/build-binaries\\.yml$/"],
+      matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
+    },
+    // Minimum supported Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)Cargo\\.toml?$/"],
+      matchStrings: [
+        'rust-version\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "msrv",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
+    },
+    // Rust toolchain version
+    {
+      customType: "regex",
+      managerFilePatterns: ["/(^|/)rust-toolchain\\.toml?$/"],
+      matchStrings: [
+        'channel\\s*=\\s*"(?<currentValue>\\d+\\.\\d+(\\.\\d+)?)"',
+      ],
+      depNameTemplate: "rust",
+      packageNameTemplate: "rust-lang/rust",
+      datasourceTemplate: "github-releases",
     },
   ],
   vulnerabilityAlerts: {

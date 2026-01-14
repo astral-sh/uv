@@ -1,7 +1,8 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 use anstream::println;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use pretty_assertions::StrComparison;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -33,7 +34,7 @@ pub(crate) struct Args {
 
 pub(crate) fn main(args: &Args) -> Result<()> {
     // Generate the schema.
-    let schema_string = generate();
+    let schema_string = generate()?;
     let filename = "uv.schema.json";
     let schema_path = PathBuf::from(ROOT_DIR).join(filename);
 
@@ -90,12 +91,35 @@ const REPLACEMENTS: &[(&str, &str)] = &[
 ];
 
 /// Generate the JSON schema for the combined options as a string.
-fn generate() -> String {
+fn generate() -> Result<String> {
     let settings = schemars::generate::SchemaSettings::draft07();
     let generator = schemars::SchemaGenerator::new(settings);
     let schema = generator.into_root_schema_for::<CombinedOptions>();
 
-    let mut output = serde_json::to_string_pretty(&schema).unwrap();
+    let json = serde_json::to_string_pretty(&schema).unwrap();
+
+    // Format with prettier
+    let output = Command::new("npx")
+        .args(["prettier", "--stdin-filepath", "uv.schema.json"])
+        .current_dir(ROOT_DIR)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .context("Failed to spawn prettier")?;
+
+    std::io::Write::write_all(&mut output.stdin.as_ref().unwrap(), json.as_bytes())
+        .context("Failed to write to prettier stdin")?;
+
+    let output = output
+        .wait_with_output()
+        .context("Failed to run prettier")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("prettier failed: {stderr}");
+    }
+
+    let mut output = String::from_utf8(output.stdout).context("prettier output is not UTF-8")?;
 
     for (value, replacement) in REPLACEMENTS {
         assert_ne!(
@@ -108,7 +132,7 @@ fn generate() -> String {
         output = after;
     }
 
-    output
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -125,6 +149,11 @@ mod tests {
 
     #[test]
     fn test_generate_json_schema() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {

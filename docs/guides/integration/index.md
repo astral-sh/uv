@@ -12,6 +12,7 @@ Learn how to integrate uv with other software:
 - [Installing PyTorch](./pytorch.md)
 - [Building a FastAPI application](./fastapi.md)
 - [Using with AWS Lambda](./aws-lambda.md)
+- [Using with Coiled](./coiled.md)
 
 Or, explore the [concept documentation](../../concepts/index.md) for comprehensive breakdown of each
 feature.

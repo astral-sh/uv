@@ -32,7 +32,7 @@ pub enum HashStrategy {
 
 impl HashStrategy {
     /// Return the [`HashPolicy`] for the given distribution.
-    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> HashPolicy {
+    pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> HashPolicy<'_> {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
@@ -53,7 +53,7 @@ impl HashStrategy {
     }
 
     /// Return the [`HashPolicy`] for the given registry-based package.
-    pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy {
+    pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy<'_> {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
@@ -76,7 +76,7 @@ impl HashStrategy {
     }
 
     /// Return the [`HashPolicy`] for the given direct URL package.
-    pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy {
+    pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy<'_> {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),

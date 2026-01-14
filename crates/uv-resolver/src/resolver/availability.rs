@@ -1,9 +1,12 @@
 use std::fmt::{Display, Formatter};
+use std::iter;
+use std::sync::Arc;
 
-use crate::resolver::{MetadataUnavailable, VersionFork};
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
+
+use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -48,12 +51,12 @@ pub enum UnavailableVersion {
 impl UnavailableVersion {
     pub(crate) fn message(&self) -> String {
         match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
-            UnavailableVersion::InvalidMetadata => "invalid metadata".into(),
-            UnavailableVersion::InconsistentMetadata => "inconsistent metadata".into(),
-            UnavailableVersion::InvalidStructure => "an invalid package format".into(),
-            UnavailableVersion::Offline => "to be downloaded from a registry".into(),
-            UnavailableVersion::RequiresPython(requires_python) => {
+            Self::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
+            Self::InvalidMetadata => "invalid metadata".into(),
+            Self::InconsistentMetadata => "inconsistent metadata".into(),
+            Self::InvalidStructure => "an invalid package format".into(),
+            Self::Offline => "to be downloaded from a registry".into(),
+            Self::RequiresPython(requires_python) => {
                 format!("Python {requires_python}")
             }
         }
@@ -61,23 +64,23 @@ impl UnavailableVersion {
 
     pub(crate) fn singular_message(&self) -> String {
         match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
-            UnavailableVersion::InvalidMetadata => format!("has {self}"),
-            UnavailableVersion::InconsistentMetadata => format!("has {self}"),
-            UnavailableVersion::InvalidStructure => format!("has {self}"),
-            UnavailableVersion::Offline => format!("needs {self}"),
-            UnavailableVersion::RequiresPython(..) => format!("requires {self}"),
+            Self::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
+            Self::InvalidMetadata => format!("has {self}"),
+            Self::InconsistentMetadata => format!("has {self}"),
+            Self::InvalidStructure => format!("has {self}"),
+            Self::Offline => format!("needs {self}"),
+            Self::RequiresPython(..) => format!("requires {self}"),
         }
     }
 
     pub(crate) fn plural_message(&self) -> String {
         match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
-            UnavailableVersion::InvalidMetadata => format!("have {self}"),
-            UnavailableVersion::InconsistentMetadata => format!("have {self}"),
-            UnavailableVersion::InvalidStructure => format!("have {self}"),
-            UnavailableVersion::Offline => format!("need {self}"),
-            UnavailableVersion::RequiresPython(..) => format!("require {self}"),
+            Self::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
+            Self::InvalidMetadata => format!("have {self}"),
+            Self::InconsistentMetadata => format!("have {self}"),
+            Self::InvalidStructure => format!("have {self}"),
+            Self::Offline => format!("need {self}"),
+            Self::RequiresPython(..) => format!("require {self}"),
         }
     }
 
@@ -87,14 +90,14 @@ impl UnavailableVersion {
         requires_python: Option<AbiTag>,
     ) -> Option<String> {
         match self {
-            UnavailableVersion::IncompatibleDist(invalid_dist) => {
+            Self::IncompatibleDist(invalid_dist) => {
                 invalid_dist.context_message(tags, requires_python)
             }
-            UnavailableVersion::InvalidMetadata => None,
-            UnavailableVersion::InconsistentMetadata => None,
-            UnavailableVersion::InvalidStructure => None,
-            UnavailableVersion::Offline => None,
-            UnavailableVersion::RequiresPython(..) => None,
+            Self::InvalidMetadata => None,
+            Self::InconsistentMetadata => None,
+            Self::InvalidStructure => None,
+            Self::Offline => None,
+            Self::RequiresPython(..) => None,
         }
     }
 }
@@ -108,18 +111,39 @@ impl Display for UnavailableVersion {
 impl From<&MetadataUnavailable> for UnavailableVersion {
     fn from(reason: &MetadataUnavailable) -> Self {
         match reason {
-            MetadataUnavailable::Offline => UnavailableVersion::Offline,
-            MetadataUnavailable::InvalidMetadata(_) => UnavailableVersion::InvalidMetadata,
-            MetadataUnavailable::InconsistentMetadata(_) => {
-                UnavailableVersion::InconsistentMetadata
-            }
-            MetadataUnavailable::InvalidStructure(_) => UnavailableVersion::InvalidStructure,
+            MetadataUnavailable::Offline => Self::Offline,
+            MetadataUnavailable::InvalidMetadata(_) => Self::InvalidMetadata,
+            MetadataUnavailable::InconsistentMetadata(_) => Self::InconsistentMetadata,
+            MetadataUnavailable::InvalidStructure(_) => Self::InvalidStructure,
             MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
-                UnavailableVersion::RequiresPython(requires_python.clone())
+                Self::RequiresPython(requires_python.clone())
             }
         }
     }
 }
+
+/// Display the error chain for unavailable packages.
+#[derive(Debug, Clone)]
+pub struct UnavailableErrorChain(Arc<dyn std::error::Error + Send + Sync + 'static>);
+
+impl Display for UnavailableErrorChain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for source in iter::successors(Some(&self.0 as &dyn std::error::Error), |&err| err.source())
+        {
+            writeln!(f, "Caused by: {}", source.to_string().trim())?;
+        }
+        Ok(())
+    }
+}
+
+impl PartialEq for UnavailableErrorChain {
+    /// Whether we can collapse two reasons into one because they would be rendered the same.
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Eq for UnavailableErrorChain {}
 
 /// The package is unavailable and cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -131,29 +155,29 @@ pub enum UnavailablePackage {
     /// The package was not found in the registry.
     NotFound,
     /// The package metadata was found, but could not be parsed.
-    InvalidMetadata(String),
+    InvalidMetadata(UnavailableErrorChain),
     /// The package has an invalid structure.
-    InvalidStructure(String),
+    InvalidStructure(UnavailableErrorChain),
 }
 
 impl UnavailablePackage {
     pub(crate) fn message(&self) -> &'static str {
         match self {
-            UnavailablePackage::NoIndex => "not found in the provided package locations",
-            UnavailablePackage::Offline => "not found in the cache",
-            UnavailablePackage::NotFound => "not found in the package registry",
-            UnavailablePackage::InvalidMetadata(_) => "invalid metadata",
-            UnavailablePackage::InvalidStructure(_) => "an invalid package format",
+            Self::NoIndex => "not found in the provided package locations",
+            Self::Offline => "not found in the cache",
+            Self::NotFound => "not found in the package registry",
+            Self::InvalidMetadata(_) => "invalid metadata",
+            Self::InvalidStructure(_) => "an invalid package format",
         }
     }
 
     pub(crate) fn singular_message(&self) -> String {
         match self {
-            UnavailablePackage::NoIndex => format!("was {self}"),
-            UnavailablePackage::Offline => format!("was {self}"),
-            UnavailablePackage::NotFound => format!("was {self}"),
-            UnavailablePackage::InvalidMetadata(_) => format!("has {self}"),
-            UnavailablePackage::InvalidStructure(_) => format!("has {self}"),
+            Self::NoIndex => format!("was {self}"),
+            Self::Offline => format!("was {self}"),
+            Self::NotFound => format!("was {self}"),
+            Self::InvalidMetadata(_) => format!("has {self}"),
+            Self::InvalidStructure(_) => format!("has {self}"),
         }
     }
 }
@@ -168,11 +192,15 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
     fn from(reason: &MetadataUnavailable) -> Self {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
-            MetadataUnavailable::InvalidMetadata(err) => Self::InvalidMetadata(err.to_string()),
-            MetadataUnavailable::InconsistentMetadata(err) => {
-                Self::InvalidMetadata(err.to_string())
+            MetadataUnavailable::InvalidMetadata(err) => {
+                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
             }
-            MetadataUnavailable::InvalidStructure(err) => Self::InvalidStructure(err.to_string()),
+            MetadataUnavailable::InconsistentMetadata(err) => {
+                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
+            }
+            MetadataUnavailable::InvalidStructure(err) => {
+                Self::InvalidStructure(UnavailableErrorChain(err.clone()))
+            }
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }

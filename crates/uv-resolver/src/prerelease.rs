@@ -109,17 +109,17 @@ impl PrereleaseStrategy {
         env: &ResolverEnvironment,
     ) -> AllowPrerelease {
         match self {
-            PrereleaseStrategy::Disallow => AllowPrerelease::No,
-            PrereleaseStrategy::Allow => AllowPrerelease::Yes,
-            PrereleaseStrategy::IfNecessary => AllowPrerelease::IfNecessary,
-            PrereleaseStrategy::Explicit(packages) => {
+            Self::Disallow => AllowPrerelease::No,
+            Self::Allow => AllowPrerelease::Yes,
+            Self::IfNecessary => AllowPrerelease::IfNecessary,
+            Self::Explicit(packages) => {
                 if packages.contains(package_name, env) {
                     AllowPrerelease::Yes
                 } else {
                     AllowPrerelease::No
                 }
             }
-            PrereleaseStrategy::IfNecessaryOrExplicit(packages) => {
+            Self::IfNecessaryOrExplicit(packages) => {
                 if packages.contains(package_name, env) {
                     AllowPrerelease::Yes
                 } else {

@@ -20,36 +20,38 @@ use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
-use uv_redacted::DisplaySafeUrl;
 use zip::ZipArchive;
 
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
-use uv_cache_key::cache_digest;
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, NoSources};
+use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl,
-    SourceDist, SourceUrl,
+    BuildInfo, BuildVariables, BuildableSource, ConfigSettings, DirectorySourceUrl,
+    ExtraBuildRequirement, GitSourceUrl, HashPolicy, Hashed, IndexUrl, PathSourceUrl, SourceDist,
+    SourceUrl,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, write_atomic};
+use uv_git::{GIT_LFS, GitError};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
 use crate::error::Error;
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
-use crate::source::built_wheel_metadata::BuiltWheelMetadata;
+use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
 use crate::{Reporter, RequiresDist};
 
@@ -325,14 +327,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Dist(SourceDist::Git(dist)) => {
-                self.git_metadata(source, &GitSourceUrl::from(dist), hashes, client)
-                    .boxed_local()
-                    .await?
+                self.git_metadata(
+                    source,
+                    &GitSourceUrl::from(dist),
+                    hashes,
+                    client,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Dist(SourceDist::Directory(dist)) => {
-                self.source_tree_metadata(source, &DirectorySourceUrl::from(dist), hashes)
-                    .boxed_local()
-                    .await?
+                self.source_tree_metadata(
+                    source,
+                    &DirectorySourceUrl::from(dist),
+                    hashes,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Dist(SourceDist::Path(dist)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -364,14 +377,25 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .await?
             }
             BuildableSource::Url(SourceUrl::Git(resource)) => {
-                self.git_metadata(source, resource, hashes, client)
-                    .boxed_local()
-                    .await?
+                self.git_metadata(
+                    source,
+                    resource,
+                    hashes,
+                    client,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Directory(resource)) => {
-                self.source_tree_metadata(source, resource, hashes)
-                    .boxed_local()
-                    .await?
+                self.source_tree_metadata(
+                    source,
+                    resource,
+                    hashes,
+                    client.unmanaged.credentials_cache(),
+                )
+                .boxed_local()
+                .await?
             }
             BuildableSource::Url(SourceUrl::Path(resource)) => {
                 let cache_shard = self.build_context.cache().shard(
@@ -405,17 +429,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     }
 
     /// Determine the extra build dependencies for the given package name.
-    fn extra_build_dependencies_for(
-        &self,
-        name: Option<&PackageName>,
-    ) -> &[uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>] {
+    fn extra_build_dependencies_for(&self, name: Option<&PackageName>) -> &[ExtraBuildRequirement] {
         name.and_then(|name| {
             self.build_context
-                .extra_build_dependencies()
+                .extra_build_requires()
                 .get(name)
-                .map(|v| v.as_slice())
+                .map(Vec::as_slice)
         })
         .unwrap_or(&[])
+    }
+
+    /// Determine the extra build variables for the given package name.
+    fn extra_build_variables_for(&self, name: Option<&PackageName>) -> Option<&BuildVariables> {
+        name.and_then(|name| self.build_context.extra_build_variables().get(name))
     }
 
     /// Build a source distribution from a remote URL.
@@ -431,7 +457,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -452,22 +478,33 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
+        // We don't track any cache information for URL-based source distributions; they're assumed
+        // to be immutable.
+        let cache_info = CacheInfo::default();
+
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
             .ok()
             .flatten()
-            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+            .filter(|file| file.matches(source.name(), source.version()))
         {
-            return Ok(built_wheel.with_hashes(revision.into_hashes()));
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                cache_info,
+                build_info,
+            ));
         }
 
         // Otherwise, we need to build a wheel. Before building, ensure that the source is present.
@@ -530,7 +567,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             target: cache_shard.join(wheel_filename.stem()).into_boxed_path(),
             filename: wheel_filename,
             hashes: revision.into_hashes(),
-            cache_info: CacheInfo::default(),
+            cache_info,
+            build_info,
         })
     }
 
@@ -541,7 +579,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     async fn url_metadata<'data>(
         &self,
         source: &BuildableSource<'data>,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
@@ -549,7 +587,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let revision = self
@@ -623,20 +661,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    DisplaySafeUrl::from(url.clone()),
+                    url.clone(),
                     subdirectory.to_path_buf(),
                 ));
             }
         }
-
-        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
-        let config_settings = self.config_settings_for(source.name());
-        let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
 
         // Otherwise, we either need to build the metadata.
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -673,6 +702,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 hashes: revision.into_hashes(),
             });
         }
+
+        // If there are build settings or extra build dependencies, we need to scope to a cache shard.
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         let task = self
             .reporter
@@ -722,7 +762,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
@@ -770,7 +810,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .boxed_local()
             .instrument(info_span!("download", source_dist = %source))
         };
-        let req = Self::request(DisplaySafeUrl::from(url.clone()), client.unmanaged)?;
+        let req = Self::request(url.clone(), client.unmanaged)?;
         let revision = client
             .managed(|client| {
                 client.cached_client().get_serde_with_retry(
@@ -783,7 +823,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, force a refresh.
@@ -795,7 +835,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
-                            Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                            Self::request(url.clone(), client)?,
                             &cache_entry,
                             cache_control,
                             download,
@@ -803,7 +843,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await
@@ -819,7 +859,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -846,19 +886,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
             .ok()
             .flatten()
-            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+            .filter(|file| file.matches(source.name(), source.version()))
         {
-            return Ok(built_wheel);
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                cache_info,
+                build_info,
+            ));
         }
 
         // Otherwise, we need to build a wheel, which requires a source distribution.
@@ -902,6 +949,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename,
             hashes: revision.into_hashes(),
             cache_info,
+            build_info,
         })
     }
 
@@ -916,7 +964,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1009,11 +1057,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1135,7 +1185,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
@@ -1152,19 +1202,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
             .ok()
             .flatten()
-            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+            .filter(|file| file.matches(source.name(), source.version()))
         {
-            return Ok(built_wheel);
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                cache_info,
+                build_info,
+            ));
         }
 
         // Otherwise, we need to build a wheel.
@@ -1201,6 +1258,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             filename,
             hashes: revision.into_hashes(),
             cache_info,
+            build_info,
         })
     }
 
@@ -1214,6 +1272,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         resource: &DirectorySourceUrl<'_>,
         hashes: HashPolicy<'_>,
+        credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1231,6 +1290,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         self.build_context.locations(),
                         self.build_context.sources(),
                         self.build_context.workspace_cache(),
+                        credentials_cache,
                     )
                     .await?,
                 ));
@@ -1249,7 +1309,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
@@ -1284,6 +1344,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.locations(),
                             self.build_context.sources(),
                             self.build_context.workspace_cache(),
+                            credentials_cache,
                         )
                         .await?,
                     ));
@@ -1333,6 +1394,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?,
             ));
@@ -1341,11 +1403,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1392,6 +1456,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.workspace_cache(),
+                credentials_cache,
             )
             .await?,
         ))
@@ -1433,7 +1498,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 }
                 Ok(None) => {}
                 Err(err) => {
-                    debug!("Failed to deserialize cached revision for: {source} ({err})",);
+                    debug!("Failed to deserialize cached revision for: {source} ({err})");
                 }
             }
         }
@@ -1452,42 +1517,39 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Return the [`RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
     pub(crate) async fn source_tree_requires_dist(
         &self,
-        source_tree: &Path,
+        path: &Path,
+        pyproject_toml: &PyProjectToml,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Option<RequiresDist>, Error> {
         // Attempt to read static metadata from the `pyproject.toml`.
-        match read_requires_dist(source_tree).await {
+        match uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml.clone()) {
             Ok(requires_dist) => {
-                debug!(
-                    "Found static `requires-dist` for: {}",
-                    source_tree.display()
-                );
+                debug!("Found static `requires-dist` for: {}", path.display());
                 let requires_dist = RequiresDist::from_project_maybe_workspace(
                     requires_dist,
-                    source_tree,
+                    path,
                     None,
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?;
                 Ok(Some(requires_dist))
             }
             Err(
-                err @ (Error::MissingPyprojectToml
-                | Error::PyprojectToml(
-                    uv_pypi_types::MetadataError::Pep508Error(_)
-                    | uv_pypi_types::MetadataError::DynamicField(_)
-                    | uv_pypi_types::MetadataError::FieldNotFound(_)
-                    | uv_pypi_types::MetadataError::PoetrySyntax,
-                )),
+                err @ (uv_pypi_types::MetadataError::Pep508Error(_)
+                | uv_pypi_types::MetadataError::DynamicField(_)
+                | uv_pypi_types::MetadataError::FieldNotFound(_)
+                | uv_pypi_types::MetadataError::PoetrySyntax),
             ) => {
                 debug!(
                     "No static `requires-dist` available for: {} ({err:?})",
-                    source_tree.display()
+                    path.display()
                 );
                 Ok(None)
             }
-            Err(err) => Err(err),
+            Err(err) => Err(Error::PyprojectToml(err)),
         }
     }
 
@@ -1511,10 +1573,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1534,6 +1592,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            if GIT_LFS.is_err() {
+                return Err(Error::MissingGitLfsArtifacts(
+                    resource.url.to_url(),
+                    GitError::GitLfsNotFound,
+                ));
+            }
+            return Err(Error::MissingGitLfsArtifacts(
+                resource.url.to_url(),
+                GitError::GitLfsNotConfigured,
+            ));
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1542,24 +1614,36 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
+
+        // We don't track any cache information for Git-based source distributions; they're assumed
+        // to be immutable.
+        let cache_info = CacheInfo::default();
+
+        // We don't compute hashes for Git-based source distributions, since the Git commit SHA is
+        // used as the identifier.
+        let hashes = HashDigests::empty();
 
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // If the cache contains a compatible wheel, return it.
-        if let Some(built_wheel) = BuiltWheelMetadata::find_in_cache(tags, &cache_shard)
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
             .ok()
             .flatten()
-            .filter(|built_wheel| built_wheel.matches(source.name(), source.version()))
+            .filter(|file| file.matches(source.name(), source.version()))
         {
-            return Ok(built_wheel);
+            return Ok(BuiltWheelMetadata::from_file(
+                file, hashes, cache_info, build_info,
+            ));
         }
 
         let task = self
@@ -1592,8 +1676,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             path: cache_shard.join(&disk_filename).into_boxed_path(),
             target: cache_shard.join(filename.stem()).into_boxed_path(),
             filename,
-            hashes: HashDigests::empty(),
-            cache_info: CacheInfo::default(),
+            hashes,
+            cache_info,
+            build_info,
         })
     }
 
@@ -1607,6 +1692,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         resource: &GitSourceUrl<'_>,
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
+        credentials_cache: &CredentialsCache,
     ) -> Result<ArchiveMetadata, Error> {
         // Before running the build, check that the hashes match.
         if hashes.is_validate() {
@@ -1702,10 +1788,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .fetch(
                 resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1725,6 +1807,20 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Validate that LFS artifacts were fully initialized
+        if resource.git.lfs().enabled() && !fetch.lfs_ready() {
+            if GIT_LFS.is_err() {
+                return Err(Error::MissingGitLfsArtifacts(
+                    resource.url.to_url(),
+                    GitError::GitLfsNotFound,
+                ));
+            }
+            return Err(Error::MissingGitLfsArtifacts(
+                resource.url.to_url(),
+                GitError::GitLfsNotConfigured,
+            ));
+        }
+
         let git_sha = fetch.git().precise().expect("Exact commit after checkout");
         let cache_shard = self.build_context.cache().shard(
             CacheBucket::SourceDistributions,
@@ -1733,7 +1829,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let metadata_entry = cache_shard.entry(METADATA);
 
         // Acquire the advisory lock.
-        let _lock = cache_shard.lock().await.map_err(Error::CacheWrite)?;
+        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
             Cow::Owned(fetch.path().join(subdirectory))
@@ -1758,6 +1854,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             self.build_context.locations(),
                             self.build_context.sources(),
                             self.build_context.workspace_cache(),
+                            credentials_cache,
                         )
                         .await?,
                     ));
@@ -1791,6 +1888,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                                 self.build_context.locations(),
                                 self.build_context.sources(),
                                 self.build_context.workspace_cache(),
+                                credentials_cache,
                             )
                             .await?,
                         ));
@@ -1843,6 +1941,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     self.build_context.locations(),
                     self.build_context.sources(),
                     self.build_context.workspace_cache(),
+                    credentials_cache,
                 )
                 .await?,
             ));
@@ -1851,11 +1950,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // If there are build settings or extra build dependencies, we need to scope to a cache shard.
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
-        let cache_shard = if config_settings.is_empty() && extra_build_deps.is_empty() {
-            cache_shard
-        } else {
-            cache_shard.shard(cache_digest(&(&config_settings, extra_build_deps)))
-        };
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info =
+            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
 
         // Otherwise, we need to build a wheel.
         let task = self
@@ -1902,6 +2003,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.build_context.locations(),
                 self.build_context.sources(),
                 self.build_context.workspace_cache(),
+                credentials_cache,
             )
             .await?,
         ))
@@ -1912,23 +2014,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         client: &ManagedClient<'_>,
-    ) -> Result<(), Error> {
+    ) -> Result<Option<GitOid>, Error> {
         let git = match source {
             BuildableSource::Dist(SourceDist::Git(source)) => &*source.git,
             BuildableSource::Url(SourceUrl::Git(source)) => source.git,
             _ => {
-                return Ok(());
+                return Ok(None);
             }
         };
 
         // If the URL is already precise, return it.
-        if self.build_context.git().get_precise(git).is_some() {
+        if let Some(precise) = self.build_context.git().get_precise(git) {
             debug!("Precise commit already known: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        if self
+        if let Some(precise) = self
             .build_context
             .git()
             .github_fast_path(
@@ -1939,18 +2041,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .raw_client(),
             )
             .await?
-            .is_some()
         {
             debug!("Resolved to precise commit via GitHub fast path: {source}");
-            return Ok(());
+            return Ok(Some(precise));
         }
 
         // Otherwise, fetch the Git repository.
-        self.build_context
+        let fetch = self
+            .build_context
             .git()
             .fetch(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
                 client.unmanaged.disable_ssl(git.repository()),
                 client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
@@ -1960,7 +2061,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?;
 
-        Ok(())
+        Ok(fetch.git().precise())
     }
 
     /// Fetch static [`ResolutionMetadata`] from a GitHub repository, if possible.
@@ -2109,7 +2210,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
-        url: &Url,
+        url: &DisplaySafeUrl,
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
@@ -2171,7 +2272,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
-                        Self::request(DisplaySafeUrl::from(url.clone()), client)?,
+                        Self::request(url.clone(), client)?,
                         &cache_entry,
                         cache_control,
                         download,
@@ -2179,7 +2280,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await
                     .map_err(|err| match err {
                         CachedClientError::Callback { err, .. } => err,
-                        CachedClientError::Client { err, .. } => Error::Client(err),
+                        CachedClientError::Client(err) => Error::Client(err),
                     })
             })
             .await
@@ -2369,6 +2470,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source_root,
                 subdirectory,
                 temp_dir.path(),
+                no_sources.clone(),
                 if source.is_editable() {
                     BuildKind::Editable
                 } else {
@@ -2386,11 +2488,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             let base_python = if cfg!(unix) {
                 self.build_context
                     .interpreter()
+                    .await
                     .find_base_python()
                     .map_err(Error::BaseInterpreter)?
             } else {
                 self.build_context
                     .interpreter()
+                    .await
                     .to_base_python()
                     .map_err(Error::BaseInterpreter)?
             };
@@ -2435,7 +2539,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                         } else {
                             BuildKind::Wheel
                         },
-                        BuildOutput::Debug,
+                        if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                            BuildOutput::Quiet
+                        } else {
+                            BuildOutput::Debug
+                        },
                         self.build_stack.cloned().unwrap_or_default(),
                     )
                     .await
@@ -2467,7 +2575,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .await
         .map_err(Error::CacheWrite)?;
 
-        debug!("Finished building: {source}");
+        debug!("Built `{source}` into `{disk_filename}`");
         Ok((disk_filename, filename, metadata))
     }
 
@@ -2485,7 +2593,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Ensure that the _installed_ Python version is compatible with the `requires-python`
         // specifier.
         if let Some(requires_python) = source.requires_python() {
-            let installed = self.build_context.interpreter().python_version();
+            let installed = self.build_context.interpreter().await.python_version();
             let target = release_specifiers_to_ranges(requires_python.clone())
                 .bounding_range()
                 .map(|bounding_range| bounding_range.0.cloned())
@@ -2507,11 +2615,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let base_python = if cfg!(unix) {
             self.build_context
                 .interpreter()
+                .await
                 .find_base_python()
                 .map_err(Error::BaseInterpreter)?
         } else {
             self.build_context
                 .interpreter()
+                .await
                 .to_base_python()
                 .map_err(Error::BaseInterpreter)?
         };
@@ -2534,7 +2644,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 source.as_dist(),
                 &no_sources,
                 build_kind,
-                BuildOutput::Debug,
+                if uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
+                    BuildOutput::Quiet
+                } else {
+                    BuildOutput::Debug
+                },
                 self.build_stack.cloned().unwrap_or_default(),
             )
             .await
@@ -2888,9 +3002,7 @@ impl LocalRevisionPointer {
     /// Read an [`LocalRevisionPointer`] from the cache.
     pub(crate) fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
-            Ok(cached) => Ok(Some(rmp_serde::from_slice::<LocalRevisionPointer>(
-                &cached,
-            )?)),
+            Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(Error::CacheRead(err)),
         }
@@ -2970,25 +3082,6 @@ async fn read_pyproject_toml(
     let pyproject_toml = PyProjectToml::from_toml(&content)?;
 
     Ok(pyproject_toml)
-}
-
-/// Return the [`pypi_types::RequiresDist`] from a `pyproject.toml`, if it can be statically extracted.
-async fn read_requires_dist(project_root: &Path) -> Result<uv_pypi_types::RequiresDist, Error> {
-    // Read the `pyproject.toml` file.
-    let pyproject_toml = project_root.join("pyproject.toml");
-    let content = match fs::read_to_string(pyproject_toml).await {
-        Ok(content) => content,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Error::MissingPyprojectToml);
-        }
-        Err(err) => return Err(Error::CacheRead(err)),
-    };
-
-    // Parse the metadata.
-    let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(&content)
-        .map_err(Error::PyprojectToml)?;
-
-    Ok(requires_dist)
 }
 
 /// Wheel metadata stored in the source distribution cache.

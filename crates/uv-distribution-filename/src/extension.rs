@@ -55,6 +55,14 @@ impl DistExtension {
                 .map_err(|_| ExtensionError::Dist),
         }
     }
+
+    /// Return the name for the extension.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Wheel => "whl",
+            Self::Source(ext) => ext.name(),
+        }
+    }
 }
 
 impl SourceDistExtension {

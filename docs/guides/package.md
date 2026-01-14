@@ -8,31 +8,17 @@ description: A guide to using uv to build and publish Python packages to a packa
 uv supports building Python packages into source and binary distributions via `uv build` and
 uploading them to a registry with `uv publish`.
 
-## Preparing your project for packaging
+## Preparing your project
 
 Before attempting to publish your project, you'll want to make sure it's ready to be packaged for
 distribution.
 
 If your project does not include a `[build-system]` definition in the `pyproject.toml`, uv will not
-build it by default. This means that your project may not be ready for distribution. Read more about
-the effect of declaring a build system in the
-[project concept](../concepts/projects/config.md#build-systems) documentation.
+build it during `uv sync` operations in the project, but will fall back to the legacy setuptools
+build system during `uv build`.
 
-!!! note
-
-    If you have internal packages that you do not want to be published, you can mark them as
-    private:
-
-    ```toml
-    [project]
-    classifiers = ["Private :: Do Not Upload"]
-    ```
-
-    This setting makes PyPI reject your uploaded package from publishing. It does not affect
-    security or privacy settings on alternative registries.
-
-    We also recommend only generating [per-project PyPI API tokens](https://pypi.org/help/#apitoken):
-    Without a PyPI token matching the project, it can't be accidentally published.
+We strongly recommend configuring a build system. Read more about build systems in the
+[project configuration](../concepts/projects/config.md#build-systems) documentation.
 
 ## Building your package
 
@@ -59,7 +45,7 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
 
 The `uv version` command provides conveniences for updating the version of your package before you
 publish it.
-[See the project docs for reading your package's version](./projects.md#managing-version).
+[See the project docs for reading your package's version](./projects.md#viewing-your-version).
 
 To update to an exact version, provide it as a positional argument:
 
@@ -88,6 +74,14 @@ The `--bump` option supports the following common version components: `major`, `
 `stable`, `alpha`, `beta`, `rc`, `post`, and `dev`. When provided more than once, the components
 will be applied in order, from largest (`major`) to smallest (`dev`).
 
+You can optionally provide a numeric value with `--bump <component>=<value>` to set the resulting
+component explicitly:
+
+```console
+$ uv version --bump patch --bump dev=66463664
+hello-world 0.0.1 => 0.0.2.dev66463664
+```
+
 To move from a stable to pre-release version, bump one of the major, minor, or patch components in
 addition to the pre-release component:
 
@@ -102,15 +96,15 @@ When moving from a pre-release to a new pre-release version, just bump the relev
 component:
 
 ```console
-uv version --bump beta
-hello-world 1.3.0b1 => 1.3.1b2
+$ uv version --bump beta
+hello-world 1.3.0b1 => 1.3.0b2
 ```
 
 When moving from a pre-release to a stable version, the `stable` option can be used to clear the
 pre-release component:
 
 ```console
-uv version --bump stable
+$ uv version --bump stable
 hello-world 1.3.1b2 => 1.3.1
 ```
 
@@ -121,6 +115,11 @@ hello-world 1.3.1b2 => 1.3.1
 
 ## Publishing your package
 
+!!! note
+
+    A complete guide to publishing from GitHub Actions to PyPI can be found in the
+    [GitHub Guide](integration/github.md#publishing-to-pypi)
+
 Publish your package with `uv publish`:
 
 ```console
@@ -129,7 +128,8 @@ $ uv publish
 
 Set a PyPI token with `--token` or `UV_PUBLISH_TOKEN`, or set a username with `--username` or
 `UV_PUBLISH_USERNAME` and password with `--password` or `UV_PUBLISH_PASSWORD`. For publishing to
-PyPI from GitHub Actions, you don't need to set any credentials. Instead,
+PyPI from GitHub Actions or another Trusted Publisher, you don't need to set any credentials.
+Instead,
 [add a trusted publisher to the PyPI project](https://docs.pypi.org/trusted-publishers/adding-a-publisher/).
 
 !!! note
@@ -162,6 +162,34 @@ using `--index`, the index URL is used as check URL. uv will skip uploading file
 to files in the registry, and it will also handle raced parallel uploads. Note that existing files
 need to match exactly with those previously uploaded to the registry, this avoids accidentally
 publishing source distribution and wheels with different contents for the same version.
+
+### Uploading attestations with your package
+
+!!! note
+
+    Some third-party package indexes may not support attestations, and may
+    reject uploads that include them (rather than silently ignoring them).
+    If you encounter issues when uploading, you can use `--no-attestations` or
+    `UV_PUBLISH_NO_ATTESTATIONS` to disable uv's default behavior.
+
+!!! tip
+
+    `uv publish` does not currently generate attestations; attestations must
+    be created separately before publishing.
+
+`uv publish` supports uploading [attestations](https://peps.python.org/pep-0740/) to registries that
+support them, like PyPI.
+
+uv will automatically discover and match attestations. For example, given the following `dist/`
+directory, `uv publish` will upload the attestations along with their corresponding distributions:
+
+```console
+$ ls dist/
+hello_world-1.0.0-py3-none-any.whl
+hello_world-1.0.0-py3-none-any.whl.publish.attestation
+hello_world-1.0.0.tar.gz
+hello_world-1.0.0.tar.gz.publish.attestation
+```
 
 ## Installing your package
 

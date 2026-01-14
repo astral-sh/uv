@@ -32,7 +32,7 @@ option:
 $ uv run --no-sync ...
 ```
 
-## Checking if the lockfile is up-to-date
+## Checking the lockfile
 
 When considering if the lockfile is up-to-date, uv will check if it matches the project metadata.
 For example, if you add a dependency to your `pyproject.toml`, the lockfile will be considered
@@ -89,15 +89,23 @@ To opt-out of this behavior, use the `--no-editable` option.
     If the project does not define a build system, it will not be installed.
     See the [build systems](./config.md#build-systems) documentation for details.
 
-### Retaining extraneous packages
+### Handling of extraneous packages
 
-Syncing is "exact" by default, which means it will remove any packages that are not present in the
-lockfile.
+`uv sync` performs "exact" syncing by default, which means it will remove any packages that are not
+present in the lockfile.
 
-To retain extraneous packages, use the `--inexact` option:
+To retain extraneous packages, use the `--inexact` flag:
 
 ```console
 $ uv sync --inexact
+```
+
+In contrast, `uv run` uses "inexact" syncing by default, ensuring that all required packages are
+installed but not removing extraneous packages. To enable exact syncing with `uv run`, use the
+`--exact` flag:
+
+```console
+$ uv run --exact ...
 ```
 
 ### Syncing optional dependencies
@@ -186,12 +194,17 @@ environment.
 
 ## Exporting the lockfile
 
-If you need to integrate uv with other tools or workflows, you can export `uv.lock` to the
-`requirements.txt` format with `uv export --format requirements-txt`. The generated
-`requirements.txt` file can then be installed via `uv pip install`, or with other tools like `pip`.
+If you need to integrate uv with other tools or workflows, you can export `uv.lock` to different
+formats including `requirements.txt`, `pylock.toml` (PEP 751), and CycloneDX SBOM.
 
-In general, we recommend against using both a `uv.lock` and a `requirements.txt` file. If you find
-yourself exporting a `uv.lock` file, consider opening an issue to discuss your use case.
+```console
+$ uv export --format requirements.txt
+$ uv export --format pylock.toml
+$ uv export --format cyclonedx1.5
+```
+
+See the [export guide](./export.md) for comprehensive documentation on all export formats and their
+use cases.
 
 ## Partial installations
 

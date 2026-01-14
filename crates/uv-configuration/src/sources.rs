@@ -1,4 +1,4 @@
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -44,7 +44,7 @@ impl NoSources {
         }
     }
 
-    /// Combine a set of [`SourceStrategy`] values.
+    /// Combine a set of [`NoSources`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         match (self, other) {
@@ -59,7 +59,7 @@ impl NoSources {
         }
     }
 
-    /// Extend a [`SourceStrategy`] value with another.
+    /// Extend a [`NoSources`] value with another.
     pub fn extend(&mut self, other: Self) {
         match (&mut *self, other) {
             (Self::All, _) | (_, Self::All) => *self = Self::All,

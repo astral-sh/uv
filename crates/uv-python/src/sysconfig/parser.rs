@@ -22,7 +22,7 @@ pub(super) struct SysconfigData(BTreeMap<String, Value>);
 
 impl SysconfigData {
     /// Returns an iterator over the key-value pairs in the map.
-    pub(super) fn iter_mut(&mut self) -> std::collections::btree_map::IterMut<String, Value> {
+    pub(super) fn iter_mut(&mut self) -> std::collections::btree_map::IterMut<'_, String, Value> {
         self.0.iter_mut()
     }
 

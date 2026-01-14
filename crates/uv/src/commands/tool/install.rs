@@ -3,31 +3,39 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
+use tokio::sync::Semaphore;
 use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Preview, Reinstall, Upgrade};
-use uv_distribution_types::{
-    NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{
+    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
+use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution_types::{
+    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirementSpecification,
+};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_warnings::warn_user;
-use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
+use uv_warnings::{warn_user, warn_user_once};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
+use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
     sync_environment, update_environment,
@@ -38,7 +46,7 @@ use crate::commands::tool::common::{
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -49,14 +57,17 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     entrypoints: &[PackageName],
+    lfs: GitLfsSetting,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -65,11 +76,11 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    if settings.resolver.torch_backend.is_some() {
+        warn_user_once!(
+            "The `--torch-backend` option is experimental and may change without warning."
+        );
+    }
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -96,12 +107,6 @@ pub(crate) async fn install(
     // Initialize any shared state.
     let state = PlatformState::default();
     let workspace_cache = WorkspaceCache::default();
-
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref())?;
@@ -147,13 +152,14 @@ pub(crate) async fn install(
                 requirement,
                 &interpreter,
                 &settings,
-                &network_settings,
+                &client_builder,
                 &state,
                 concurrency,
                 &cache,
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?
             .pop()
@@ -228,16 +234,74 @@ pub(crate) async fn install(
         }
     };
 
+    // For `@latest`, fetch the latest version and create a constraint.
+    let latest = if let ToolRequest::Package {
+        target: Target::Latest(_, name, _),
+        ..
+    } = &request
+    {
+        // Build the registry client to fetch the latest version.
+        let client = RegistryClientBuilder::new(
+            client_builder
+                .clone()
+                .keyring(settings.resolver.keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(settings.resolver.index_locations.clone())
+        .index_strategy(settings.resolver.index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
+
+        // Initialize the capabilities.
+        let capabilities = IndexCapabilities::default();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
+
+        // Initialize the client to fetch the latest version.
+        let latest_client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease: settings.resolver.prerelease,
+            exclude_newer: &settings.resolver.exclude_newer,
+            tags: None,
+            requires_python: None,
+        };
+
+        // Fetch the latest version.
+        if let Some(dist_filename) = latest_client
+            .find_latest(name, None, &download_concurrency)
+            .await?
+        {
+            let version = dist_filename.version().clone();
+            debug!("Resolved `{name}@latest` to `{name}=={version}`");
+
+            // The constraint pins the version during resolution to prevent backtracking.
+            Some(Requirement {
+                name: name.clone(),
+                extras: vec![].into_boxed_slice(),
+                groups: Box::new([]),
+                marker: MarkerTree::default(),
+                source: RequirementSource::Registry {
+                    specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(version)),
+                    index: None,
+                    conflict: None,
+                },
+                origin: None,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let package_name = &requirement.name;
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
             resolver: ResolverSettings {
-                upgrade: settings
-                    .resolver
-                    .upgrade
-                    .combine(Upgrade::package(package_name.clone())),
+                upgrade: Upgrade::package(package_name.clone()).combine(settings.resolver.upgrade),
                 ..settings.resolver
             },
             ..settings
@@ -249,9 +313,7 @@ pub(crate) async fn install(
     // If the user passed `--force`, it implies `--reinstall-package <from>`
     let settings = if force {
         ResolverInstallerSettings {
-            reinstall: settings
-                .reinstall
-                .combine(Reinstall::package(package_name.clone())),
+            reinstall: Reinstall::package(package_name.clone()).combine(settings.reinstall),
             ..settings
         }
     } else {
@@ -263,6 +325,7 @@ pub(crate) async fn install(
         with,
         constraints,
         overrides,
+        excludes,
         None,
         &client_builder,
     )
@@ -277,13 +340,14 @@ pub(crate) async fn install(
                 spec.requirements.clone(),
                 &interpreter,
                 &settings,
-                &network_settings,
+                &client_builder,
                 &state,
                 concurrency,
                 &cache,
                 &workspace_cache,
                 printer,
                 preview,
+                lfs,
             )
             .await?,
         );
@@ -291,24 +355,25 @@ pub(crate) async fn install(
     };
 
     // Resolve the constraints.
-    let constraints = spec
+    let constraints: Vec<_> = spec
         .constraints
         .into_iter()
         .map(|constraint| constraint.requirement)
-        .collect::<Vec<_>>();
+        .collect();
 
     // Resolve the overrides.
     let overrides = resolve_names(
         spec.overrides,
         &interpreter,
         &settings,
-        &network_settings,
+        &client_builder,
         &state,
         concurrency,
         &cache,
         &workspace_cache,
         printer,
         preview,
+        lfs,
     )
     .await?;
 
@@ -347,7 +412,10 @@ pub(crate) async fn install(
                             package_name.cyan()
                         );
                     }
-                    Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(err)
+                        if err
+                            .as_io_error()
+                            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) => {}
                     Err(err) => {
                         return Err(err.into());
                     }
@@ -360,11 +428,11 @@ pub(crate) async fn install(
         installed_tools
             .get_environment(package_name, &cache)?
             .filter(|environment| {
-                if environment.uses(&interpreter) {
+                if environment.environment().uses(&interpreter) {
                     trace!(
                         "Existing interpreter matches the requested interpreter for `{}`: {}",
                         package_name,
-                        environment.interpreter().sys_executable().display()
+                        environment.environment().interpreter().sys_executable().display()
                     );
                     true
                 } else {
@@ -378,38 +446,71 @@ pub(crate) async fn install(
             });
 
     // If the requested and receipt requirements are the same...
-    if existing_environment
-        .as_ref()
-        .filter(|_| {
-            // And the user didn't request a reinstall or upgrade...
-            !request.is_latest()
-                && settings.reinstall.is_none()
-                && settings.resolver.upgrade.is_none()
-        })
-        .is_some()
-    {
+    if let Some(environment) = existing_environment.as_ref().filter(|_| {
+        // And the user didn't request a reinstall or upgrade...
+        !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none()
+    }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
                 && build_constraints == tool_receipt.build_constraints()
             {
-                if *tool_receipt.options() != options {
-                    // ...but the options differ, we need to update the receipt.
-                    installed_tools.add_tool_receipt(
-                        package_name,
-                        tool_receipt.clone().with_options(options),
+                let ResolverInstallerSettings {
+                    resolver:
+                        ResolverSettings {
+                            config_setting,
+                            config_settings_package,
+                            extra_build_dependencies,
+                            extra_build_variables,
+                            ..
+                        },
+                    ..
+                } = &settings;
+
+                // Lower the extra build dependencies, if any.
+                let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                    extra_build_dependencies.clone(),
+                )
+                .into_inner();
+
+                // Determine the markers and tags to use for the resolution.
+                let markers = resolution_markers(None, python_platform.as_ref(), &interpreter);
+                let tags = resolution_tags(None, python_platform.as_ref(), &interpreter)?;
+
+                // Check if the installed packages meet the requirements.
+                let site_packages = SitePackages::from_environment(environment.environment())?;
+                if matches!(
+                    site_packages.satisfies_requirements(
+                        requirements.iter(),
+                        constraints.iter().chain(latest.iter()),
+                        overrides.iter(),
+                        InstallationStrategy::Permissive,
+                        &markers,
+                        &tags,
+                        config_setting,
+                        config_settings_package,
+                        &extra_build_requires,
+                        extra_build_variables,
+                    ),
+                    Ok(SatisfiesResult::Fresh { .. })
+                ) {
+                    // Then we're done! Though we might need to update the receipt.
+                    if *tool_receipt.options() != options {
+                        installed_tools.add_tool_receipt(
+                            package_name,
+                            tool_receipt.clone().with_options(options),
+                        )?;
+                    }
+
+                    writeln!(
+                        printer.stderr(),
+                        "`{}` is already installed",
+                        requirement.cyan()
                     )?;
+
+                    return Ok(ExitStatus::Success);
                 }
-
-                // We're done, though we might need to update the receipt.
-                writeln!(
-                    printer.stderr(),
-                    "`{}` is already installed",
-                    requirement.cyan()
-                )?;
-
-                return Ok(ExitStatus::Success);
             }
         }
     }
@@ -424,6 +525,7 @@ pub(crate) async fn install(
         constraints: constraints
             .iter()
             .cloned()
+            .chain(latest.into_iter())
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides
@@ -440,13 +542,14 @@ pub(crate) async fn install(
     // be invalidated by moving the environment.
     let environment = if let Some(environment) = existing_environment {
         let environment = match update_environment(
-            environment,
+            environment.into_environment(),
             spec,
             Modifications::Exact,
+            python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
-            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
+            ExtraBuildRequires::default(),
             &settings,
-            &network_settings,
+            &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
@@ -462,9 +565,11 @@ pub(crate) async fn install(
         {
             Ok(update) => update.into_environment(),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -484,9 +589,10 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
+            python_platform.as_ref(),
             Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings.resolver,
-            &network_settings,
+            &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
             concurrency,
@@ -523,7 +629,7 @@ pub(crate) async fn install(
                     .ok()
                     .flatten() else {
                         return diagnostics::OperationDiagnostic::native_tls(
-                            network_settings.native_tls,
+                            client_builder.is_native_tls(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -538,9 +644,10 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
+                        python_platform.as_ref(),
                         Constraints::from_requirements(build_constraints.iter().cloned()),
                         &settings.resolver,
-                        &network_settings,
+                        &client_builder,
                         &state,
                         Box::new(DefaultResolveLogger),
                         concurrency,
@@ -553,7 +660,7 @@ pub(crate) async fn install(
                         Ok(resolution) => (resolution, interpreter),
                         Err(ProjectError::Operation(err)) => {
                             return diagnostics::OperationDiagnostic::native_tls(
-                                network_settings.native_tls,
+                                client_builder.is_native_tls(),
                             )
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
@@ -580,7 +687,7 @@ pub(crate) async fn install(
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
-            &network_settings,
+            &client_builder,
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
@@ -597,9 +704,11 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::native_tls(
+                    client_builder.is_native_tls(),
+                )
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }

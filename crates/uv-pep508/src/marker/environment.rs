@@ -187,7 +187,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::implementation_name`].
     #[inline]
     #[must_use]
-    pub fn with_implementation_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_implementation_name(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).implementation_name = value.into();
         self
     }
@@ -197,10 +197,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::implementation_version`].
     #[inline]
     #[must_use]
-    pub fn with_implementation_version(
-        mut self,
-        value: impl Into<StringVersion>,
-    ) -> MarkerEnvironment {
+    pub fn with_implementation_version(mut self, value: impl Into<StringVersion>) -> Self {
         Arc::make_mut(&mut self.inner).implementation_version = value.into();
         self
     }
@@ -210,7 +207,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::os_name`].
     #[inline]
     #[must_use]
-    pub fn with_os_name(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_os_name(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).os_name = value.into();
         self
     }
@@ -220,7 +217,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_machine`].
     #[inline]
     #[must_use]
-    pub fn with_platform_machine(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_platform_machine(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_machine = value.into();
         self
     }
@@ -231,10 +228,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_python_implementation`].
     #[inline]
     #[must_use]
-    pub fn with_platform_python_implementation(
-        mut self,
-        value: impl Into<String>,
-    ) -> MarkerEnvironment {
+    pub fn with_platform_python_implementation(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_python_implementation = value.into();
         self
     }
@@ -244,7 +238,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_release`].
     #[inline]
     #[must_use]
-    pub fn with_platform_release(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_platform_release(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_release = value.into();
         self
     }
@@ -254,7 +248,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_system`].
     #[inline]
     #[must_use]
-    pub fn with_platform_system(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_platform_system(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_system = value.into();
         self
     }
@@ -264,7 +258,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::platform_version`].
     #[inline]
     #[must_use]
-    pub fn with_platform_version(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_platform_version(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).platform_version = value.into();
         self
     }
@@ -274,10 +268,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
     #[must_use]
-    pub fn with_python_full_version(
-        mut self,
-        value: impl Into<StringVersion>,
-    ) -> MarkerEnvironment {
+    pub fn with_python_full_version(mut self, value: impl Into<StringVersion>) -> Self {
         Arc::make_mut(&mut self.inner).python_full_version = value.into();
         self
     }
@@ -287,7 +278,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::python_full_version`].
     #[inline]
     #[must_use]
-    pub fn with_python_version(mut self, value: impl Into<StringVersion>) -> MarkerEnvironment {
+    pub fn with_python_version(mut self, value: impl Into<StringVersion>) -> Self {
         Arc::make_mut(&mut self.inner).python_version = value.into();
         self
     }
@@ -297,7 +288,7 @@ impl MarkerEnvironment {
     /// See also [`MarkerEnvironment::sys_platform`].
     #[inline]
     #[must_use]
-    pub fn with_sys_platform(mut self, value: impl Into<String>) -> MarkerEnvironment {
+    pub fn with_sys_platform(mut self, value: impl Into<String>) -> Self {
         Arc::make_mut(&mut self.inner).sys_platform = value.into();
         self
     }
@@ -331,7 +322,7 @@ impl<'a> TryFrom<MarkerEnvironmentBuilder<'a>> for MarkerEnvironment {
     type Error = VersionParseError;
 
     fn try_from(builder: MarkerEnvironmentBuilder<'a>) -> Result<Self, Self::Error> {
-        Ok(MarkerEnvironment {
+        Ok(Self {
             inner: Arc::new(MarkerEnvironmentInner {
                 implementation_name: builder.implementation_name.to_string(),
                 implementation_version: builder.implementation_version.parse()?,

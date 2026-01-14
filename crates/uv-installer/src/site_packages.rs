@@ -8,13 +8,15 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDist, Name, NameRequirementSpecification, Requirement,
+    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
+    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
+use uv_platform_tags::Tags;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_redacted::DisplaySafeUrl;
@@ -124,7 +126,7 @@ impl SitePackages {
                     .push(idx);
 
                 // Index the distribution by URL.
-                if let InstalledDist::Url(dist) = &dist_info {
+                if let InstalledDistKind::Url(dist) = &dist_info.kind {
                     by_url.entry(dist.url.clone()).or_default().push(idx);
                 }
 
@@ -193,6 +195,7 @@ impl SitePackages {
     pub fn diagnostics(
         &self,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -222,7 +225,7 @@ impl SitePackages {
                 };
 
                 // Determine the dependencies for the given package.
-                let Ok(metadata) = distribution.metadata() else {
+                let Ok(metadata) = distribution.read_metadata() else {
                     diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
                         path: distribution.install_path().to_owned(),
@@ -237,6 +240,25 @@ impl SitePackages {
                             package: package.clone(),
                             version: self.interpreter.python_version().clone(),
                             requires_python: requires_python.clone(),
+                        });
+                    }
+                }
+
+                // Verify that the package is compatible with the current tags.
+                match distribution.read_tags() {
+                    Ok(Some(wheel_tags)) => {
+                        if !wheel_tags.is_compatible(tags) {
+                            // TODO(charlie): Show the expanded tag hint, that explains _why_ it doesn't match.
+                            diagnostics.push(SitePackagesDiagnostic::IncompatiblePlatform {
+                                package: package.clone(),
+                            });
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(_) => {
+                        diagnostics.push(SitePackagesDiagnostic::TagsUnavailable {
+                            package: package.clone(),
+                            path: distribution.install_path().to_owned(),
                         });
                     }
                 }
@@ -258,12 +280,10 @@ impl SitePackages {
                         }
                         [installed] => {
                             match &dependency.version_or_url {
-                                None | Some(uv_pep508::VersionOrUrl::Url(_)) => {
+                                None | Some(VersionOrUrl::Url(_)) => {
                                     // Nothing to do (accept any installed version).
                                 }
-                                Some(uv_pep508::VersionOrUrl::VersionSpecifier(
-                                    version_specifier,
-                                )) => {
+                                Some(VersionOrUrl::VersionSpecifier(version_specifier)) => {
                                     // The installed version doesn't satisfy the requirement.
                                     if !version_specifier.contains(installed.version()) {
                                         diagnostics.push(
@@ -294,7 +314,13 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
+        installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
         // First, map all unnamed requirements to named requirements.
         let requirements = {
@@ -379,7 +405,13 @@ impl SitePackages {
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
             overrides.iter().map(Cow::as_ref),
+            installation,
             markers,
+            tags,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
         )
     }
 
@@ -389,7 +421,13 @@ impl SitePackages {
         requirements: impl ExactSizeIterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: impl Iterator<Item = &'a Requirement>,
+        installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints and overrides by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -443,7 +481,18 @@ impl SitePackages {
                 [distribution] => {
                     // Validate that the requirement is satisfied.
                     if requirement.evaluate_markers(Some(markers), &[]) {
-                        match RequirementSatisfaction::check(distribution, &requirement.source) {
+                        match RequirementSatisfaction::check(
+                            name,
+                            distribution,
+                            &requirement.source,
+                            None,
+                            installation,
+                            tags,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        ) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::CacheInvalid => {
@@ -456,7 +505,18 @@ impl SitePackages {
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
                         if constraint.evaluate_markers(Some(markers), &[]) {
-                            match RequirementSatisfaction::check(distribution, &constraint.source) {
+                            match RequirementSatisfaction::check(
+                                name,
+                                distribution,
+                                &constraint.source,
+                                None,
+                                installation,
+                                tags,
+                                config_settings,
+                                config_settings_package,
+                                extra_build_requires,
+                                extra_build_variables,
+                            ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
                                 | RequirementSatisfaction::CacheInvalid => {
@@ -471,12 +531,12 @@ impl SitePackages {
 
                     // Recurse into the dependencies.
                     let metadata = distribution
-                        .metadata()
+                        .read_metadata()
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
-                    for dependency in metadata.requires_dist {
-                        let dependency = Requirement::from(dependency);
+                    for dependency in &metadata.requires_dist {
+                        let dependency = Requirement::from(dependency.clone());
                         if let Some(r#overrides) = overrides.get(&dependency.name) {
                             for dependency in r#overrides {
                                 if dependency.evaluate_markers(Some(markers), &requirement.extras) {
@@ -505,6 +565,27 @@ impl SitePackages {
             recursive_requirements: seen,
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallationStrategy {
+    /// A permissive installation strategy, which accepts existing installations even if the source
+    /// type differs, as in the `pip` and `uv pip` CLIs.
+    ///
+    /// In this strategy, packages that are already installed in the environment may be reused if
+    /// they implicitly match the requirements. For example, if the user installs `./path/to/idna`,
+    /// then runs `uv pip install anyio` (which depends on `idna`), the existing `idna` installation
+    /// will be reused if its version matches the requirement, even though it was installed from a
+    /// path and is being implicitly requested from a registry.
+    Permissive,
+
+    /// A strict installation strategy, which requires that existing installations match the source
+    /// type, as in the `uv sync` CLI.
+    ///
+    /// This strategy enforces that the installation source must match the requirement source.
+    /// It prevents reusing packages that were installed from different sources, ensuring
+    /// declarative and reproducible environments.
+    Strict,
 }
 
 /// We check if all requirements are already satisfied, recursing through the requirements tree.
@@ -537,6 +618,12 @@ pub enum SitePackagesDiagnostic {
         /// The path to the package.
         path: PathBuf,
     },
+    TagsUnavailable {
+        /// The package that is missing tags.
+        package: PackageName,
+        /// The path to the package.
+        path: PathBuf,
+    },
     IncompatiblePythonVersion {
         /// The package that requires a different version of Python.
         package: PackageName,
@@ -544,6 +631,10 @@ pub enum SitePackagesDiagnostic {
         version: Version,
         /// The version of Python that is required.
         requires_python: VersionSpecifiers,
+    },
+    IncompatiblePlatform {
+        /// The package that was built for a different platform.
+        package: PackageName,
     },
     MissingDependency {
         /// The package that is missing a dependency.
@@ -575,6 +666,10 @@ impl Diagnostic for SitePackagesDiagnostic {
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.",
                 path.display(),
             ),
+            Self::TagsUnavailable { package, path } => format!(
+                "The package `{package}` is broken or incomplete (unable to read `WHEEL` file). Consider recreating the virtualenv, or removing the package directory at: {}.",
+                path.display(),
+            ),
             Self::IncompatiblePythonVersion {
                 package,
                 version,
@@ -582,6 +677,9 @@ impl Diagnostic for SitePackagesDiagnostic {
             } => format!(
                 "The package `{package}` requires Python {requires_python}, but `{version}` is installed"
             ),
+            Self::IncompatiblePlatform { package } => {
+                format!("The package `{package}` was built for a different platform")
+            }
             Self::MissingDependency {
                 package,
                 requirement,
@@ -611,7 +709,9 @@ impl Diagnostic for SitePackagesDiagnostic {
     fn includes(&self, name: &PackageName) -> bool {
         match self {
             Self::MetadataUnavailable { package, .. } => name == package,
+            Self::TagsUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
+            Self::IncompatiblePlatform { package } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {
                 package,

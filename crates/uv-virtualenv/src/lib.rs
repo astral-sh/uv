@@ -3,10 +3,10 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::Preview;
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{OnExisting, remove_virtualenv};
+pub use virtualenv::{OnExisting, RemovalReason, remove_virtualenv};
 
 mod virtualenv;
 

@@ -1,11 +1,10 @@
 [package]
 name = "uv-build-frontend"
-version = "0.0.1"
-description = "Build wheels from source distributions"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -17,13 +16,16 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-static = { workspace = true }

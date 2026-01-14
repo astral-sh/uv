@@ -14,21 +14,23 @@ use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
+    BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
     DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
-    PackageConfigSettings, Preview,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    PackageConfigSettings, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -37,7 +39,7 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -46,7 +48,7 @@ use crate::commands::pip::operations;
 use crate::commands::project::{ProjectError, find_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
+use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
 enum Error {
@@ -105,13 +107,15 @@ pub(crate) async fn build_frontend(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: Vec<RequirementsSource>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -130,13 +134,15 @@ pub(crate) async fn build_frontend(
         wheel,
         list,
         build_logs,
+        gitignore,
         force_pep517,
+        clear,
         &build_constraints,
         hash_checking,
         python.as_deref(),
         install_mirrors,
         settings,
-        network_settings,
+        client_builder,
         no_config,
         python_preference,
         python_downloads,
@@ -173,13 +179,15 @@ async fn build_impl(
     wheel: bool,
     list: bool,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -199,21 +207,16 @@ async fn build_impl(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
         build_options,
         sources,
+        torch_backend: _,
     } = settings;
-
-    let client_builder = BaseClientBuilder::default()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -344,11 +347,13 @@ async fn build_impl(
             client_builder.clone(),
             hash_checking,
             build_logs,
+            gitignore,
             force_pep517,
+            clear,
             build_constraints,
-            *no_build_isolation,
-            no_build_isolation_package,
+            build_isolation,
             extra_build_dependencies,
+            extra_build_variables,
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
@@ -387,11 +392,39 @@ async fn build_impl(
                     source: String,
                     #[source]
                     cause: anyhow::Error,
+                    #[help]
+                    help: Option<String>,
                 }
+
+                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
+                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                    // encoding everything in strings
+                    // NOTE(ww): We check for both messages below because the both indicate
+                    // different external extraction scenarios; the first is for any
+                    // absolute path outside of the target directory, and the second
+                    // is specifically for symlinks that point outside.
+                    if err.to_string().contains("/bin/python")
+                        && std::error::Error::source(err).is_some_and(|err| {
+                            let err = err.to_string();
+                            err.ends_with("outside of the target directory")
+                                || err.ends_with("external symlinks are not allowed")
+                        })
+                    {
+                        Some(
+                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
+                    help,
                 });
                 anstream::eprint!("{report:?}");
 
@@ -423,11 +456,13 @@ async fn build_package(
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
+    gitignore: bool,
     force_pep517: bool,
+    clear: bool,
     build_constraints: &[RequirementsSource],
-    no_build_isolation: bool,
-    no_build_isolation_package: &[PackageName],
+    build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
@@ -455,6 +490,11 @@ async fn build_package(
             }
         }
     };
+
+    // Clear the output directory if requested
+    if clear && output_dir.exists() {
+        fs_err::remove_dir_all(&*output_dir)?;
+    }
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
@@ -502,8 +542,6 @@ async fn build_package(
     .await?
     .into_interpreter();
 
-    index_locations.cache_index_credentials();
-
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
@@ -529,9 +567,8 @@ async fn build_package(
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())
@@ -540,14 +577,16 @@ async fn build_package(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Resolve the flat indexes from `--find-links`.
@@ -563,13 +602,15 @@ async fn build_package(
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         index_locations,
         &flat_index,
@@ -578,8 +619,9 @@ async fn build_package(
         index_strategy,
         config_setting,
         config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &hasher,
@@ -590,7 +632,7 @@ async fn build_package(
         preview,
     );
 
-    prepare_output_directory(&output_dir).await?;
+    prepare_output_directory(&output_dir, gitignore).await?;
 
     // Determine the build plan.
     let plan = BuildPlan::determine(&source, sdist, wheel).map_err(Error::BuildPlan)?;
@@ -621,7 +663,7 @@ async fn build_package(
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
-            if build_logs {
+            if build_logs && !uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
                 BuildOutput::Stderr
             } else {
                 BuildOutput::Quiet
@@ -865,8 +907,13 @@ async fn build_sdist(
     let build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
+                uv_build_backend::list_source_dist(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources_enabled,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -890,11 +937,13 @@ async fn build_sdist(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
+                    sources_enabled,
                 )
             })
             .await??
@@ -970,8 +1019,9 @@ async fn build_wheel(
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(&source_tree_, uv_version::version())
+                uv_build_backend::list_wheel(&source_tree_, uv_version::version(), sources_enabled)
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -995,12 +1045,14 @@ async fn build_wheel(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_wheel(
                     &source_tree,
                     &output_dir_,
                     None,
                     uv_version::version(),
+                    sources_enabled,
                 )
             })
             .await??;
@@ -1057,19 +1109,21 @@ async fn build_wheel(
 }
 
 /// Create the output directory and add a `.gitignore`.
-async fn prepare_output_directory(output_dir: &Path) -> Result<(), Error> {
+async fn prepare_output_directory(output_dir: &Path, gitignore: bool) -> Result<(), Error> {
     // Create the output directory.
     fs_err::tokio::create_dir_all(&output_dir).await?;
 
     // Add a .gitignore.
-    match fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(output_dir.join(".gitignore"))
-    {
-        Ok(mut file) => file.write_all(b"*")?,
-        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
-        Err(err) => return Err(err.into()),
+    if gitignore {
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output_dir.join(".gitignore"))
+        {
+            Ok(mut file) => file.write_all(b"*")?,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => (),
+            Err(err) => return Err(err.into()),
+        }
     }
     Ok(())
 }
@@ -1173,11 +1227,11 @@ impl BuildMessage {
     /// The normalized filename of the wheel or source distribution.
     fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 normalized_filename: name,
                 ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 normalized_filename: name,
                 ..
             } => name,
@@ -1187,10 +1241,10 @@ impl BuildMessage {
     /// The filename of the wheel or source distribution before normalization.
     fn raw_filename(&self) -> &str {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename: name, ..
             } => name,
-            BuildMessage::List {
+            Self::List {
                 raw_filename: name, ..
             } => name,
         }
@@ -1198,7 +1252,7 @@ impl BuildMessage {
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
-            BuildMessage::Build {
+            Self::Build {
                 raw_filename,
                 output_dir,
                 ..
@@ -1209,7 +1263,7 @@ impl BuildMessage {
                     output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
-            BuildMessage::List {
+            Self::List {
                 raw_filename,
                 file_list,
                 source_tree,

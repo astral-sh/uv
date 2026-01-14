@@ -24,7 +24,7 @@ impl IndexStatusCodeStrategy {
     pub fn from_index_url(url: &Url) -> Self {
         if url
             .host_str()
-            .is_some_and(|host| host.ends_with("pytorch.org"))
+            .is_some_and(|host| host.eq_ignore_ascii_case("download.pytorch.org"))
         {
             // The PyTorch registry returns a 403 when a package is not found, so
             // we ignore them when deciding whether to search other indexes.
@@ -68,7 +68,7 @@ impl IndexStatusCodeStrategy {
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
         match self {
-            IndexStatusCodeStrategy::Default => match status_code {
+            Self::Default => match status_code {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
                 StatusCode::UNAUTHORIZED => {
                     capabilities.set_unauthorized(index_url.clone());
@@ -80,15 +80,11 @@ impl IndexStatusCodeStrategy {
                 }
                 _ => IndexStatusCodeDecision::Fail(status_code),
             },
-            IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
+            Self::IgnoreErrorCodes { status_codes } => {
                 if status_codes.contains(&status_code) {
                     IndexStatusCodeDecision::Ignore
                 } else {
-                    IndexStatusCodeStrategy::Default.handle_status_code(
-                        status_code,
-                        index_url,
-                        capabilities,
-                    )
+                    Self::Default.handle_status_code(status_code, index_url, capabilities)
                 }
             }
         }

@@ -3,6 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -13,7 +14,7 @@ use uv_pypi_types::Scheme;
 pub use install::install_wheel;
 pub use linker::{LinkMode, Locks};
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
-pub use wheel::{LibKind, parse_wheel_file, read_record_file};
+pub use wheel::{LibKind, WheelFile, read_record_file};
 
 mod install;
 mod linker;
@@ -74,9 +75,9 @@ pub enum Error {
     MissingTopLevel(PathBuf),
     #[error("Invalid package version")]
     InvalidVersion(#[from] uv_pep440::VersionParseError),
-    #[error("Wheel package name does not match filename: {0} != {1}")]
+    #[error("Wheel package name does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedName(PackageName, PackageName),
-    #[error("Wheel version does not match filename: {0} != {1}")]
+    #[error("Wheel version does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedVersion(Version, Version),
     #[error("Invalid egg-link")]
     InvalidEggLink(PathBuf),

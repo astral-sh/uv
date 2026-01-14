@@ -1,40 +1,42 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{Context, anyhow};
-use itertools::Itertools;
-use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use anyhow::{Context, anyhow};
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, Overrides, PackageConfigSettings, Reinstall, Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, InstalledDist, LocalDist, NameRequirementSpecification, Requirement,
-    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    CachedDist, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
+    NameRequirementSpecification, Requirement, ResolutionDiagnostic, UnresolvedRequirement,
+    UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
-use uv_distribution_types::{
-    DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
-};
+use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
-use uv_pep508::{MarkerEnvironment, RequirementOrigin};
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -44,9 +46,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
+use crate::commands::compile_bytecode;
+use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -54,6 +56,7 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
     groups: Option<&GroupsSpecification>,
     client_builder: &BaseClientBuilder<'_>,
@@ -80,6 +83,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        excludes,
         groups,
         client_builder,
     )
@@ -92,7 +96,7 @@ pub(crate) async fn read_constraints(
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
     Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], None, client_builder)
+        RequirementsSpecification::from_sources(&[], constraints, &[], &[], None, client_builder)
             .await?
             .constraints,
     )
@@ -103,7 +107,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
-    source_trees: Vec<PathBuf>,
+    excludes: Vec<PackageName>,
+    source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
@@ -167,7 +172,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
-            .resolve(source_trees.iter().map(PathBuf::as_path))
+            .resolve(source_trees.iter())
             .await?;
 
             // If we resolved a single project, use it for the project name.
@@ -214,13 +219,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch.locations(),
                 build_dispatch.sources(),
                 build_dispatch.workspace_cache(),
+                client.credentials_cache(),
             )
             .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to read dependency groups from: {}\n{}",
-                    pyproject_path.display(),
-                    e
+            .with_context(|| {
+                format!(
+                    "Failed to read dependency groups from: {}",
+                    pyproject_path.display()
                 )
             })?;
 
@@ -283,7 +288,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and overrides.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
@@ -291,6 +296,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .chain(upgrade.constraints().cloned()),
     );
     let overrides = Overrides::from_requirements(overrides);
+    let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.
@@ -319,6 +325,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements,
         constraints,
         overrides,
+        excludes,
         preferences,
         project,
         workspace_members,
@@ -376,27 +383,111 @@ pub(crate) enum Modifications {
     Exact,
 }
 
+/// A distribution which was or would be modified
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ChangedDist {
+    Local(LocalDist),
+    Remote(Arc<Dist>),
+}
+
+impl Name for ChangedDist {
+    fn name(&self) -> &PackageName {
+        match self {
+            Self::Local(dist) => dist.name(),
+            Self::Remote(dist) => dist.name(),
+        }
+    }
+}
+
+/// The [`Version`] or [`VerbatimUrl`] for a changed dist.
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub(crate) enum ShortSpecifier<'a> {
+    Version(&'a Version),
+    Url(&'a VerbatimUrl),
+}
+
+impl std::fmt::Display for ShortSpecifier<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Version(version) => version.fmt(f),
+            Self::Url(url) => write!(f, " @ {url}"),
+        }
+    }
+}
+
+/// The [`InstalledVersion`] or [`VerbatimUrl`] for a changed dist.
+#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub(crate) enum LongSpecifier<'a> {
+    InstalledVersion(InstalledVersion<'a>),
+    Url(&'a VerbatimUrl),
+}
+
+impl std::fmt::Display for LongSpecifier<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InstalledVersion(version) => version.fmt(f),
+            Self::Url(url) => write!(f, " @ {url}"),
+        }
+    }
+}
+
+impl ChangedDist {
+    pub(crate) fn short_specifier(&self) -> ShortSpecifier<'_> {
+        match self {
+            Self::Local(dist) => ShortSpecifier::Version(dist.installed_version().version()),
+            Self::Remote(dist) => match dist.version_or_url() {
+                VersionOrUrlRef::Version(version) => ShortSpecifier::Version(version),
+                VersionOrUrlRef::Url(url) => ShortSpecifier::Url(url),
+            },
+        }
+    }
+
+    pub(crate) fn long_specifier(&self) -> LongSpecifier<'_> {
+        match self {
+            Self::Local(dist) => LongSpecifier::InstalledVersion(dist.installed_version()),
+            Self::Remote(dist) => match dist.version_or_url() {
+                VersionOrUrlRef::Version(version) => {
+                    LongSpecifier::InstalledVersion(InstalledVersion::Version(version))
+                }
+                VersionOrUrlRef::Url(url) => LongSpecifier::Url(url),
+            },
+        }
+    }
+
+    pub(crate) fn version(&self) -> Option<&Version> {
+        match self {
+            Self::Local(dist) => Some(dist.installed_version().version()),
+            Self::Remote(dist) => dist.version(),
+        }
+    }
+}
+
 /// A summary of the changes made to the environment during an installation.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Changelog {
     /// The distributions that were installed.
-    pub(crate) installed: HashSet<LocalDist>,
+    pub(crate) installed: HashSet<ChangedDist>,
     /// The distributions that were uninstalled.
-    pub(crate) uninstalled: HashSet<LocalDist>,
+    pub(crate) uninstalled: HashSet<ChangedDist>,
     /// The distributions that were reinstalled.
-    pub(crate) reinstalled: HashSet<LocalDist>,
+    pub(crate) reinstalled: HashSet<ChangedDist>,
 }
 
 impl Changelog {
-    /// Create a [`Changelog`] from a list of installed and uninstalled distributions.
-    pub(crate) fn new(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
-        let mut uninstalled: HashSet<_> = uninstalled.into_iter().map(LocalDist::from).collect();
-
+    /// Create a [`Changelog`] from two iterators of [`ChangedDist`]s.
+    pub(crate) fn new<I, U>(installed: I, uninstalled: U) -> Self
+    where
+        I: IntoIterator<Item = ChangedDist>,
+        U: IntoIterator<Item = ChangedDist>,
+    {
+        // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
+        // the inner `kind`, and omits the types that rely on internal mutability.
+        #[allow(clippy::mutable_key_type)]
+        let mut uninstalled: HashSet<_> = uninstalled.into_iter().collect();
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
             .into_iter()
-            .map(LocalDist::from)
             .partition(|dist| uninstalled.contains(dist));
-
         uninstalled.retain(|dist| !reinstalled.contains(dist));
 
         Self {
@@ -406,13 +497,21 @@ impl Changelog {
         }
     }
 
+    /// Create a [`Changelog`] from a list of local distributions.
+    pub(crate) fn from_local(installed: Vec<CachedDist>, uninstalled: Vec<InstalledDist>) -> Self {
+        Self::new(
+            installed
+                .into_iter()
+                .map(|dist| ChangedDist::Local(dist.into())),
+            uninstalled
+                .into_iter()
+                .map(|dist| ChangedDist::Local(dist.into())),
+        )
+    }
+
     /// Create a [`Changelog`] from a list of installed distributions.
     pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
-        Self {
-            installed: installed.into_iter().map(LocalDist::from).collect(),
-            uninstalled: HashSet::default(),
-            reinstalled: HashSet::default(),
-        }
+        Self::from_local(installed, Vec::new())
     }
 
     /// Returns `true` if the changelog includes a distribution with the given name, either via
@@ -434,14 +533,12 @@ impl Changelog {
 pub(crate) async fn install(
     resolution: &Resolution,
     site_packages: SitePackages,
+    installation: InstallationStrategy,
     modifications: Modifications,
     reinstall: &Reinstall,
     build_options: &BuildOptions,
     link_mode: LinkMode,
     compile: bool,
-    index_urls: &IndexLocations,
-    config_settings: &ConfigSettings,
-    config_settings_package: &PackageConfigSettings,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -454,6 +551,7 @@ pub(crate) async fn install(
     installer_metadata: bool,
     dry_run: DryRun,
     printer: Printer,
+    preview: Preview,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
 
@@ -462,12 +560,15 @@ pub(crate) async fn install(
     let plan = Planner::new(resolution)
         .build(
             site_packages,
+            installation,
             reinstall,
             build_options,
             hasher,
-            index_urls,
-            config_settings,
-            config_settings_package,
+            build_dispatch.locations(),
+            build_dispatch.config_settings(),
+            build_dispatch.config_settings_package(),
+            build_dispatch.extra_build_requires(),
+            build_dispatch.extra_build_variables(),
             cache,
             venv,
             tags,
@@ -475,8 +576,15 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run.enabled() {
-        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
-        return Ok(Changelog::default());
+        return report_dry_run(
+            dry_run,
+            resolution,
+            plan,
+            modifications,
+            start,
+            logger.as_ref(),
+            printer,
+        );
     }
 
     let Plan {
@@ -499,9 +607,135 @@ pub(crate) async fn install(
         && extraneous.is_empty()
         && !compile
     {
-        logger.on_audit(resolution.len(), start, printer)?;
+        logger.on_audit(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
     }
+
+    // Partition into two sets: those that require build isolation, and those that disable it. This
+    // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
+    // `--no-build-isolation` packages "access" to the rest of the environment.
+    let (isolated_phase, shared_phase) = Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    }
+    .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
+
+    let has_isolated_phase = !isolated_phase.is_empty();
+    let has_shared_phase = !shared_phase.is_empty();
+
+    let mut installs = vec![];
+    let mut uninstalls = vec![];
+
+    // Execute the isolated-build phase.
+    if has_isolated_phase {
+        let (isolated_installs, isolated_uninstalls) = execute_plan(
+            isolated_phase,
+            None,
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(isolated_installs);
+        uninstalls.extend(isolated_uninstalls);
+    }
+
+    if has_shared_phase {
+        let (shared_installs, shared_uninstalls) = execute_plan(
+            shared_phase,
+            if has_isolated_phase {
+                Some(InstallPhase::Shared)
+            } else {
+                None
+            },
+            resolution,
+            build_options,
+            link_mode,
+            hasher,
+            tags,
+            client,
+            in_flight,
+            concurrency,
+            build_dispatch,
+            cache,
+            venv,
+            logger.as_ref(),
+            installer_metadata,
+            printer,
+            preview,
+        )
+        .await?;
+        installs.extend(shared_installs);
+        uninstalls.extend(shared_uninstalls);
+    }
+
+    if compile {
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
+    }
+
+    // Construct a summary of the changes made to the environment.
+    let changelog = Changelog::from_local(installs, uninstalls);
+
+    // Notify the user of any environment modifications.
+    logger.on_complete(&changelog, printer, dry_run)?;
+
+    Ok(changelog)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallPhase {
+    /// A dedicated phase for building and installing packages with build-isolation disabled.
+    Shared,
+}
+
+impl InstallPhase {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Shared => "without build isolation",
+        }
+    }
+}
+
+/// Execute a [`Plan`] to install distributions into a Python environment.
+async fn execute_plan(
+    plan: Plan,
+    phase: Option<InstallPhase>,
+    resolution: &Resolution,
+    build_options: &BuildOptions,
+    link_mode: LinkMode,
+    hasher: &HashStrategy,
+    tags: &Tags,
+    client: &RegistryClient,
+    in_flight: &InFlight,
+    concurrency: Concurrency,
+    build_dispatch: &BuildDispatch<'_>,
+    cache: &Cache,
+    venv: &PythonEnvironment,
+    logger: &dyn InstallLogger,
+    installer_metadata: bool,
+    printer: Printer,
+    preview: Preview,
+) -> Result<(Vec<CachedDist>, Vec<InstalledDist>), Error> {
+    let Plan {
+        cached,
+        remote,
+        reinstalls,
+        extraneous,
+    } = plan;
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
@@ -524,7 +758,13 @@ pub(crate) async fn install(
             .prepare(remote.clone(), in_flight, resolution)
             .await?;
 
-        logger.on_prepare(wheels.len(), start, printer)?;
+        logger.on_prepare(
+            wheels.len(),
+            phase.map(InstallPhase::label),
+            start,
+            printer,
+            DryRun::Disabled,
+        )?;
 
         wheels
     };
@@ -558,7 +798,7 @@ pub(crate) async fn install(
                     uv_install_wheel::Error::MissingTopLevel(_),
                 )) => {
                     warn_user!(
-                        "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
+                        "Failed to uninstall package at {} due to missing `top_level.txt` file. Installation may result in an incomplete environment.",
                         dist_info.install_path().user_display().cyan(),
                     );
                 }
@@ -566,14 +806,14 @@ pub(crate) async fn install(
             }
         }
 
-        logger.on_uninstall(uninstalls.len(), start, printer)?;
+        logger.on_uninstall(uninstalls.len(), start, printer, DryRun::Disabled)?;
     }
 
     // Install the resolved distributions.
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !installs.is_empty() {
         let start = std::time::Instant::now();
-        installs = uv_installer::Installer::new(venv)
+        installs = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
@@ -585,20 +825,10 @@ pub(crate) async fn install(
             // task.
             .install_blocking(installs)?;
 
-        logger.on_install(installs.len(), start, printer)?;
+        logger.on_install(installs.len(), start, printer, DryRun::Disabled)?;
     }
 
-    if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
-    }
-
-    // Construct a summary of the changes made to the environment.
-    let changelog = Changelog::new(installs, uninstalls);
-
-    // Notify the user of any environment modifications.
-    logger.on_complete(&changelog, printer)?;
-
-    Ok(changelog)
+    Ok((installs, uninstalls))
 }
 
 /// Display a message about the interpreter that was selected for the operation.
@@ -618,9 +848,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {}",
+                    "Using {} {}{}",
                     implementation.pretty(),
-                    interpreter.python_version()
+                    interpreter.python_version(),
+                    interpreter.variant().display_suffix(),
                 )
                 .dimmed()
             )?;
@@ -629,9 +860,10 @@ pub(crate) fn report_interpreter(
                 printer.stderr(),
                 "{}",
                 format!(
-                    "Using {} {} interpreter at: {}",
+                    "Using {} {}{} interpreter at: {}",
                     implementation.pretty(),
                     interpreter.python_version(),
+                    interpreter.variant().display_suffix(),
                     interpreter.sys_executable().user_display()
                 )
                 .dimmed()
@@ -641,16 +873,18 @@ pub(crate) fn report_interpreter(
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().display_suffix().cyan()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -710,8 +944,9 @@ fn report_dry_run(
     plan: Plan,
     modifications: Modifications,
     start: std::time::Instant,
+    logger: &dyn InstallLogger,
     printer: Printer,
-) -> Result<(), Error> {
+) -> Result<Changelog, Error> {
     let Plan {
         cached,
         remote,
@@ -727,25 +962,15 @@ fn report_dry_run(
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
-        DefaultInstallLogger.on_audit(resolution.len(), start, printer)?;
-        writeln!(printer.stderr(), "Would make no changes")?;
-        return Ok(());
+        logger.on_audit(resolution.len(), start, printer, dry_run)?;
+        return Ok(Changelog::default());
     }
 
     // Download, build, and unzip any missing distributions.
     let wheels = if remote.is_empty() {
         vec![]
     } else {
-        let s = if remote.len() == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Would download {}",
-                format!("{} package{}", remote.len(), s).bold(),
-            )
-            .dimmed()
-        )?;
+        logger.on_prepare(remote.len(), None, start, printer, dry_run)?;
         remote.clone()
     };
 
@@ -753,87 +978,35 @@ fn report_dry_run(
     let uninstalls = extraneous.len() + reinstalls.len();
 
     if uninstalls > 0 {
-        let s = if uninstalls == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Would uninstall {}",
-                format!("{uninstalls} package{s}").bold(),
-            )
-            .dimmed()
-        )?;
+        logger.on_uninstall(uninstalls, start, printer, dry_run)?;
     }
 
     // Install the resolved distributions.
     let installs = wheels.len() + cached.len();
 
     if installs > 0 {
-        let s = if installs == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!("Would install {}", format!("{installs} package{s}").bold()).dimmed()
-        )?;
+        logger.on_install(installs, start, printer, dry_run)?;
     }
 
-    // TODO(charlie): DRY this up with `report_modifications`. The types don't quite line up.
-    for event in reinstalls
+    let uninstalled = reinstalls
         .into_iter()
-        .chain(extraneous.into_iter())
-        .map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.installed_version().to_string(),
-            kind: ChangeEventKind::Removed,
-        })
-        .chain(wheels.into_iter().map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.version_or_url().to_string(),
-            kind: ChangeEventKind::Added,
-        }))
-        .chain(cached.into_iter().map(|distribution| DryRunEvent {
-            name: distribution.name().clone(),
-            version: distribution.installed_version().to_string(),
-            kind: ChangeEventKind::Added,
-        }))
-        .sorted_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| a.kind.cmp(&b.kind)))
-    {
-        match event.kind {
-            ChangeEventKind::Added => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "+".green(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-            ChangeEventKind::Removed => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "-".red(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-            ChangeEventKind::Reinstalled => {
-                writeln!(
-                    printer.stderr(),
-                    " {} {}{}",
-                    "~".yellow(),
-                    event.name.bold(),
-                    event.version.dimmed()
-                )?;
-            }
-        }
-    }
+        .chain(extraneous)
+        .map(|dist| ChangedDist::Local(dist.into()));
+    let installed = wheels.into_iter().map(ChangedDist::Remote).chain(
+        cached
+            .into_iter()
+            .map(|dist| ChangedDist::Local(dist.into())),
+    );
+
+    let changelog = Changelog::new(installed, uninstalled);
+
+    logger.on_complete(&changelog, printer, dry_run)?;
 
     if matches!(dry_run, DryRun::Check) {
         return Err(Error::OutdatedEnvironment);
     }
 
-    Ok(())
+    Ok(changelog)
 }
 
 /// Report any diagnostics on resolved distributions.
@@ -860,10 +1033,11 @@ pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
+    tags: &Tags,
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
-    for diagnostic in site_packages.diagnostics(markers)? {
+    for diagnostic in site_packages.diagnostics(markers, tags)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
         if resolution
             .distributions()

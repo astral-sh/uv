@@ -2,6 +2,11 @@ use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot};
+use anyhow::Result;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 #[test]
 fn python_list() {
@@ -280,7 +285,7 @@ fn python_list_unsupported_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.12+freethreaded was requested.
     ");
 }
 
@@ -361,11 +366,11 @@ fn python_list_downloads() {
     // Instead, we choose a Python version where our available distributions are stable
 
     // Test the default display, which requires reverting the test context disabling Python downloads
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -373,10 +378,11 @@ fn python_list_downloads() {
     ");
 
     // Show patch versions
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.19-[PLATFORM]    <download available>
     cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
     cpython-3.10.16-[PLATFORM]    <download available>
@@ -419,11 +425,11 @@ fn python_list_downloads_installed() {
     // Instead, we choose a Python version where our available distributions are stable
 
     // First, the download is shown as available
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -434,7 +440,7 @@ fn python_list_downloads_installed() {
     // the URL
 
     // But not if `--only-installed` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -446,11 +452,11 @@ fn python_list_downloads_installed() {
     context.python_install().arg("3.10").assert().success();
 
     // Then, it should be listed as installed instead of available
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    managed/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10.19-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -458,11 +464,11 @@ fn python_list_downloads_installed() {
     ");
 
     // But, the display should be reverted if `--only-downloads` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.18-[PLATFORM]    <download available>
+    cpython-3.10.19-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
@@ -470,10 +476,210 @@ fn python_list_downloads_installed() {
     ");
 
     // And should not be shown if `--no-managed-python` is used
-    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
     success: true
     exit_code: 0
     ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
+
+#[tokio::test]
+async fn python_list_remote_python_downloads_json_url() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    let remote_json = r#"
+    {
+        "cpython-3.14.0-darwin-aarch64-none": {
+            "name": "cpython",
+            "arch": {
+                "family": "aarch64",
+                "variant": null
+            },
+            "os": "darwin",
+            "libc": "none",
+            "major": 3,
+            "minor": 14,
+            "patch": 0,
+            "prerelease": "",
+            "url": "https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz",
+            "sha256": "c3223d5924a0ed0ef5958a750377c362d0957587f896c0f6c635ae4b39e0f337",
+            "variant": null,
+            "build": "20251028"
+        },
+        "cpython-3.13.2+freethreaded-linux-powerpc64le-gnu": {
+            "name": "cpython",
+            "arch": {
+                "family": "powerpc64le",
+                "variant": null
+            },
+            "os": "linux",
+            "libc": "gnu",
+            "major": 3,
+            "minor": 13,
+            "patch": 2,
+            "prerelease": "",
+            "url": "https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz",
+            "sha256": "6ae8fa44cb2edf4ab49cff1820b53c40c10349c0f39e11b8cd76ce7f3e7e1def",
+            "variant": "freethreaded",
+            "build": "20250317"
+        }
+    }
+    "#;
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(remote_json, "application/json"))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/invalid"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw("{", "application/json"))
+        .mount(&server)
+        .await;
+
+    // Test showing all interpreters from the remote JSON URL
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--python-downloads-json-url").arg(server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0-macos-aarch64-none                    https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz
+    cpython-3.13.2+freethreaded-linux-powerpc64le-gnu    https://custom.com/ccpython-3.13.2+freethreaded-linux-powerpc64le-gnu.tar.gz
+
+    ----- stderr -----
+    ");
+
+    // test invalid URL path
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/404", server.uri())), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
+      Caused by: Failed to download http://[LOCALHOST]/404
+      Caused by: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
+
+    ");
+
+    // test invalid json
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url").arg(format!("{}/invalid", server.uri())), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to parse the JSON Python download list at http://[LOCALHOST]/invalid
+      Caused by: EOF while parsing an object at line 1 column 1
+
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn python_list_with_mirrors() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace()
+        // Add filters to normalize file paths in URLs
+        .with_filter((
+            r"(https://mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://python-mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://pypy-mirror\.example\.com/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://downloads\.python\.org/pypy/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
+            r"(https://github\.com/oracle/graalpython/releases/download/).*".to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ));
+
+    // Test with UV_PYTHON_INSTALL_MIRROR environment variable - verify mirror URL is used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("cpython@3.10.19")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://mirror.example.com/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test with UV_PYPY_INSTALL_MIRROR environment variable - verify PyPy mirror URL is used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("pypy@3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test with both mirror environment variables set
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env(EnvVars::UV_PYTHON_INSTALL_MIRROR, "https://python-mirror.example.com")
+        .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
+
+    ----- stderr -----
+    ");
+
+    // Test without mirrors - verify default URLs are used
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--show-urls")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM] https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
+    graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 
     ----- stderr -----
     ");

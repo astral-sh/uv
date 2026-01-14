@@ -1,0 +1,166 @@
+on:
+  workflow_call:
+    inputs:
+      code-changed:
+        required: true
+        type: string
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  ruff:
+    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
+        with:
+          version: "0.9.24"
+      - run: uvx ruff check .
+
+  ty:
+    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
+        with:
+          version: "0.9.24"
+      - run: |
+          uvx ty check python/uv
+          uvx \
+            --directory crates/uv-python \
+            --with-requirements fetch-download-metadata.py \
+            ty check --python-version 3.13 fetch-download-metadata.py
+
+  shellcheck:
+    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        env:
+          # renovate: datasource=github-tags depName=koalaman/shellcheck
+          SHELLCHECK_VERSION: "v0.11.0"
+          SHELLCHECK_OPTS: --shell bash
+        with:
+          version: ${{ env.SHELLCHECK_VERSION }}
+          severity: style
+          check_together: "yes"
+
+  validate-pyproject:
+    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
+        with:
+          version: "0.9.24"
+      - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
+
+  readme:
+    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: 3.12
+      - run: python scripts/transform_readme.py --target pypi
+
+  clippy-ubuntu:
+    name: "clippy on linux"
+    timeout-minutes: 10
+    if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Check uv_build dependencies"
+        uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
+        with:
+          command: check bans
+          manifest-path: crates/uv-build/Cargo.toml
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+      - name: "Clippy"
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  clippy-windows:
+    name: "clippy on windows"
+    timeout-minutes: 15
+    if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup component add clippy
+
+      - name: "Clippy"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  shear:
+    name: "cargo shear"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: "Install cargo shear"
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        with:
+          tool: cargo-shear
+      - run: cargo shear
+
+  typos:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: crate-ci/typos@64e4db431eb262bb5c6baa19dce280d78532830c # v1.37.3

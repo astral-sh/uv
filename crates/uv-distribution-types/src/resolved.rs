@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::sync::Arc;
 
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
 
 use crate::{
@@ -141,6 +141,15 @@ impl ResolvedDistRef<'_> {
             },
         }
     }
+
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Self::InstallableRegistrySourceDist { sdist, .. } => Some(&sdist.index),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => Some(&wheel.index),
+            Self::Installed { .. } => None,
+        }
+    }
 }
 
 impl Display for ResolvedDistRef<'_> {
@@ -164,7 +173,7 @@ impl Name for ResolvedDistRef<'_> {
 }
 
 impl DistributionMetadata for ResolvedDistRef<'_> {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Installed { dist } => VersionOrUrlRef::Version(dist.version()),
             Self::InstallableRegistrySourceDist { sdist, .. } => sdist.version_or_url(),
@@ -201,7 +210,7 @@ impl Name for ResolvedDist {
 }
 
 impl DistributionMetadata for ResolvedDist {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         match self {
             Self::Installed { dist } => dist.version_or_url(),
             Self::Installable { dist, .. } => dist.version_or_url(),

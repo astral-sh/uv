@@ -36,7 +36,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
         &self,
         requires_python: &RequiresPython,
         include_markers: bool,
-    ) -> Cow<str> {
+    ) -> Cow<'_, str> {
         // If the URL is editable, write it as an editable requirement.
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
@@ -143,7 +143,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
 
     /// Convert the [`RequirementsTxtDist`] to a comparator that can be used to sort the requirements
     /// in a `requirements.txt` file.
-    pub(crate) fn to_comparator(&self) -> RequirementsTxtComparator {
+    pub(crate) fn to_comparator(&self) -> RequirementsTxtComparator<'_> {
         if self.dist.is_editable() {
             if let VersionOrUrlRef::Url(url) = self.dist.version_or_url() {
                 return RequirementsTxtComparator::Url(url.verbatim());
@@ -213,7 +213,7 @@ impl Name for RequirementsTxtDist<'_> {
 }
 
 impl DistributionMetadata for RequirementsTxtDist<'_> {
-    fn version_or_url(&self) -> VersionOrUrlRef {
+    fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         self.dist.version_or_url()
     }
 }

@@ -394,6 +394,15 @@ impl VersionSpecifier {
         }
     }
 
+    /// Remove all parts of the version beyond the minor segment of the release.
+    #[must_use]
+    pub fn only_minor_release(&self) -> Self {
+        Self {
+            operator: self.operator,
+            version: self.version.only_minor_release(),
+        }
+    }
+
     /// `==<version>`
     pub fn equals_version(version: Version) -> Self {
         Self {
@@ -482,61 +491,57 @@ impl VersionSpecifier {
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
         bounds: (&Bound<Version>, &Bound<Version>),
-    ) -> impl Iterator<Item = VersionSpecifier> {
+    ) -> impl Iterator<Item = Self> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
-                (Some(VersionSpecifier::equals_version(v1.clone())), None)
+                (Some(Self::equals_version(v1.clone())), None)
             }
             // `v >= 3.7 && v < 3.8` is equivalent to `v == 3.7.*`
             (Bound::Included(v1), Bound::Excluded(v2)) => {
                 match *v1.only_release_trimmed().release() {
                     [major] if *v2.only_release_trimmed().release() == [major, 1] => {
                         let version = Version::new([major, 0]);
-                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                        (Some(Self::equals_star_version(version)), None)
                     }
                     [major, minor]
                         if *v2.only_release_trimmed().release() == [major, minor + 1] =>
                     {
                         let version = Version::new([major, minor]);
-                        (Some(VersionSpecifier::equals_star_version(version)), None)
+                        (Some(Self::equals_star_version(version)), None)
                     }
                     _ => (
-                        VersionSpecifier::from_lower_bound(&Bound::Included(v1.clone())),
-                        VersionSpecifier::from_upper_bound(&Bound::Excluded(v2.clone())),
+                        Self::from_lower_bound(&Bound::Included(v1.clone())),
+                        Self::from_upper_bound(&Bound::Excluded(v2.clone())),
                     ),
                 }
             }
-            (lower, upper) => (
-                VersionSpecifier::from_lower_bound(lower),
-                VersionSpecifier::from_upper_bound(upper),
-            ),
+            (lower, upper) => (Self::from_lower_bound(lower), Self::from_upper_bound(upper)),
         };
 
         b1.into_iter().chain(b2)
     }
 
     /// Returns a version specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_lower_bound(bound: &Bound<Version>) -> Option<Self> {
         match bound {
-            Bound::Included(version) => Some(
-                VersionSpecifier::from_version(Operator::GreaterThanEqual, version.clone())
-                    .unwrap(),
-            ),
-            Bound::Excluded(version) => Some(
-                VersionSpecifier::from_version(Operator::GreaterThan, version.clone()).unwrap(),
-            ),
+            Bound::Included(version) => {
+                Some(Self::from_version(Operator::GreaterThanEqual, version.clone()).unwrap())
+            }
+            Bound::Excluded(version) => {
+                Some(Self::from_version(Operator::GreaterThan, version.clone()).unwrap())
+            }
             Bound::Unbounded => None,
         }
     }
 
     /// Returns a version specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<Version>) -> Option<VersionSpecifier> {
+    pub fn from_upper_bound(bound: &Bound<Version>) -> Option<Self> {
         match bound {
-            Bound::Included(version) => Some(
-                VersionSpecifier::from_version(Operator::LessThanEqual, version.clone()).unwrap(),
-            ),
+            Bound::Included(version) => {
+                Some(Self::from_version(Operator::LessThanEqual, version.clone()).unwrap())
+            }
             Bound::Excluded(version) => {
-                Some(VersionSpecifier::from_version(Operator::LessThan, version.clone()).unwrap())
+                Some(Self::from_version(Operator::LessThan, version.clone()).unwrap())
             }
             Bound::Unbounded => None,
         }
@@ -905,16 +910,14 @@ impl<'a> TildeVersionSpecifier<'a> {
     ///
     /// If a [`Operator::TildeEqual`] is not used, or the version includes more than minor and patch
     /// segments, this will return [`None`].
-    pub fn from_specifier(specifier: VersionSpecifier) -> Option<TildeVersionSpecifier<'a>> {
+    pub fn from_specifier(specifier: VersionSpecifier) -> Option<Self> {
         TildeVersionSpecifier::new(Cow::Owned(specifier))
     }
 
     /// Create a new [`TildeVersionSpecifier`] from a [`VersionSpecifier`] reference.
     ///
     /// See [`TildeVersionSpecifier::from_specifier`].
-    pub fn from_specifier_ref(
-        specifier: &'a VersionSpecifier,
-    ) -> Option<TildeVersionSpecifier<'a>> {
+    pub fn from_specifier_ref(specifier: &'a VersionSpecifier) -> Option<Self> {
         TildeVersionSpecifier::new(Cow::Borrowed(specifier))
     }
 
@@ -957,7 +960,7 @@ impl<'a> TildeVersionSpecifier<'a> {
     }
 
     /// Construct a new tilde `VersionSpecifier` with the given patch version appended.
-    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier {
+    pub fn with_patch_version(&self, patch: u64) -> TildeVersionSpecifier<'_> {
         let mut release = self.inner.version.release().to_vec();
         if self.has_patch() {
             release.pop();

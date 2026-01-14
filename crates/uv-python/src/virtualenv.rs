@@ -79,30 +79,63 @@ pub(crate) enum CondaEnvironmentKind {
 impl CondaEnvironmentKind {
     /// Whether the given `CONDA_PREFIX` path is the base Conda environment.
     ///
-    /// When the base environment is used, `CONDA_DEFAULT_ENV` will be set to a name, i.e., `base` or
-    /// `root` which does not match the prefix, e.g. `/usr/local` instead of
-    /// `/usr/local/conda/envs/<name>`.
+    /// The base environment is typically stored in a location matching the `_CONDA_ROOT` path.
+    ///
+    /// Additionally, when the base environment is active, `CONDA_DEFAULT_ENV` will be set to a
+    /// name, e.g., `base`, which does not match the `CONDA_PREFIX`, e.g., `/usr/local` instead of
+    /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
+    /// active environment name, not a constant base environment name.
     fn from_prefix_path(path: &Path) -> Self {
-        // If we cannot read `CONDA_DEFAULT_ENV`, there's no way to know if the base environment
-        let Ok(default_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
-            return CondaEnvironmentKind::Child;
-        };
-
-        // These are the expected names for the base environment
-        if default_env != "base" && default_env != "root" {
-            return CondaEnvironmentKind::Child;
+        // Pixi never creates true "base" envs and names project envs "default", confusing our
+        // heuristics, so treat Pixi prefixes as child envs outright.
+        if is_pixi_environment(path) {
+            return Self::Child;
         }
 
-        let Some(name) = path.file_name() else {
-            return CondaEnvironmentKind::Child;
+        // If `_CONDA_ROOT` is set and matches `CONDA_PREFIX`, it's the base environment.
+        if let Ok(conda_root) = env::var(EnvVars::CONDA_ROOT) {
+            if path == Path::new(&conda_root) {
+                return Self::Base;
+            }
+        }
+
+        // Next, we'll use a heuristic based on `CONDA_DEFAULT_ENV`
+        let Ok(current_env) = env::var(EnvVars::CONDA_DEFAULT_ENV) else {
+            return Self::Child;
         };
 
-        if name.to_str().is_some_and(|name| name == default_env) {
-            CondaEnvironmentKind::Base
+        // If the `CONDA_PREFIX` equals the `CONDA_DEFAULT_ENV`, we're in an unnamed environment
+        // which is typical for environments created with `conda create -p /path/to/env`.
+        if path == Path::new(&current_env) {
+            return Self::Child;
+        }
+
+        // If the environment name is "base" or "root", treat it as a base environment
+        //
+        // These are the expected names for the base environment; and is retained for backwards
+        // compatibility, but in a future breaking release we should remove this special-casing.
+        if current_env == "base" || current_env == "root" {
+            return Self::Base;
+        }
+
+        // For other environment names, use the path-based logic
+        let Some(name) = path.file_name() else {
+            return Self::Child;
+        };
+
+        // If the environment is in a directory matching the name of the environment, it's not
+        // usually a base environment.
+        if name.to_str().is_some_and(|name| name == current_env) {
+            Self::Child
         } else {
-            CondaEnvironmentKind::Child
+            Self::Base
         }
     }
+}
+
+/// Detect whether the current `CONDA_PREFIX` belongs to a Pixi-managed environment.
+fn is_pixi_environment(path: &Path) -> bool {
+    path.join("conda-meta").join("pixi").is_file()
 }
 
 /// Locate an active conda environment by inspecting environment variables.
@@ -295,9 +328,36 @@ impl PyVenvConfiguration {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use indoc::indoc;
+    use temp_env::with_vars;
+    use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn pixi_environment_is_treated_as_child() {
+        let tempdir = tempdir().unwrap();
+        let prefix = tempdir.path();
+        let conda_meta = prefix.join("conda-meta");
+
+        fs::create_dir_all(&conda_meta).unwrap();
+        fs::write(conda_meta.join("pixi"), []).unwrap();
+
+        let vars = [
+            (EnvVars::CONDA_ROOT, None),
+            (EnvVars::CONDA_PREFIX, Some(prefix.as_os_str())),
+            (EnvVars::CONDA_DEFAULT_ENV, Some(OsStr::new("example"))),
+        ];
+
+        with_vars(vars, || {
+            assert_eq!(
+                CondaEnvironmentKind::from_prefix_path(prefix),
+                CondaEnvironmentKind::Child
+            );
+        });
+    }
 
     #[test]
     fn test_set_existing_key() {

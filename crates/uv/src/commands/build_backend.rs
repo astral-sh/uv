@@ -10,6 +10,7 @@ pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
         &env::current_dir()?,
         sdist_directory,
         uv_version::version(),
+        false,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -26,6 +27,7 @@ pub(crate) fn build_wheel(
         wheel_directory,
         metadata_directory,
         uv_version::version(),
+        false,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -42,6 +44,7 @@ pub(crate) fn build_editable(
         wheel_directory,
         metadata_directory,
         uv_version::version(),
+        false,
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

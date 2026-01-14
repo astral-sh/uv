@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
 
 use crate::Cache;
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use tracing::{debug, warn};
 
 #[derive(Parser, Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct CacheArgs {
     /// `%LOCALAPPDATA%\uv\cache` on Windows.
     ///
     /// To view the location of the cache directory, run `uv cache dir`.
-    #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR)]
+    #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR, value_hint = ValueHint::DirPath)]
     pub cache_dir: Option<PathBuf>,
 }
 
@@ -82,7 +82,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Cache::from_settings(value.no_cache, value.cache_dir)
+        Self::from_settings(value.no_cache, value.cache_dir)
     }
 }
 

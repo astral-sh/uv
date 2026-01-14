@@ -25,7 +25,8 @@ use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
@@ -400,9 +401,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && dev.is_none() {
+                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
                     Some("your project".to_string())
                 } else {
                     Some(format!("{package}"))
@@ -411,7 +412,7 @@ impl PubGrubReportFormatter<'_> {
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
-            PubGrubPackageInner::Dev { name, .. } if self.workspace_members.contains(name) => {
+            PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
                 Some(format!("{package}"))
             }
             _ => None,
@@ -428,9 +429,9 @@ impl PubGrubReportFormatter<'_> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
-                name, extra, dev, ..
+                name, extra, group, ..
             } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && dev.is_none()
+                self.is_single_project_workspace() && extra.is_none() && group.is_none()
             }
             _ => false,
         }
@@ -543,10 +544,8 @@ impl PubGrubReportFormatter<'_> {
             DerivationTree::External(External::Custom(package, set, reason)) => {
                 if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
-                    if options.flexibility == Flexibility::Configurable {
-                        if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(name, set, selector, env, output_hints);
-                        }
+                    if !fork_urls.contains_key(name) {
+                        self.prerelease_hint(name, set, selector, env, options, output_hints);
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -603,10 +602,8 @@ impl PubGrubReportFormatter<'_> {
             DerivationTree::External(External::NoVersions(package, set)) => {
                 if let Some(name) = package.name_no_root() {
                     // Check for no versions due to pre-release options.
-                    if options.flexibility == Flexibility::Configurable {
-                        if !fork_urls.contains_key(name) {
-                            self.prerelease_available_hint(name, set, selector, env, output_hints);
-                        }
+                    if !fork_urls.contains_key(name) {
+                        self.prerelease_hint(name, set, selector, env, options, output_hints);
                     }
 
                     // Check for no versions due to no `--find-links` flat index.
@@ -647,7 +644,7 @@ impl PubGrubReportFormatter<'_> {
 
                     if package_name == dependency_name
                         && (dependency.extra().is_none() || package.extra() == dependency.extra())
-                        && (dependency.dev().is_none() || dependency.dev() == package.dev())
+                        && (dependency.group().is_none() || dependency.group() == package.group())
                         && workspace_members.contains(package_name)
                     {
                         output_hints.insert(PubGrubHint::DependsOnItself {
@@ -935,14 +932,19 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
-    fn prerelease_available_hint(
+    fn prerelease_hint(
         &self,
         name: &PackageName,
         set: &Range<Version>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
+        options: &Options,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
+        if selector.prerelease_strategy().allows(name, env) == AllowPrerelease::Yes {
+            return;
+        }
+
         let any_prerelease = set.iter().any(|(start, end)| {
             // Ignore, e.g., `>=2.4.dev0,<2.5.dev0`, which is the desugared form of `==2.4.*`.
             if PrefixMatch::from_range(start, end).is_some() {
@@ -972,11 +974,19 @@ impl PubGrubReportFormatter<'_> {
 
         if any_prerelease {
             // A pre-release marker appeared in the version requirements.
-            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
-                hints.insert(PubGrubHint::PrereleaseRequested {
-                    name: name.clone(),
-                    range: set.clone(),
-                });
+            match options.flexibility {
+                Flexibility::Configurable => {
+                    hints.insert(PubGrubHint::PrereleaseRequested {
+                        name: name.clone(),
+                        range: set.clone(),
+                    });
+                }
+                Flexibility::Fixed => {
+                    hints.insert(PubGrubHint::BuildPrereleaseRequested {
+                        name: name.clone(),
+                        range: set.clone(),
+                    });
+                }
             }
         } else if let Some(version) = self.available_versions.get(name).and_then(|versions| {
             versions
@@ -986,11 +996,19 @@ impl PubGrubReportFormatter<'_> {
                 .find(|version| set.contains(version))
         }) {
             // There are pre-release versions available for the package.
-            if selector.prerelease_strategy().allows(name, env) != AllowPrerelease::Yes {
-                hints.insert(PubGrubHint::PrereleaseAvailable {
-                    package: name.clone(),
-                    version: version.clone(),
-                });
+            match options.flexibility {
+                Flexibility::Configurable => {
+                    hints.insert(PubGrubHint::PrereleaseAvailable {
+                        package: name.clone(),
+                        version: version.clone(),
+                    });
+                }
+                Flexibility::Fixed => {
+                    hints.insert(PubGrubHint::BuildPrereleaseAvailable {
+                        package: name.clone(),
+                        version: version.clone(),
+                    });
+                }
             }
         }
     }
@@ -1006,9 +1024,23 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         version: Version,
     },
+    /// The resolver runs with fixed options (e.g., for build environments) and requires explicit
+    /// pre-release opt-in for a package that only has pre-releases available.
+    BuildPrereleaseAvailable {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+    },
     /// A requirement included a pre-release marker, but pre-releases weren't enabled for that
     /// package.
     PrereleaseRequested {
+        name: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        range: Range<Version>,
+    },
+    /// A requirement included a pre-release marker, but the resolver runs with fixed options
+    /// (e.g., for build environments) and cannot enable pre-releases automatically.
+    BuildPrereleaseRequested {
         name: PackageName,
         // excluded from `PartialEq` and `Hash`
         range: Range<Version>,
@@ -1022,13 +1054,13 @@ pub(crate) enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: String,
+        reason: UnavailableErrorChain,
     },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
@@ -1158,7 +1190,13 @@ enum PubGrubHintCore {
     PrereleaseAvailable {
         package: PackageName,
     },
+    BuildPrereleaseAvailable {
+        package: PackageName,
+    },
     PrereleaseRequested {
+        package: PackageName,
+    },
+    BuildPrereleaseRequested {
         package: PackageName,
     },
     NoIndex,
@@ -1227,8 +1265,14 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
+            PubGrubHint::BuildPrereleaseAvailable { package, .. } => {
+                Self::BuildPrereleaseAvailable { package }
+            }
             PubGrubHint::PrereleaseRequested { name: package, .. } => {
                 Self::PrereleaseRequested { package }
+            }
+            PubGrubHint::BuildPrereleaseRequested { name: package, .. } => {
+                Self::BuildPrereleaseRequested { package }
             }
             PubGrubHint::NoIndex => Self::NoIndex,
             PubGrubHint::Offline => Self::Offline,
@@ -1313,6 +1357,18 @@ impl std::fmt::Display for PubGrubHint {
                     "--prerelease=allow".green(),
                 )
             }
+            Self::BuildPrereleaseAvailable { package, version } => {
+                let spec = format!("{package}>={version}");
+                write!(
+                    f,
+                    "{}{} Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically. Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    version.cyan(),
+                    spec.cyan(),
+                )
+            }
             Self::PrereleaseRequested { name, range } => {
                 write!(
                     f,
@@ -1322,6 +1378,17 @@ impl std::fmt::Display for PubGrubHint {
                     name.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     "--prerelease=allow".green(),
+                )
+            }
+            Self::BuildPrereleaseRequested { name, range } => {
+                write!(
+                    f,
+                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    name.cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                 )
             }
             Self::NoIndex => {
@@ -1344,21 +1411,21 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` could not be parsed:\n{}",
+                    "{}{} Metadata for `{}` could not be parsed.\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` was invalid:\n{}",
+                    "{}{} The structure of `{}` was invalid\n{}",
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                    textwrap::indent(reason, "  ")
+                    textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
             Self::InvalidVersionMetadata {
@@ -1548,7 +1615,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex { index } => {
                 write!(
                     f,
-                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
+                    "{}{} An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
                     "hint".bold().cyan(),
                     ":".bold(),
                     index.without_credentials().cyan(),
@@ -1828,6 +1895,23 @@ fn update_availability_range(
     range: &Range<Version>,
     available_versions: &BTreeSet<Version>,
 ) -> Range<Version> {
+    /// Whether a (normalized) version is contained in a set of versions.
+    ///
+    /// Unfortunately, we need to normalize the version because when we extract it from the range it
+    /// may have `min` or `max` set but the values in `available_versions` will never have `min` or
+    /// `max`.
+    fn version_contained_in(version: &Version, versions: &BTreeSet<Version>) -> bool {
+        if versions.contains(version) {
+            return true;
+        }
+
+        // It's a little unfortunate we perform a clone here and throw away the value, but the
+        // performance implications during an error report seem negligible and it makes the
+        // calling code simpler.
+        let version = version.clone().with_min(None).with_max(None);
+        versions.contains(&version)
+    }
+
     let mut new_range = Range::empty();
 
     // Construct an available range to help guide simplification. Note this is not strictly correct,
@@ -1890,13 +1974,13 @@ fn update_availability_range(
         // bound to avoid confusion, e.g., if the segment is `foo<=10` and the available versions
         // do not include `foo 10`, we should instead say `foo<10`.
         let lower = match lower {
-            Bound::Included(version) if !available_versions.contains(version) => {
+            Bound::Included(version) if !version_contained_in(version, available_versions) => {
                 Bound::Excluded(version.clone())
             }
             _ => (*lower).clone(),
         };
         let upper = match upper {
-            Bound::Included(version) if !available_versions.contains(version) => {
+            Bound::Included(version) if !version_contained_in(version, available_versions) => {
                 Bound::Excluded(version.clone())
             }
             _ => (*upper).clone(),
@@ -2011,7 +2095,7 @@ impl<'a> DependsOn<'a> {
     /// Adds an additional dependency.
     ///
     /// Note this overwrites previous calls to `DependsOn::and`.
-    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> DependsOn<'a> {
+    fn and(mut self, package: &'a PubGrubPackage, range: &'a Range<Version>) -> Self {
         self.dependency2 = Some(PackageRange {
             package,
             range,

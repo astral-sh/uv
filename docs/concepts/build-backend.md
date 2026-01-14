@@ -31,7 +31,7 @@ To use uv as a build backend in an existing project, add `uv_build` to the
 
 ```toml title="pyproject.toml"
 [build-system]
-requires = ["uv_build>=0.8.4,<0.9.0"]
+requires = ["uv_build>=0.9.25,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -230,12 +230,19 @@ From these,
 [`tool.uv.build-backend.source-exclude`](../reference/settings.md#build-backend_source-exclude),
 [`tool.uv.build-backend.wheel-exclude`](../reference/settings.md#build-backend_wheel-exclude) and
 the default excludes are removed. The source dist excludes are applied to avoid source tree to wheel
-source builds including more files than source tree to source distribution to wheel build.
+builds including more files than source tree to source distribution to wheel build.
 
 There are no specific wheel includes. There must only be one top level module, and all data files
 must either be under the module root or in the appropriate
 [data directory](../reference/settings.md#build-backend_data). Most packages store small data in the
 module root alongside the source code.
+
+!!! tip
+
+    When using the uv build backend through a frontend that is not uv, such as pip or
+    `python -m build`, debug logging can be enabled through environment variables with
+    `RUST_LOG=uv=debug` or `RUST_LOG=uv=verbose`. When used through uv, the uv build backend shares
+    the verbosity level of uv.
 
 ### Include and exclude syntax
 

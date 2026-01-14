@@ -4,16 +4,19 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, NoSources,
-    PackageConfigSettings, RequiredVersion, TargetTriple, TrustedPublishing,
+    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, NoSources, ProxyUrl,
+    Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
-use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
+use uv_distribution_types::{
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
+    PipFindLinks, PipIndex,
+};
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
@@ -40,7 +43,7 @@ pub trait Combine {
 
 impl Combine for Option<FilesystemOptions> {
     /// Combine the options used in two [`FilesystemOptions`]s. Retains the root of `self`.
-    fn combine(self, other: Option<FilesystemOptions>) -> Option<FilesystemOptions> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(FilesystemOptions(
                 a.into_options().combine(b.into_options()),
@@ -52,7 +55,7 @@ impl Combine for Option<FilesystemOptions> {
 
 impl Combine for Option<Options> {
     /// Combine the options used in two [`Options`]s. Retains the root of `self`.
-    fn combine(self, other: Option<Options>) -> Option<Options> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
@@ -61,7 +64,7 @@ impl Combine for Option<Options> {
 }
 
 impl Combine for Option<PipOptions> {
-    fn combine(self, other: Option<PipOptions>) -> Option<PipOptions> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
@@ -82,7 +85,7 @@ macro_rules! impl_combine_or {
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
-impl_combine_or!(ExcludeNewerTimestamp);
+impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
@@ -97,6 +100,7 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
+impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);
 impl_combine_or!(PythonVersion);
@@ -114,7 +118,7 @@ impl_combine_or!(bool);
 impl<T> Combine for Option<Vec<T>> {
     /// Combine two vectors by extending the vector in `self` with the vector in `other`, if they're
     /// both `Some`.
-    fn combine(self, other: Option<Vec<T>>) -> Option<Vec<T>> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 a.extend(b);
@@ -127,7 +131,7 @@ impl<T> Combine for Option<Vec<T>> {
 
 impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
     /// Combine two maps of vecs by combining their vecs
-    fn combine(self, other: Option<BTreeMap<K, Vec<T>>>) -> Option<BTreeMap<K, Vec<T>>> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 for (key, value) in b {
@@ -142,7 +146,7 @@ impl<K: Ord, T> Combine for Option<BTreeMap<K, Vec<T>>> {
 
 impl Combine for Option<ExcludeNewerPackage> {
     /// Combine two [`ExcludeNewerPackage`] instances by merging them, with the values in `self` taking precedence.
-    fn combine(self, other: Option<ExcludeNewerPackage>) -> Option<ExcludeNewerPackage> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(mut a), Some(b)) => {
                 // Extend with values from b, but a takes precedence (we don't overwrite existing keys)
@@ -159,7 +163,7 @@ impl Combine for Option<ExcludeNewerPackage> {
 impl Combine for Option<ConfigSettings> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
-    fn combine(self, other: Option<ConfigSettings>) -> Option<ConfigSettings> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
             (a, b) => a.or(b),
@@ -170,7 +174,7 @@ impl Combine for Option<ConfigSettings> {
 impl Combine for Option<PackageConfigSettings> {
     /// Combine two maps by merging the map in `self` with the map in `other`, if they're both
     /// `Some`.
-    fn combine(self, other: Option<PackageConfigSettings>) -> Option<PackageConfigSettings> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.merge(b)),
             (a, b) => a.or(b),
@@ -180,7 +184,34 @@ impl Combine for Option<PackageConfigSettings> {
 
 impl Combine for Option<NoSources> {
     /// Combine two source strategies by using the `combine` method if they're both `Some`.
-    fn combine(self, other: Option<NoSources>) -> Option<NoSources> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Upgrade> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<Reinstall> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for Option<BuildIsolation> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),
@@ -208,9 +239,11 @@ impl Combine for ExcludeNewer {
             if self.package.is_empty() {
                 self.package = other.package;
             } else {
-                // Merge package-specific timestamps, with self taking precedence
-                for (pkg, timestamp) in &other.package {
-                    self.package.entry(pkg.clone()).or_insert(*timestamp);
+                // Merge package-specific settings, with self taking precedence
+                for (pkg, setting) in &other.package {
+                    self.package
+                        .entry(pkg.clone())
+                        .or_insert_with(|| setting.clone());
                 }
             }
         }
@@ -238,7 +271,36 @@ impl Combine for ExtraBuildDependencies {
 }
 
 impl Combine for Option<ExtraBuildDependencies> {
-    fn combine(self, other: Option<ExtraBuildDependencies>) -> Option<ExtraBuildDependencies> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for ExtraBuildVariables {
+    fn combine(mut self, other: Self) -> Self {
+        for (key, value) in other {
+            match self.entry(key) {
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    // Combine the maps, with self taking precedence
+                    let existing = entry.get_mut();
+                    for (k, v) in value {
+                        existing.entry(k).or_insert(v);
+                    }
+                }
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+            }
+        }
+        self
+    }
+}
+
+impl Combine for Option<ExtraBuildVariables> {
+    fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
             (a, b) => a.or(b),

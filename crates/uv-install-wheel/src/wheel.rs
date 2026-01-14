@@ -12,7 +12,6 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
-use uv_cache_info::CacheInfo;
 use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -258,6 +257,76 @@ pub(crate) fn write_script_entrypoints(
     Ok(())
 }
 
+/// A parsed `WHEEL` file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WheelFile(FxHashMap<String, Vec<String>>);
+
+impl WheelFile {
+    /// Parse `WHEEL` file.
+    ///
+    /// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
+    /// > email message format:
+    pub fn parse(wheel_text: &str) -> Result<Self, Error> {
+        // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same email message format:
+        let data = parse_email_message_file(&mut wheel_text.as_bytes(), "WHEEL")?;
+
+        // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
+        // like pip
+        let wheel_version = data
+            .get("Wheel-Version")
+            .and_then(|wheel_versions| wheel_versions.first());
+        let wheel_version = wheel_version
+            .and_then(|wheel_version| wheel_version.split_once('.'))
+            .ok_or_else(|| {
+                Error::InvalidWheel(format!(
+                    "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
+                ))
+            })?;
+        // pip has some test wheels that use that ancient version,
+        // and technically we only need to check that the version is not higher
+        if wheel_version == ("0", "1") {
+            warn!("Ancient wheel version 0.1 (expected is 1.0)");
+            return Ok(Self(data));
+        }
+        // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
+        // Wheel-Version: 1.0
+        if wheel_version.0 != "1" {
+            return Err(Error::InvalidWheel(format!(
+                "Unsupported wheel major version (expected {}, got {})",
+                1, wheel_version.0
+            )));
+        }
+        if wheel_version.1 > "0" {
+            warn!(
+                "Warning: Unsupported wheel minor version (expected {}, got {})",
+                0, wheel_version.1
+            );
+        }
+        Ok(Self(data))
+    }
+
+    /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
+    pub fn lib_kind(&self) -> LibKind {
+        // Determine whether Root-Is-Purelib == ‘true’.
+        // If it is, the wheel is pure, and should be installed into purelib.
+        let root_is_purelib = self
+            .0
+            .get("Root-Is-Purelib")
+            .and_then(|root_is_purelib| root_is_purelib.first())
+            .is_some_and(|root_is_purelib| root_is_purelib == "true");
+        if root_is_purelib {
+            LibKind::Pure
+        } else {
+            LibKind::Plat
+        }
+    }
+
+    /// Return the list of wheel tags.
+    pub fn tags(&self) -> Option<&[String]> {
+        self.0.get("Tag").map(Vec::as_slice)
+    }
+}
+
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LibKind {
@@ -265,61 +334,6 @@ pub enum LibKind {
     Pure,
     /// Install into the `platlib` directory.
     Plat,
-}
-
-/// Parse WHEEL file.
-///
-/// > {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same
-/// > email message format:
-pub fn parse_wheel_file(wheel_text: &str) -> Result<LibKind, Error> {
-    // {distribution}-{version}.dist-info/WHEEL is metadata about the archive itself in the same email message format:
-    let data = parse_email_message_file(&mut wheel_text.as_bytes(), "WHEEL")?;
-
-    // Determine whether Root-Is-Purelib == ‘true’.
-    // If it is, the wheel is pure, and should be installed into purelib.
-    let root_is_purelib = data
-        .get("Root-Is-Purelib")
-        .and_then(|root_is_purelib| root_is_purelib.first())
-        .is_some_and(|root_is_purelib| root_is_purelib == "true");
-    let lib_kind = if root_is_purelib {
-        LibKind::Pure
-    } else {
-        LibKind::Plat
-    };
-
-    // mkl_fft-1.3.6-58-cp310-cp310-manylinux2014_x86_64.whl has multiple Wheel-Version entries, we have to ignore that
-    // like pip
-    let wheel_version = data
-        .get("Wheel-Version")
-        .and_then(|wheel_versions| wheel_versions.first());
-    let wheel_version = wheel_version
-        .and_then(|wheel_version| wheel_version.split_once('.'))
-        .ok_or_else(|| {
-            Error::InvalidWheel(format!(
-                "Invalid Wheel-Version in WHEEL file: {wheel_version:?}"
-            ))
-        })?;
-    // pip has some test wheels that use that ancient version,
-    // and technically we only need to check that the version is not higher
-    if wheel_version == ("0", "1") {
-        warn!("Ancient wheel version 0.1 (expected is 1.0)");
-        return Ok(lib_kind);
-    }
-    // Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
-    // Wheel-Version: 1.0
-    if wheel_version.0 != "1" {
-        return Err(Error::InvalidWheel(format!(
-            "Unsupported wheel major version (expected {}, got {})",
-            1, wheel_version.0
-        )));
-    }
-    if wheel_version.1 > "0" {
-        warn!(
-            "Warning: Unsupported wheel minor version (expected {}, got {})",
-            0, wheel_version.1
-        );
-    }
-    Ok(lib_kind)
 }
 
 /// Moves the files and folders in src to dest, updating the RECORD in the process
@@ -359,7 +373,9 @@ pub(crate) fn move_folder_recorded(
                         src.simplified_display()
                     ))
                 })?;
-            entry.path = relative_to(&target, site_packages)?.display().to_string();
+            entry.path = relative_to(&target, site_packages)?
+                .portable_display()
+                .to_string();
         }
     }
     Ok(())
@@ -562,7 +578,7 @@ fn install_script(
         })?;
 
     // Update the entry in the `RECORD`.
-    entry.path = script_relative.simplified_display().to_string();
+    entry.path = script_relative.portable_display().to_string();
     if let Some((size, encoded_hash)) = size_and_encoded_hash {
         entry.size = Some(size);
         entry.hash = Some(encoded_hash);
@@ -666,8 +682,8 @@ pub(crate) fn install_data(
             }
             _ => {
                 return Err(Error::InvalidWheel(format!(
-                    "Unknown wheel data type: {:?}",
-                    entry.file_name()
+                    "Unknown wheel data type: {}",
+                    entry.file_name().display()
                 )));
             }
         }
@@ -704,12 +720,13 @@ pub(crate) fn write_file_recorded(
 }
 
 /// Adds `INSTALLER`, `REQUESTED` and `direct_url.json` to the .dist-info dir
-pub(crate) fn write_installer_metadata(
+pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Serialize>(
     site_packages: &Path,
     dist_info_prefix: &str,
     requested: bool,
     direct_url: Option<&DirectUrl>,
-    cache_info: Option<&CacheInfo>,
+    cache_info: Option<&Cache>,
+    build_info: Option<&Build>,
     installer: Option<&str>,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
@@ -730,6 +747,14 @@ pub(crate) fn write_installer_metadata(
             site_packages,
             &dist_info_dir.join("uv_cache.json"),
             serde_json::to_string(cache_info)?.as_bytes(),
+            record,
+        )?;
+    }
+    if let Some(build_info) = build_info {
+        write_file_recorded(
+            site_packages,
+            &dist_info_dir.join("uv_build.json"),
+            serde_json::to_string(build_info)?.as_bytes(),
             record,
         )?;
     }
@@ -904,7 +929,7 @@ impl RenameOrCopy {
             Self::Rename => match fs_err::rename(from.as_ref(), to.as_ref()) {
                 Ok(()) => {}
                 Err(err) => {
-                    *self = RenameOrCopy::Copy;
+                    *self = Self::Copy;
                     debug!("Failed to rename, falling back to copy: {err}");
                     fs_err::copy(from.as_ref(), to.as_ref())?;
                 }
@@ -926,12 +951,9 @@ mod test {
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
 
-    use crate::Error;
-    use crate::wheel::format_shebang;
-
     use super::{
-        RecordEntry, Script, get_script_executable, parse_email_message_file, parse_wheel_file,
-        read_record_file, write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
+        parse_email_message_file, read_record_file, write_installer_metadata,
     };
 
     #[test]
@@ -1005,8 +1027,8 @@ mod test {
                 version
             }
         }
-        parse_wheel_file(&wheel_with_version("1.0")).unwrap();
-        parse_wheel_file(&wheel_with_version("2.0")).unwrap_err();
+        WheelFile::parse(&wheel_with_version("1.0")).unwrap();
+        WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
     }
 
     #[test]
@@ -1221,10 +1243,11 @@ mod test {
             .child("foo-0.1.0.dist-info")
             .create_dir_all()
             .unwrap();
-        write_installer_metadata(
+        write_installer_metadata::<(), ()>(
             site_packages,
             "foo-0.1.0",
             true,
+            None,
             None,
             None,
             Some("uv"),

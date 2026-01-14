@@ -14,14 +14,14 @@ impl DryRun {
     /// Determine the [`DryRun`] setting based on the command-line arguments.
     pub fn from_args(dry_run: bool) -> Self {
         if dry_run {
-            DryRun::Enabled
+            Self::Enabled
         } else {
-            DryRun::Disabled
+            Self::Disabled
         }
     }
 
     /// Returns `true` if dry run mode is enabled.
     pub const fn enabled(&self) -> bool {
-        matches!(self, DryRun::Enabled) || matches!(self, DryRun::Check)
+        matches!(self, Self::Enabled) || matches!(self, Self::Check)
     }
 }

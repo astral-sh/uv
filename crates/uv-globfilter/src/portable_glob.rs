@@ -69,8 +69,8 @@ pub enum PortableGlobParser {
 impl PortableGlobParser {
     fn backslash_escape(self) -> bool {
         match self {
-            PortableGlobParser::Pep639 => false,
-            PortableGlobParser::Uv => true,
+            Self::Pep639 => false,
+            Self::Uv => true,
         }
     }
 
@@ -164,14 +164,14 @@ impl PortableGlobParser {
                 }
                 start_or_slash = false;
             } else if c == '\\' {
-                match *self {
-                    PortableGlobParser::Pep639 => {
+                match self {
+                    Self::Pep639 => {
                         return Err(PortableGlobError::InvalidBackslash {
                             glob: glob.to_string(),
                             pos,
                         });
                     }
-                    PortableGlobParser::Uv => {
+                    Self::Uv => {
                         match chars.next() {
                             Some((pos, '/' | '\\')) => {
                                 // For cross-platform compatibility, we don't allow forward slashes or
@@ -194,13 +194,13 @@ impl PortableGlobParser {
                     }
                 }
             } else {
-                let err = match *self {
-                    PortableGlobParser::Pep639 => PortableGlobError::InvalidCharacter {
+                let err = match self {
+                    Self::Pep639 => PortableGlobError::InvalidCharacter {
                         glob: glob.to_string(),
                         pos,
                         invalid: c,
                     },
-                    PortableGlobParser::Uv => PortableGlobError::InvalidCharacterUv {
+                    Self::Uv => PortableGlobError::InvalidCharacterUv {
                         glob: glob.to_string(),
                         pos,
                         invalid: c,

@@ -11,7 +11,7 @@ use crate::ROOT_DIR;
 use crate::generate_all::Mode;
 
 /// Contains current supported targets
-const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20250723/cpython-unix/targets.yml";
+const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260113/cpython-unix/targets.yml";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -99,13 +99,13 @@ async fn generate() -> Result<String> {
                 replacements
                     .entry(sysconfig_cc_entry)
                     .or_default()
-                    .insert(from_cc.to_string(), "cc".to_string());
+                    .insert(from_cc.to_owned(), "cc".to_string());
             }
             if let Some(ref from_cc) = targets_config.target_cc {
                 replacements
                     .entry(sysconfig_cc_entry)
                     .or_default()
-                    .insert(from_cc.to_string(), "cc".to_string());
+                    .insert(from_cc.to_owned(), "cc".to_string());
             }
         }
         for sysconfig_cxx_entry in ["CXX", "LDCXXSHARED"] {
@@ -113,13 +113,13 @@ async fn generate() -> Result<String> {
                 replacements
                     .entry(sysconfig_cxx_entry)
                     .or_default()
-                    .insert(from_cxx.to_string(), "c++".to_string());
+                    .insert(from_cxx.to_owned(), "c++".to_string());
             }
             if let Some(ref from_cxx) = targets_config.target_cxx {
                 replacements
                     .entry(sysconfig_cxx_entry)
                     .or_default()
-                    .insert(from_cxx.to_string(), "c++".to_string());
+                    .insert(from_cxx.to_owned(), "c++".to_string());
             }
         }
     }
@@ -130,7 +130,7 @@ async fn generate() -> Result<String> {
     output.push_str("//! DO NOT EDIT\n");
     output.push_str("//!\n");
     output.push_str("//! Generated with `cargo run dev generate-sysconfig-metadata`\n");
-    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20250723/cpython-unix/targets.yml>\n");
+    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260113/cpython-unix/targets.yml>\n");
     output.push_str("//!\n");
 
     // Disable clippy/fmt
@@ -188,6 +188,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_sysconfig_mappings() -> Result<()> {
+        // Skip this test in CI to avoid redundancy with the dedicated CI job
+        if env::var_os(EnvVars::CI).is_some() {
+            return Ok(());
+        }
+
         let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
             Mode::Write
         } else {

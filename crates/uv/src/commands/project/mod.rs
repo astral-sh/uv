@@ -7,27 +7,28 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Preview,
-    PreviewFeatures, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
-use uv_distribution::{DistributionDatabase, LoweredRequirement};
+use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
+use uv_preview::{Preview, PreviewFeatures};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
@@ -36,32 +37,35 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, PythonRequirement,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
+use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependencies;
-use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 pub(crate) mod add;
 pub(crate) mod environment;
 pub(crate) mod export;
+pub(crate) mod format;
 pub(crate) mod init;
 mod install_target;
 pub(crate) mod lock;
@@ -72,17 +76,76 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
 
+/// The source of a missing lockfile error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MissingLockfileSource {
+    /// The `--frozen` flag was provided.
+    Frozen,
+    /// The `UV_FROZEN` environment variable was set.
+    FrozenEnv,
+    /// The `frozen` option was set via workspace configuration.
+    FrozenConfiguration,
+    /// The `--locked` flag was provided.
+    Locked,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
+    /// The `--check` flag was provided.
+    Check,
+}
+
+impl std::fmt::Display for MissingLockfileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frozen => write!(f, "`--frozen`"),
+            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
+            Self::Locked => write!(f, "`--locked`"),
+            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
+            Self::Check => write!(f, "`--check`"),
+        }
+    }
+}
+
+impl From<LockCheckSource> for MissingLockfileSource {
+    fn from(source: LockCheckSource) -> Self {
+        match source {
+            LockCheckSource::LockedCli => Self::Locked,
+            LockCheckSource::LockedEnv => Self::LockedEnv,
+            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
+            LockCheckSource::Check => Self::Check,
+        }
+    }
+}
+
+impl From<FrozenSource> for MissingLockfileSource {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Env => Self::FrozenEnv,
+            FrozenSource::Configuration => Self::FrozenConfiguration,
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `{2}` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile,
+    MissingLockfile(MissingLockfileSource),
+
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -153,7 +216,7 @@ pub(crate) enum ProjectError {
     MissingGroupProject(GroupName),
 
     #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupWorkspace(GroupName),
+    MissingGroupProjects(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
@@ -167,7 +230,7 @@ pub(crate) enum ProjectError {
     MissingExtraProject(ExtraName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraWorkspace(ExtraName),
+    MissingExtraProjects(ExtraName),
 
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
@@ -212,6 +275,9 @@ pub(crate) enum ProjectError {
     DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
+    Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
     Python(#[from] uv_python::Error),
 
     #[error(transparent)]
@@ -251,13 +317,25 @@ pub(crate) enum ProjectError {
     Lowering(#[from] uv_distribution::LoweringError),
 
     #[error(transparent)]
+    Workspace(#[from] uv_workspace::WorkspaceError),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
+
+    #[error(transparent)]
+    ExtraBuildRequires(#[from] uv_distribution_types::ExtraBuildRequiresError),
 
     #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
+    Accelerator(#[from] uv_torch::AcceleratorError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -268,7 +346,7 @@ pub(crate) struct ConflictError {
     /// The set from which the conflict was derived.
     pub(crate) set: ConflictSet,
     /// The items from the set that were enabled, and thus create the conflict.
-    pub(crate) conflicts: Vec<ConflictPackage>,
+    pub(crate) conflicts: Vec<ConflictItem>,
     /// Enabled dependency groups with defaults applied.
     pub(crate) groups: DependencyGroupsWithDefaults,
 }
@@ -279,9 +357,10 @@ impl std::fmt::Display for ConflictError {
         let set = self
             .set
             .iter()
-            .map(|item| match item.conflict() {
-                ConflictPackage::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(group) => format!("`{}:{}`", item.package(), group),
+            .map(|item| match item.kind() {
+                ConflictKind::Project => format!("{}", item.package()),
+                ConflictKind::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictKind::Group(group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -289,7 +368,7 @@ impl std::fmt::Display for ConflictError {
         if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Extra(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Extra(..)))
         {
             write!(
                 f,
@@ -297,9 +376,9 @@ impl std::fmt::Display for ConflictError {
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Extra(extra) => format!("`{extra}`"),
-                            ConflictPackage::Group(..) => unreachable!(),
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Extra(extra) => format!("`{extra}`"),
+                            ConflictKind::Group(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -307,25 +386,20 @@ impl std::fmt::Display for ConflictError {
         } else if self
             .conflicts
             .iter()
-            .all(|conflict| matches!(conflict, ConflictPackage::Group(..)))
+            .all(|conflict| matches!(conflict.kind(), ConflictKind::Group(..)))
         {
-            let conflict_source = if self.set.is_inferred_conflict() {
-                "transitively inferred"
-            } else {
-                "declared"
-            };
             write!(
                 f,
-                "Groups {} are incompatible with the {conflict_source} conflicts: {{{set}}}",
+                "Groups {} are incompatible with the conflicts: {{{set}}}",
                 conjunction(
                     self.conflicts
                         .iter()
-                        .map(|conflict| match conflict {
-                            ConflictPackage::Group(group)
+                        .map(|conflict| match conflict.kind() {
+                            ConflictKind::Group(group)
                                 if self.groups.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(group) => format!("`{group}`"),
-                            ConflictPackage::Extra(..) => unreachable!(),
+                            ConflictKind::Group(group) => format!("`{group}`"),
+                            ConflictKind::Extra(..) | ConflictKind::Project => unreachable!(),
                         })
                         .collect()
                 )
@@ -339,14 +413,17 @@ impl std::fmt::Display for ConflictError {
                         .iter()
                         .enumerate()
                         .map(|(i, conflict)| {
-                            let conflict = match conflict {
-                                ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(group)
+                            let conflict = match conflict.kind() {
+                                ConflictKind::Project => {
+                                    format!("package `{}`", conflict.package())
+                                }
+                                ConflictKind::Extra(extra) => format!("extra `{extra}`"),
+                                ConflictKind::Group(group)
                                     if self.groups.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(group) => format!("group `{group}`"),
+                                ConflictKind::Group(group) => format!("group `{group}`"),
                             };
                             if i == 0 {
                                 capitalize(&conflict)
@@ -639,7 +716,7 @@ impl ScriptInterpreter {
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -689,12 +766,6 @@ impl ScriptInterpreter {
             Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         let interpreter = PythonInstallation::find_or_download(
@@ -702,7 +773,7 @@ impl ScriptInterpreter {
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -737,17 +808,18 @@ impl ScriptInterpreter {
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ScriptInterpreter::Interpreter(interpreter) => interpreter,
-            ScriptInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
         match script {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    LockedFileMode::Exclusive,
                     script.path.simplified_display(),
                 )
                 .await
@@ -755,6 +827,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Remote(.., url) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    LockedFileMode::Exclusive,
                     url.to_string(),
                 )
                 .await
@@ -762,6 +835,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Stdin(metadata) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    LockedFileMode::Exclusive,
                     "stdin".to_string(),
                 )
                 .await
@@ -879,7 +953,7 @@ impl ProjectInterpreter {
         project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -973,12 +1047,6 @@ impl ProjectInterpreter {
             Err(err) => return Err(err.into()),
         }
 
-        let client_builder = BaseClientBuilder::default()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment.
@@ -987,7 +1055,7 @@ impl ProjectInterpreter {
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -1004,16 +1072,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().display_suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1034,18 +1104,19 @@ impl ProjectInterpreter {
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
-            ProjectInterpreter::Interpreter(interpreter) => interpreter,
-            ProjectInterpreter::Environment(venv) => venv.into_interpreter(),
+            Self::Interpreter(interpreter) => interpreter,
+            Self::Environment(venv) => venv.into_interpreter(),
         }
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
         LockedFile::acquire(
             std::env::temp_dir().join(format!(
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
+            LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
         )
         .await
@@ -1074,11 +1145,11 @@ pub(crate) enum PythonRequestSource {
 impl std::fmt::Display for PythonRequestSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PythonRequestSource::UserRequest => write!(f, "explicit request"),
-            PythonRequestSource::DotPythonVersion(file) => {
+            Self::UserRequest => write!(f, "explicit request"),
+            Self::DotPythonVersion(file) => {
                 write!(f, "version file at `{}`", file.path().user_display())
             }
-            PythonRequestSource::RequiresPython => write!(f, "`requires-python` metadata"),
+            Self::RequiresPython => write!(f, "`requires-python` metadata"),
         }
     }
 }
@@ -1261,7 +1332,7 @@ impl ProjectEnvironment {
         groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         no_sync: bool,
@@ -1290,7 +1361,7 @@ impl ProjectEnvironment {
             workspace.install_path().as_ref(),
             groups,
             python,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1366,7 +1437,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1406,7 +1479,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1492,7 +1567,7 @@ impl ScriptEnvironment {
     pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -1519,7 +1594,7 @@ impl ScriptEnvironment {
         match ScriptInterpreter::discover(
             script,
             python_request,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1558,7 +1633,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1572,7 +1649,7 @@ impl ScriptEnvironment {
                 }
 
                 // Remove the existing virtual environment.
-                let replaced = match fs_err::remove_dir_all(&root) {
+                let replaced = match remove_virtualenv(&root) {
                     Ok(()) => {
                         debug!(
                             "Removed virtual environment at: {}",
@@ -1580,7 +1657,11 @@ impl ScriptEnvironment {
                         );
                         true
                     }
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(uv_virtualenv::Error::Io(err))
+                        if err.kind() == std::io::ErrorKind::NotFound =>
+                    {
+                        false
+                    }
                     Err(err) => return Err(err.into()),
                 };
 
@@ -1594,7 +1675,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1653,24 +1736,26 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-        requirements
-            .into_iter()
-            .partition_map(|spec| match spec.requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        .into_iter()
+        .map(|spec| {
+            spec.requirement
+                .augment_requirement(None, None, None, lfs.into(), None)
+        })
+        .partition_map(|requirement| match requirement {
+            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
+        });
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {
@@ -1691,47 +1776,58 @@ pub(crate) async fn resolve_names(
                 index_strategy,
                 keyring_provider,
                 link_mode,
-                no_build_isolation,
-                no_build_isolation_package,
+                build_isolation,
                 extra_build_dependencies,
+                extra_build_variables,
                 prerelease: _,
                 resolution: _,
                 sources,
+                torch_backend,
                 upgrade: _,
             },
         compile_bytecode: _,
         reinstall: _,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()
-        .map_err(uv_requirements::Error::ClientError)?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
-    index_locations.cache_index_credentials();
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+        })
+        .transpose()
+        .ok()
+        .flatten();
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if *no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::Shared(&environment)
+        }
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -1741,13 +1837,16 @@ pub(crate) async fn resolve_names(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1758,6 +1857,7 @@ pub(crate) async fn resolve_names(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1826,9 +1926,10 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -1848,14 +1949,15 @@ pub(crate) async fn resolve_environment(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         upgrade: _,
         build_options,
         sources,
+        torch_backend,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1864,43 +1966,61 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = interpreter.tags()?;
-    let marker_env = interpreter.resolver_marker_environment();
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
-    index_locations.cache_index_credentials();
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if *no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::Shared(&environment)
+        }
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     let options = OptionsBuilder::new()
@@ -1948,18 +2068,21 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     let workspace_cache = WorkspaceCache::default();
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -1970,6 +2093,7 @@ pub(crate) async fn resolve_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -1985,6 +2109,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -1995,7 +2120,7 @@ pub(crate) async fn resolve_environment(
         &hasher,
         &reinstall,
         &upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env),
         python_requirement,
         interpreter.markers(),
@@ -2019,7 +2144,7 @@ pub(crate) async fn sync_environment(
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -2035,9 +2160,9 @@ pub(crate) async fn sync_environment(
         dependency_metadata,
         config_setting,
         config_settings_package,
-        no_build_isolation,
-        no_build_isolation_package,
+        build_isolation,
         extra_build_dependencies,
+        extra_build_variables,
         exclude_newer,
         link_mode,
         compile_bytecode,
@@ -2046,12 +2171,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2059,24 +2179,21 @@ pub(crate) async fn sync_environment(
     let interpreter = venv.interpreter();
     let tags = venv.interpreter().tags()?;
 
-    index_locations.cache_index_credentials();
-
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
-    let build_isolation = if no_build_isolation {
-        BuildIsolation::Shared(&venv)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(&venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(&venv, packages)
+        }
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -2095,13 +2212,16 @@ pub(crate) async fn sync_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
-    // Create a build dispatch.
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2112,10 +2232,11 @@ pub(crate) async fn sync_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
+        exclude_newer.clone(),
         sources,
         workspace_cache,
         concurrency,
@@ -2126,14 +2247,12 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
         link_mode,
         compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
         tags,
         &client,
@@ -2146,6 +2265,7 @@ pub(crate) async fn sync_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -2176,10 +2296,11 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
-    extra_build_requires: uv_distribution::ExtraBuildRequires,
+    extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
@@ -2206,24 +2327,20 @@ pub(crate) async fn update_environment(
                 index_strategy,
                 keyring_provider,
                 link_mode,
-                no_build_isolation,
-                no_build_isolation_package,
+                build_isolation,
                 extra_build_dependencies: _,
+                extra_build_variables,
                 prerelease,
                 resolution,
                 sources,
+                torch_backend,
                 upgrade,
             },
         compile_bytecode,
         reinstall,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {
@@ -2231,13 +2348,15 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
 
-    // Determine markers to use for resolution.
+    // Determine markers and tags to use for resolution.
     let interpreter = venv.interpreter();
-    let marker_env = venv.interpreter().resolver_marker_environment();
+    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
@@ -2246,7 +2365,18 @@ pub(crate) async fn update_environment(
         && source_trees.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
+        match site_packages.satisfies_spec(
+            &requirements,
+            &constraints,
+            &overrides,
+            InstallationStrategy::Permissive,
+            &marker_env,
+            &tags,
+            config_setting,
+            config_settings_package,
+            &extra_build_requires,
+            extra_build_variables,
+        )? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -2274,24 +2404,44 @@ pub(crate) async fn update_environment(
         }
     }
 
-    index_locations.cache_index_credentials();
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(index_locations)
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
-    let build_isolation = if *no_build_isolation {
-        BuildIsolation::Shared(&venv)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        BuildIsolation::SharedPackage(&venv, no_build_isolation_package)
+    let build_isolation = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+        uv_configuration::BuildIsolation::Shared => BuildIsolation::Shared(&venv),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            BuildIsolation::SharedPackage(&venv, packages)
+        }
     };
 
     let options = OptionsBuilder::new()
@@ -2312,7 +2462,6 @@ pub(crate) async fn update_environment(
     let preferences = Vec::default();
 
     // Determine the tags to use for resolution.
-    let tags = venv.interpreter().tags()?;
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
     // Resolve the flat indexes from `--find-links`.
@@ -2321,14 +2470,14 @@ pub(crate) async fn update_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        &build_constraints,
         interpreter,
         index_locations,
         &flat_index,
@@ -2339,6 +2488,7 @@ pub(crate) async fn update_environment(
         config_settings_package,
         build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         *link_mode,
         build_options,
         &build_hasher,
@@ -2354,6 +2504,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2364,7 +2515,7 @@ pub(crate) async fn update_environment(
         &hasher,
         reinstall,
         upgrade,
-        Some(tags),
+        Some(&tags),
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         venv.interpreter().markers(),
@@ -2388,16 +2539,14 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
         *link_mode,
         *compile_bytecode,
-        index_locations,
-        config_setting,
-        config_settings_package,
         &hasher,
-        tags,
+        &tags,
         &client,
         state.in_flight(),
         concurrency,
@@ -2408,6 +2557,7 @@ pub(crate) async fn update_environment(
         installer_metadata,
         dry_run,
         printer,
+        preview,
     )
     .await?;
 
@@ -2436,7 +2586,7 @@ pub(crate) async fn init_script_python_requirement(
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        PythonRequest::parse(request)
+        Some(PythonRequest::parse(request))
     } else if let (false, Some(request)) = (
         no_pin_python,
         PythonVersionFile::discover(
@@ -2447,14 +2597,14 @@ pub(crate) async fn init_script_python_requirement(
         .and_then(PythonVersionFile::into_version),
     ) {
         // (2) Request from `.python-version`
-        request
+        Some(request)
     } else {
-        // (3) Assume any Python version
-        PythonRequest::Any
+        // (3) No explicit request
+        None
     };
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        python_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
@@ -2505,31 +2655,33 @@ pub(crate) fn default_dependency_groups(
 /// are declared as conflicting.
 #[allow(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
-    lock: &Lock,
+    target: &InstallTarget,
     extras: &ExtrasSpecification,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
-    // Note that we need to collect all extras and groups that match in
-    // a particular set, since extras can be declared as conflicting with
-    // groups. So if extra `x` and group `g` are declared as conflicting,
-    // then enabling both of those should result in an error.
+    // Validate that we aren't trying to install extras or groups that
+    // are declared as conflicting. Note that we need to collect all
+    // extras and groups that match in a particular set, since extras
+    // can be declared as conflicting with groups. So if extra `x` and
+    // group `g` are declared as conflicting, then enabling both of
+    // those should result in an error.
+    let lock = target.lock();
+    let packages = target.packages(extras, groups);
     let conflicts = lock.conflicts();
     for set in conflicts.iter() {
-        let mut conflicts: Vec<ConflictPackage> = vec![];
+        let mut conflicts: Vec<ConflictItem> = vec![];
         for item in set.iter() {
-            if item
-                .extra()
-                .map(|extra| extras.contains(extra))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            if !packages.contains(item.package()) {
+                // Ignore items that are not in the install targets
+                continue;
             }
-            if item
-                .group()
-                .map(|group| groups.contains(group))
-                .unwrap_or(false)
-            {
-                conflicts.push(item.conflict().clone());
+            let is_conflicting = match item.kind() {
+                ConflictKind::Project => groups.prod(),
+                ConflictKind::Extra(extra) => extras.contains(extra),
+                ConflictKind::Group(group1) => groups.contains(group1),
+            };
+            if is_conflicting {
+                conflicts.push(item.clone());
             }
         }
         if conflicts.len() >= 2 {
@@ -2548,6 +2700,7 @@ pub(crate) fn detect_conflicts(
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -2567,6 +2720,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2587,6 +2741,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2607,6 +2762,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2624,7 +2780,8 @@ pub(crate) fn script_specification(
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
-) -> Result<uv_distribution::ExtraBuildRequires, ProjectError> {
+    credentials_cache: &CredentialsCache,
+) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
     let script_indexes = script.indexes(&settings.sources);
     let script_sources = script.sources(&settings.sources);
@@ -2639,28 +2796,37 @@ pub(crate) fn script_extra_build_requires(
         .and_then(|uv| uv.extra_build_dependencies.as_ref())
         .unwrap_or(&empty);
 
-    // Lower the extra build dependencies
-    let mut extra_build_dependencies = ExtraBuildDependencies::default();
+    // Lower the extra build dependencies.
+    let mut extra_build_requires = ExtraBuildRequires::default();
     for (name, requirements) in script_extra_build_dependencies {
         let lowered_requirements: Vec<_> = requirements
             .iter()
             .cloned()
-            .flat_map(|requirement| {
-                LoweredRequirement::from_non_workspace_requirement(
-                    requirement,
-                    script_dir.as_ref(),
-                    script_sources,
-                    script_indexes,
-                    &settings.index_locations,
-                )
-                .map_ok(|req| req.into_inner().into())
-            })
+            .flat_map(
+                |ExtraBuildDependency {
+                     requirement,
+                     match_runtime,
+                 }| {
+                    LoweredRequirement::from_non_workspace_requirement(
+                        requirement,
+                        script_dir.as_ref(),
+                        script_sources,
+                        script_indexes,
+                        &settings.index_locations,
+                        credentials_cache,
+                    )
+                    .map_ok(move |requirement| ExtraBuildRequirement {
+                        requirement: requirement.into_inner(),
+                        match_runtime,
+                    })
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
-        extra_build_dependencies.insert(name.clone(), lowered_requirements);
+        extra_build_requires.insert(name.clone(), lowered_requirements);
     }
 
-    Ok(uv_distribution::ExtraBuildRequires::from_lowered(
-        extra_build_dependencies,
+    Ok(LoweredExtraBuildDependencies::from_lowered(
+        extra_build_requires,
     ))
 }
 

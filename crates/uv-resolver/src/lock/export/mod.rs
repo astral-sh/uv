@@ -16,12 +16,14 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{Reachable, marker_reachability};
+use crate::lock::LockErrorKind;
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_conflicts;
-use crate::{Installable, Package};
+use crate::{Installable, LockError, Package};
 
+pub mod cyclonedx_json;
 mod pylock_toml;
 mod requirements_txt;
 
@@ -46,10 +48,10 @@ impl<'lock> ExportableRequirements<'lock> {
         target: &impl Installable<'lock>,
         prune: &[PackageName],
         extras: &ExtrasSpecificationWithDefaults,
-        dev: &DependencyGroupsWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
-    ) -> Self {
+    ) -> Result<Self, LockError> {
         let size_guess = target.lock().packages.len();
         let mut graph = Graph::<Node<'lock>, Edge<'lock>>::with_capacity(size_guess, size_guess);
         let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -73,10 +75,14 @@ impl<'lock> ExportableRequirements<'lock> {
             let dist = target
                 .lock()
                 .find_by_name(root_name)
-                .expect("found too many packages matching root")
-                .expect("could not find root");
+                .map_err(|_| LockErrorKind::MultipleRootPackages {
+                    name: root_name.clone(),
+                })?
+                .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                    name: root_name.clone(),
+                })?;
 
-            if dev.prod() {
+            if groups.prod() {
                 // Add the workspace package to the graph.
                 let index = *inverse
                     .entry(&dist.id)
@@ -103,7 +109,7 @@ impl<'lock> ExportableRequirements<'lock> {
                 .dependency_groups
                 .iter()
                 .filter_map(|(group, deps)| {
-                    if dev.contains(group) {
+                    if groups.contains(group) {
                         Some(deps.iter().map(move |dep| (group, dep)))
                     } else {
                         None
@@ -163,7 +169,7 @@ impl<'lock> ExportableRequirements<'lock> {
                     .dependency_groups()
                     .iter()
                     .filter_map(|(group, deps)| {
-                        if dev.contains(group) {
+                        if groups.contains(group) {
                             Some(deps)
                         } else {
                             None
@@ -303,7 +309,7 @@ impl<'lock> ExportableRequirements<'lock> {
             })
             .filter(|(_index, package)| {
                 install_options.include_package(
-                    &package.id.name,
+                    package.as_install_target(),
                     target.project_name(),
                     target.lock().members(),
                 )
@@ -330,7 +336,7 @@ impl<'lock> ExportableRequirements<'lock> {
             .filter(|requirement| !requirement.marker.is_false())
             .collect::<Vec<_>>();
 
-        Self(nodes)
+        Ok(Self(nodes))
     }
 }
 

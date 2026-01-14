@@ -1,3 +1,5 @@
+#[cfg(any(feature = "git", feature = "git-lfs"))]
+use std::collections::BTreeSet;
 use std::process::Command;
 
 use anyhow::Result;
@@ -294,7 +296,7 @@ fn tool_install_with_editable() -> Result<()> {
     let bin_dir = context.temp_dir.child("bin");
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
-        context.workspace_root.join("scripts/packages/anyio_local"),
+        context.workspace_root.join("test/packages/anyio_local"),
         &anyio_local,
     )?;
 
@@ -596,7 +598,7 @@ fn tool_install_editable() {
     // Install `black` as an editable package.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -608,7 +610,7 @@ fn tool_install_editable() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     Installed 1 executable: black
     "###);
 
@@ -648,7 +650,7 @@ fn tool_install_editable() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
@@ -716,7 +718,7 @@ fn tool_install_editable() {
     Prepared 6 packages in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 6 packages in [TIME]
-     - black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     - black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
      + black==24.2.0
      + click==8.1.7
      + mypy-extensions==1.0.0
@@ -897,7 +899,7 @@ fn tool_install_editable_from() {
         .arg("black")
         .arg("-e")
         .arg("--from")
-        .arg(context.workspace_root.join("scripts/packages/black_editable"))
+        .arg(context.workspace_root.join("test/packages/black_editable"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
@@ -909,7 +911,7 @@ fn tool_install_editable_from() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + black==0.1.0 (from file://[WORKSPACE]/scripts/packages/black_editable)
+     + black==0.1.0 (from file://[WORKSPACE]/test/packages/black_editable)
     Installed 1 executable: black
     "###);
 
@@ -949,7 +951,7 @@ fn tool_install_editable_from() {
         // We should have a tool receipt
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
         [tool]
-        requirements = [{ name = "black", editable = "[WORKSPACE]/scripts/packages/black_editable" }]
+        requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
             { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
         ]
@@ -1817,6 +1819,297 @@ fn tool_install_unnamed_package() {
     "###);
 }
 
+/// Test installing a tool with a Git requirement.
+#[test]
+#[cfg(feature = "git")]
+fn tool_install_git() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut paths = BTreeSet::new();
+
+    // Avoid removing `git` from PATH
+    let git_path = which::which("git")
+        .expect("Failed to find `git` executable.")
+        .parent()
+        .expect("Failed to find `git` executable directory.")
+        .to_path_buf();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(git_path);
+    // Git Submodule in macos seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        let sed_path = which::which("sed")
+            .expect("Failed to find `sed` executable.")
+            .parent()
+            .expect("Failed to find `sed` executable directory.")
+            .to_path_buf();
+        paths.insert(sed_path);
+    }
+    let path = std::env::join_paths(paths).unwrap();
+
+    // Unnamed Git Install
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    fs_err::remove_dir_all(&bin_dir).expect("Failed to remove bin dir.");
+    fs_err::remove_dir_all(&tool_dir).expect("Failed to remove tool dir.");
+
+    // Named Git Install
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black @ git+https://github.com/psf/black@24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + black==24.2.0 (from git+https://github.com/psf/black@6fdf8a4af28071ed1d079c01122b34c5d587207a)
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    tool_dir.child("black").assert(predicate::path::is_dir());
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+}
+
+/// Test installing a tool with a Git LFS enabled requirement.
+#[test]
+#[cfg(feature = "git-lfs")]
+fn tool_install_git_lfs() {
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_git_lfs_config();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let mut paths = BTreeSet::new();
+
+    // Avoid removing `git` or `git-lfs` from PATH
+    let git_path = which::which("git")
+        .expect("Failed to find `git` executable.")
+        .parent()
+        .expect("Failed to find `git` executable directory.")
+        .to_path_buf();
+    let git_lfs_path = which::which("git-lfs")
+        .expect("Failed to find `git-lfs` executable.")
+        .parent()
+        .expect("Failed to find `git-lfs` executable directory.")
+        .to_path_buf();
+    paths.insert(bin_dir.to_path_buf());
+    paths.insert(git_path);
+    paths.insert(git_lfs_path);
+    // Git LFS filter-process in macos seems to rely on `sh`.
+    // Git Submodule in macos seems to rely on `sed`.
+    if cfg!(target_os = "macos") {
+        for bin_path in ["sh", "sed"].into_iter().map(|name| {
+            which::which(name)
+                .unwrap_or_else(|_| panic!("Failed to find `{name}` executable."))
+                .parent()
+                .unwrap_or_else(|| panic!("Failed to find `{name}` executable directory."))
+                .to_path_buf()
+        }) {
+            paths.insert(bin_path);
+        }
+    }
+    let path = std::env::join_paths(paths).unwrap();
+
+    // Verify a successful LFS request
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+    Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
+    ");
+
+    tool_dir
+        .child("test-lfs-repo")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("test-lfs-repo")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("test-lfs-repo{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=c6d77ab63d91104f32ab5e5ae2943f4d26ff875f" }]
+        entrypoints = [
+            { name = "test-lfs-repo", install-path = "[TEMP_DIR]/bin/test-lfs-repo", from = "test-lfs-repo" },
+            { name = "test-lfs-repo-assets", install-path = "[TEMP_DIR]/bin/test-lfs-repo-assets", from = "test-lfs-repo" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo!
+
+    ----- stderr -----
+    "###);
+
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from test-lfs-repo! LFS_TEST=True ANOTHER_LFS_TEST=True
+
+    ----- stderr -----
+    "###);
+
+    // Attempt to install when LFS artifacts are missing and LFS is requested.
+
+    // The filters below will remove any boilerplate before what we actually want to match.
+    // They help handle slightly different output in uv-distribution/src/source/mod.rs between
+    // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
+    // In addition, we can get different error codes depending on where the failure occurs,
+    // although we know the error code cannot be 0.
+    let mut filters = context.filters();
+    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
+    filters.push((
+        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+    ));
+
+    uv_snapshot!(filters, context.tool_install()
+        .arg("--reinstall")
+        .arg("--lfs")
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: false
+    exit_code: [ERROR_CODE]
+    ----- stdout -----
+
+    ----- stderr -----
+    [PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts
+    ");
+
+    // Attempt to install when LFS artifacts are missing but LFS was not requested.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, path.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@c6d77ab63d91104f32ab5e5ae2943f4d26ff875f)
+    Installed 2 executables: test-lfs-repo, test-lfs-repo-assets
+    ");
+
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/bin/test-lfs-repo-assets", line 10, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Traceback (most recent call last):
+      File "<frozen runpy>", line 198, in _run_module_as_main
+      File "<frozen runpy>", line 88, in _run_code
+      File "[TEMP_DIR]/bin/test-lfs-repo-assets/__main__.py", line 10, in <module>
+        sys.exit(main_lfs())
+                 ~~~~~~~~^^
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+        from .lfs_module import LFS_TEST
+      File "[TEMP_DIR]/tools/test-lfs-repo/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+        version https://git-lfs.github.com/spec/v1
+                ^^^^^
+    SyntaxError: invalid syntax
+    "#);
+}
+
 /// Test installing a tool with a bare URL requirement using `--from`, where the URL and the package
 /// name conflict.
 #[test]
@@ -2024,6 +2317,131 @@ fn tool_install_unnamed_with() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn tool_install_with_dependencies_from_script() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-requirements")
+        .arg("script.py")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + anyio==4.3.0
+     + black==24.3.0
+     + click==8.1.7
+     + idna==3.6
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + sniffio==1.3.1
+    Installed 2 executables: black, blackd
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "anyio" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    // Update the script file.
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "iniconfig",
+        # ]
+        # ///
+
+        import anyio
+    "#})?;
+
+    // Install `black`
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with-requirements")
+        .arg("script.py")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+    Installed 2 executables: black, blackd
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "anyio" },
+            { name = "iniconfig" },
+        ]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black", from = "black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#);
+    });
+
+    Ok(())
 }
 
 /// Test installing a tool with additional requirements from a `requirements.txt` file.
@@ -2723,7 +3141,7 @@ fn tool_install_warn_path() {
         .arg("black==24.1.1")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env_remove(EnvVars::PATH), @r###"
+        .env_remove(EnvVars::PATH), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2740,7 +3158,7 @@ fn tool_install_warn_path() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     warning: `[TEMP_DIR]/bin` is not on your PATH. To use installed tools, run `export PATH="[TEMP_DIR]/bin:$PATH"` or `uv tool update-shell`.
-    "###);
+    "#);
 }
 
 /// Test installing and reinstalling with an invalid receipt.
@@ -3553,9 +3971,9 @@ fn tool_install_python() {
     // Install `python`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3567,9 +3985,9 @@ fn tool_install_python() {
     // Install `python@<version>`
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python@3.12")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3781,7 +4199,6 @@ fn tool_install_default_credentials() -> Result<()> {
                 sys.argv[0] = sys.argv[0][:-4]
             sys.exit(main())
         "###);
-
     });
 
     insta::with_settings!({
@@ -3849,9 +4266,9 @@ fn tool_install_with_executables_from() {
         .arg("--with-executables-from")
         .arg("ansible-core,black")
         .arg("ansible==9.3.0")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3914,9 +4331,9 @@ fn tool_install_with_executables_from() {
 
     uv_snapshot!(context.filters(), context.tool_uninstall()
         .arg("ansible")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3940,9 +4357,9 @@ fn tool_install_with_executables_from_no_entrypoints() {
         .arg("--with-executables-from")
         .arg("requests")
         .arg("flask")
-        .env("UV_TOOL_DIR", tool_dir.as_os_str())
-        .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3967,4 +4384,169 @@ fn tool_install_with_executables_from_no_entrypoints() {
      + werkzeug==3.0.1
     Installed 1 executable: flask
     "###);
+}
+
+#[test]
+fn tool_install_find_links() {
+    let context = TestContext::new("3.13").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Run with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    ");
+
+    // Install with `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + basic-app==0.1.0
+    Installed 1 executable: basic-app
+    ");
+
+    tool_dir
+        .child("basic-app")
+        .assert(predicate::path::is_dir());
+    tool_dir
+        .child("basic-app")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    let executable = bin_dir.child(format!("basic-app{}", std::env::consts::EXE_SUFFIX));
+    assert!(executable.exists());
+
+    // On Windows, we can't snapshot an executable file.
+    #[cfg(not(windows))]
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // Should run basic-app in the virtual environment
+        assert_snapshot!(fs_err::read_to_string(executable).unwrap(), @r#"
+        #![TEMP_DIR]/tools/basic-app/bin/python
+        # -*- coding: utf-8 -*-
+        import sys
+        from basic_app import main
+        if __name__ == "__main__":
+            if sys.argv[0].endswith("-script.pyw"):
+                sys.argv[0] = sys.argv[0][:-11]
+            elif sys.argv[0].endswith(".exe"):
+                sys.argv[0] = sys.argv[0][:-4]
+            sys.exit(main())
+        "#);
+    });
+
+    // Run the installed version with `--find-links` on the CLI again.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from basic-app!
+
+    ----- stderr -----
+    ");
+
+    // Run the installed version without `--find-links`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--offline")
+        .arg("basic-app")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+
+          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+}
+
+#[test]
+fn tool_install_python_platform() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` for macos.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("macos")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables: black, blackd
+    ");
+
+    // Install `black` for Linux.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--python-platform")
+        .arg("linux")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ black==24.3.0
+    Installed 2 executables: black, blackd
+    ");
 }

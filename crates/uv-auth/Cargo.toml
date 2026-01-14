@@ -1,7 +1,13 @@
 [package]
 name = "uv-auth"
-version = "0.0.1"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -10,25 +16,38 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
+uv-fs = { workspace = true }
+uv-keyring = { workspace = true, features = ["apple-native", "secret-service", "windows-native"] }
 uv-once-map = { workspace = true }
+uv-preview = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
+uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+arcstr = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+etcetera = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
+jiff = { workspace = true }
 percent-encoding = { workspace = true }
+reqsign = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
+toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 

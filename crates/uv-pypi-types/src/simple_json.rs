@@ -2,25 +2,34 @@ use std::borrow::Cow;
 use std::str::FromStr;
 
 use jiff::Timestamp;
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
+use uv_pep508::Requirement;
 use uv_small_str::SmallString;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
+use crate::{ProjectStatus, VerbatimParsedUrl};
 
-/// A collection of "files" from `PyPI`'s JSON API for a single package.
+/// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
+/// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SimpleJson {
-    /// The list of [`File`]s available for download sorted by filename.
+#[serde(rename_all = "kebab-case")]
+pub struct PypiSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
+    /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]
-    pub files: Vec<File>,
+    pub files: Vec<PypiFile>,
 }
 
 /// Deserializes a sequence of "simple" files from `PyPI` and ensures that they
 /// are sorted in a stable order.
-fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>, D::Error> {
-    let mut files = <Vec<File>>::deserialize(d)?;
+fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<PypiFile>, D::Error> {
+    let mut files = <Vec<PypiFile>>::deserialize(d)?;
     // While it has not been positively observed, we sort the files
     // to ensure we have a defined ordering. Otherwise, if we rely on
     // the API to provide a stable ordering and doesn't, it can lead
@@ -33,11 +42,12 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
     Ok(files)
 }
 
-/// A single (remote) file belonging to a package, either a wheel or a source distribution.
+/// A single (remote) file belonging to a package, either a wheel or a source distribution, as
+/// served by the `vnd.pypi.simple.v1` media type.
 ///
 /// <https://peps.python.org/pep-0691/#project-detail>
 #[derive(Debug, Clone)]
-pub struct File {
+pub struct PypiFile {
     pub core_metadata: Option<CoreMetadata>,
     pub filename: SmallString,
     pub hashes: Hashes,
@@ -48,7 +58,7 @@ pub struct File {
     pub yanked: Option<Box<Yanked>>,
 }
 
-impl<'de> Deserialize<'de> for File {
+impl<'de> Deserialize<'de> for PypiFile {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -56,7 +66,7 @@ impl<'de> Deserialize<'de> for File {
         struct FileVisitor;
 
         impl<'de> serde::de::Visitor<'de> for FileVisitor {
-            type Value = File;
+            type Value = PypiFile;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                 formatter.write_str("a map containing file metadata")
@@ -75,8 +85,8 @@ impl<'de> Deserialize<'de> for File {
                 let mut url = None;
                 let mut yanked = None;
 
-                while let Some(key) = access.next_key::<String>()? {
-                    match key.as_str() {
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -103,7 +113,7 @@ impl<'de> Deserialize<'de> for File {
                     }
                 }
 
-                Ok(File {
+                Ok(PypiFile {
                     core_metadata,
                     filename: filename
                         .ok_or_else(|| serde::de::Error::missing_field("filename"))?,
@@ -121,6 +131,120 @@ impl<'de> Deserialize<'de> for File {
     }
 }
 
+/// A collection of "files" from the Simple API.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PyxSimpleDetail {
+    /// The list of [`PyxFile`]s available for download sorted by filename.
+    pub files: Vec<PyxFile>,
+    /// The core metadata for the project, keyed by version.
+    #[serde(default)]
+    pub core_metadata: FxHashMap<Version, CoreMetadatum>,
+}
+
+/// A single (remote) file belonging to a package, either a wheel or a source distribution,
+/// as served by the Simple API.
+#[derive(Debug, Clone)]
+pub struct PyxFile {
+    pub core_metadata: Option<CoreMetadata>,
+    pub filename: Option<SmallString>,
+    pub hashes: Hashes,
+    pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
+    pub size: Option<u64>,
+    pub upload_time: Option<Timestamp>,
+    pub url: SmallString,
+    pub yanked: Option<Box<Yanked>>,
+    pub zstd: Option<Zstd>,
+}
+
+impl<'de> Deserialize<'de> for PyxFile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct FileVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for FileVisitor {
+            type Value = PyxFile;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a map containing file metadata")
+            }
+
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                let mut core_metadata = None;
+                let mut filename = None;
+                let mut hashes = None;
+                let mut requires_python = None;
+                let mut size = None;
+                let mut upload_time = None;
+                let mut url = None;
+                let mut yanked = None;
+                let mut zstd = None;
+
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
+                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
+                            if core_metadata.is_none() {
+                                core_metadata = access.next_value()?;
+                            } else {
+                                let _: serde::de::IgnoredAny = access.next_value()?;
+                            }
+                        }
+                        "filename" => filename = Some(access.next_value()?),
+                        "hashes" => hashes = Some(access.next_value()?),
+                        "requires-python" => {
+                            requires_python =
+                                access.next_value::<Option<Cow<'_, str>>>()?.map(|s| {
+                                    LenientVersionSpecifiers::from_str(s.as_ref())
+                                        .map(VersionSpecifiers::from)
+                                });
+                        }
+                        "size" => size = access.next_value()?,
+                        "upload-time" => upload_time = Some(access.next_value()?),
+                        "url" => url = Some(access.next_value()?),
+                        "yanked" => yanked = Some(access.next_value()?),
+                        "zstd" => {
+                            zstd = Some(access.next_value()?);
+                        }
+                        _ => {
+                            let _: serde::de::IgnoredAny = access.next_value()?;
+                        }
+                    }
+                }
+
+                Ok(PyxFile {
+                    core_metadata,
+                    filename,
+                    hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
+                    requires_python,
+                    size,
+                    upload_time,
+                    url: url.ok_or_else(|| serde::de::Error::missing_field("url"))?,
+                    yanked,
+                    zstd,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(FileVisitor)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct CoreMetadatum {
+    #[serde(default)]
+    pub requires_python: Option<VersionSpecifiers>,
+    #[serde(default)]
+    pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
+    #[serde(default, alias = "provides-extras")]
+    pub provides_extra: Box<[ExtraName]>,
+}
+
 #[derive(Debug, Clone)]
 pub enum CoreMetadata {
     Bool(bool),
@@ -133,9 +257,21 @@ impl<'de> Deserialize<'de> for CoreMetadata {
         D: Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(CoreMetadata::Bool(bool)))
+            .bool(|bool| Ok(Self::Bool(bool)))
             .map(|map| map.deserialize().map(CoreMetadata::Hashes))
             .deserialize(deserializer)
+    }
+}
+
+impl Serialize for CoreMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_available) => serializer.serialize_bool(*is_available),
+            Self::Hashes(hashes) => hashes.serialize(serializer),
+        }
     }
 }
 
@@ -161,9 +297,21 @@ impl<'de> Deserialize<'de> for Yanked {
         D: Deserializer<'de>,
     {
         serde_untagged::UntaggedEnumVisitor::new()
-            .bool(|bool| Ok(Yanked::Bool(bool)))
-            .string(|string| Ok(Yanked::Reason(SmallString::from(string))))
+            .bool(|bool| Ok(Self::Bool(bool)))
+            .string(|string| Ok(Self::Reason(SmallString::from(string))))
             .deserialize(deserializer)
+    }
+}
+
+impl Serialize for Yanked {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bool(is_yanked) => serializer.serialize_bool(*is_yanked),
+            Self::Reason(reason) => serializer.serialize_str(reason.as_ref()),
+        }
     }
 }
 
@@ -180,6 +328,13 @@ impl Default for Yanked {
     fn default() -> Self {
         Self::Bool(false)
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
+pub struct Zstd {
+    pub hashes: Hashes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
 }
 
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
@@ -218,35 +373,35 @@ impl Hashes {
         }
 
         match name {
-            "md5" => Ok(Hashes {
+            "md5" => Ok(Self {
                 md5: Some(SmallString::from(value)),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha256" => Ok(Hashes {
+            "sha256" => Ok(Self {
                 md5: None,
                 sha256: Some(SmallString::from(value)),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha384" => Ok(Hashes {
+            "sha384" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: Some(SmallString::from(value)),
                 sha512: None,
                 blake2b: None,
             }),
-            "sha512" => Ok(Hashes {
+            "sha512" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(SmallString::from(value)),
                 blake2b: None,
             }),
-            "blake2b" => Ok(Hashes {
+            "blake2b" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
@@ -278,35 +433,35 @@ impl FromStr for Hashes {
         }
 
         match name {
-            "md5" => Ok(Hashes {
+            "md5" => Ok(Self {
                 md5: Some(SmallString::from(value)),
                 sha256: None,
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha256" => Ok(Hashes {
+            "sha256" => Ok(Self {
                 md5: None,
                 sha256: Some(SmallString::from(value)),
                 sha384: None,
                 sha512: None,
                 blake2b: None,
             }),
-            "sha384" => Ok(Hashes {
+            "sha384" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: Some(SmallString::from(value)),
                 sha512: None,
                 blake2b: None,
             }),
-            "sha512" => Ok(Hashes {
+            "sha512" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(SmallString::from(value)),
                 blake2b: None,
             }),
-            "blake2b" => Ok(Hashes {
+            "blake2b" => Ok(Self {
                 md5: None,
                 sha256: None,
                 sha384: None,
@@ -523,7 +678,7 @@ impl From<Hashes> for HashDigests {
 
 impl From<HashDigests> for Hashes {
     fn from(value: HashDigests) -> Self {
-        let mut hashes = Hashes::default();
+        let mut hashes = Self::default();
         for digest in value {
             match digest.algorithm() {
                 HashAlgorithm::Md5 => hashes.md5 = Some(digest.digest),
@@ -675,4 +830,43 @@ mod tests {
 
         Ok(())
     }
+}
+
+/// Response from the Simple API root endpoint (index) listing all available projects,
+/// as served by the `vnd.pypi.simple.v1` media type.
+///
+/// <https://peps.python.org/pep-0691/#specification>
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PypiSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Response from the Pyx Simple API root endpoint listing all available projects,
+/// as served by the `vnd.pyx.simple.v1` media types.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PyxSimpleIndex {
+    /// Metadata about the response.
+    pub meta: SimpleIndexMeta,
+    /// The list of projects available in the index.
+    pub projects: Vec<ProjectEntry>,
+}
+
+/// Metadata about a Simple API index response.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SimpleIndexMeta {
+    /// The API version.
+    pub api_version: SmallString,
+}
+
+/// A single project entry in the Simple API index.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProjectEntry {
+    /// The name of the project.
+    pub name: PackageName,
 }

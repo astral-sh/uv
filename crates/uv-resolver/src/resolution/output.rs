@@ -68,15 +68,15 @@ pub(crate) enum ResolutionGraphNode {
 impl ResolutionGraphNode {
     pub(crate) fn marker(&self) -> &UniversalMarker {
         match self {
-            ResolutionGraphNode::Root => &UniversalMarker::TRUE,
-            ResolutionGraphNode::Dist(dist) => &dist.marker,
+            Self::Root => &UniversalMarker::TRUE,
+            Self::Dist(dist) => &dist.marker,
         }
     }
 
     pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
                 let extra = dist.extra.as_ref()?;
                 Some((&dist.name, extra))
             }
@@ -84,19 +84,19 @@ impl ResolutionGraphNode {
     }
 
     pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => {
-                let group = dist.dev.as_ref()?;
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => {
+                let group = dist.group.as_ref()?;
                 Some((&dist.name, group))
             }
         }
     }
 
     pub(crate) fn package_name(&self) -> Option<&PackageName> {
-        match *self {
-            ResolutionGraphNode::Root => None,
-            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
+        match self {
+            Self::Root => None,
+            Self::Dist(dist) => Some(&dist.name),
         }
     }
 }
@@ -104,8 +104,8 @@ impl ResolutionGraphNode {
 impl Display for ResolutionGraphNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResolutionGraphNode::Root => f.write_str("root"),
-            ResolutionGraphNode::Dist(dist) => Display::fmt(dist, f),
+            Self::Root => f.write_str("root"),
+            Self::Dist(dist) => Display::fmt(dist, f),
         }
     }
 }
@@ -294,7 +294,7 @@ impl ResolverOutput {
                 url: edge.from_url.as_ref(),
                 index: edge.from_index.as_ref(),
                 extra: edge.from_extra.as_ref(),
-                group: edge.from_dev.as_ref(),
+                group: edge.from_group.as_ref(),
             }]
         });
         let to_index = inverse[&PackageRef {
@@ -303,7 +303,7 @@ impl ResolverOutput {
             url: edge.to_url.as_ref(),
             index: edge.to_index.as_ref(),
             extra: edge.to_extra.as_ref(),
-            group: edge.to_dev.as_ref(),
+            group: edge.to_group.as_ref(),
         }];
 
         let edge_marker = {
@@ -338,7 +338,7 @@ impl ResolverOutput {
         let ResolutionPackage {
             name,
             extra,
-            dev,
+            dev: group,
             url,
             index,
         } = &package;
@@ -358,7 +358,7 @@ impl ResolverOutput {
         if let Some(metadata) = metadata.as_ref() {
             // Validate the extra.
             if let Some(extra) = extra {
-                if !metadata.provides_extras.contains(extra) {
+                if !metadata.provides_extra.contains(extra) {
                     diagnostics.push(ResolutionDiagnostic::MissingExtra {
                         dist: dist.clone(),
                         extra: extra.clone(),
@@ -367,11 +367,11 @@ impl ResolverOutput {
             }
 
             // Validate the development dependency group.
-            if let Some(dev) = dev {
+            if let Some(dev) = group {
                 if !metadata.dependency_groups.contains_key(dev) {
-                    diagnostics.push(ResolutionDiagnostic::MissingDev {
+                    diagnostics.push(ResolutionDiagnostic::MissingGroup {
                         dist: dist.clone(),
-                        dev: dev.clone(),
+                        group: dev.clone(),
                     });
                 }
             }
@@ -383,7 +383,7 @@ impl ResolverOutput {
             name: name.clone(),
             version: version.clone(),
             extra: extra.clone(),
-            dev: dev.clone(),
+            group: group.clone(),
             hashes,
             metadata,
             marker: UniversalMarker::TRUE,
@@ -395,7 +395,7 @@ impl ResolverOutput {
                 url: url.as_ref(),
                 index: index.as_ref(),
                 extra: extra.as_ref(),
-                group: dev.as_ref(),
+                group: group.as_ref(),
             },
             node,
         );
@@ -832,7 +832,7 @@ impl std::error::Error for ConflictingDistributionError {}
 
 impl Display for ConflictingDistributionError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let ConflictingDistributionError {
+        let Self {
             ref name,
             ref version1,
             ref version2,
@@ -914,8 +914,8 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
                     let edge = if let Some(extra) = source_dist.extra.as_ref() {
                         Edge::Optional(extra.clone())
-                    } else if let Some(dev) = source_dist.dev.as_ref() {
-                        Edge::Dev(dev.clone())
+                    } else if let Some(group) = source_dist.group.as_ref() {
+                        Edge::Dev(group.clone())
                     } else {
                         Edge::Prod
                     };
@@ -928,7 +928,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
             }
         }
 
-        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+        Self::new(transformed).with_diagnostics(diagnostics)
     }
 }
 

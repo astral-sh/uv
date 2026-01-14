@@ -13,19 +13,19 @@ LLD and add the `rustup` targets:
 ```shell
 sudo apt install llvm clang lld
 cargo install cargo-xwin
-rustup toolchain install nightly-2025-02-16
-rustup component add rust-src --toolchain nightly-2025-02-16-x86_64-unknown-linux-gnu
-rustup target add --toolchain nightly-2025-02-16 i686-pc-windows-msvc
-rustup target add --toolchain nightly-2025-02-16 x86_64-pc-windows-msvc
-rustup target add --toolchain nightly-2025-02-16 aarch64-pc-windows-msvc
+rustup toolchain install nightly-2025-06-23
+rustup component add rust-src --toolchain nightly-2025-06-23-x86_64-unknown-linux-gnu
+rustup target add --toolchain nightly-2025-06-23 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2025-06-23 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2025-06-23 aarch64-pc-windows-msvc
 ```
 
 Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2025-02-16 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +nightly-2025-02-16 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2025-02-16 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Cross-compiling from macOS
@@ -36,19 +36,19 @@ LLVM and add the `rustup` targets:
 ```shell
 brew install llvm
 cargo install cargo-xwin
-rustup toolchain install nightly-2025-02-16
-rustup component add rust-src --toolchain nightly-2025-02-16-aarch64-apple-darwin
-rustup target add --toolchain nightly-2025-02-16 i686-pc-windows-msvc
-rustup target add --toolchain nightly-2025-02-16 x86_64-pc-windows-msvc
-rustup target add --toolchain nightly-2025-02-16 aarch64-pc-windows-msvc
+rustup toolchain install nightly-2025-06-23
+rustup component add rust-src --toolchain nightly-2025-06-23-aarch64-apple-darwin
+rustup target add --toolchain nightly-2025-06-23 i686-pc-windows-msvc
+rustup target add --toolchain nightly-2025-06-23 x86_64-pc-windows-msvc
+rustup target add --toolchain nightly-2025-06-23 aarch64-pc-windows-msvc
 ```
 
 Then, build the trampolines for all supported architectures:
 
 ```shell
-cargo +nightly-2025-02-16 xwin build --release --target i686-pc-windows-msvc
-cargo +nightly-2025-02-16 xwin build --release --target x86_64-pc-windows-msvc
-cargo +nightly-2025-02-16 xwin build --release --target aarch64-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --release --target x86_64-pc-windows-msvc
+cargo +nightly-2025-06-23 xwin build --release --target aarch64-pc-windows-msvc
 ```
 
 ### Updating the prebuilt executables
@@ -56,12 +56,12 @@ cargo +nightly-2025-02-16 xwin build --release --target aarch64-pc-windows-msvc
 After building the trampolines for all supported architectures:
 
 ```shell
-cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-aarch64-console.exe
-cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-aarch64-gui.exe
-cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-x86_64-console.exe
-cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-x86_64-gui.exe
-cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe trampolines/uv-trampoline-i686-console.exe
-cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe trampolines/uv-trampoline-i686-gui.exe
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-aarch64-console.exe
+cp target/aarch64-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-aarch64-gui.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-x86_64-console.exe
+cp target/x86_64-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-x86_64-gui.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-i686-console.exe
+cp target/i686-pc-windows-msvc/release/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-i686-gui.exe
 ```
 
 ### Testing the trampolines
@@ -92,24 +92,16 @@ arbitrary Python scripts, and when invoked it bounces to invoking `python <the s
 Basically, this looks up `python.exe` (for console programs) and invokes
 `python.exe path\to\the\<the .exe>`.
 
-The intended use is:
+It uses PE resources to store/load the information required to do this:
 
-- take your Python script, name it `__main__.py`, and pack it into a `.zip` file. Then concatenate
-  that `.zip` file onto the end of one of our prebuilt `.exe`s.
-- After the zip file content, write the path to the Python executable that the script uses to run
-  the Python script as UTF-8 encoded string, followed by the path's length as a 32-bit little-endian
-  integer.
-- At the very end, write the magic number `UVUV` in bytes.
+|       Resource name        |                         Contains                          |
+| :------------------------: | :-------------------------------------------------------: |
+| `RESOURCE_TRAMPOLINE_KIND` |           `1` (script) or `2` (Python launcher)           |
+|   `RESOURCE_PYTHON_PATH`   |                   Path to `python.exe`                    |
+|   `RESOURCE_SCRIPT_DATA`   | Zip file, containing a Python script called `__main__.py` |
 
-|       `launcher.exe`        |
-| :-------------------------: |
-|  `<zipped python script>`   |
-|   `<path to python.exe>`    |
-| `<len(path to python.exe)>` |
-| `<b'U', b'V', b'U', b'V'>`  |
-
-Then when you run `python` on the `.exe`, it will see the `.zip` trailer at the end of the `.exe`,
-and automagically look inside to find and execute `__main__.py`. Easy-peasy.
+This works because when you run `python` on the `.exe`, the `zipimport` mechanism will see the
+embedded `.zip` file, and automagically look inside to find and execute `__main__.py`. Easy-peasy.
 
 ### Why does this exist?
 

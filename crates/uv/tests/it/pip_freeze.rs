@@ -131,7 +131,7 @@ fn freeze_with_editable() -> Result<()> {
         "anyio\n-e {}",
         context
             .workspace_root
-            .join("scripts/packages/poetry_editable")
+            .join("test/packages/poetry_editable")
             .display()
     ))?;
 
@@ -149,7 +149,7 @@ fn freeze_with_editable() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     anyio==4.3.0
-    -e file://[WORKSPACE]/scripts/packages/poetry_editable
+    -e file://[WORKSPACE]/test/packages/poetry_editable
 
     ----- stderr -----
     warning: The package `anyio` requires `idna>=2.8`, but it's not installed
@@ -452,4 +452,125 @@ fn freeze_nonexistent_path() {
 
     ----- stderr -----
     ");
+}
+
+#[test]
+fn freeze_with_quiet_flag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    // Run `pip sync`.
+    context
+        .pip_sync()
+        .arg(requirements_txt.path())
+        .assert()
+        .success();
+
+    // Run `pip freeze` with `--quiet` flag.
+    uv_snapshot!(context.pip_freeze().arg("--quiet"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn freeze_target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let target = context.temp_dir.child("target");
+
+    // Install packages to a target directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+
+    // Freeze packages in the target directory.
+    uv_snapshot!(context.filters(), context.pip_freeze()
+        .arg("--target")
+        .arg(target.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --target, the packages should not be visible.
+    uv_snapshot!(context.pip_freeze(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn freeze_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--prefix")
+        .arg(prefix.path())
+        .assert()
+        .success();
+
+    // Freeze packages in the prefix directory.
+    uv_snapshot!(context.filters(), context.pip_freeze()
+        .arg("--prefix")
+        .arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    markupsafe==2.1.3
+    tomli==2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --prefix, the packages should not be visible.
+    uv_snapshot!(context.pip_freeze(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
 }

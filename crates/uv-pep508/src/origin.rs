@@ -22,11 +22,11 @@ impl RequirementOrigin {
     /// Returns the path of the requirement origin.
     pub fn path(&self) -> &Path {
         match self {
-            RequirementOrigin::File(path) => path.as_path(),
-            RequirementOrigin::Project(path, _) => path.as_path(),
-            RequirementOrigin::Group(path, _, _) => path.as_path(),
+            Self::File(path) => path.as_path(),
+            Self::Project(path, _) => path.as_path(),
+            Self::Group(path, _, _) => path.as_path(),
             // Multiple toml are merged and difficult to track files where Requirement is defined. Returns a dummy path instead.
-            RequirementOrigin::Workspace => Path::new("(workspace)"),
+            Self::Workspace => Path::new("(workspace)"),
         }
     }
 }

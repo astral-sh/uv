@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -10,27 +11,31 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
+use uv_python::downloads::ManagedPythonDownloadList;
+
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, NoSources, PackageConfigSettings, Preview, PreviewFeatures, Reinstall,
-    Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
+    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
+    UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
@@ -42,17 +47,19 @@ use uv_resolver::{
     InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, ResolutionMode,
     ResolverEnvironment,
 };
-use uv_torch::{TorchMode, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
+use uv_torch::{TorchMode, TorchSource, TorchStrategy};
+use uv_types::{EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Resolve a set of requirements into a set of pinned versions.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -60,15 +67,17 @@ pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
-    format: Option<ExportFormat>,
+    format: Option<PipCompileFormat>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     fork_strategy: ForkStrategy,
@@ -91,15 +100,17 @@ pub(crate) async fn pip_compile(
     torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     config_settings: ConfigSettings,
     config_settings_package: PackageConfigSettings,
-    no_build_isolation: bool,
-    no_build_isolation_package: Vec<PackageName>,
+    build_isolation: BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_variables: &ExtraBuildVariables,
     build_options: BuildOptions,
+    install_mirrors: PythonInstallMirrors,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
     universal: bool,
     exclude_newer: ExcludeNewer,
     sources: NoSources,
@@ -139,16 +150,16 @@ pub(crate) async fn pip_compile(
     let format = format.unwrap_or_else(|| {
         let extension = output_file.and_then(Path::extension);
         if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
-            ExportFormat::PylockToml
+            PipCompileFormat::PylockToml
         } else {
-            ExportFormat::RequirementsTxt
+            PipCompileFormat::RequirementsTxt
         }
     });
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
-    if matches!(format, ExportFormat::PylockToml) {
+    if matches!(format, PipCompileFormat::PylockToml) {
         if let Some(file_name) = output_file
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
@@ -163,7 +174,7 @@ pub(crate) async fn pip_compile(
 
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
-        if let Ok(request) = std::env::var("UV_PYTHON") {
+        if let Ok(request) = std::env::var(EnvVars::UV_PYTHON) {
             if !request.is_empty() {
                 python = Some(request);
             }
@@ -192,12 +203,7 @@ pub(crate) async fn pip_compile(
         ));
     }
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -205,6 +211,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -219,6 +226,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         Some(&groups),
         &client_builder,
     )
@@ -249,6 +257,11 @@ pub(crate) async fn pip_compile(
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from),
         )
+        .collect();
+
+    let excludes: Vec<PackageName> = excludes
+        .into_iter()
+        .chain(excludes_from_workspace)
         .collect();
 
     // Read build constraints.
@@ -283,15 +296,30 @@ pub(crate) async fn pip_compile(
 
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
+    let python_preference = python_preference.with_system_flag(system);
+    let client = client_builder.clone().retries(0).build();
+    let download_list = ManagedPythonDownloadList::new(
+        &client,
+        install_mirrors.python_downloads_json_url.as_deref(),
+    )
+    .await?;
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(
-            &request,
+        let reporter = PythonDownloadReporter::single(printer);
+        PythonInstallation::find_or_download(
+            Some(&request),
             environment_preference,
             python_preference,
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
+        .await
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
@@ -305,6 +333,7 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
+            &download_list,
             &cache,
             preview,
         )
@@ -372,14 +401,22 @@ pub(crate) async fn pip_compile(
             ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, marker_env) =
-            resolution_environment(python_version, python_platform, &interpreter)?;
+        let tags = resolution_tags(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        )?;
+        let marker_env = resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        );
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
     // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
     // present, but otherwise, we omit them by default.
-    let hasher = if generate_hashes || matches!(format, ExportFormat::PylockToml) {
+    let hasher = if generate_hashes || matches!(format, PipCompileFormat::PylockToml) {
         HashStrategy::Generate(HashGeneration::All)
     } else {
         HashStrategy::None
@@ -401,13 +438,19 @@ pub(crate) async fn pip_compile(
         no_index,
     );
 
-    index_locations.cache_index_credentials();
-
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
             TorchStrategy::from_mode(
                 mode,
+                source,
                 python_platform
                     .map(TargetTriple::platform)
                     .as_ref()
@@ -418,9 +461,8 @@ pub(crate) async fn pip_compile(
         .transpose()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
-        .index_locations(&index_locations)
+    let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
+        .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
@@ -431,10 +473,10 @@ pub(crate) async fn pip_compile(
     let LockedRequirements { preferences, git } =
         if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
             match format {
-                ExportFormat::RequirementsTxt => LockedRequirements::from_preferences(
+                PipCompileFormat::RequirementsTxt => LockedRequirements::from_preferences(
                     read_requirements_txt(output_file, &upgrade).await?,
                 ),
-                ExportFormat::PylockToml => {
+                PipCompileFormat::PylockToml => {
                     read_pylock_toml_requirements(output_file, &upgrade).await?
                 }
             }
@@ -462,14 +504,16 @@ pub(crate) async fn pip_compile(
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::Shared(&environment)
-    } else if no_build_isolation_package.is_empty() {
-        BuildIsolation::Isolated
-    } else {
-        environment = PythonEnvironment::from_interpreter(interpreter.clone());
-        BuildIsolation::SharedPackage(&environment, &no_build_isolation_package)
+    let types_build_isolation = match build_isolation {
+        BuildIsolation::Isolate => uv_types::BuildIsolation::Isolated,
+        BuildIsolation::Shared => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::Shared(&environment)
+        }
+        BuildIsolation::SharedPackage(ref packages) => {
+            environment = PythonEnvironment::from_interpreter(interpreter.clone());
+            uv_types::BuildIsolation::SharedPackage(&environment, packages)
+        }
     };
 
     // Don't enforce hashes in `pip compile`.
@@ -480,12 +524,16 @@ pub(crate) async fn pip_compile(
             .map(|constraint| constraint.requirement.clone()),
     );
 
+    // Lower the extra build dependencies, if any.
     let extra_build_requires =
-        uv_distribution::ExtraBuildRequires::from_lowered(extra_build_dependencies.clone());
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+            .into_inner();
+
+    // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
         &cache,
-        build_constraints,
+        &build_constraints,
         &interpreter,
         &index_locations,
         &flat_index,
@@ -494,8 +542,9 @@ pub(crate) async fn pip_compile(
         index_strategy,
         &config_settings,
         &config_settings_package,
-        build_isolation,
+        types_build_isolation,
         &extra_build_requires,
+        extra_build_variables,
         link_mode,
         &build_options,
         &build_hashes,
@@ -522,6 +571,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -550,7 +600,7 @@ pub(crate) async fn pip_compile(
     {
         Ok(resolution) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
@@ -581,7 +631,7 @@ pub(crate) async fn pip_compile(
     }
 
     match format {
-        ExportFormat::RequirementsTxt => {
+        PipCompileFormat::RequirementsTxt => {
             if include_marker_expression {
                 if let Some(marker_env) = resolver_env.marker_environment() {
                     let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
@@ -672,7 +722,7 @@ pub(crate) async fn pip_compile(
                 )
             )?;
         }
-        ExportFormat::PylockToml => {
+        PipCompileFormat::PylockToml => {
             if include_marker_expression {
                 warn_user!(
                     "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
@@ -708,7 +758,13 @@ pub(crate) async fn pip_compile(
             };
 
             // Convert the resolution to a `pylock.toml` file.
-            let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
+            let export = PylockToml::from_resolution(
+                &resolution,
+                &no_emit_packages,
+                install_path,
+                tags.as_deref(),
+                &build_options,
+            )?;
             write!(writer, "{}", export.to_toml()?)?;
         }
     }

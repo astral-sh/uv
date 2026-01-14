@@ -10,7 +10,7 @@ use uv_pep440::Version;
 use crate::MetadataError;
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     pub project: Option<Project>,
@@ -21,7 +21,7 @@ impl PyProjectToml {
     pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
         let pyproject_toml = toml_edit::Document::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
-        let pyproject_toml = PyProjectToml::deserialize(pyproject_toml.into_deserializer())
+        let pyproject_toml = Self::deserialize(pyproject_toml.into_deserializer())
             .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
         Ok(pyproject_toml)
     }
@@ -33,7 +33,7 @@ impl PyProjectToml {
 /// relevant for dependency resolution.
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(try_from = "PyprojectTomlWire")]
 pub struct Project {
     /// The name of the project
@@ -51,7 +51,7 @@ pub struct Project {
     pub dynamic: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 struct PyprojectTomlWire {
     name: Option<PackageName>,
@@ -67,7 +67,7 @@ impl TryFrom<PyprojectTomlWire> for Project {
 
     fn try_from(wire: PyprojectTomlWire) -> Result<Self, Self::Error> {
         let name = wire.name.ok_or(MetadataError::MissingName)?;
-        Ok(Project {
+        Ok(Self {
             name,
             version: wire.version,
             requires_python: wire.requires_python,
@@ -78,13 +78,13 @@ impl TryFrom<PyprojectTomlWire> for Project {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct Tool {
     pub(super) poetry: Option<ToolPoetry>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 #[allow(clippy::empty_structs_with_brackets)]
 pub(super) struct ToolPoetry {}

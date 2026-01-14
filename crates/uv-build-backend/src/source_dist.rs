@@ -1,16 +1,18 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
 use crate::{
-    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml, find_roots,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    error_on_venv, find_roots,
 };
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
-use std::io::{BufReader, Cursor};
-use std::path::{Path, PathBuf};
+use std::io::{BufReader, Cursor, Write};
+use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
+use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
@@ -23,17 +25,27 @@ pub fn build_source_dist(
     source_tree: &Path,
     source_dist_directory: &Path,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         extension: SourceDistExtension::TarGz,
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
-    let writer = TarGzWriter::new(&source_dist_path)?;
-    write_source_dist(source_tree, writer, uv_version)?;
+
+    if source_dist_path.exists() {
+        fs_err::remove_file(&source_dist_path)?;
+    }
+
+    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
+    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    temp_file
+        .persist(&source_dist_path)
+        .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
+
     Ok(filename)
 }
 
@@ -41,9 +53,9 @@ pub fn build_source_dist(
 pub fn list_source_dist(
     source_tree: &Path,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<(SourceDistFilename, FileList), Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
@@ -51,7 +63,7 @@ pub fn list_source_dist(
     };
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
-    write_source_dist(source_tree, writer, uv_version)?;
+    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     Ok((filename, files))
 }
 
@@ -60,6 +72,7 @@ fn source_dist_matcher(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     settings: BuildBackendSettings,
+    show_warnings: bool,
 ) -> Result<(GlobDirFilter, GlobSet), Error> {
     // File and directories to include in the source directory
     let mut include_globs = Vec::new();
@@ -74,6 +87,7 @@ fn source_dist_matcher(
         &settings.module_root,
         settings.module_name.as_ref(),
         settings.namespace,
+        show_warnings,
     )?;
     for module_relative in modules_relative {
         // The wheel must not include any files included by the source distribution (at least until we
@@ -103,7 +117,7 @@ fn source_dist_matcher(
         .and_then(|readme| readme.path())
     {
         let readme = uv_fs::normalize_path(readme);
-        trace!("Including readme at: `{}`", readme.user_display());
+        trace!("Including readme at: {}", readme.user_display());
         let readme = readme.portable_display().to_string();
         let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
         include_globs.push(glob);
@@ -111,7 +125,7 @@ fn source_dist_matcher(
 
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
-        trace!("Including license files at: `{license_files}`");
+        trace!("Including license files at: {license_files}`");
         let glob = PortableGlobParser::Pep639
             .parse(license_files)
             .map_err(|err| Error::PortableGlob {
@@ -123,12 +137,18 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let directory = uv_fs::normalize_path(Path::new(directory));
-        trace!(
-            "Including data ({}) at: `{}`",
-            name,
-            directory.user_display()
-        );
+        let directory = uv_fs::normalize_path(directory);
+        trace!("Including data ({}) at: {}", name, directory.user_display());
+        if directory
+            .components()
+            .next()
+            .is_some_and(|component| !matches!(component, Component::CurDir | Component::Normal(_)))
+        {
+            return Err(Error::InvalidDataRoot {
+                name: name.to_string(),
+                path: directory.to_path_buf(),
+            });
+        }
         let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(&directory)))
@@ -140,7 +160,7 @@ fn source_dist_matcher(
     }
 
     debug!(
-        "Source distribution includes: `{:?}`",
+        "Source distribution includes: {:?}",
         include_globs
             .iter()
             .map(ToString::to_string)
@@ -175,9 +195,9 @@ fn write_source_dist(
     source_tree: &Path,
     mut writer: impl DirectoryWriter,
     uv_version: &str,
+    show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -211,7 +231,7 @@ fn write_source_dist(
     )?;
 
     let (include_matcher, exclude_matcher) =
-        source_dist_matcher(source_tree, &pyproject_toml, settings)?;
+        source_dist_matcher(source_tree, &pyproject_toml, settings, show_warnings)?;
 
     let mut files_visited = 0;
     for entry in WalkDir::new(source_tree)
@@ -252,9 +272,11 @@ fn write_source_dist(
             .expect("walkdir starts with root");
 
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
-            trace!("Excluding from sdist: `{}`", relative.user_display());
+            trace!("Excluding from sdist: {}", relative.user_display());
             continue;
         }
+
+        error_on_venv(entry.file_name(), entry.path())?;
 
         let entry_path = Path::new(&top_level)
             .join(relative)
@@ -270,24 +292,27 @@ fn write_source_dist(
     Ok(filename)
 }
 
-struct TarGzWriter {
+struct TarGzWriter<W: Write> {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<File>>,
+    tar: tar::Builder<GzEncoder<W>>,
 }
 
-impl TarGzWriter {
-    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+impl<W: Write> TarGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let file = File::create(&path)?;
-        let enc = GzEncoder::new(file, Compression::default());
+        let enc = GzEncoder::new(writer, Compression::default());
         let tar = tar::Builder::new(enc);
-        Ok(Self { path, tar })
+        Self { path, tar }
     }
 }
 
-impl DirectoryWriter for TarGzWriter {
+impl<W: Write> DirectoryWriter for TarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
+        // Work around bug in Python's std tar module
+        // https://github.com/python/cpython/issues/141707
+        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
+        header.set_entry_type(EntryType::Regular);
         header.set_size(bytes.len() as u64);
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
@@ -301,6 +326,10 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        // Work around bug in Python's std tar module
+        // https://github.com/python/cpython/issues/141707
+        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
+        header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
         let executable_bit = {

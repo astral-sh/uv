@@ -1,19 +1,22 @@
 [package]
 name = "uv-build"
-version = "0.8.4"
-edition.workspace = true
-rust-version.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.9.25"
+description = "A Python build backend"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 uv-build-backend = { workspace = true }
+uv-logging = { workspace = true }
 uv-version = { workspace = true }
 
+anstream = { workspace = true }
 anyhow = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
 workspace = true

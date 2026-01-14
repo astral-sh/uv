@@ -1,8 +1,14 @@
 [package]
 name = "uv-scripts"
-version = "0.0.1"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
-description = "Parse PEP 723-style Python scripts."
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
 
 [lib]
 doctest = false
@@ -13,6 +19,7 @@ workspace = true
 [dependencies]
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }

@@ -1,10 +1,10 @@
 [package]
 name = "uv-settings"
-version = "0.0.1"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -17,9 +17,11 @@ workspace = true
 
 [dependencies]
 uv-cache-info = { workspace = true, features = ["schemars"] }
+uv-client = { workspace = true }
 uv-configuration = { workspace = true, features = ["schemars", "clap"] }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true, features = ["schemars"] }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["schemars", "clap"] }
 uv-macros = { workspace = true }
@@ -49,3 +51,6 @@ url = { workspace = true }
 ignored = ["uv-options-metadata", "clap"]
 
 [dev-dependencies]
+
+[features]
+tracing-durations-export = []

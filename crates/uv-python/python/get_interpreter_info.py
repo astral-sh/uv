@@ -4,6 +4,7 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
+import site
 import sys
 
 import json
@@ -41,7 +42,19 @@ if hasattr(sys, "implementation"):
         import re
 
         implementation_version = re.sub(
-            r"graalpy(\d)(\d+)-\d+", r"\1.\2", sys.implementation.cache_tag
+            r"graalpy(\d)(\d+)(?:dev[\da-f]+)?-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag,
+        )
+    elif implementation_name == "pyston":
+        # Pyston reports the CPython version as sys.implementation.version,
+        # so we need to discover the Pyston version from the cache_tag
+        import re
+
+        implementation_version = re.sub(
+            r"pyston-(\d)(\d+)",
+            r"\1.\2",
+            sys.implementation.cache_tag,
         )
     else:
         implementation_version = format_full_version(sys.implementation.version)
@@ -509,6 +522,15 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "ios":
+        ios_ver = platform.ios_ver()
+        version = ios_ver.release.split(".")
+        operating_system = {
+            "name": "ios",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+            "simulator": ios_ver.is_simulator,
+        }
     elif operating_system == "emscripten":
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
         if not pyodide_abi_version:
@@ -635,6 +657,7 @@ def main() -> None:
         # temporary path to `sys.path` so we can import it, which we have to strip later
         # to avoid having this now-deleted path around.
         "sys_path": sys.path[1:],
+        "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
@@ -650,6 +673,8 @@ def main() -> None:
         # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes
         "gil_disabled": bool(sysconfig.get_config_var("Py_GIL_DISABLED")),
+        # https://docs.python.org/3/using/configure.html#debug-build
+        "debug_enabled": bool(sysconfig.get_config_var("Py_DEBUG")),
         # Determine if the interpreter is 32-bit or 64-bit.
         # https://github.com/python/cpython/blob/b228655c227b2ca298a8ffac44d14ce3d22f6faa/Lib/venv/__init__.py#L136
         "pointer_size": "64" if sys.maxsize > 2**32 else "32",

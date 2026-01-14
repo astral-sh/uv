@@ -342,26 +342,3 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
         output.push_str(&markdown::to_html(&value));
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::env;
-
-    use anyhow::Result;
-
-    use uv_static::EnvVars;
-
-    use crate::generate_all::Mode;
-
-    use super::{Args, main};
-
-    #[test]
-    fn test_generate_cli_reference() -> Result<()> {
-        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-        main(&Args { mode })
-    }
-}

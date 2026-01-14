@@ -7,11 +7,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use tracing::debug;
+use tracing::{debug, trace, warn};
 
-pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_fs::{LockedFile, cachedir, directories};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -22,6 +21,7 @@ use crate::removal::Remover;
 pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
+pub use archive::ArchiveId;
 
 mod archive;
 mod by_timestamp;
@@ -34,6 +34,17 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
+
+/// Error locking a cache entry or shard
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("Could not make the path absolute")]
+    Absolute(#[source] io::Error),
+    #[error("Could not acquire lock")]
+    Acquire(#[from] LockedFileError),
+}
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -80,9 +91,14 @@ impl CacheEntry {
     }
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
         fs_err::create_dir_all(self.dir())?;
-        LockedFile::acquire(self.path(), self.path().display()).await
+        Ok(LockedFile::acquire(
+            self.path(),
+            LockedFileMode::Exclusive,
+            self.path().display(),
+        )
+        .await?)
     }
 }
 
@@ -109,9 +125,14 @@ impl CacheShard {
     }
 
     /// Acquire the cache entry as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
         fs_err::create_dir_all(self.as_ref())?;
-        LockedFile::acquire(self.join(".lock"), self.display()).await
+        Ok(LockedFile::acquire(
+            self.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.display(),
+        )
+        .await?)
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
@@ -135,6 +156,8 @@ impl Deref for CacheShard {
 }
 
 /// The main cache abstraction.
+///
+/// While the cache is active, it holds a read (shared) lock that prevents cache cleaning
 #[derive(Debug, Clone)]
 pub struct Cache {
     /// The cache directory.
@@ -146,6 +169,9 @@ pub struct Cache {
     /// Included to ensure that the temporary directory exists for the length of the operation, but
     /// is dropped at the end as appropriate.
     temp_dir: Option<Arc<tempfile::TempDir>>,
+    /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
+    /// uv process.
+    lock_file: Option<Arc<LockedFile>>,
 }
 
 impl Cache {
@@ -155,6 +181,7 @@ impl Cache {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
+            lock_file: None,
         }
     }
 
@@ -165,6 +192,7 @@ impl Cache {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
+            lock_file: None,
         })
     }
 
@@ -172,6 +200,69 @@ impl Cache {
     #[must_use]
     pub fn with_refresh(self, refresh: Refresh) -> Self {
         Self { refresh, ..self }
+    }
+
+    /// Acquire a lock that allows removing entries from the cache.
+    pub async fn with_exclusive_lock(self) -> Result<Self, LockedFileError> {
+        let Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file,
+        } = self;
+
+        // Release the existing lock, avoid deadlocks from a cloned cache.
+        if let Some(lock_file) = lock_file {
+            drop(
+                Arc::try_unwrap(lock_file).expect(
+                    "cloning the cache before acquiring an exclusive lock causes a deadlock",
+                ),
+            );
+        }
+        let lock_file = LockedFile::acquire(
+            root.join(".lock"),
+            LockedFileMode::Exclusive,
+            root.simplified_display(),
+        )
+        .await?;
+
+        Ok(Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file: Some(Arc::new(lock_file)),
+        })
+    }
+
+    /// Acquire a lock that allows removing entries from the cache, if available.
+    ///
+    /// If the lock is not immediately available, returns [`Err`] with self.
+    pub fn with_exclusive_lock_no_wait(self) -> Result<Self, Self> {
+        let Self {
+            root,
+            refresh,
+            temp_dir,
+            lock_file,
+        } = self;
+
+        match LockedFile::acquire_no_wait(
+            root.join(".lock"),
+            LockedFileMode::Exclusive,
+            root.simplified_display(),
+        ) {
+            Some(lock_file) => Ok(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file: Some(Arc::new(lock_file)),
+            }),
+            None => Err(Self {
+                root,
+                refresh,
+                temp_dir,
+                lock_file,
+            }),
+        }
     }
 
     /// Return the root of the cache.
@@ -310,10 +401,8 @@ impl Cache {
         self.temp_dir.is_some()
     }
 
-    /// Initialize the [`Cache`].
-    pub fn init(self) -> Result<Self, io::Error> {
-        let root = &self.root;
-
+    /// Populate the cache scaffold.
+    fn create_base_files(root: &PathBuf) -> io::Result<()> {
         // Create the cache directory, if it doesn't exist.
         fs_err::create_dir_all(root)?;
 
@@ -359,21 +448,101 @@ impl Cache {
                 .join(".git"),
         )?;
 
+        Ok(())
+    }
+
+    /// Initialize the [`Cache`].
+    pub async fn init(self) -> Result<Self, Error> {
+        let root = &self.root;
+
+        Self::create_base_files(root)?;
+
+        // Block cache removal operations from interfering.
+        let lock_file = match LockedFile::acquire(
+            root.join(".lock"),
+            LockedFileMode::Shared,
+            root.simplified_display(),
+        )
+        .await
+        {
+            Ok(lock_file) => Some(Arc::new(lock_file)),
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == io::ErrorKind::Unsupported) =>
+            {
+                warn!(
+                    "Shared locking is not supported by the current platform or filesystem, \
+                        reduced parallel process safety with `uv cache clean` and `uv cache prune`."
+                );
+                None
+            }
+            Err(err) => return Err(err.into()),
+        };
+
         Ok(Self {
-            root: std::path::absolute(root)?,
+            root: std::path::absolute(root).map_err(Error::Absolute)?,
+            lock_file,
             ..self
         })
     }
 
+    /// Initialize the [`Cache`], assuming that there are no other uv processes running.
+    pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
+        let root = &self.root;
+
+        Self::create_base_files(root)?;
+
+        // Block cache removal operations from interfering.
+        let Some(lock_file) = LockedFile::acquire_no_wait(
+            root.join(".lock"),
+            LockedFileMode::Shared,
+            root.simplified_display(),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            root: std::path::absolute(root).map_err(Error::Absolute)?,
+            lock_file: Some(Arc::new(lock_file)),
+            ..self
+        }))
+    }
+
     /// Clear the cache, removing all entries.
-    pub fn clear(&self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
-        Remover::new(reporter).rm_rf(&self.root)
+    pub fn clear(self, reporter: Box<dyn CleanReporter>) -> Result<Removal, io::Error> {
+        // Remove everything but `.lock`, Windows does not allow removal of a locked file
+        let mut removal = Remover::new(reporter).rm_rf(&self.root, true)?;
+        let Self {
+            root, lock_file, ..
+        } = self;
+
+        // Remove the `.lock` file, unlocking it first
+        if let Some(lock) = lock_file {
+            drop(lock);
+            fs_err::remove_file(root.join(".lock"))?;
+        }
+        removal.num_files += 1;
+
+        // Remove the root directory
+        match fs_err::remove_dir(root) {
+            Ok(()) => {
+                removal.num_dirs += 1;
+            }
+            // On Windows, when `--force` is used, the `.lock` file can exist and be unremovable,
+            // so we make this non-fatal
+            Err(err) if err.kind() == io::ErrorKind::DirectoryNotEmpty => {
+                trace!("Failed to remove root cache directory: not empty");
+            }
+            Err(err) => return Err(err),
+        }
+
+        Ok(removal)
     }
 
     /// Remove a package from the cache.
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+    pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
         let references = self.find_archive_references()?;
 
@@ -407,6 +576,7 @@ impl Cache {
             if entry.file_name() == "CACHEDIR.TAG"
                 || entry.file_name() == ".gitignore"
                 || entry.file_name() == ".git"
+                || entry.file_name() == ".lock"
             {
                 continue;
             }
@@ -987,6 +1157,8 @@ pub enum CacheBucket {
     Environments,
     /// Cached Python downloads
     Python,
+    /// Downloaded tool binaries (e.g., Ruff).
+    Binaries,
 }
 
 impl CacheBucket {
@@ -1000,7 +1172,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v16",
+            Self::Simple => "simple-v18",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
             Self::Wheels => "wheels-v5",
@@ -1010,6 +1182,7 @@ impl CacheBucket {
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
             Self::Python => "python-v0",
+            Self::Binaries => "binaries-v0",
         }
     }
 
@@ -1116,7 +1289,8 @@ impl CacheBucket {
             | Self::Archive
             | Self::Builds
             | Self::Environments
-            | Self::Python => {
+            | Self::Python
+            | Self::Binaries => {
                 // Nothing to do.
             }
         }
@@ -1135,6 +1309,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Binaries,
         ]
         .iter()
         .copied()
@@ -1211,36 +1386,31 @@ impl Refresh {
 
     /// Combine two [`Refresh`] policies, taking the "max" of the two policies.
     #[must_use]
-    pub fn combine(self, other: Refresh) -> Self {
-        /// Return the maximum of two timestamps.
-        fn max(a: Timestamp, b: Timestamp) -> Timestamp {
-            if a > b { a } else { b }
-        }
-
+    pub fn combine(self, other: Self) -> Self {
         match (self, other) {
             // If the policy is `None`, return the existing refresh policy.
             // Take the `max` of the two timestamps.
-            (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
-            (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::None(t1), Refresh::Packages(packages, paths, t2)) => {
-                Refresh::Packages(packages, paths, max(t1, t2))
+            (Self::None(t1), Self::None(t2)) => Self::None(t1.max(t2)),
+            (Self::None(t1), Self::All(t2)) => Self::All(t1.max(t2)),
+            (Self::None(t1), Self::Packages(packages, paths, t2)) => {
+                Self::Packages(packages, paths, t1.max(t2))
             }
 
             // If the policy is `All`, refresh all packages.
-            (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::Packages(.., t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Self::None(t2) | Self::All(t2) | Self::Packages(.., t2)) => {
+                Self::All(t1.max(t2))
+            }
 
             // If the policy is `Packages`, take the "max" of the two policies.
-            (Self::Packages(packages, paths, t1), Refresh::None(t2)) => {
-                Refresh::Packages(packages, paths, max(t1, t2))
+            (Self::Packages(packages, paths, t1), Self::None(t2)) => {
+                Self::Packages(packages, paths, t1.max(t2))
             }
-            (Self::Packages(.., t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::Packages(packages1, paths1, t1), Refresh::Packages(packages2, paths2, t2)) => {
-                Refresh::Packages(
+            (Self::Packages(.., t1), Self::All(t2)) => Self::All(t1.max(t2)),
+            (Self::Packages(packages1, paths1, t1), Self::Packages(packages2, paths2, t2)) => {
+                Self::Packages(
                     packages1.into_iter().chain(packages2).collect(),
                     paths1.into_iter().chain(paths2).collect(),
-                    max(t1, t2),
+                    t1.max(t2),
                 )
             }
         }

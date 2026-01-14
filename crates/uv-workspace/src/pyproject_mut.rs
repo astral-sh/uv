@@ -1,9 +1,10 @@
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, iter, mem};
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
@@ -12,9 +13,9 @@ use toml_edit::{
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
-use uv_normalize::GroupName;
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
@@ -64,18 +65,18 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum CommentType {
     /// A comment that appears on its own line.
     OwnLine,
     /// A comment that appears at the end of a line.
-    EndOfLine,
+    EndOfLine { leading_whitespace: String },
 }
 
 #[derive(Debug, Clone)]
 struct Comment {
     text: String,
-    comment_type: CommentType,
+    kind: CommentType,
 }
 
 impl ArrayEdit {
@@ -129,10 +130,10 @@ impl AddBoundsKind {
         // second most significant component, so most versions are either major.minor.patch or
         // 0.major.minor.
         match self {
-            AddBoundsKind::Lower => {
+            Self::Lower => {
                 VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(version))
             }
-            AddBoundsKind::Major => {
+            Self::Major => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -173,7 +174,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Minor => {
+            Self::Minor => {
                 let leading_zeroes = version
                     .release()
                     .iter()
@@ -242,7 +243,7 @@ impl AddBoundsKind {
                     VersionSpecifier::less_than_version(upper_bound),
                 ])
             }
-            AddBoundsKind::Exact => {
+            Self::Exact => {
                 VersionSpecifiers::from_iter([VersionSpecifier::equals_version(version)])
             }
         }
@@ -544,17 +545,17 @@ impl PyProjectTomlMut {
 
         // Set the position to the minimum, if it's not already the first element.
         if let Some(min) = existing.iter().filter_map(Table::position).min() {
-            table.set_position(min);
+            table.set_position(Some(min));
 
             // Increment the position of all existing elements.
             for table in existing.iter_mut() {
                 if let Some(position) = table.position() {
-                    table.set_position(position + 1);
+                    table.set_position(Some(position + 1));
                 }
             }
         } else {
             let position = isize::try_from(size).expect("TOML table size fits in `isize`");
-            table.set_position(position);
+            table.set_position(Some(position));
         }
 
         // Push the item to the table.
@@ -619,6 +620,41 @@ impl PyProjectTomlMut {
         }
 
         Ok(added)
+    }
+
+    /// Ensure that an optional dependency group exists, creating an empty group if it doesn't.
+    pub fn ensure_optional_dependency(&mut self, extra: &ExtraName) -> Result<(), Error> {
+        // Get or create `project.optional-dependencies`.
+        let optional_dependencies = self
+            .project()?
+            .entry("optional-dependencies")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        // Check if the extra already exists.
+        let extra_exists = optional_dependencies
+            .iter()
+            .any(|(key, _value)| ExtraName::from_str(key).is_ok_and(|e| e == *extra));
+
+        // If the extra doesn't exist, create it.
+        if !extra_exists {
+            optional_dependencies.insert(extra.as_ref(), Item::Value(Value::Array(Array::new())));
+        }
+
+        // If `project.optional-dependencies` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(optional_dependencies) = self
+            .project()?
+            .get_mut("optional-dependencies")
+            .and_then(Item::as_inline_table_mut)
+        {
+            optional_dependencies.fmt();
+        }
+
+        Ok(())
     }
 
     /// Adds a dependency to `dependency-groups`.
@@ -690,6 +726,54 @@ impl PyProjectTomlMut {
         }
 
         Ok(added)
+    }
+
+    /// Ensure that a dependency group exists, creating an empty group if it doesn't.
+    pub fn ensure_dependency_group(&mut self, group: &GroupName) -> Result<(), Error> {
+        // Get or create `dependency-groups`.
+        let dependency_groups = self
+            .doc
+            .entry("dependency-groups")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_like_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        let was_sorted = dependency_groups
+            .get_values()
+            .iter()
+            .filter_map(|(dotted_ks, _)| dotted_ks.first())
+            .map(|k| k.get())
+            .is_sorted();
+
+        // Check if the group already exists.
+        let group_exists = dependency_groups
+            .iter()
+            .any(|(key, _value)| GroupName::from_str(key).is_ok_and(|g| g == *group));
+
+        // If the group doesn't exist, create it.
+        if !group_exists {
+            dependency_groups.insert(group.as_ref(), Item::Value(Value::Array(Array::new())));
+
+            // To avoid churn in pyproject.toml, we only sort new group keys if the
+            // existing keys were sorted.
+            if was_sorted {
+                dependency_groups.sort_values();
+            }
+        }
+
+        // If `dependency-groups` is an inline table, reformat it.
+        //
+        // Reformatting can drop comments between keys, but you can't put comments
+        // between items in an inline table anyway.
+        if let Some(dependency_groups) = self
+            .doc
+            .get_mut("dependency-groups")
+            .and_then(Item::as_inline_table_mut)
+        {
+            dependency_groups.fmt();
+        }
+
+        Ok(())
     }
 
     /// Set the constraint for a requirement for an existing dependency.
@@ -1140,10 +1224,18 @@ impl PyProjectTomlMut {
             .get_mut("project")
             .and_then(Item::as_table_mut)
             .ok_or(Error::MalformedWorkspace)?;
-        project.insert(
-            "version",
-            Item::Value(Value::String(Formatted::new(version.to_string()))),
-        );
+
+        if let Some(existing) = project.get_mut("version") {
+            if let Some(value) = existing.as_value_mut() {
+                let mut formatted = Value::from(version.to_string());
+                *formatted.decor_mut() = value.decor().clone();
+                *value = formatted;
+            } else {
+                *existing = Item::Value(Value::from(version.to_string()));
+            }
+        } else {
+            project.insert("version", Item::Value(Value::from(version.to_string())));
+        }
 
         Ok(())
     }
@@ -1535,18 +1627,31 @@ fn reformat_array_multiline(deps: &mut Array) {
                 (false, false),
                 |(prev_line_was_empty, prev_line_was_comment), line| {
                     let trimmed_line = line.trim();
-                    if let Some(index) = trimmed_line.find('#') {
-                        let comment_text = trimmed_line[index..].trim().to_string();
-                        let comment_type = if (*prev_line_was_empty) || (*prev_line_was_comment) {
+
+                    if let Some((before, comment)) = line.split_once('#') {
+                        let comment_text = format!("#{}", comment.trim_end());
+
+                        let comment_kind = if (*prev_line_was_empty) || (*prev_line_was_comment) {
                             CommentType::OwnLine
                         } else {
-                            CommentType::EndOfLine
+                            CommentType::EndOfLine {
+                                leading_whitespace: before
+                                    .chars()
+                                    .rev()
+                                    .take_while(|c| c.is_whitespace())
+                                    .collect::<String>()
+                                    .chars()
+                                    .rev()
+                                    .collect(),
+                            }
                         };
+
                         *prev_line_was_empty = trimmed_line.is_empty();
                         *prev_line_was_comment = true;
+
                         Some(Some(Comment {
                             text: comment_text,
-                            comment_type,
+                            kind: comment_kind,
                         }))
                     } else {
                         *prev_line_was_empty = trimmed_line.is_empty();
@@ -1562,36 +1667,36 @@ fn reformat_array_multiline(deps: &mut Array) {
 
     let mut indentation_prefix = None;
 
+    // Calculate the indentation prefix based on the indentation of the first dependency entry.
+    if let Some(first_item) = deps.iter().next() {
+        let decor_prefix = first_item
+            .decor()
+            .prefix()
+            .and_then(|s| s.as_str())
+            .and_then(|s| s.lines().last())
+            .unwrap_or_default();
+
+        let decor_prefix = decor_prefix
+            .split_once('#')
+            .map(|(s, _)| s)
+            .unwrap_or(decor_prefix);
+
+        indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
+    }
+
+    let indentation_prefix_str = format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
+
     for item in deps.iter_mut() {
         let decor = item.decor_mut();
         let mut prefix = String::new();
 
-        // Calculate the indentation prefix based on the indentation of the first dependency entry.
-        if indentation_prefix.is_none() {
-            let decor_prefix = decor
-                .prefix()
-                .and_then(|s| s.as_str())
-                .and_then(|s| s.lines().last())
-                .unwrap_or_default();
-
-            let decor_prefix = decor_prefix
-                .split_once('#')
-                .map(|(s, _)| s)
-                .unwrap_or(decor_prefix);
-
-            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
-        }
-
-        let indentation_prefix_str =
-            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
-
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
-            match comment.comment_type {
+            match &comment.kind {
                 CommentType::OwnLine => {
                     prefix.push_str(&indentation_prefix_str);
                 }
-                CommentType::EndOfLine => {
-                    prefix.push(' ');
+                CommentType::EndOfLine { leading_whitespace } => {
+                    prefix.push_str(leading_whitespace);
                 }
             }
             prefix.push_str(&comment.text);
@@ -1606,14 +1711,14 @@ fn reformat_array_multiline(deps: &mut Array) {
         let mut rv = String::new();
         if comments.peek().is_some() {
             for comment in comments {
-                match comment.comment_type {
+                match &comment.kind {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
                             format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
-                    CommentType::EndOfLine => {
-                        rv.push(' ');
+                    CommentType::EndOfLine { leading_whitespace } => {
+                        rv.push_str(leading_whitespace);
                     }
                 }
                 rv.push_str(&comment.text);
@@ -1645,8 +1750,9 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, split_specifiers};
+    use super::{AddBoundsKind, reformat_array_multiline, split_specifiers};
     use std::str::FromStr;
+    use toml_edit::DocumentMut;
     use uv_pep440::Version;
 
     #[test]
@@ -1666,6 +1772,56 @@ mod test {
                 "flask",
                 "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
             )
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_spacing() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",     # comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",     # comment"),
+            "inline comment spacing should be preserved:\n{serialized}"
+        );
+    }
+
+    #[test]
+    fn reformat_preserves_inline_comment_without_padding() {
+        let mut doc: DocumentMut = r#"
+[project]
+dependencies = [
+    "attrs>=25.4.0",#comment
+]
+"#
+        .parse()
+        .unwrap();
+
+        reformat_array_multiline(
+            doc["project"]["dependencies"]
+                .as_array_mut()
+                .expect("dependencies array"),
+        );
+
+        let serialized = doc.to_string();
+
+        assert!(
+            serialized.contains("\"attrs>=25.4.0\",#comment"),
+            "inline comment spacing without padding should be preserved:\n{serialized}"
         );
     }
 

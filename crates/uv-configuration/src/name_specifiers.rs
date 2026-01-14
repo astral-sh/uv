@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::str::FromStr;
 
-use uv_pep508::PackageName;
+use uv_normalize::PackageName;
 
 /// A specifier used for (e.g.) pip's `--no-binary` flag.
 ///

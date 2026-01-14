@@ -7,6 +7,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
+use uv_static::EnvVars;
 
 #[test]
 fn python_pin() {
@@ -450,21 +451,21 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.11` -> `3.13t`
+    Updated `.python-version` from `3.11` -> `3.13+freethreaded`
 
     ----- stderr -----
-    warning: No interpreter found for Python 3.13t in [PYTHON SOURCES]
+    warning: No interpreter found for Python 3.13+freethreaded in [PYTHON SOURCES]
     ");
 
     // Request a implementation version that is compatible
-    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("cpython@3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Updated `.python-version` from `3.13t` -> `cpython@3.11`
+    Updated `.python-version` from `3.13+freethreaded` -> `cpython@3.11`
 
     ----- stderr -----
-    "###);
+    ");
 
     let python_version = context.read(PYTHON_VERSION_FILENAME);
     insta::with_settings!({
@@ -822,7 +823,7 @@ fn python_pin_install() {
     warning: No interpreter found for Python 3.12 in [PYTHON SOURCES]
     ");
 
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env("UV_PYTHON_DOWNLOADS", "auto"), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env(EnvVars::UV_PYTHON_DOWNLOADS, "auto"), @r"
     success: true
     exit_code: 0
     ----- stdout -----

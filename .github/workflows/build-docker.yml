@@ -40,6 +40,8 @@ env:
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
   UV_DOCKERHUB_IMAGE: docker.io/astral/uv
 
+permissions: {}
+
 jobs:
   docker-plan:
     name: plan
@@ -57,13 +59,13 @@ jobs:
           IS_LOCAL_PR: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         id: plan
         run: |
-          if [ "${{ env.DRY_RUN }}" == "false" ]; then
+          if [ "${DRY_RUN}" == "false" ]; then
             echo "login=true" >> "$GITHUB_OUTPUT"
             echo "push=true" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ env.TAG }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "action=build and publish" >> "$GITHUB_OUTPUT"
           else
-            echo "login=${{ env.IS_LOCAL_PR }}" >> "$GITHUB_OUTPUT"
+            echo "login=${IS_LOCAL_PR}" >> "$GITHUB_OUTPUT"
             echo "push=false" >> "$GITHUB_OUTPUT"
             echo "tag=dry-run" >> "$GITHUB_OUTPUT"
             echo "action=build" >> "$GITHUB_OUTPUT"
@@ -88,18 +90,19 @@ jobs:
       image-digest: ${{ steps.build.outputs.digest }}
       image-version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           submodules: recursive
+          persist-credentials: false
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -111,18 +114,20 @@ jobs:
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         run: |
           version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
-          if [ "${{ needs.docker-plan.outputs.tag }}" != "${version}" ]; then
+          if [ "${TAG}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
-            echo "${{ needs.docker-plan.outputs.tag }}" >&2
+            echo "${TAG}" >&2
             echo "${version}" >&2
             exit 1
           else
             echo "Releasing ${version}"
           fi
+        env:
+          TAG: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
@@ -137,7 +142,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@9785b135c3c76c33db102e45be96a25ab55cd507 # v1.16.2
         with:
           project: 7hd4vdzmw5 # astral-sh/uv
           context: .
@@ -150,7 +155,7 @@ jobs:
 
       - name: Generate artifact attestation for base image
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -173,24 +178,39 @@ jobs:
         # Mapping of base image followed by a comma followed by one or more base tags (comma separated)
         # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
         image-mapping:
-          - alpine:3.21,alpine3.21,alpine
-          - debian:bookworm-slim,bookworm-slim,debian-slim
-          - buildpack-deps:bookworm,bookworm,debian
-          - python:3.14-rc-alpine,python3.14-rc-alpine
-          - python:3.13-alpine,python3.13-alpine
-          - python:3.12-alpine,python3.12-alpine
-          - python:3.11-alpine,python3.11-alpine
-          - python:3.10-alpine,python3.10-alpine
-          - python:3.9-alpine,python3.9-alpine
-          - python:3.8-alpine,python3.8-alpine
-          - python:3.14-rc-bookworm,python3.14-rc-bookworm
+          - alpine:3.22,alpine3.22,alpine
+          - alpine:3.21,alpine3.21
+          - debian:trixie-slim,trixie-slim,debian-slim
+          - buildpack-deps:trixie,trixie,debian
+          - debian:bookworm-slim,bookworm-slim
+          - buildpack-deps:bookworm,bookworm
+          - python:3.14-alpine3.23,python3.14-alpine3.23,python3.14-alpine
+          - python:3.13-alpine3.23,python3.13-alpine3.23,python3.13-alpine
+          - python:3.12-alpine3.23,python3.12-alpine3.23,python3.12-alpine
+          - python:3.11-alpine3.23,python3.11-alpine3.23,python3.11-alpine
+          - python:3.10-alpine3.23,python3.10-alpine3.23,python3.10-alpine
+          - python:3.9-alpine3.22,python3.9-alpine3.22,python3.9-alpine
+          - python:3.8-alpine3.20,python3.8-alpine3.20,python3.8-alpine
+          - python:3.14-trixie,python3.14-trixie
+          - python:3.13-trixie,python3.13-trixie
+          - python:3.12-trixie,python3.12-trixie
+          - python:3.11-trixie,python3.11-trixie
+          - python:3.10-trixie,python3.10-trixie
+          - python:3.9-trixie,python3.9-trixie
+          - python:3.14-slim-trixie,python3.14-trixie-slim
+          - python:3.13-slim-trixie,python3.13-trixie-slim
+          - python:3.12-slim-trixie,python3.12-trixie-slim
+          - python:3.11-slim-trixie,python3.11-trixie-slim
+          - python:3.10-slim-trixie,python3.10-trixie-slim
+          - python:3.9-slim-trixie,python3.9-trixie-slim
+          - python:3.14-bookworm,python3.14-bookworm
           - python:3.13-bookworm,python3.13-bookworm
           - python:3.12-bookworm,python3.12-bookworm
           - python:3.11-bookworm,python3.11-bookworm
           - python:3.10-bookworm,python3.10-bookworm
           - python:3.9-bookworm,python3.9-bookworm
           - python:3.8-bookworm,python3.8-bookworm
-          - python:3.14-rc-slim-bookworm,python3.14-rc-bookworm-slim
+          - python:3.14-slim-bookworm,python3.14-bookworm-slim
           - python:3.13-slim-bookworm,python3.13-bookworm-slim
           - python:3.12-slim-bookworm,python3.12-bookworm-slim
           - python:3.11-slim-bookworm,python3.11-bookworm-slim
@@ -199,13 +219,13 @@ jobs:
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -224,7 +244,7 @@ jobs:
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${{ env.UV_GHCR_IMAGE }}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
@@ -236,8 +256,8 @@ jobs:
           # Loop through all base tags and append its docker metadata pattern to the list
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
           IFS=','; for TAG in ${BASE_TAGS}; do
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
-            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${{ needs.docker-plan.outputs.tag }}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ version }},suffix=-${TAG},value=${VERSION}\n"
+            TAG_PATTERNS="${TAG_PATTERNS}type=pep440,pattern={{ major }}.{{ minor }},suffix=-${TAG},value=${VERSION}\n"
             TAG_PATTERNS="${TAG_PATTERNS}type=raw,value=${TAG}\n"
           done
 
@@ -250,10 +270,12 @@ jobs:
             echo -e "${TAG_PATTERNS}"
             echo EOF
           } >> $GITHUB_ENV
+        env:
+          VERSION: ${{ needs.docker-plan.outputs.tag }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         # ghcr.io prefers index level annotations
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
@@ -268,7 +290,7 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: depot/build-push-action@2583627a84956d07561420dcc1d0eb1f2af3fac0 # v1.15.0
+        uses: depot/build-push-action@9785b135c3c76c33db102e45be96a25ab55cd507 # v1.16.2
         with:
           context: .
           project: 7hd4vdzmw5 # astral-sh/uv
@@ -281,7 +303,7 @@ jobs:
 
       - name: Generate artifact attestation
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
@@ -325,7 +347,7 @@ jobs:
       # See `docker-annotate-base` for details.
       - name: Generate artifact attestation
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}
@@ -334,6 +356,11 @@ jobs:
   docker-annotate-base:
     name: annotate uv
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for GHCR signing
+      packages: write # for GHCR image pushes
+      attestations: write # for GHCR attestations
     environment:
       name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:
@@ -342,12 +369,12 @@ jobs:
       - docker-publish-extra
     if: ${{ needs.docker-plan.outputs.push == 'true' }}
     steps:
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           username: astral
           password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
 
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -402,7 +429,7 @@ jobs:
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ env.UV_GHCR_IMAGE }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}

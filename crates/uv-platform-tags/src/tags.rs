@@ -79,6 +79,13 @@ pub struct Tags {
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,
+    /// Python platform used to generate the tags, for error messages.
+    python_platform: Platform,
+    /// Python version used to generate the tags, for error messages.
+    python_version: (u8, u8),
+    /// Whether the tags are for a different Python interpreter than the current one, for error
+    /// messages.
+    is_cross: bool,
 }
 
 impl Tags {
@@ -86,7 +93,12 @@ impl Tags {
     ///
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
-    pub fn new(tags: Vec<(LanguageTag, AbiTag, PlatformTag)>) -> Self {
+    fn new(
+        tags: Vec<(LanguageTag, AbiTag, PlatformTag)>,
+        python_platform: Platform,
+        python_version: (u8, u8),
+        is_cross: bool,
+    ) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
 
@@ -104,6 +116,9 @@ impl Tags {
         Self {
             map: Arc::new(map),
             best,
+            python_platform,
+            python_version,
+            is_cross,
         }
     }
 
@@ -116,6 +131,7 @@ impl Tags {
         implementation_version: (u8, u8),
         manylinux_compatible: bool,
         gil_disabled: bool,
+        is_cross: bool,
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
 
@@ -219,7 +235,7 @@ impl Tags {
                 ));
             }
         }
-        Ok(Self::new(tags))
+        Ok(Self::new(tags, platform.clone(), python_version, is_cross))
     }
 
     /// Returns true when there exists at least one tag for this platform
@@ -319,6 +335,18 @@ impl Tags {
             .get(&python_tag)
             .map(|abis| abis.contains_key(&abi_tag))
             .unwrap_or(false)
+    }
+
+    pub fn python_platform(&self) -> &Platform {
+        &self.python_platform
+    }
+
+    pub fn python_version(&self) -> (u8, u8) {
+        self.python_version
+    }
+
+    pub fn is_cross(&self) -> bool {
+        self.is_cross
     }
 }
 
@@ -553,22 +581,25 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         }
         (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
         (Os::FreeBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::OpenBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
                 release_arch: SmallString::from(release_arch),
             }]
@@ -611,17 +642,81 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 release_arch: SmallString::from(release_arch),
             }]
         }
-        (Os::Android { api_level }, _) => {
-            vec![PlatformTag::Android {
-                api_level: *api_level,
-                arch,
-            }]
+        (Os::Android { api_level }, arch) => {
+            // Source: https://github.com/pypa/packaging/blob/e5470c1854e352f68fa3f83df9cbb0af59558c49/src/packaging/tags.py#L541
+            let mut platform_tags = vec![];
+
+            // 16 is the minimum API level known to have enough features to support CPython
+            // without major patching. Yield every API level from the maximum down to the
+            // minimum, inclusive.
+            for ver in (16..=*api_level).rev() {
+                platform_tags.push(PlatformTag::Android {
+                    api_level: ver,
+                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
+                });
+            }
+
+            platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
             vec![PlatformTag::Pyodide {
                 major: *major,
                 minor: *minor,
             }]
+        }
+        (
+            Os::Ios {
+                major,
+                minor,
+                simulator,
+            },
+            arch,
+        ) => {
+            // Source: https://github.com/pypa/packaging/blob/e9b9d09ebc5992ecad1799da22ee5faefb9cc7cb/src/packaging/tags.py#L484
+            let mut platform_tags = vec![];
+            let multiarch = IosMultiarch::from_arch(arch, *simulator)
+                .map_err(PlatformError::ArchDetectionError)?;
+
+            // Consider any iOS major.minor version from the version requested, down to
+            // 12.0. 12.0 is the first iOS version that is known to have enough features
+            // to support CPython. Consider every possible minor release up to X.9. The
+            // highest the minor has ever gone is 8 (14.8 and 15.8) but having some extra
+            // candidates that won't ever match doesn't really hurt, and it saves us from
+            // having to keep an explicit list of known iOS versions in the code. Return
+            // the results descending order of version number.
+
+            // If the requested major version is less than 12, there won't be any matches.
+            if *major < 12 {
+                return Ok(platform_tags);
+            }
+
+            // Consider the actual X.Y version that was requested.
+            platform_tags.push(PlatformTag::Ios {
+                major: *major,
+                minor: *minor,
+                multiarch,
+            });
+
+            // Consider every minor version from X.0 to the minor version prior to the
+            // version requested by the platform.
+            for min in (0..*minor).rev() {
+                platform_tags.push(PlatformTag::Ios {
+                    major: *major,
+                    minor: min,
+                    multiarch,
+                });
+            }
+            for maj in (12..*major).rev() {
+                for min in (0..=9).rev() {
+                    platform_tags.push(PlatformTag::Ios {
+                        major: maj,
+                        minor: min,
+                        multiarch,
+                    });
+                }
+            }
+
+            platform_tags
         }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
@@ -719,7 +814,7 @@ impl BinaryFormat {
     ///
     /// This is roughly the inverse of the above: given a binary format, which `platform_machine`
     /// tags are supported?
-    pub fn platform_machine(&self) -> &'static [BinaryFormat] {
+    pub fn platform_machine(&self) -> &'static [Self] {
         match self {
             Self::Arm64 => &[Self::Arm64],
             Self::Fat => &[Self::X86_64, Self::Ppc],
@@ -755,6 +850,138 @@ impl BinaryFormat {
             Self::Universal => "universal",
             Self::Universal2 => "universal2",
             Self::X86_64 => "x86_64",
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum AndroidAbi {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+    ArmeabiV7a,
+    Arm64V8a,
+    X86,
+    X86_64,
+}
+
+impl std::fmt::Display for AndroidAbi {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for AndroidAbi {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "armeabi_v7a" => Ok(Self::ArmeabiV7a),
+            "arm64_v8a" => Ok(Self::Arm64V8a),
+            "x86" => Ok(Self::X86),
+            "x86_64" => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {s}")),
+        }
+    }
+}
+
+impl AndroidAbi {
+    /// Determine the appropriate Android arch.
+    pub fn from_arch(arch: Arch) -> Result<Self, String> {
+        match arch {
+            Arch::Aarch64 => Ok(Self::Arm64V8a),
+            Arch::Armv7L => Ok(Self::ArmeabiV7a),
+            Arch::X86 => Ok(Self::X86),
+            Arch::X86_64 => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {arch}")),
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ArmeabiV7a => "armeabi_v7a",
+            Self::Arm64V8a => "arm64_v8a",
+            Self::X86 => "x86",
+            Self::X86_64 => "x86_64",
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum IosMultiarch {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#ios
+    Arm64Device,
+    Arm64Simulator,
+    X86_64Simulator,
+}
+
+impl std::fmt::Display for IosMultiarch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for IosMultiarch {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "arm64_iphoneos" => Ok(Self::Arm64Device),
+            "arm64_iphonesimulator" => Ok(Self::Arm64Simulator),
+            "x86_64_iphonesimulator" => Ok(Self::X86_64Simulator),
+            _ => Err(format!("Invalid multiarch format: {s}")),
+        }
+    }
+}
+
+impl IosMultiarch {
+    /// Determine the appropriate multiarch for a iOS version.
+    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, String> {
+        if simulator {
+            match arch {
+                Arch::Aarch64 => Ok(Self::Arm64Simulator),
+                Arch::X86_64 => Ok(Self::X86_64Simulator),
+                _ => Err(format!("Invalid iOS simulator arch: {arch}")),
+            }
+        } else {
+            match arch {
+                Arch::Aarch64 => Ok(Self::Arm64Device),
+                _ => Err(format!("Invalid iOS device arch: {arch}")),
+            }
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Arm64Device => "arm64_iphoneos",
+            Self::Arm64Simulator => "arm64_iphonesimulator",
+            Self::X86_64Simulator => "x86_64_iphonesimulator",
         }
     }
 }
@@ -1130,6 +1357,127 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_platform_tags_android() {
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 14 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    []
+    "###
+        );
+
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 20 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    [
+        "android_20_arm64_v8a",
+        "android_19_arm64_v8a",
+        "android_18_arm64_v8a",
+        "android_17_arm64_v8a",
+        "android_16_arm64_v8a",
+    ]
+    "###
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_ios() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 11,
+                minor: 0,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    []
+    "###
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 12,
+                minor: 3,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    [
+        "ios_12_3_arm64_iphoneos",
+        "ios_12_2_arm64_iphoneos",
+        "ios_12_1_arm64_iphoneos",
+        "ios_12_0_arm64_iphoneos",
+    ]
+    "###
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 15,
+                minor: 1,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r###"
+    [
+        "ios_15_1_arm64_iphoneos",
+        "ios_15_0_arm64_iphoneos",
+        "ios_14_9_arm64_iphoneos",
+        "ios_14_8_arm64_iphoneos",
+        "ios_14_7_arm64_iphoneos",
+        "ios_14_6_arm64_iphoneos",
+        "ios_14_5_arm64_iphoneos",
+        "ios_14_4_arm64_iphoneos",
+        "ios_14_3_arm64_iphoneos",
+        "ios_14_2_arm64_iphoneos",
+        "ios_14_1_arm64_iphoneos",
+        "ios_14_0_arm64_iphoneos",
+        "ios_13_9_arm64_iphoneos",
+        "ios_13_8_arm64_iphoneos",
+        "ios_13_7_arm64_iphoneos",
+        "ios_13_6_arm64_iphoneos",
+        "ios_13_5_arm64_iphoneos",
+        "ios_13_4_arm64_iphoneos",
+        "ios_13_3_arm64_iphoneos",
+        "ios_13_2_arm64_iphoneos",
+        "ios_13_1_arm64_iphoneos",
+        "ios_13_0_arm64_iphoneos",
+        "ios_12_9_arm64_iphoneos",
+        "ios_12_8_arm64_iphoneos",
+        "ios_12_7_arm64_iphoneos",
+        "ios_12_6_arm64_iphoneos",
+        "ios_12_5_arm64_iphoneos",
+        "ios_12_4_arm64_iphoneos",
+        "ios_12_3_arm64_iphoneos",
+        "ios_12_2_arm64_iphoneos",
+        "ios_12_1_arm64_iphoneos",
+        "ios_12_0_arm64_iphoneos",
+    ]
+    "###
+        );
+    }
+
     /// Ensure the tags returned do not include the `manylinux` tags
     /// when `manylinux_incompatible` is set to `false`.
     #[test]
@@ -1145,6 +1493,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
             false,
             false,
         )
@@ -1209,6 +1558,7 @@ mod tests {
             "cpython",
             (3, 9),
             true,
+            false,
             false,
         )
         .unwrap();
@@ -1832,6 +2182,7 @@ mod tests {
             (3, 9),
             "cpython",
             (3, 9),
+            false,
             false,
             false,
         )

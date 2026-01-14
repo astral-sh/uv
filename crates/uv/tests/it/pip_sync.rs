@@ -56,14 +56,14 @@ fn missing_venv() -> Result<()> {
     assert!(predicates::path::missing().eval(&context.venv));
 
     // If not "active", we hint to create one
-    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove(EnvVars::VIRTUAL_ENV), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No virtual environment found; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
-    "###);
+    ");
 
     assert!(predicates::path::missing().eval(&context.venv));
 
@@ -776,7 +776,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
         "bz2 @ {}",
         context
             .workspace_root
-            .join("scripts/links/bz2-1.0.0.tar.bz2")
+            .join("test/links/bz2-1.0.0.tar.bz2")
             .display()
     ))?;
 
@@ -791,7 +791,7 @@ fn install_sdist_archive_type_bz2() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + bz2==1.0.0 (from file://[WORKSPACE]/scripts/links/bz2-1.0.0.tar.bz2)
+     + bz2==1.0.0 (from file://[WORKSPACE]/test/links/bz2-1.0.0.tar.bz2)
     "###
     );
 
@@ -1233,7 +1233,7 @@ fn mismatched_version() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1242,8 +1242,23 @@ fn mismatched_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     error: Failed to install: tomli-3.7.2-py3-none-any.whl (tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl))
-      Caused by: Wheel version does not match filename: 2.0.1 != 3.7.2
-    "###
+      Caused by: Wheel version does not match filename (2.0.1 != 3.7.2), which indicates a malformed wheel. If this is intentional, set `UV_SKIP_WHEEL_FILENAME_CHECK=1`.
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict")
+        .env(EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK, "1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tomli==3.7.2 (from file://[TEMP_DIR]/tomli-3.7.2-py3-none-any.whl)
+    "
     );
 
     Ok(())
@@ -1269,7 +1284,7 @@ fn mismatched_name() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1278,9 +1293,9 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
+    "
     );
 
     Ok(())
@@ -2248,9 +2263,7 @@ fn sync_editable() -> Result<()> {
 
     // Copy into the temporary directory so we can mutate it.
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/poetry_editable"),
+        context.workspace_root.join("test/packages/poetry_editable"),
         &poetry_editable,
     )?;
 
@@ -2414,9 +2427,7 @@ fn sync_editable_and_registry() -> Result<()> {
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;
 
@@ -2529,9 +2540,7 @@ fn sync_editable_and_local() -> Result<()> {
 
     // Copy the black test editable into the "current" directory
     copy_dir_all(
-        context
-            .workspace_root
-            .join("scripts/packages/black_editable"),
+        context.workspace_root.join("test/packages/black_editable"),
         context.temp_dir.join("black_editable"),
     )?;
 
@@ -2613,7 +2622,7 @@ fn incompatible_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2622,9 +2631,10 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of `foo` was invalid:
-            Failed to read from zip file
-    "###
+          hint: The structure of `foo` was invalid
+            Caused by: Failed to read from zip file
+            Caused by: unable to locate the end of central directory record
+    "
     );
 
     Ok(())
@@ -2671,7 +2681,7 @@ fn find_links() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2704,7 +2714,7 @@ fn find_links_no_index_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2734,7 +2744,7 @@ fn find_links_offline_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2765,7 +2775,7 @@ fn find_links_offline_no_match() -> Result<()> {
         .arg("requirements.txt")
         .arg("--offline")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2795,7 +2805,7 @@ fn find_links_wheel_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2813,7 +2823,7 @@ fn find_links_wheel_cache() -> Result<()> {
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2845,7 +2855,7 @@ fn find_links_source_cache() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2863,7 +2873,7 @@ fn find_links_source_cache() -> Result<()> {
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts/links/")), @r###"
+        .arg(context.workspace_root.join("test/links/")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4029,7 +4039,7 @@ fn require_hashes_source_tree() -> Result<()> {
         "black @ {} --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a",
         context
             .workspace_root
-            .join("scripts/packages/black_editable")
+            .join("test/packages/black_editable")
             .display()
     ))?;
 
@@ -4041,8 +4051,8 @@ fn require_hashes_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `black @ file://[WORKSPACE]/scripts/packages/black_editable`
-      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/scripts/packages/black_editable`
+      × Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
+      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
     "###
     );
 
@@ -4133,7 +4143,7 @@ fn require_hashes_wheel_path() -> Result<()> {
         "tqdm @ {} --hash=sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13",
         context
             .workspace_root
-            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
             .display()
     ))?;
 
@@ -4148,7 +4158,7 @@ fn require_hashes_wheel_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==1000.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl)
+     + tqdm==1000.0.0 (from file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl)
     "###
     );
 
@@ -4165,7 +4175,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
         "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
         context
             .workspace_root
-            .join("scripts/links/tqdm-1000.0.0-py3-none-any.whl")
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl")
             .display()
     ))?;
 
@@ -4178,8 +4188,8 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
           Expected:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4202,7 +4212,7 @@ fn require_hashes_source_path() -> Result<()> {
         "tqdm @ {} --hash=sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b",
         context
             .workspace_root
-            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .join("test/links/tqdm-999.0.0.tar.gz")
             .display()
     ))?;
 
@@ -4217,7 +4227,7 @@ fn require_hashes_source_path() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + tqdm==999.0.0 (from file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz)
+     + tqdm==999.0.0 (from file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz)
     "###
     );
 
@@ -4234,7 +4244,7 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
         "tqdm @ {} --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f",
         context
             .workspace_root
-            .join("scripts/links/tqdm-999.0.0.tar.gz")
+            .join("test/links/tqdm-999.0.0.tar.gz")
             .display()
     ))?;
 
@@ -4246,8 +4256,8 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-999.0.0.tar.gz`
+      × Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
 
           Expected:
             sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
@@ -4296,7 +4306,7 @@ fn require_hashes_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        -e file://{workspace_root}/scripts/packages/black_editable[d]
+        -e file://{workspace_root}/test/packages/black_editable[d]
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -4310,7 +4320,7 @@ fn require_hashes_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/scripts/packages/black_editable[d]
+    error: In `--require-hashes` mode, all requirements must have a hash, but none were provided for: file://[WORKSPACE]/test/packages/black_editable[d]
     "###
     );
 
@@ -5342,7 +5352,7 @@ fn target_no_build_isolation() -> Result<()> {
     requirements_in.write_str("flit_core")?;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5352,7 +5362,7 @@ fn target_no_build_isolation() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + flit-core==3.9.0
-    "###);
+    ");
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5411,7 +5421,7 @@ fn target_system() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
-        .arg("target"), @r###"
+        .arg("target"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5422,7 +5432,7 @@ fn target_system() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Ensure that the package is present in the target directory.
     assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
@@ -6069,6 +6079,8 @@ fn pep_751_direct_url_tags() -> Result<()> {
     ----- stderr -----
     error: Failed to determine installation plan
       Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+
+    hint: The wheel is compatible with macOS (`macosx_11_0_arm64`), but you're on Linux (`manylinux_2_28_x86_64`)
     "
     );
 
@@ -6087,5 +6099,118 @@ fn pep_751_direct_url_tags() -> Result<()> {
     "
     );
 
+    Ok(())
+}
+
+#[test]
+fn incompatible_python_version_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with CPython 3.13 (`cp313`), but you're using CPython 3.12 (`cp312`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn incompatible_platform_direct_url() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("numpy @ https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/ae/11/7c546fcf42145f29b71e4d6f429e96d8d68e5a7ba1830b2e68d7418f0bbd/numpy-2.3.2-cp313-cp313-win32.whl
+
+    hint: The wheel is compatible with Windows (`win32`), but you're on Linux (`manylinux_2_28_x86_64`)
+    "
+    );
+
+    Ok(())
+}
+
+/// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
+#[cfg(feature = "python-managed")]
+#[test]
+fn sync_missing_python_no_target() -> Result<()> {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    // Request Python 3.12; which should fail
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--python").arg("3.12")
+        .arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No virtual environment found for Python 3.12; run `uv venv` to create an environment, or pass `--system` to install into a non-virtual environment
+    "###
+    );
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn sync_with_target_installs_missing_python() -> Result<()> {
+    // Create a context that only has Python 3.11 available.
+    let context = TestContext::new("3.11")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let target_dir = context.temp_dir.child("target-dir");
+    let requirements = context.temp_dir.child("requirements.txt");
+    requirements.write_str("anyio")?;
+
+    // Request Python 3.12 which is not installed in this context.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--python").arg("3.12")
+        .arg("--target").arg(target_dir.path()), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Using CPython 3.12.12
+        Resolved 1 package in [TIME]
+        Prepared 1 package in [TIME]
+        Installed 1 package in [TIME]
+         + anyio==4.3.0
+        "###
+    );
     Ok(())
 }

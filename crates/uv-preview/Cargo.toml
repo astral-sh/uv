@@ -1,0 +1,27 @@
+[package]
+name = "uv-preview"
+version = "0.0.14"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+uv-warnings = { workspace = true }
+
+bitflags = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+
+[features]
+default = []

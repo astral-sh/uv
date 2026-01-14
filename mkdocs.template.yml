@@ -75,12 +75,14 @@ plugins:
         "reference/versioning.md": "reference/policies/versioning.md"
         "reference/platforms.md": "reference/policies/platforms.md"
         "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
+        "reference/resolver-internals.md": "reference/internals/resolver.md"
         "configuration/installer.md": "reference/installer.md"
-        "configuration/authentication.md": "concepts/authentication.md"
+        "configuration/authentication.md": "concepts/authentication/index.md"
         "configuration/build-backend.md": "concepts/build-backend.md"
         "configuration/files.md": "concepts/configuration-files.md"
         "configuration/indexes.md": "concepts/indexes.md"
         "configuration/environment.md": "reference/environment.md"
+        "guides/export.md": "concepts/projects/export.md"
   - llmstxt:
       markdown_description: |
         You can use uv to install Python dependencies, run scripts, manage virtual environments,
@@ -90,6 +92,10 @@ plugins:
         uv includes both a pip-compatible CLI (prepend `uv` to a pip command, e.g., `uv pip install ruff`)
         and a first-class project interface (e.g., `uv add ruff`) complete with lockfiles and
         workspace support.
+
+        When fetching documentation, use explicit `index.md` paths for directories, e.g.,
+        `https://docs.astral.sh/uv/concepts/projects/dependencies/index.md`. This returns
+        clean markdown instead of rendered HTML with JS/CSS.
       sections:
         Getting started:
           - getting-started/installation.md
@@ -113,6 +119,7 @@ plugins:
           - guides/integration/alternative-indexes.md
           - guides/integration/dependency-bots.md
           - guides/integration/aws-lambda.md
+          - guides/integration/coiled.md
         Projects:
           - concepts/projects/layout.md
           - concepts/projects/init.md
@@ -121,6 +128,7 @@ plugins:
           - concepts/projects/sync.md
           - concepts/projects/config.md
           - concepts/projects/build.md
+          - concepts/projects/export.md
           - concepts/projects/workspaces.md
         Features:
           - concepts/tools.md
@@ -129,7 +137,7 @@ plugins:
           - concepts/indexes.md
           - concepts/resolution.md
           - concepts/build-backend.md
-          - concepts/authentication.md
+          - concepts/authentication/index.md
           - concepts/cache.md
           - concepts/preview.md
         The pip interface:
@@ -142,6 +150,7 @@ plugins:
         Reference:
           - reference/cli.md
           - reference/settings.md
+          - reference/storage.md
           - reference/environment.md
           - reference/installer.md
 extra_css:
@@ -191,6 +200,7 @@ nav:
           - Alternative indexes: guides/integration/alternative-indexes.md
           - Dependency bots: guides/integration/dependency-bots.md
           - AWS Lambda: guides/integration/aws-lambda.md
+          - Coiled: guides/integration/coiled.md
   - Concepts:
       - concepts/index.md
       - Projects:
@@ -202,6 +212,7 @@ nav:
           - Locking and syncing: concepts/projects/sync.md
           - Configuring projects: concepts/projects/config.md
           - Building distributions: concepts/projects/build.md
+          - Exporting lockfiles: concepts/projects/export.md
           - Using workspaces: concepts/projects/workspaces.md
       - Tools: concepts/tools.md
       - Python versions: concepts/python-versions.md
@@ -209,7 +220,13 @@ nav:
       - Package indexes: concepts/indexes.md
       - Resolution: concepts/resolution.md
       - Build backend: concepts/build-backend.md
-      - Authentication: concepts/authentication.md
+      - Authentication:
+          - concepts/authentication/index.md
+          - The auth CLI: concepts/authentication/cli.md
+          - HTTP credentials: concepts/authentication/http.md
+          - Git credentials: concepts/authentication/git.md
+          - TLS certificates: concepts/authentication/certificates.md
+          - Third-party services: concepts/authentication/third-party.md
       - Caching: concepts/cache.md
       - Preview features: concepts/preview.md
       # Note:  The `pip` section was moved to the `concepts/` section but the
@@ -227,12 +244,15 @@ nav:
       - Commands: reference/cli.md
       - Settings: reference/settings.md
       - Environment variables: reference/environment.md
-      - Installer: reference/installer.md
+      - Storage: reference/storage.md
+      - Installer options: reference/installer.md
       - Troubleshooting:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md
           - Reproducible examples: reference/troubleshooting/reproducible-examples.md
-      - Resolver: reference/resolver-internals.md
+      - Internals:
+          - reference/internals/index.md
+          - Resolver: reference/internals/resolver.md
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md

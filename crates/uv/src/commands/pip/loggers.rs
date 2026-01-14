@@ -6,21 +6,34 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 
-use uv_distribution_types::{InstalledMetadata, Name};
+use uv_configuration::DryRun;
+use uv_distribution_types::Name;
 use uv_normalize::PackageName;
-use uv_pep440::Version;
 
-use crate::commands::pip::operations::Changelog;
+use crate::commands::pip::operations::{Changelog, ShortSpecifier};
 use crate::commands::{ChangeEvent, ChangeEventKind, elapsed};
 use crate::printer::Printer;
 
 /// A trait to handle logging during install operations.
 pub(crate) trait InstallLogger {
     /// Log the completion of the audit phase.
-    fn on_audit(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
+    fn on_audit(
+        &self,
+        count: usize,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result;
 
     /// Log the completion of the preparation phase.
-    fn on_prepare(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
+    fn on_prepare(
+        &self,
+        count: usize,
+        suffix: Option<&str>,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result;
 
     /// Log the completion of the uninstallation phase.
     fn on_uninstall(
@@ -28,13 +41,20 @@ pub(crate) trait InstallLogger {
         count: usize,
         start: std::time::Instant,
         printer: Printer,
+        dry_run: DryRun,
     ) -> fmt::Result;
 
     /// Log the completion of the installation phase.
-    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result;
+    fn on_install(
+        &self,
+        count: usize,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result;
 
     /// Log the completion of the operation.
-    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result;
+    fn on_complete(&self, changelog: &Changelog, printer: Printer, dry_run: DryRun) -> fmt::Result;
 }
 
 /// The default logger for install operations.
@@ -42,13 +62,19 @@ pub(crate) trait InstallLogger {
 pub(crate) struct DefaultInstallLogger;
 
 impl InstallLogger for DefaultInstallLogger {
-    fn on_audit(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_audit(
+        &self,
+        count: usize,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result {
         if count == 0 {
             writeln!(
                 printer.stderr(),
                 "{}",
                 format!("Audited in {}", elapsed(start.elapsed())).dimmed()
-            )
+            )?;
         } else {
             let s = if count == 1 { "" } else { "s" };
             writeln!(
@@ -60,20 +86,40 @@ impl InstallLogger for DefaultInstallLogger {
                     format!("in {}", elapsed(start.elapsed())).dimmed()
                 )
                 .dimmed()
-            )
+            )?;
         }
+        if dry_run.enabled() {
+            writeln!(printer.stderr(), "Would make no changes")?;
+        }
+        Ok(())
     }
 
-    fn on_prepare(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_prepare(
+        &self,
+        count: usize,
+        suffix: Option<&str>,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
+        let what = if let Some(suffix) = suffix {
+            format!("{count} package{s} {suffix}")
+        } else {
+            format!("{count} package{s}")
+        };
+        let what = what.bold();
         writeln!(
             printer.stderr(),
             "{}",
-            format!(
-                "Prepared {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
+            if dry_run.enabled() {
+                format!("Would download {what}")
+            } else {
+                format!(
+                    "Prepared {what} {}",
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+            }
             .dimmed()
         )
     }
@@ -83,35 +129,57 @@ impl InstallLogger for DefaultInstallLogger {
         count: usize,
         start: std::time::Instant,
         printer: Printer,
+        dry_run: DryRun,
     ) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
+        let what = format!("{count} package{s}");
+        let what = what.bold();
         writeln!(
             printer.stderr(),
             "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
+            if dry_run.enabled() {
+                format!("Would uninstall {what}")
+            } else {
+                format!(
+                    "Uninstalled {what} {}",
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+            }
             .dimmed()
         )
     }
 
-    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
+    fn on_install(
+        &self,
+        count: usize,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result {
         let s = if count == 1 { "" } else { "s" };
+        let what = format!("{count} package{s}");
+        let what = what.bold();
         writeln!(
             printer.stderr(),
             "{}",
-            format!(
-                "Installed {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
+            if dry_run.enabled() {
+                format!("Would install {what}")
+            } else {
+                format!(
+                    "Installed {what} {}",
+                    format!("in {}", elapsed(start.elapsed())).dimmed()
+                )
+            }
             .dimmed()
         )
     }
 
-    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result {
+    fn on_complete(
+        &self,
+        changelog: &Changelog,
+        printer: Printer,
+        _dry_run: DryRun,
+    ) -> fmt::Result {
         for event in changelog
             .uninstalled
             .iter()
@@ -137,7 +205,7 @@ impl InstallLogger for DefaultInstallLogger {
                     .name()
                     .cmp(b.dist.name())
                     .then_with(|| a.kind.cmp(&b.kind))
-                    .then_with(|| a.dist.installed_version().cmp(&b.dist.installed_version()))
+                    .then_with(|| a.dist.long_specifier().cmp(&b.dist.long_specifier()))
             })
         {
             match event.kind {
@@ -147,7 +215,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "+".green(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
                 ChangeEventKind::Removed => {
@@ -156,7 +224,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "-".red(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
                 ChangeEventKind::Reinstalled => {
@@ -165,7 +233,7 @@ impl InstallLogger for DefaultInstallLogger {
                         " {} {}{}",
                         "~".yellow(),
                         event.dist.name().bold(),
-                        event.dist.installed_version().dimmed()
+                        event.dist.long_specifier().dimmed()
                     )?;
                 }
             }
@@ -185,6 +253,7 @@ impl InstallLogger for SummaryInstallLogger {
         _count: usize,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -192,8 +261,10 @@ impl InstallLogger for SummaryInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -203,35 +274,27 @@ impl InstallLogger for SummaryInstallLogger {
         count: usize,
         start: std::time::Instant,
         printer: Printer,
+        dry_run: DryRun,
     ) -> fmt::Result {
-        let s = if count == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Uninstalled {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )
+        DefaultInstallLogger.on_uninstall(count, start, printer, dry_run)
     }
 
-    fn on_install(&self, count: usize, start: std::time::Instant, printer: Printer) -> fmt::Result {
-        let s = if count == 1 { "" } else { "s" };
-        writeln!(
-            printer.stderr(),
-            "{}",
-            format!(
-                "Installed {} {}",
-                format!("{count} package{s}").bold(),
-                format!("in {}", elapsed(start.elapsed())).dimmed()
-            )
-            .dimmed()
-        )
+    fn on_install(
+        &self,
+        count: usize,
+        start: std::time::Instant,
+        printer: Printer,
+        dry_run: DryRun,
+    ) -> fmt::Result {
+        DefaultInstallLogger.on_install(count, start, printer, dry_run)
     }
 
-    fn on_complete(&self, _changelog: &Changelog, _printer: Printer) -> fmt::Result {
+    fn on_complete(
+        &self,
+        _changelog: &Changelog,
+        _printer: Printer,
+        _dry_run: DryRun,
+    ) -> fmt::Result {
         Ok(())
     }
 }
@@ -255,6 +318,7 @@ impl InstallLogger for UpgradeInstallLogger {
         _count: usize,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -262,8 +326,10 @@ impl InstallLogger for UpgradeInstallLogger {
     fn on_prepare(
         &self,
         _count: usize,
+        _suffix: Option<&str>,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -273,6 +339,7 @@ impl InstallLogger for UpgradeInstallLogger {
         _count: usize,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
@@ -282,31 +349,38 @@ impl InstallLogger for UpgradeInstallLogger {
         _count: usize,
         _start: std::time::Instant,
         _printer: Printer,
+        _dry_run: DryRun,
     ) -> fmt::Result {
         Ok(())
     }
 
-    fn on_complete(&self, changelog: &Changelog, printer: Printer) -> fmt::Result {
+    fn on_complete(
+        &self,
+        changelog: &Changelog,
+        printer: Printer,
+        // TODO(tk): Adjust format for dry_run
+        _dry_run: DryRun,
+    ) -> fmt::Result {
         // Index the removals by package name.
-        let removals: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let removals: FxHashMap<&PackageName, BTreeSet<ShortSpecifier>> =
             changelog.uninstalled.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.uninstalled.len(), FxBuildHasher),
                 |mut acc, distribution| {
                     acc.entry(distribution.name())
                         .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                        .insert(distribution.short_specifier());
                     acc
                 },
             );
 
         // Index the additions by package name.
-        let additions: FxHashMap<&PackageName, BTreeSet<Version>> =
+        let additions: FxHashMap<&PackageName, BTreeSet<ShortSpecifier>> =
             changelog.installed.iter().fold(
                 FxHashMap::with_capacity_and_hasher(changelog.installed.len(), FxBuildHasher),
                 |mut acc, distribution| {
                     acc.entry(distribution.name())
                         .or_default()
-                        .insert(distribution.installed_version().version().clone());
+                        .insert(distribution.short_specifier());
                     acc
                 },
             );
@@ -388,7 +462,7 @@ impl InstallLogger for UpgradeInstallLogger {
         }
 
         // Follow-up with a detailed summary of all changes.
-        DefaultInstallLogger.on_complete(changelog, printer)?;
+        DefaultInstallLogger.on_complete(changelog, printer, _dry_run)?;
 
         Ok(())
     }

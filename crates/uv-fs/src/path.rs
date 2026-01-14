@@ -69,14 +69,14 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
+        // Attempt to strip the current working directory, then the canonicalized current working
+        // directory, in case they differ.
+        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
+
         if path.as_os_str() == "" {
             // Avoid printing an empty string for the current directory
             return Path::new(".").display();
         }
-
-        // Attempt to strip the current working directory, then the canonicalized current working
-        // directory, in case they differ.
-        let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
 
         path.display()
     }
@@ -207,7 +207,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 }
 
 /// Normalize a [`Path`], removing things like `.` and `..`.
-pub fn normalize_path(path: &Path) -> Cow<Path> {
+pub fn normalize_path(path: &Path) -> Cow<'_, Path> {
     // Fast path: if the path is already normalized, return it as-is.
     if path.components().all(|component| match component {
         Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
@@ -430,11 +430,11 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         if s == "." {
             Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s).into_boxed_path()))
+            Ok(Self(PathBuf::from(s.as_ref()).into_boxed_path()))
         }
     }
 }

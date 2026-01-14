@@ -7,9 +7,9 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_configuration::Preview;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
+use uv_preview::Preview;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -152,19 +152,16 @@ impl PythonEnvironment {
     pub fn find(
         request: &PythonRequest,
         preference: EnvironmentPreference,
+        python_preference: PythonPreference,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = match find_python_installation(
-            request,
-            preference,
-            PythonPreference::default(),
-            cache,
-            preview,
-        )? {
-            Ok(installation) => installation,
-            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-        };
+        let installation =
+            match find_python_installation(request, preference, python_preference, cache, preview)?
+            {
+                Ok(installation) => installation,
+                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+            };
         Ok(Self::from_installation(installation))
     }
 
@@ -305,7 +302,7 @@ impl PythonEnvironment {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         self.0.interpreter.site_packages()
     }
 
@@ -315,7 +312,7 @@ impl PythonEnvironment {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, std::io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         self.0.interpreter.lock().await
     }
 

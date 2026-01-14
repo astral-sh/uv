@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -7,7 +8,7 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
@@ -23,6 +24,12 @@ pub(crate) enum InstallTarget<'lock> {
     Project {
         workspace: &'lock Workspace,
         name: &'lock PackageName,
+        lock: &'lock Lock,
+    },
+    /// Multiple specific projects in a workspace.
+    Projects {
+        workspace: &'lock Workspace,
+        names: &'lock [PackageName],
         lock: &'lock Lock,
     },
     /// An entire workspace.
@@ -46,6 +53,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
     fn install_path(&self) -> &'lock Path {
         match self {
             Self::Project { workspace, .. } => workspace.install_path(),
+            Self::Projects { workspace, .. } => workspace.install_path(),
             Self::Workspace { workspace, .. } => workspace.install_path(),
             Self::NonProjectWorkspace { workspace, .. } => workspace.install_path(),
             Self::Script { script, .. } => script.path.parent().unwrap(),
@@ -55,36 +63,38 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
     fn lock(&self) -> &'lock Lock {
         match self {
             Self::Project { lock, .. } => lock,
+            Self::Projects { lock, .. } => lock,
             Self::Workspace { lock, .. } => lock,
             Self::NonProjectWorkspace { lock, .. } => lock,
             Self::Script { lock, .. } => lock,
         }
     }
 
-    fn roots(&self) -> impl Iterator<Item = &PackageName> {
+    #[allow(refining_impl_trait)]
+    fn roots(&self) -> Box<dyn Iterator<Item = &PackageName> + '_> {
         match self {
-            Self::Project { name, .. } => Either::Left(Either::Left(std::iter::once(*name))),
-            Self::NonProjectWorkspace { lock, .. } => {
-                Either::Left(Either::Right(lock.members().iter()))
-            }
+            Self::Project { name, .. } => Box::new(std::iter::once(*name)),
+            Self::Projects { names, .. } => Box::new(names.iter()),
+            Self::NonProjectWorkspace { lock, .. } => Box::new(lock.members().iter()),
             Self::Workspace { lock, .. } => {
                 // Identify the workspace members.
                 //
                 // The members are encoded directly in the lockfile, unless the workspace contains a
                 // single member at the root, in which case, we identify it by its source.
                 if lock.members().is_empty() {
-                    Either::Right(Either::Left(lock.root().into_iter().map(Package::name)))
+                    Box::new(lock.root().into_iter().map(Package::name))
                 } else {
-                    Either::Left(Either::Right(lock.members().iter()))
+                    Box::new(lock.members().iter())
                 }
             }
-            Self::Script { .. } => Either::Right(Either::Right(std::iter::empty())),
+            Self::Script { .. } => Box::new(std::iter::empty()),
         }
     }
 
     fn project_name(&self) -> Option<&PackageName> {
         match self {
             Self::Project { name, .. } => Some(name),
+            Self::Projects { .. } => None,
             Self::Workspace { .. } => None,
             Self::NonProjectWorkspace { .. } => None,
             Self::Script { .. } => None,
@@ -97,6 +107,7 @@ impl<'lock> InstallTarget<'lock> {
     pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
         match self {
             Self::Project { workspace, .. }
+            | Self::Projects { workspace, .. }
             | Self::Workspace { workspace, .. }
             | Self::NonProjectWorkspace { workspace, .. } => {
                 Either::Left(workspace.indexes().iter().chain(
@@ -129,6 +140,7 @@ impl<'lock> InstallTarget<'lock> {
     pub(crate) fn sources(&self) -> impl Iterator<Item = &Source> {
         match self {
             Self::Project { workspace, .. }
+            | Self::Projects { workspace, .. }
             | Self::Workspace { workspace, .. }
             | Self::NonProjectWorkspace { workspace, .. } => {
                 Either::Left(workspace.sources().values().flat_map(Sources::iter).chain(
@@ -157,6 +169,7 @@ impl<'lock> InstallTarget<'lock> {
     ) -> impl Iterator<Item = Cow<'lock, uv_pep508::Requirement<VerbatimParsedUrl>>> {
         match self {
             Self::Project { workspace, .. }
+            | Self::Projects { workspace, .. }
             | Self::Workspace { workspace, .. }
             | Self::NonProjectWorkspace { workspace, .. } => {
                 Either::Left(
@@ -255,6 +268,7 @@ impl<'lock> InstallTarget<'lock> {
         }
         match self {
             Self::Project { lock, .. }
+            | Self::Projects { lock, .. }
             | Self::Workspace { lock, .. }
             | Self::NonProjectWorkspace { lock, .. } => {
                 if !lock.supports_provides_extra() {
@@ -280,7 +294,10 @@ impl<'lock> InstallTarget<'lock> {
                             Self::Project { .. } => {
                                 Err(ProjectError::MissingExtraProject(extra.clone()))
                             }
-                            _ => Err(ProjectError::MissingExtraWorkspace(extra.clone())),
+                            Self::Projects { .. } => {
+                                Err(ProjectError::MissingExtraProjects(extra.clone()))
+                            }
+                            _ => Err(ProjectError::MissingExtraProjects(extra.clone())),
                         };
                     }
                 }
@@ -336,11 +353,11 @@ impl<'lock> InstallTarget<'lock> {
 
                 for group in groups.explicit_names() {
                     if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupWorkspace(group.clone()));
+                        return Err(ProjectError::MissingGroupProjects(group.clone()));
                     }
                 }
             }
-            Self::Project { lock, .. } => {
+            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
                 let roots = self.roots().collect::<FxHashSet<_>>();
                 let member_packages: Vec<&Package> = lock
                     .packages()
@@ -348,7 +365,7 @@ impl<'lock> InstallTarget<'lock> {
                     .filter(|package| roots.contains(package.name()))
                     .collect();
 
-                // Extract the dependency groups defined in the relevant member.
+                // Extract the dependency groups defined in the relevant member(s).
                 let known_groups = member_packages
                     .iter()
                     .flat_map(|package| package.dependency_groups().keys())
@@ -356,7 +373,15 @@ impl<'lock> InstallTarget<'lock> {
 
                 for group in groups.explicit_names() {
                     if !known_groups.contains(group) {
-                        return Err(ProjectError::MissingGroupProject(group.clone()));
+                        return match self {
+                            Self::Project { .. } => {
+                                Err(ProjectError::MissingGroupProject(group.clone()))
+                            }
+                            Self::Projects { .. } => {
+                                Err(ProjectError::MissingGroupProjects(group.clone()))
+                            }
+                            _ => unreachable!(),
+                        };
                     }
                 }
             }
@@ -368,5 +393,120 @@ impl<'lock> InstallTarget<'lock> {
         }
 
         Ok(())
+    }
+
+    /// Returns the names of all packages in the workspace that will be installed.
+    ///
+    /// Note this only includes workspace members.
+    pub(crate) fn packages(
+        &self,
+        extras: &ExtrasSpecification,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> BTreeSet<&PackageName> {
+        match self {
+            Self::Project { lock, .. } | Self::Projects { lock, .. } => {
+                let roots = self.roots().collect::<FxHashSet<_>>();
+
+                // Collect the packages by name for efficient lookup.
+                let packages = lock
+                    .packages()
+                    .iter()
+                    .map(|package| (package.name(), package))
+                    .collect::<BTreeMap<_, _>>();
+
+                // We'll include all specified projects
+                let mut required_members = BTreeSet::new();
+                for name in &roots {
+                    required_members.insert(*name);
+                }
+
+                // Find all workspace member dependencies recursively for all specified packages
+                let mut queue: VecDeque<(&PackageName, Option<&ExtraName>)> = VecDeque::new();
+                let mut seen: FxHashSet<(&PackageName, Option<&ExtraName>)> = FxHashSet::default();
+
+                for name in roots {
+                    let Some(root_package) = packages.get(name) else {
+                        continue;
+                    };
+
+                    if groups.prod() {
+                        // Add the root package
+                        if seen.insert((name, None)) {
+                            queue.push_back((name, None));
+                        }
+
+                        // Add explicitly activated extras for the root package
+                        for extra in extras.extra_names(root_package.optional_dependencies().keys())
+                        {
+                            if seen.insert((name, Some(extra))) {
+                                queue.push_back((name, Some(extra)));
+                            }
+                        }
+                    }
+
+                    // Add activated dependency groups for the root package
+                    for (group_name, dependencies) in root_package.resolved_dependency_groups() {
+                        if !groups.contains(group_name) {
+                            continue;
+                        }
+                        for dependency in dependencies {
+                            let dep_name = dependency.package_name();
+                            if seen.insert((dep_name, None)) {
+                                queue.push_back((dep_name, None));
+                            }
+                            for extra in dependency.extra() {
+                                if seen.insert((dep_name, Some(extra))) {
+                                    queue.push_back((dep_name, Some(extra)));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                while let Some((package_name, extra)) = queue.pop_front() {
+                    if lock.members().contains(package_name) {
+                        required_members.insert(package_name);
+                    }
+
+                    let Some(package) = packages.get(package_name) else {
+                        continue;
+                    };
+
+                    let Some(dependencies) = extra
+                        .map(|extra_name| {
+                            package
+                                .optional_dependencies()
+                                .get(extra_name)
+                                .map(Vec::as_slice)
+                        })
+                        .unwrap_or(Some(package.dependencies()))
+                    else {
+                        continue;
+                    };
+
+                    for dependency in dependencies {
+                        let name = dependency.package_name();
+                        if seen.insert((name, None)) {
+                            queue.push_back((name, None));
+                        }
+                        for extra in dependency.extra() {
+                            if seen.insert((name, Some(extra))) {
+                                queue.push_back((name, Some(extra)));
+                            }
+                        }
+                    }
+                }
+
+                required_members
+            }
+            Self::Workspace { lock, .. } | Self::NonProjectWorkspace { lock, .. } => {
+                // Return all workspace members
+                lock.members().iter().collect()
+            }
+            Self::Script { .. } => {
+                // Scripts don't have workspace members
+                BTreeSet::new()
+            }
+        }
     }
 }

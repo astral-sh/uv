@@ -4,23 +4,25 @@ use owo_colors::{AnsiColors, OwoColorize};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, Preview};
-use uv_distribution_types::Requirement;
+use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
+use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, Version};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, Tool};
 use uv_warnings::write_error_chain;
-use uv_workspace::{WorkspaceCache, pyproject::ExtraBuildDependencies};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -33,16 +35,17 @@ use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
     names: Vec<String>,
     python: Option<String>,
+    python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
@@ -81,11 +84,6 @@ pub(crate) async fn upgrade(
     }
 
     let reporter = PythonDownloadReporter::single(printer);
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let python_request = python.as_deref().map(PythonRequest::parse);
 
@@ -117,34 +115,46 @@ pub(crate) async fn upgrade(
     // Determine whether we applied any upgrades.
     let mut did_upgrade_environment = vec![];
 
+    // Constraints that caused upgrades to be skipped or altered.
+    let mut collected_constraints: Vec<(PackageName, UpgradeConstraint)> = Vec::new();
+
     let mut errors = Vec::new();
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
-        let result = upgrade_tool(
+        let result = Box::pin(upgrade_tool(
             name,
             constraints,
             interpreter.as_ref(),
+            python_platform.as_ref(),
             printer,
             &installed_tools,
             &args,
-            &network_settings,
+            &client_builder,
             cache,
             &filesystem,
             installer_metadata,
             concurrency,
             preview,
-        )
+        ))
         .await;
 
         match result {
-            Ok(UpgradeOutcome::UpgradeEnvironment) => {
-                did_upgrade_environment.push(name);
-            }
-            Ok(UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::UpgradeTool) => {
-                did_upgrade_tool.push(name);
-            }
-            Ok(UpgradeOutcome::NoOp) => {
-                debug!("Upgrading `{name}` was a no-op");
+            Ok(report) => {
+                match report.outcome {
+                    UpgradeOutcome::UpgradeEnvironment => {
+                        did_upgrade_environment.push(name);
+                    }
+                    UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeDependencies => {
+                        did_upgrade_tool.push(name);
+                    }
+                    UpgradeOutcome::NoOp => {
+                        debug!("Upgrading `{name}` was a no-op");
+                    }
+                }
+
+                if let Some(constraint) = report.constraint.clone() {
+                    collected_constraints.push((name.clone(), constraint));
+                }
             }
             Err(err) => {
                 errors.push((name, err));
@@ -157,6 +167,7 @@ pub(crate) async fn upgrade(
             .into_iter()
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
+            trace!("Error trace: {err:?}");
             write_error_chain(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
@@ -188,6 +199,14 @@ pub(crate) async fn upgrade(
         }
     }
 
+    if !collected_constraints.is_empty() {
+        writeln!(printer.stderr())?;
+    }
+
+    for (name, constraint) in collected_constraints {
+        constraint.print(&name, printer)?;
+    }
+
     Ok(ExitStatus::Success)
 }
 
@@ -203,21 +222,55 @@ enum UpgradeOutcome {
     NoOp,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum UpgradeConstraint {
+    /// The tool remains pinned to an exact version, so an upgrade was skipped.
+    PinnedVersion { version: Version },
+}
+
+impl UpgradeConstraint {
+    fn print(&self, name: &PackageName, printer: Printer) -> Result<()> {
+        match self {
+            Self::PinnedVersion { version } => {
+                let name = name.to_string();
+                let reinstall_command = format!("uv tool install {name}@latest");
+
+                writeln!(
+                    printer.stderr(),
+                    "hint: `{}` is pinned to `{}` (installed with an exact version pin); reinstall with `{}` to upgrade to a new version.",
+                    name.cyan(),
+                    version.to_string().magenta(),
+                    reinstall_command.green(),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpgradeReport {
+    outcome: UpgradeOutcome,
+    constraint: Option<UpgradeConstraint>,
+}
+
 /// Upgrade a specific tool.
 async fn upgrade_tool(
     name: &PackageName,
     constraints: &[Requirement],
     interpreter: Option<&Interpreter>,
+    python_platform: Option<&TargetTriple>,
     printer: Printer,
     installed_tools: &InstalledTools,
     args: &ResolverInstallerOptions,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
     concurrency: Concurrency,
     preview: Preview,
-) -> Result<UpgradeOutcome> {
+) -> Result<UpgradeReport> {
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -288,15 +341,16 @@ async fn upgrade_tool(
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
     let (environment, outcome) = if let Some(interpreter) =
-        interpreter.filter(|interpreter| !environment.uses(interpreter))
+        interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
     {
         // If we're using a new interpreter, re-create the environment for each tool.
         let resolution = resolve_environment(
             spec.into(),
             interpreter,
+            python_platform,
             build_constraints.clone(),
             &settings.resolver,
-            network_settings,
+            client_builder,
             &state,
             Box::new(SummaryResolveLogger),
             concurrency,
@@ -314,7 +368,7 @@ async fn upgrade_tool(
             Modifications::Exact,
             build_constraints,
             (&settings).into(),
-            network_settings,
+            client_builder,
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
@@ -334,13 +388,14 @@ async fn upgrade_tool(
             environment,
             changelog,
         } = update_environment(
-            environment,
+            environment.into_environment(),
             spec,
             Modifications::Exact,
+            python_platform,
             build_constraints,
-            uv_distribution::ExtraBuildRequires::from_lowered(ExtraBuildDependencies::default()),
+            ExtraBuildRequires::default(),
             &settings,
-            network_settings,
+            client_builder,
             &state,
             Box::new(SummaryResolveLogger),
             Box::new(UpgradeInstallLogger::new(name.clone())),
@@ -396,5 +451,38 @@ async fn upgrade_tool(
         )?;
     }
 
-    Ok(outcome)
+    let constraint = match &outcome {
+        UpgradeOutcome::UpgradeDependencies | UpgradeOutcome::NoOp => {
+            pinned_requirement_version(&existing_tool_receipt, name)
+                .map(|version| UpgradeConstraint::PinnedVersion { version })
+        }
+        UpgradeOutcome::UpgradeTool | UpgradeOutcome::UpgradeEnvironment => None,
+    };
+
+    Ok(UpgradeReport {
+        outcome,
+        constraint,
+    })
+}
+
+fn pinned_requirement_version(tool: &Tool, name: &PackageName) -> Option<Version> {
+    pinned_version_from(tool.requirements(), name)
+        .or_else(|| pinned_version_from(tool.constraints(), name))
+}
+
+fn pinned_version_from(requirements: &[Requirement], name: &PackageName) -> Option<Version> {
+    requirements
+        .iter()
+        .filter(|requirement| requirement.name == *name)
+        .find_map(|requirement| match &requirement.source {
+            RequirementSource::Registry { specifier, .. } => {
+                specifier
+                    .iter()
+                    .find_map(|specifier| match specifier.operator() {
+                        Operator::Equal | Operator::ExactEqual => Some(specifier.version().clone()),
+                        _ => None,
+                    })
+            }
+            _ => None,
+        })
 }

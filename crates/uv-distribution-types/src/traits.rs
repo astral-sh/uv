@@ -23,7 +23,7 @@ pub trait Name {
 pub trait DistributionMetadata: Name {
     /// Return a [`uv_pep440::Version`], for registry-based distributions, or a [`url::Url`],
     /// for URL-based distributions.
-    fn version_or_url(&self) -> VersionOrUrlRef;
+    fn version_or_url(&self) -> VersionOrUrlRef<'_>;
 
     /// Returns a unique identifier for the package at the given version (e.g., `black==23.10.0`).
     ///
@@ -56,7 +56,7 @@ pub trait DistributionMetadata: Name {
 /// Metadata that can be resolved from a built distribution.
 pub trait InstalledMetadata: Name {
     /// Return the resolved version of the installed distribution.
-    fn installed_version(&self) -> InstalledVersion;
+    fn installed_version(&self) -> InstalledVersion<'_>;
 }
 
 pub trait RemoteSource {

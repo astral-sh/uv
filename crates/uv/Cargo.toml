@@ -1,10 +1,11 @@
 [package]
 name = "uv"
-version = "0.8.4"
+version = "0.9.25"
+description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
+documentation = "https://docs.astral.sh/uv"
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -15,6 +16,7 @@ workspace = true
 
 [dependencies]
 uv-auth = { workspace = true }
+uv-bin-install = { workspace = true }
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
@@ -29,17 +31,20 @@ uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
+uv-flags = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
 uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
+uv-logging = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
-uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
+uv-performance-memory-allocator = { workspace = true, optional = true }
 uv-platform = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
@@ -69,9 +74,9 @@ axoupdater = { workspace = true, features = [
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
 ctrlc = { workspace = true }
+diskus = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }
-flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
@@ -79,11 +84,10 @@ indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
-jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
+open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
-regex = { workspace = true }
 reqwest = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
@@ -97,10 +101,11 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
-tracing-subscriber = { workspace = true, features = ["json"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json", "registry"] }
 tracing-tree = { workspace = true }
 unicode-width = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
@@ -110,11 +115,19 @@ zip = { workspace = true }
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
 windows = { workspace = true }
-windows-result = { workspace = true }
+
+[build-dependencies]
+uv-static = { workspace = true }
+uv-version = { workspace = true }
+
+embed-manifest = { workspace = true }
 
 [dev-dependencies]
+uv-publish = { workspace = true, features = ["test"] }
+
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }
@@ -125,9 +138,11 @@ insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
+sha2 = { workspace = true }
 similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
+tokio-util = { workspace = true }
 whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
@@ -135,14 +150,9 @@ zip = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 
-[package.metadata.cargo-shear]
-ignored = [
-    "flate2",
-    "uv-performance-memory-allocator",
-]
-
 [features]
 default = ["performance", "uv-distribution/static", "default-tests"]
+native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
@@ -152,13 +162,15 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 self-update = ["axoupdater", "uv-cli/self-update"]
 
 # Features for development only.
-tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
 default-tests = [
     "crates-io",
     "git",
+    "git-lfs",
     "pypi",
+    "r2",
     "python",
     "python-managed",
     "python-eol",
@@ -169,8 +181,12 @@ default-tests = [
 crates-io = []
 # Introduces a testing dependency on Git.
 git = []
+# Introduces a testing dependency on Git LFS.
+git-lfs = ["git"]
 # Introduces a testing dependency on PyPI.
 pypi = []
+# Introduces a testing dependency on R2.
+r2 = []
 # Introduces a testing dependency on a local Python installation.
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.

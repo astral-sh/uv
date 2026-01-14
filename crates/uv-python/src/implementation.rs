@@ -4,6 +4,8 @@ use std::{
 };
 use thiserror::Error;
 
+use crate::Interpreter;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Unknown Python implementation `{0}`")]
@@ -12,6 +14,7 @@ pub enum Error {
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash)]
 pub enum ImplementationName {
+    Pyodide,
     GraalPy,
     PyPy,
     #[default]
@@ -30,11 +33,11 @@ impl ImplementationName {
     }
 
     pub(crate) fn long_names() -> impl Iterator<Item = &'static str> {
-        ["cpython", "pypy", "graalpy"].into_iter()
+        ["cpython", "pypy", "graalpy", "pyodide"].into_iter()
     }
 
     pub(crate) fn iter_all() -> impl Iterator<Item = Self> {
-        [Self::CPython, Self::PyPy, Self::GraalPy].into_iter()
+        [Self::CPython, Self::PyPy, Self::GraalPy, Self::Pyodide].into_iter()
     }
 
     pub fn pretty(self) -> &'static str {
@@ -42,13 +45,23 @@ impl ImplementationName {
             Self::CPython => "CPython",
             Self::PyPy => "PyPy",
             Self::GraalPy => "GraalPy",
+            Self::Pyodide => "Pyodide",
         }
     }
 
     pub fn executable_name(self) -> &'static str {
         match self {
-            Self::CPython => "python",
+            Self::CPython | Self::Pyodide => "python",
             Self::PyPy | Self::GraalPy => self.into(),
+        }
+    }
+
+    pub fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+        match self {
+            Self::Pyodide => interpreter.os().is_emscripten(),
+            _ => interpreter
+                .implementation_name()
+                .eq_ignore_ascii_case(self.into()),
         }
     }
 }
@@ -75,6 +88,7 @@ impl From<&ImplementationName> for &'static str {
             ImplementationName::CPython => "cpython",
             ImplementationName::PyPy => "pypy",
             ImplementationName::GraalPy => "graalpy",
+            ImplementationName::Pyodide => "pyodide",
         }
     }
 }
@@ -105,6 +119,7 @@ impl FromStr for ImplementationName {
             "cpython" | "cp" => Ok(Self::CPython),
             "pypy" | "pp" => Ok(Self::PyPy),
             "graalpy" | "gp" => Ok(Self::GraalPy),
+            "pyodide" => Ok(Self::Pyodide),
             _ => Err(Error::UnknownImplementation(s.to_string())),
         }
     }

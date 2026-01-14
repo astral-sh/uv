@@ -153,8 +153,8 @@ pub enum InvalidPipGroupError {
 impl Display for InvalidPipGroupError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            InvalidPipGroupError::Name(e) => e.fmt(f),
-            InvalidPipGroupError::Path(e) => e.fmt(f),
+            Self::Name(e) => e.fmt(f),
+            Self::Path(e) => e.fmt(f),
         }
     }
 }

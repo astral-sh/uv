@@ -97,7 +97,7 @@ pub async fn compile_tree(
                 Ok(duration) => Some(duration),
                 Err(_) => {
                     return Err(CompileError::EnvironmentError {
-                        var: "UV_COMPILE_BYTECODE_TIMEOUT",
+                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
                         message: format!("Expected an integer number of seconds, got \"{value}\""),
                     });
                 }

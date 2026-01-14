@@ -1,21 +1,27 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
 use ref_cast::RefCast;
+use reqwest_retry::policies::ExponentialBackoff;
 use tracing::{debug, info};
+use uv_warnings::warn_user;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_configuration::Preview;
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
-use uv_platform::{Arch, Libc, Os};
+use uv_platform::{Arch, Libc, Os, Platform};
+use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
-use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
+use crate::downloads::{
+    DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList, PythonDownloadRequest,
+    Reporter,
+};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::{
@@ -57,11 +63,13 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        download_list: &ManagedPythonDownloadList,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let installation =
             find_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
 
@@ -71,16 +79,14 @@ impl PythonInstallation {
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
+        download_list: &ManagedPythonDownloadList,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        Ok(find_best_python_installation(
-            request,
-            environments,
-            preference,
-            cache,
-            preview,
-        )??)
+        let installation =
+            find_best_python_installation(request, environments, preference, cache, preview)??;
+        installation.warn_if_outdated_prerelease(request, download_list);
+        Ok(installation)
     }
 
     /// Find or fetch a [`PythonInstallation`].
@@ -101,8 +107,22 @@ impl PythonInstallation {
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware performing uncontrolled retries.
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build();
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache, preview) {
+        let err = match Self::find(
+            request,
+            environments,
+            preference,
+            &download_list,
+            cache,
+            preview,
+        ) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
@@ -125,9 +145,10 @@ impl PythonInstallation {
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
 
-        let download = download_request.clone().fill().map(|request| {
-            ManagedPythonDownload::from_request(&request, python_downloads_json_url)
-        });
+        let download = download_request
+            .clone()
+            .fill()
+            .map(|request| download_list.find(&request));
 
         // Regardless of whether downloads are enabled, we want to determine if the download is
         // available to power error messages. However, if downloads aren't enabled, we don't want to
@@ -200,22 +221,28 @@ impl PythonInstallation {
             return Err(err);
         }
 
-        Self::fetch(
+        let installation = Self::fetch(
             download,
-            client_builder,
+            &client,
+            &retry_policy,
             cache,
             reporter,
             python_install_mirror,
             pypy_install_mirror,
             preview,
         )
-        .await
+        .await?;
+
+        installation.warn_if_outdated_prerelease(request, &download_list);
+
+        Ok(installation)
     }
 
     /// Download and install the requested installation.
     pub async fn fetch(
-        download: &'static ManagedPythonDownload,
-        client_builder: &BaseClientBuilder<'_>,
+        download: &ManagedPythonDownload,
+        client: &BaseClient,
+        retry_policy: &ExponentialBackoff,
         cache: &Cache,
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
@@ -227,12 +254,11 @@ impl PythonInstallation {
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let client = client_builder.build();
-
         info!("Fetching requested Python...");
         let result = download
             .fetch_with_retry(
-                &client,
+                client,
+                retry_policy,
                 installations_dir,
                 &scratch_dir,
                 false,
@@ -251,6 +277,7 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+        installed.ensure_build_file()?;
 
         let minor_version = installed.minor_version_key();
         let highest_patch = installations
@@ -310,7 +337,7 @@ impl PythonInstallation {
         !matches!(
             self.implementation(),
             LenientImplementationName::Known(ImplementationName::CPython)
-        )
+        ) || self.os().is_emscripten()
     }
 
     /// Return the [`Arch`] of the Python installation as reported by its interpreter.
@@ -337,6 +364,78 @@ impl PythonInstallation {
     pub fn into_interpreter(self) -> Interpreter {
         self.interpreter
     }
+
+    /// Emit a warning when the interpreter is a managed prerelease and a matching stable
+    /// build can be installed via `uv python upgrade`.
+    pub(crate) fn warn_if_outdated_prerelease(
+        &self,
+        request: &PythonRequest,
+        download_list: &ManagedPythonDownloadList,
+    ) {
+        if request.allows_prereleases() {
+            return;
+        }
+
+        let interpreter = self.interpreter();
+        let version = interpreter.python_version();
+
+        if version.pre().is_none() {
+            return;
+        }
+
+        if !interpreter.is_managed() {
+            return;
+        }
+
+        // Transparent upgrades only exist for CPython, so skip the warning for other
+        // managed implementations.
+        //
+        // See: https://github.com/astral-sh/uv/issues/16675
+        if !interpreter
+            .implementation_name()
+            .eq_ignore_ascii_case("cpython")
+        {
+            return;
+        }
+
+        let release = version.only_release();
+
+        let Ok(download_request) = PythonDownloadRequest::try_from(&interpreter.key()) else {
+            return;
+        };
+
+        let download_request = download_request.with_prereleases(false);
+
+        let has_stable_download = {
+            let mut downloads = download_list.iter_matching(&download_request);
+
+            downloads.any(|download| {
+                let download_version = download.key().version().into_version();
+                download_version.pre().is_none() && download_version.only_release() >= release
+            })
+        };
+
+        if !has_stable_download {
+            return;
+        }
+
+        if let Some(upgrade_request) = download_request
+            .unset_defaults()
+            .without_patch()
+            .simplified_display()
+        {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Use `uv python upgrade {}` to upgrade.",
+                version,
+                upgrade_request
+            );
+        } else {
+            warn_user!(
+                "You're using a pre-release version of Python ({}) but a stable version is available. Run `uv python upgrade` to update your managed interpreters.",
+                version,
+            );
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -352,9 +451,7 @@ pub struct PythonInstallationKey {
     pub(crate) minor: u8,
     pub(crate) patch: u8,
     pub(crate) prerelease: Option<Prerelease>,
-    pub(crate) os: Os,
-    pub(crate) arch: Arch,
-    pub(crate) libc: Libc,
+    pub(crate) platform: Platform,
     pub(crate) variant: PythonVariant,
 }
 
@@ -365,9 +462,7 @@ impl PythonInstallationKey {
         minor: u8,
         patch: u8,
         prerelease: Option<Prerelease>,
-        os: Os,
-        arch: Arch,
-        libc: Libc,
+        platform: Platform,
         variant: PythonVariant,
     ) -> Self {
         Self {
@@ -376,9 +471,7 @@ impl PythonInstallationKey {
             minor,
             patch,
             prerelease,
-            os,
-            arch,
-            libc,
+            platform,
             variant,
         }
     }
@@ -386,9 +479,7 @@ impl PythonInstallationKey {
     pub fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
-        os: Os,
-        arch: Arch,
-        libc: Libc,
+        platform: Platform,
         variant: PythonVariant,
     ) -> Self {
         Self {
@@ -397,15 +488,17 @@ impl PythonInstallationKey {
             minor: version.minor(),
             patch: version.patch().unwrap_or_default(),
             prerelease: version.pre(),
-            os,
-            arch,
-            libc,
+            platform,
             variant,
         }
     }
 
-    pub fn implementation(&self) -> &LenientImplementationName {
-        &self.implementation
+    pub fn implementation(&self) -> Cow<'_, LenientImplementationName> {
+        if self.os().is_emscripten() {
+            Cow::Owned(LenientImplementationName::from(ImplementationName::Pyodide))
+        } else {
+            Cow::Borrowed(&self.implementation)
+        }
     }
 
     pub fn version(&self) -> PythonVersion {
@@ -434,16 +527,24 @@ impl PythonInstallationKey {
         self.minor
     }
 
+    pub fn prerelease(&self) -> Option<Prerelease> {
+        self.prerelease
+    }
+
+    pub fn platform(&self) -> &Platform {
+        &self.platform
+    }
+
     pub fn arch(&self) -> &Arch {
-        &self.arch
+        &self.platform.arch
     }
 
     pub fn os(&self) -> &Os {
-        &self.os
+        &self.platform.os
     }
 
     pub fn libc(&self) -> &Libc {
-        &self.libc
+        &self.platform.libc
     }
 
     pub fn variant(&self) -> &PythonVariant {
@@ -456,7 +557,7 @@ impl PythonInstallationKey {
             "python{maj}.{min}{var}{exe}",
             maj = self.major,
             min = self.minor,
-            var = self.variant.suffix(),
+            var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -466,7 +567,7 @@ impl PythonInstallationKey {
         format!(
             "python{maj}{var}{exe}",
             maj = self.major,
-            var = self.variant.suffix(),
+            var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -475,7 +576,7 @@ impl PythonInstallationKey {
     pub fn executable_name(&self) -> String {
         format!(
             "python{var}{exe}",
-            var = self.variant.suffix(),
+            var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
     }
@@ -485,12 +586,12 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.variant),
+            _ => format!("+{}", self.variant),
         };
         write!(
             f,
-            "{}-{}.{}.{}{}{}-{}-{}-{}",
-            self.implementation,
+            "{}-{}.{}.{}{}{}-{}",
+            self.implementation(),
             self.major,
             self.minor,
             self.patch,
@@ -498,9 +599,7 @@ impl fmt::Display for PythonInstallationKey {
                 .map(|pre| pre.to_string())
                 .unwrap_or_default(),
             variant,
-            self.os,
-            self.arch,
-            self.libc
+            self.platform
         )
     }
 }
@@ -510,31 +609,25 @@ impl FromStr for PythonInstallationKey {
 
     fn from_str(key: &str) -> Result<Self, Self::Err> {
         let parts = key.split('-').collect::<Vec<_>>();
-        let [implementation, version, os, arch, libc] = parts.as_slice() else {
+
+        // We need exactly implementation-version-os-arch-libc
+        if parts.len() != 5 {
             return Err(PythonInstallationKeyError::ParseError(
                 key.to_string(),
-                "not enough `-`-separated values".to_string(),
+                format!(
+                    "expected exactly 5 `-`-separated values, got {}",
+                    parts.len()
+                ),
             ));
+        }
+
+        let [implementation_str, version_str, os, arch, libc] = parts.as_slice() else {
+            unreachable!()
         };
 
-        let implementation = LenientImplementationName::from(*implementation);
+        let implementation = LenientImplementationName::from(*implementation_str);
 
-        let os = Os::from_str(os).map_err(|err| {
-            PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid OS: {err}"))
-        })?;
-
-        let arch = Arch::from_str(arch).map_err(|err| {
-            PythonInstallationKeyError::ParseError(
-                key.to_string(),
-                format!("invalid architecture: {err}"),
-            )
-        })?;
-
-        let libc = Libc::from_str(libc).map_err(|err| {
-            PythonInstallationKeyError::ParseError(key.to_string(), format!("invalid libc: {err}"))
-        })?;
-
-        let (version, variant) = match version.split_once('+') {
+        let (version, variant) = match version_str.split_once('+') {
             Some((version, variant)) => {
                 let variant = PythonVariant::from_str(variant).map_err(|()| {
                     PythonInstallationKeyError::ParseError(
@@ -544,7 +637,7 @@ impl FromStr for PythonInstallationKey {
                 })?;
                 (version, variant)
             }
-            None => (*version, PythonVariant::Default),
+            None => (*version_str, PythonVariant::Default),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {
@@ -554,14 +647,22 @@ impl FromStr for PythonInstallationKey {
             )
         })?;
 
-        Ok(Self::new_from_version(
+        let platform = Platform::from_parts(os, arch, libc).map_err(|err| {
+            PythonInstallationKeyError::ParseError(
+                key.to_string(),
+                format!("invalid platform: {err}"),
+            )
+        })?;
+
+        Ok(Self {
             implementation,
-            &version,
-            os,
-            arch,
-            libc,
+            major: version.major(),
+            minor: version.minor(),
+            patch: version.patch().unwrap_or_default(),
+            prerelease: version.pre(),
+            platform,
             variant,
-        ))
+        })
     }
 }
 
@@ -576,10 +677,8 @@ impl Ord for PythonInstallationKey {
         self.implementation
             .cmp(&other.implementation)
             .then_with(|| self.version().cmp(&other.version()))
-            .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
-            // Architectures are sorted in preferred order, with native architectures first
-            .then_with(|| self.arch.cmp(&other.arch).reverse())
-            .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
+            // Platforms are sorted in preferred order for the target
+            .then_with(|| self.platform.cmp(&other.platform).reverse())
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
     }
@@ -628,18 +727,12 @@ impl fmt::Display for PythonInstallationMinorVersionKey {
         // and prerelease (with special formatting for the variant).
         let variant = match self.0.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+            _ => format!("+{}", self.0.variant),
         };
         write!(
             f,
-            "{}-{}.{}{}-{}-{}-{}",
-            self.0.implementation,
-            self.0.major,
-            self.0.minor,
-            variant,
-            self.0.os,
-            self.0.arch,
-            self.0.libc,
+            "{}-{}.{}{}-{}",
+            self.0.implementation, self.0.major, self.0.minor, variant, self.0.platform,
         )
     }
 }
@@ -653,9 +746,9 @@ impl fmt::Debug for PythonInstallationMinorVersionKey {
             .field("major", &self.0.major)
             .field("minor", &self.0.minor)
             .field("variant", &self.0.variant)
-            .field("os", &self.0.os)
-            .field("arch", &self.0.arch)
-            .field("libc", &self.0.libc)
+            .field("os", &self.0.platform.os)
+            .field("arch", &self.0.platform.arch)
+            .field("libc", &self.0.platform.libc)
             .finish()
     }
 }
@@ -667,9 +760,7 @@ impl PartialEq for PythonInstallationMinorVersionKey {
         self.0.implementation == other.0.implementation
             && self.0.major == other.0.major
             && self.0.minor == other.0.minor
-            && self.0.os == other.0.os
-            && self.0.arch == other.0.arch
-            && self.0.libc == other.0.libc
+            && self.0.platform == other.0.platform
             && self.0.variant == other.0.variant
     }
 }
@@ -681,15 +772,123 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.implementation.hash(state);
         self.0.major.hash(state);
         self.0.minor.hash(state);
-        self.0.os.hash(state);
-        self.0.arch.hash(state);
-        self.0.libc.hash(state);
+        self.0.platform.hash(state);
         self.0.variant.hash(state);
     }
 }
 
 impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
     fn from(key: PythonInstallationKey) -> Self {
-        PythonInstallationMinorVersionKey(key)
+        Self(key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uv_platform::ArchVariant;
+
+    #[test]
+    fn test_python_installation_key_from_str() {
+        // Test basic parsing
+        let key = PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64-gnu").unwrap();
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 12);
+        assert_eq!(key.patch, 0);
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Linux)
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(target_lexicon::Architecture::X86_64, None)
+        );
+        assert_eq!(
+            key.platform.libc,
+            Libc::Some(target_lexicon::Environment::Gnu)
+        );
+
+        // Test with architecture variant
+        let key = PythonInstallationKey::from_str("cpython-3.11.2-linux-x86_64_v3-musl").unwrap();
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 11);
+        assert_eq!(key.patch, 2);
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Linux)
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(target_lexicon::Architecture::X86_64, Some(ArchVariant::V3))
+        );
+        assert_eq!(
+            key.platform.libc,
+            Libc::Some(target_lexicon::Environment::Musl)
+        );
+
+        // Test with Python variant (freethreaded)
+        let key = PythonInstallationKey::from_str("cpython-3.13.0+freethreaded-macos-aarch64-none")
+            .unwrap();
+        assert_eq!(
+            key.implementation,
+            LenientImplementationName::Known(ImplementationName::CPython)
+        );
+        assert_eq!(key.major, 3);
+        assert_eq!(key.minor, 13);
+        assert_eq!(key.patch, 0);
+        assert_eq!(key.variant, PythonVariant::Freethreaded);
+        assert_eq!(
+            key.platform.os,
+            Os::new(target_lexicon::OperatingSystem::Darwin(None))
+        );
+        assert_eq!(
+            key.platform.arch,
+            Arch::new(
+                target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                None
+            )
+        );
+        assert_eq!(key.platform.libc, Libc::None);
+
+        // Test error cases
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0-linux-x86_64").is_err());
+        assert!(PythonInstallationKey::from_str("cpython-3.12.0").is_err());
+        assert!(PythonInstallationKey::from_str("cpython").is_err());
+    }
+
+    #[test]
+    fn test_python_installation_key_display() {
+        let key = PythonInstallationKey {
+            implementation: LenientImplementationName::from("cpython"),
+            major: 3,
+            minor: 12,
+            patch: 0,
+            prerelease: None,
+            platform: Platform::from_str("linux-x86_64-gnu").unwrap(),
+            variant: PythonVariant::Default,
+        };
+        assert_eq!(key.to_string(), "cpython-3.12.0-linux-x86_64-gnu");
+
+        let key_with_variant = PythonInstallationKey {
+            implementation: LenientImplementationName::from("cpython"),
+            major: 3,
+            minor: 13,
+            patch: 0,
+            prerelease: None,
+            platform: Platform::from_str("macos-aarch64-none").unwrap(),
+            variant: PythonVariant::Freethreaded,
+        };
+        assert_eq!(
+            key_with_variant.to_string(),
+            "cpython-3.13.0+freethreaded-macos-aarch64-none"
+        );
     }
 }

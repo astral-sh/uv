@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use uv_auth::CredentialsCache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
@@ -57,7 +58,15 @@ impl SourcedDependencyGroups {
         locations: &IndexLocations,
         no_sources: NoSources,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
+        // If the `pyproject.toml` doesn't exist, fail early.
+        if !pyproject_path.is_file() {
+            return Err(MetadataError::MissingPyprojectToml(
+                pyproject_path.to_path_buf(),
+            ));
+        }
+
         let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
                 git_member
@@ -71,6 +80,7 @@ impl SourcedDependencyGroups {
             } else {
                 MemberDiscovery::None
             },
+            ..DiscoveryOptions::default()
         };
 
         // The subsequent API takes an absolute path to the dir the pyproject is in
@@ -78,7 +88,7 @@ impl SourcedDependencyGroups {
         let absolute_pyproject_path =
             std::path::absolute(pyproject_path).map_err(WorkspaceError::Normalize)?;
         let project_dir = absolute_pyproject_path.parent().unwrap_or(&empty);
-        let project = VirtualProject::discover_defaulted(project_dir, &discovery, cache).await?;
+        let project = VirtualProject::discover(project_dir, &discovery, cache).await?;
 
         // Collect the dependency groups.
         let dependency_groups =
@@ -154,6 +164,7 @@ impl SourcedDependencyGroups {
                                 locations,
                                 project.workspace(),
                                 git_member,
+                                credentials_cache,
                             )
                             .map(move |requirement| match requirement {
                                 Ok(requirement) => Ok(requirement.into_inner()),

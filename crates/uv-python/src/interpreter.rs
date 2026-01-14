@@ -3,6 +3,7 @@ use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::str::FromStr;
 use std::sync::OnceLock;
 use std::{env, io};
 
@@ -17,13 +18,14 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::Platform;
-use uv_platform_tags::{Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
@@ -35,9 +37,10 @@ use crate::{
 };
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
+use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -51,6 +54,7 @@ pub struct Interpreter {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -59,6 +63,7 @@ pub struct Interpreter {
     pointer_size: PointerSize,
     gil_disabled: bool,
     real_executable: PathBuf,
+    debug_enabled: bool,
 }
 
 impl Interpreter {
@@ -82,10 +87,12 @@ impl Interpreter {
             sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
+            debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
+            site_packages: info.site_packages,
             stdlib: info.stdlib,
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -105,6 +112,7 @@ impl Interpreter {
             sys_prefix: virtualenv.root,
             target: None,
             prefix: None,
+            site_packages: vec![],
             ..self
         }
     }
@@ -167,7 +175,7 @@ impl Interpreter {
             base_executable,
             self.python_major(),
             self.python_minor(),
-            self.variant().suffix(),
+            self.variant().executable_suffix(),
         ) {
             Ok(path) => path,
             Err(err) => {
@@ -203,16 +211,20 @@ impl Interpreter {
             self.python_minor(),
             self.python_patch(),
             self.python_version().pre(),
-            self.os(),
-            self.arch(),
-            self.libc(),
+            uv_platform::Platform::new(self.os(), self.arch(), self.libc()),
             self.variant(),
         )
     }
 
     pub fn variant(&self) -> PythonVariant {
         if self.gil_disabled() {
-            PythonVariant::Freethreaded
+            if self.debug_enabled() {
+                PythonVariant::FreethreadedDebug
+            } else {
+                PythonVariant::Freethreaded
+            }
+        } else if self.debug_enabled() {
+            PythonVariant::Debug
         } else {
             PythonVariant::default()
         }
@@ -243,6 +255,7 @@ impl Interpreter {
                 self.implementation_tuple(),
                 self.manylinux_compatible,
                 self.gil_disabled,
+                false,
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
@@ -292,7 +305,19 @@ impl Interpreter {
             return false;
         };
 
-        self.sys_base_prefix.starts_with(installations.root())
+        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+            return false;
+        };
+
+        let Some(first_component) = suffix.components().next() else {
+            return false;
+        };
+
+        let Some(name) = first_component.as_os_str().to_str() else {
+            return false;
+        };
+
+        PythonInstallationKey::from_str(name).is_ok()
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -439,8 +464,19 @@ impl Interpreter {
     }
 
     /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &Vec<PathBuf> {
+    pub fn sys_path(&self) -> &[PathBuf] {
         &self.sys_path
+    }
+
+    /// Return the `site.getsitepackages` for this Python interpreter.
+    ///
+    /// These are the paths Python will search for packages in at runtime. We use this for
+    /// environment layering, but not for checking for installed packages. We could use these paths
+    /// to check for installed packages, but it introduces a lot of complexity, so instead we use a
+    /// simplified version that does not respect customized site-packages. See
+    /// [`Interpreter::site_packages`].
+    pub fn runtime_site_packages(&self) -> &[PathBuf] {
+        &self.site_packages
     }
 
     /// Return the `stdlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
@@ -495,6 +531,12 @@ impl Interpreter {
     /// abiflags with a `t` flag. <https://peps.python.org/pep-0703/#build-configuration-changes>
     pub fn gil_disabled(&self) -> bool {
         self.gil_disabled
+    }
+
+    /// Return whether this is a debug build of Python, as specified by the sysconfig var
+    /// `Py_DEBUG`.
+    pub fn debug_enabled(&self) -> bool {
+        self.debug_enabled
     }
 
     /// Return the `--target` directory for this interpreter, if any.
@@ -567,7 +609,10 @@ impl Interpreter {
     ///
     /// Some distributions also create symbolic links from `purelib` to `platlib`; in such cases, we
     /// still deduplicate the entries, returning a single path.
-    pub fn site_packages(&self) -> impl Iterator<Item = Cow<Path>> {
+    ///
+    /// Note this does not include all runtime site-packages directories if the interpreter has been
+    /// customized. See [`Interpreter::runtime_site_packages`].
+    pub fn site_packages(&self) -> impl Iterator<Item = Cow<'_, Path>> {
         let target = self.target().map(Target::site_packages);
 
         let prefix = self
@@ -624,17 +669,28 @@ impl Interpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                target.root().user_display(),
+            )
+            .await
         } else if let Some(prefix) = self.prefix() {
             // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+            LockedFile::acquire(
+                prefix.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                prefix.root().user_display(),
+            )
+            .await
         } else if self.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lockfile.
             LockedFile::acquire(
                 self.sys_prefix.join(".lock"),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -642,6 +698,7 @@ impl Interpreter {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -783,6 +840,12 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("Failed to query Python interpreter at `{path}`")]
+    PermissionDenied {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -857,6 +920,7 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -870,10 +934,12 @@ struct InterpreterInfo {
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
+    site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    debug_enabled: bool,
 }
 
 impl InterpreterInfo {
@@ -895,23 +961,35 @@ impl InterpreterInfo {
             .arg("-c")
             .arg(script)
             .output()
-            .map_err(
-                |err| match err.raw_os_error().and_then(|code| u32::try_from(code).ok()) {
-                    // These error codes are returned if the Python interpreter is a corrupt MSIX
-                    // package, which we want to differentiate from a typical spawn failure.
-                    #[cfg(windows)]
-                    Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) => {
-                        Error::CorruptWindowsPackage {
+            .map_err(|err| {
+                match err.kind() {
+                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::PermissionDenied => {
+                        return Error::PermissionDenied {
                             path: interpreter.to_path_buf(),
                             err,
-                        }
+                        };
                     }
-                    _ => Error::SpawnFailed {
+                    _ => {}
+                }
+                #[cfg(windows)]
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                    .raw_os_error()
+                    .and_then(|code| u32::try_from(code).ok())
+                    .map(WIN32_ERROR)
+                {
+                    // These error codes are returned if the Python interpreter is a corrupt MSIX
+                    // package, which we want to differentiate from a typical spawn failure.
+                    return Error::CorruptWindowsPackage {
                         path: interpreter.to_path_buf(),
                         err,
-                    },
-                },
-            )?;
+                    };
+                }
+                Error::SpawnFailed {
+                    path: interpreter.to_path_buf(),
+                    err,
+                }
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -1209,8 +1287,8 @@ mod tests {
 
     use crate::Interpreter;
 
-    #[test]
-    fn test_cache_invalidation() {
+    #[tokio::test]
+    async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
@@ -1247,6 +1325,9 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
+            "site_packages": [
+                "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
+            ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
             "scheme": {
                 "data": "/home/ferris/.pyenv/versions/3.12.0",
@@ -1263,11 +1344,12 @@ mod tests {
                 "scripts": "bin"
             },
             "pointer_size": "64",
-            "gil_disabled": true
+            "gil_disabled": true,
+            "debug_enabled": false
         }
     "##};
 
-        let cache = Cache::temp().unwrap().init().unwrap();
+        let cache = Cache::temp().unwrap().init().await.unwrap();
 
         fs::write(
             &mocked_interpreter,

@@ -1,7 +1,6 @@
 use std::cmp::max;
 use std::fmt::Write;
 
-use anstream::println;
 use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
@@ -9,13 +8,14 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ListFormat;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
-use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType, Preview};
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name, RequiresPython,
@@ -24,8 +24,9 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonEnvironment};
+use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -33,7 +34,6 @@ use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Enumerate the installed packages in the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -46,12 +46,14 @@ pub(crate) async fn pip_list(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -65,9 +67,27 @@ pub(crate) async fn pip_list(
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
         cache,
         preview,
     )?;
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
 
     report_target_environment(&environment, cache, printer)?;
 
@@ -86,21 +106,18 @@ pub(crate) async fn pip_list(
     let latest = if outdated && !results.is_empty() {
         let capabilities = IndexCapabilities::default();
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+        let client_builder = client_builder.clone().keyring(keyring_provider);
 
         // Initialize the registry client.
-        let client = RegistryClientBuilder::try_from(client_builder)?
-            .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-            .index_locations(&index_locations)
-            .index_strategy(index_strategy)
-            .markers(environment.interpreter().markers())
-            .platform(environment.interpreter().platform())
-            .build();
+        let client = RegistryClientBuilder::new(
+            client_builder,
+            cache.clone().with_refresh(Refresh::All(Timestamp::now())),
+        )
+        .index_locations(index_locations)
+        .index_strategy(index_strategy)
+        .markers(environment.interpreter().markers())
+        .platform(environment.interpreter().platform())
+        .build();
         let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
@@ -114,9 +131,9 @@ pub(crate) async fn pip_list(
             client: &client,
             capabilities: &capabilities,
             prerelease,
-            exclude_newer,
+            exclude_newer: &exclude_newer,
             tags: Some(tags),
-            requires_python: &requires_python,
+            requires_python: Some(&requires_python),
         };
 
         let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);
@@ -183,7 +200,7 @@ pub(crate) async fn pip_list(
                 })
                 .collect_vec();
             let output = serde_json::to_string(&rows)?;
-            println!("{output}");
+            writeln!(printer.stdout_important(), "{output}")?;
         }
         ListFormat::Columns if results.is_empty() => {}
         ListFormat::Columns => {
@@ -257,23 +274,29 @@ pub(crate) async fn pip_list(
             }
 
             for elems in MultiZip(columns.iter().map(Column::fmt).collect_vec()) {
-                println!("{}", elems.join(" ").trim_end());
+                writeln!(printer.stdout_important(), "{}", elems.join(" ").trim_end())?;
             }
         }
         ListFormat::Freeze if results.is_empty() => {}
         ListFormat::Freeze => {
             for dist in &results {
-                println!("{}=={}", dist.name().bold(), dist.version());
+                writeln!(
+                    printer.stdout_important(),
+                    "{}=={}",
+                    dist.name().bold(),
+                    dist.version()
+                )?;
             }
         }
     }
 
     // Validate that the environment is consistent.
     if strict {
-        // Determine the markers to use for resolution.
+        // Determine the markers and tags to use for resolution.
         let markers = environment.interpreter().resolver_marker_environment();
+        let tags = environment.interpreter().tags()?;
 
-        for diagnostic in site_packages.diagnostics(&markers)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",

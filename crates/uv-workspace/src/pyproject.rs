@@ -20,7 +20,9 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::de::{IntoDeserializer, SeqAccess};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
+
 use uv_build_backend::BuildBackendSettings;
+use uv_configuration::GitLfsSetting;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -124,9 +126,9 @@ impl PyProjectToml {
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
         let pyproject =
             toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject = PyProjectToml::deserialize(pyproject.into_deserializer())
+        let pyproject = Self::deserialize(pyproject.into_deserializer())
             .map_err(PyprojectTomlError::TomlSchema)?;
-        Ok(PyProjectToml { raw, ..pyproject })
+        Ok(Self { raw, ..pyproject })
     }
 
     /// Returns `true` if the project should be considered a Python package, as opposed to a
@@ -255,7 +257,7 @@ impl TryFrom<ProjectWire> for Project {
             return Err(PyprojectTomlError::MissingVersion);
         }
 
-        Ok(Project {
+        Ok(Self {
             name,
             version: value.version,
             requires_python: value.requires_python,
@@ -427,21 +429,6 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
-    /// Additional build dependencies for packages.
-    ///
-    /// This allows extending the PEP 517 build environment for the project's dependencies with
-    /// additional packages. This is useful for packages that assume the presence of packages, like,
-    /// `pip`, and do not declare them as build dependencies.
-    #[option(
-        default = "[]",
-        value_type = "dict",
-        example = r#"
-            [tool.uv.extra-build-dependencies]
-            pytest = ["pip"]
-        "#
-    )]
-    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
-
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -502,6 +489,37 @@ pub struct ToolUv {
         "#
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
+    /// Dependencies to exclude when resolving the project's dependencies.
+    ///
+    /// Excludes are used to prevent a package from being selected during resolution,
+    /// regardless of whether it's requested by any other package. When a package is excluded,
+    /// it will be omitted from the dependency list entirely.
+    ///
+    /// Including a package as an exclusion will prevent it from being installed, even if
+    /// it's requested by transitive dependencies. This can be useful for removing optional
+    /// dependencies or working around packages with broken dependencies.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Exclude Werkzeug from being installed, even if transitive dependencies request it.
+            exclude-dependencies = ["werkzeug"]
+        "#
+    )]
+    pub exclude_dependencies: Option<Vec<PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///
@@ -755,14 +773,69 @@ pub struct DependencyGroupSettings {
     pub requires_python: Option<VersionSpecifiers>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum ExtraBuildDependencyWire {
+    Unannotated(uv_pep508::Requirement<VerbatimParsedUrl>),
+    #[serde(rename_all = "kebab-case")]
+    Annotated {
+        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        match_runtime: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    deny_unknown_fields,
+    from = "ExtraBuildDependencyWire",
+    into = "ExtraBuildDependencyWire"
+)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct ExtraBuildDependency {
+    pub requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+    pub match_runtime: bool,
+}
+
+impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
+    fn from(value: ExtraBuildDependency) -> Self {
+        value.requirement
+    }
+}
+
+impl From<ExtraBuildDependencyWire> for ExtraBuildDependency {
+    fn from(wire: ExtraBuildDependencyWire) -> Self {
+        match wire {
+            ExtraBuildDependencyWire::Unannotated(requirement) => Self {
+                requirement,
+                match_runtime: false,
+            },
+            ExtraBuildDependencyWire::Annotated {
+                requirement,
+                match_runtime,
+            } => Self {
+                requirement,
+                match_runtime,
+            },
+        }
+    }
+}
+
+impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
+    fn from(item: ExtraBuildDependency) -> Self {
+        Self::Annotated {
+            requirement: item.requirement,
+            match_runtime: item.match_runtime,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExtraBuildDependencies(
-    BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-);
+pub struct ExtraBuildDependencies(BTreeMap<PackageName, Vec<ExtraBuildDependency>>);
 
 impl std::ops::Deref for ExtraBuildDependencies {
-    type Target = BTreeMap<PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>;
+    type Target = BTreeMap<PackageName, Vec<ExtraBuildDependency>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -776,14 +849,19 @@ impl std::ops::DerefMut for ExtraBuildDependencies {
 }
 
 impl IntoIterator for ExtraBuildDependencies {
-    type Item = (PackageName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>);
-    type IntoIter = std::collections::btree_map::IntoIter<
-        PackageName,
-        Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    >;
+    type Item = (PackageName, Vec<ExtraBuildDependency>);
+    type IntoIter = std::collections::btree_map::IntoIter<PackageName, Vec<ExtraBuildDependency>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl FromIterator<(PackageName, Vec<ExtraBuildDependency>)> for ExtraBuildDependencies {
+    fn from_iter<T: IntoIterator<Item = (PackageName, Vec<ExtraBuildDependency>)>>(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -1045,6 +1123,8 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        /// Whether to use Git LFS when cloning the repository.
+        lfs: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1115,6 +1195,8 @@ pub enum Source {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        /// Whether the package should be installed as editable. Defaults to `true`.
+        editable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1141,6 +1223,7 @@ impl<'de> Deserialize<'de> for Source {
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
+            lfs: Option<bool>,
             url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
@@ -1164,6 +1247,7 @@ impl<'de> Deserialize<'de> for Source {
             rev,
             tag,
             branch,
+            lfs,
             url,
             path,
             editable,
@@ -1241,6 +1325,7 @@ impl<'de> Deserialize<'de> for Source {
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -1452,11 +1537,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `workspace` and `branch`",
                 ));
             }
-            if editable.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `workspace` and `editable`",
-                ));
-            }
             if package.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `workspace` and `package`",
@@ -1465,6 +1545,7 @@ impl<'de> Deserialize<'de> for Source {
 
             return Ok(Self::Workspace {
                 workspace,
+                editable,
                 marker,
                 extra,
                 group,
@@ -1501,13 +1582,13 @@ pub enum SourceError {
     )]
     UnusedBranch(String, String),
     #[error(
+        "`{0}` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided."
+    )]
+    UnusedLfs(String),
+    #[error(
         "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
     )]
     UnusedEditable(String),
-    #[error(
-        "Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode."
-    )]
-    UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1533,17 +1614,21 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        lfs: GitLfsSetting,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
-    ) -> Result<Option<Source>, SourceError> {
+    ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some() || tag.is_some() || rev.is_some())
+            && (branch.is_some()
+                || tag.is_some()
+                || rev.is_some()
+                || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
                     for existing_source in package_sources.iter() {
-                        if let Source::Git {
+                        if let Self::Git {
                             git,
                             subdirectory,
                             marker,
@@ -1552,12 +1637,13 @@ impl Source {
                             ..
                         } = existing_source
                         {
-                            return Ok(Some(Source::Git {
+                            return Ok(Some(Self::Git {
                                 git: git.clone(),
                                 subdirectory: subdirectory.clone(),
                                 rev,
                                 tag,
                                 branch,
+                                lfs: lfs.into(),
                                 marker: *marker,
                                 extra: extra.clone(),
                                 group: group.clone(),
@@ -1575,15 +1661,13 @@ impl Source {
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
             }
+            if matches!(lfs, GitLfsSetting::Enabled { from_env: false }) {
+                return Err(SourceError::UnusedLfs(name.to_string()));
+            }
         }
 
-        if workspace {
-            // If a workspace source is added with `--no-editable`, error.
-            if editable == Some(false) {
-                return Err(SourceError::UnusedNoEditable(name.to_string()));
-            }
-        } else {
-            // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        if !workspace {
             if !matches!(source, RequirementSource::Directory { .. }) {
                 if editable == Some(true) {
                     return Err(SourceError::UnusedEditable(name.to_string()));
@@ -1595,8 +1679,9 @@ impl Source {
         if workspace {
             return match source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
-                    Ok(Some(Source::Workspace {
+                    Ok(Some(Self::Workspace {
                         workspace: true,
+                        editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,
@@ -1620,7 +1705,7 @@ impl Source {
             }
             RequirementSource::Registry { index: None, .. } => {
                 if let Some(index) = index {
-                    Source::Registry {
+                    Self::Registry {
                         index,
                         marker: MarkerTree::TRUE,
                         extra: None,
@@ -1630,9 +1715,25 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Source::Path {
-                editable,
+            RequirementSource::Path { install_path, .. } => Self::Path {
+                editable: None,
+                package: None,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
+                ),
+                marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable: is_editable,
+                ..
+            } => Self::Path {
+                editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
@@ -1648,7 +1749,7 @@ impl Source {
                 location,
                 subdirectory,
                 ..
-            } => Source::Url {
+            } => Self::Url {
                 url: location,
                 subdirectory: subdirectory.map(PortablePathBuf::from),
                 marker: MarkerTree::TRUE,
@@ -1667,10 +1768,11 @@ impl Source {
                         GitReference::NamedRef(rev) => Some(rev),
                         GitReference::DefaultBranch => None,
                     };
-                    Source::Git {
+                    Self::Git {
                         rev: rev.cloned(),
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1678,10 +1780,11 @@ impl Source {
                         group: None,
                     }
                 } else {
-                    Source::Git {
+                    Self::Git {
                         rev,
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1698,33 +1801,33 @@ impl Source {
     /// Return the [`MarkerTree`] for the source.
     pub fn marker(&self) -> MarkerTree {
         match self {
-            Source::Git { marker, .. } => *marker,
-            Source::Url { marker, .. } => *marker,
-            Source::Path { marker, .. } => *marker,
-            Source::Registry { marker, .. } => *marker,
-            Source::Workspace { marker, .. } => *marker,
+            Self::Git { marker, .. } => *marker,
+            Self::Url { marker, .. } => *marker,
+            Self::Path { marker, .. } => *marker,
+            Self::Registry { marker, .. } => *marker,
+            Self::Workspace { marker, .. } => *marker,
         }
     }
 
     /// Return the extra name for the source.
     pub fn extra(&self) -> Option<&ExtraName> {
         match self {
-            Source::Git { extra, .. } => extra.as_ref(),
-            Source::Url { extra, .. } => extra.as_ref(),
-            Source::Path { extra, .. } => extra.as_ref(),
-            Source::Registry { extra, .. } => extra.as_ref(),
-            Source::Workspace { extra, .. } => extra.as_ref(),
+            Self::Git { extra, .. } => extra.as_ref(),
+            Self::Url { extra, .. } => extra.as_ref(),
+            Self::Path { extra, .. } => extra.as_ref(),
+            Self::Registry { extra, .. } => extra.as_ref(),
+            Self::Workspace { extra, .. } => extra.as_ref(),
         }
     }
 
     /// Return the dependency group name for the source.
     pub fn group(&self) -> Option<&GroupName> {
         match self {
-            Source::Git { group, .. } => group.as_ref(),
-            Source::Url { group, .. } => group.as_ref(),
-            Source::Path { group, .. } => group.as_ref(),
-            Source::Registry { group, .. } => group.as_ref(),
-            Source::Workspace { group, .. } => group.as_ref(),
+            Self::Git { group, .. } => group.as_ref(),
+            Self::Url { group, .. } => group.as_ref(),
+            Self::Path { group, .. } => group.as_ref(),
+            Self::Registry { group, .. } => group.as_ref(),
+            Self::Workspace { group, .. } => group.as_ref(),
         }
     }
 }
@@ -1751,7 +1854,7 @@ impl<'de> Deserialize<'de> for BuildBackendSettingsSchema {
     where
         D: Deserializer<'de>,
     {
-        Ok(BuildBackendSettingsSchema)
+        Ok(Self)
     }
 }
 

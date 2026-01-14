@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
@@ -286,7 +287,7 @@ fn list_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -297,7 +298,7 @@ fn list_editable() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -316,7 +317,7 @@ fn list_editable() {
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
 
     ----- stderr -----
@@ -332,7 +333,7 @@ fn list_editable_only() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -343,7 +344,7 @@ fn list_editable_only() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -361,7 +362,7 @@ fn list_editable_only() {
     ----- stdout -----
     Package Version Editable project location
     [UNDERLINE]
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
 
     ----- stderr -----
     "###
@@ -407,7 +408,7 @@ fn list_exclude() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -418,7 +419,7 @@ fn list_exclude() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -439,7 +440,7 @@ fn list_exclude() {
     [UNDERLINE]
     anyio 4.3.0
     idna 3.6
-    poetry-editable 0.1.0 [WORKSPACE]/scripts/packages/poetry_editable
+    poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
     sniffio 1.3.1
 
     ----- stderr -----
@@ -490,7 +491,7 @@ fn list_format_json() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -501,7 +502,7 @@ fn list_format_json() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -517,7 +518,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
+    [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
     "###
@@ -529,7 +530,7 @@ fn list_format_json() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/scripts/packages/poetry_editable"}]
+    [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"}]
 
     ----- stderr -----
     "###
@@ -557,7 +558,7 @@ fn list_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -568,7 +569,7 @@ fn list_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -723,7 +724,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -734,7 +735,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
-     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
     "###
     );
@@ -787,4 +788,102 @@ fn list_ignores_quiet_flag_format_freeze() {
     ----- stderr -----
     "###
     );
+}
+
+#[test]
+#[cfg(feature = "pypi")]
+fn list_target() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let target = context.temp_dir.child("target");
+
+    // Install packages to a target directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--target")
+        .arg(target.path())
+        .assert()
+        .success();
+
+    // List packages in the target directory.
+    uv_snapshot!(context.filters(), context.pip_list()
+        .arg("--target")
+        .arg(target.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.3
+    tomli      2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --target, the packages should not be visible.
+    uv_snapshot!(context.pip_list(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "pypi")]
+fn list_prefix() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
+
+    let prefix = context.temp_dir.child("prefix");
+
+    // Install packages to a prefix directory.
+    context
+        .pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--prefix")
+        .arg(prefix.path())
+        .assert()
+        .success();
+
+    // List packages in the prefix directory.
+    uv_snapshot!(context.filters(), context.pip_list()
+        .arg("--prefix")
+        .arg(prefix.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package    Version
+    ---------- -------
+    markupsafe 2.1.3
+    tomli      2.0.1
+
+    ----- stderr -----
+    "###
+    );
+
+    // Without --prefix, the packages should not be visible.
+    uv_snapshot!(context.pip_list(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###
+    );
+
+    Ok(())
 }

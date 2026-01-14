@@ -38,7 +38,7 @@ impl Name for LocalDist {
 }
 
 impl InstalledMetadata for LocalDist {
-    fn installed_version(&self) -> InstalledVersion {
+    fn installed_version(&self) -> InstalledVersion<'_> {
         match self {
             Self::Cached(dist, _) => dist.installed_version(),
             Self::Installed(dist, _) => dist.installed_version(),

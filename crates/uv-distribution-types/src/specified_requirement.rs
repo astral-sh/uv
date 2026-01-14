@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
+use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
-use uv_pep508::{MarkerEnvironment, UnnamedRequirement};
-use uv_pypi_types::Hashes;
+use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
+use uv_pypi_types::{Hashes, ParsedUrl};
 
 use crate::{Requirement, RequirementSource, VerbatimParsedUrl};
 
@@ -63,6 +64,89 @@ impl UnresolvedRequirement {
         match self {
             Self::Named(requirement) => requirement.evaluate_markers(env, extras),
             Self::Unnamed(requirement) => requirement.evaluate_optional_environment(env, extras),
+        }
+    }
+
+    /// Augment a user-provided requirement by attaching any specification data that was provided
+    /// separately from the requirement itself (e.g., `--branch main`).
+    #[must_use]
+    pub fn augment_requirement(
+        self,
+        rev: Option<&str>,
+        tag: Option<&str>,
+        branch: Option<&str>,
+        lfs: Option<bool>,
+        marker: Option<MarkerTree>,
+    ) -> Self {
+        #[allow(clippy::manual_map)]
+        let git_reference = if let Some(rev) = rev {
+            Some(GitReference::from_rev(rev.to_string()))
+        } else if let Some(tag) = tag {
+            Some(GitReference::Tag(tag.to_string()))
+        } else if let Some(branch) = branch {
+            Some(GitReference::Branch(branch.to_string()))
+        } else {
+            None
+        };
+
+        match self {
+            Self::Named(mut requirement) => Self::Named(Requirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
+                source: match requirement.source {
+                    RequirementSource::Git {
+                        git,
+                        subdirectory,
+                        url,
+                    } => {
+                        let git = if let Some(git_reference) = git_reference {
+                            git.with_reference(git_reference)
+                        } else {
+                            git
+                        };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
+                        RequirementSource::Git {
+                            git,
+                            subdirectory,
+                            url,
+                        }
+                    }
+                    _ => requirement.source,
+                },
+                ..requirement
+            }),
+            Self::Unnamed(mut requirement) => Self::Unnamed(UnnamedRequirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
+                url: match requirement.url.parsed_url {
+                    ParsedUrl::Git(mut git) => {
+                        if let Some(git_reference) = git_reference {
+                            git.url = git.url.with_reference(git_reference);
+                        }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::Git(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    _ => requirement.url,
+                },
+                ..requirement
+            }),
         }
     }
 

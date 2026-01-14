@@ -1,13 +1,13 @@
 [package]
 name = "uv-requirements"
-version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.0.14"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -31,9 +31,9 @@ uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-requirements-txt = { workspace = true, features = ["http"] }
 uv-resolver = { workspace = true, features = ["clap"] }
+uv-scripts = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 configparser = { workspace = true }

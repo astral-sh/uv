@@ -11,8 +11,17 @@ echo "Updating metadata with rooster..."
 cd "$project_root"
 
 # Update the changelog
-uv tool run --from 'rooster-blue>=0.0.7' --python 3.12 -- \
-    rooster release "$@"
+uvx --python 3.12 rooster@0.1.1 release "$@"
+
+# Bump library crate versions
+uv run "$project_root/scripts/bump-workspace-crate-versions.py"
+
+echo "Updating crate READMEs..."
+uv run "$project_root/scripts/generate-crate-readmes.py"
 
 echo "Updating lockfile..."
 cargo update -p uv
+pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
+
+echo "Generating JSON schema..."
+cargo dev generate-json-schema

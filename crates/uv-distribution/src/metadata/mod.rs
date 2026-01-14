@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use uv_auth::CredentialsCache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -11,7 +12,7 @@ use uv_pypi_types::{HashDigests, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{WorkspaceCache, WorkspaceError};
 
-pub use crate::metadata::build_requires::{BuildRequires, ExtraBuildRequires};
+pub use crate::metadata::build_requires::{BuildRequires, LoweredExtraBuildDependencies};
 pub use crate::metadata::dependency_groups::SourcedDependencyGroups;
 pub use crate::metadata::lowering::LoweredRequirement;
 pub use crate::metadata::lowering::LoweringError;
@@ -28,6 +29,8 @@ pub enum MetadataError {
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
     DependencyGroup(#[from] DependencyGroupError),
+    #[error("No pyproject.toml found at: {0}")]
+    MissingPyprojectToml(PathBuf),
     #[error("Failed to parse entry: `{0}`")]
     LoweringError(PackageName, #[source] Box<LoweringError>),
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
@@ -58,7 +61,7 @@ pub struct Metadata {
     // Optional fields
     pub requires_dist: Box<[Requirement]>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub provides_extras: Box<[ExtraName]>,
+    pub provides_extra: Box<[ExtraName]>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
@@ -74,7 +77,7 @@ impl Metadata {
                 .map(Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dependency_groups: BTreeMap::default(),
             dynamic: metadata.dynamic,
         }
@@ -89,18 +92,19 @@ impl Metadata {
         locations: &IndexLocations,
         sources: NoSources,
         cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
-            provides_extras: metadata.provides_extras,
+            provides_extra: metadata.provides_extra,
             dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
-            provides_extras,
+            provides_extra,
             dependency_groups,
             dynamic,
         } = RequiresDist::from_project_maybe_workspace(
@@ -110,6 +114,7 @@ impl Metadata {
             locations,
             sources,
             cache,
+            credentials_cache,
         )
         .await?;
 
@@ -119,7 +124,7 @@ impl Metadata {
             version: metadata.version,
             requires_dist,
             requires_python: metadata.requires_python,
-            provides_extras,
+            provides_extra,
             dependency_groups,
             dynamic,
         })
