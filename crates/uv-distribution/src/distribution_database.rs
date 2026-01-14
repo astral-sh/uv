@@ -18,7 +18,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
     Name, SourceDist, ToUrlError,
@@ -29,6 +29,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
+use uv_warnings::warn_user;
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -379,6 +380,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // Warn if the source distribution isn't PEP 625 compliant.
+        // We do this here instead of in `SourceDistExtension::from_path` to minimize log volume:
+        // a non-compliant distribution isn't a huge problem if it's not actually being
+        // materialized into a wheel. Observe that we also allow no extension, since we expect that
+        // for directory and Git installs.
+        if !matches!(dist.extension(), Some(SourceDistExtension::TarGz) | None) {
+            warn_user!(
+                "Legacy (non-PEP 625) source distributions are deprecated: {dist}. A future version of uv will reject source distributions that do not use '.tar.gz'",
+            );
+        }
+
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
