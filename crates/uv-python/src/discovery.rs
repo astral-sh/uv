@@ -20,7 +20,7 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
-use uv_warnings::warn_user_once;
+use uv_warnings::{warn_user, warn_user_once};
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -1523,9 +1523,11 @@ pub(crate) async fn find_best_python_installation(
         _ => return Ok(result?),
     }
 
+    let mut previous_fetch_failed = false;
+
     // Attempt to download the version if downloads are enabled
     if downloads_enabled
-        && let Some(installation) = attempt_download(
+        && let Some(installation) = match attempt_download(
             request,
             download_list,
             client,
@@ -1536,7 +1538,23 @@ pub(crate) async fn find_best_python_installation(
             pypy_install_mirror,
             preview,
         )
-        .await?
+        .await
+        {
+            Ok(maybe_installation) => maybe_installation,
+            Err(error) => {
+                // If the request was for the default or any version, propagate
+                // the error as nothing else we are about to do will help the
+                // situation.
+                if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    return Err(error);
+                }
+                warn_user!(
+                    "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
+                );
+                previous_fetch_failed = true;
+                None
+            }
+        }
     {
         return Ok(Ok(installation));
     }
@@ -1570,8 +1588,9 @@ pub(crate) async fn find_best_python_installation(
         }
 
         // Attempt to download the relaxed version if downloads are enabled
+        // Only report errors if the previous download didn't.
         if downloads_enabled
-            && let Some(installation) = attempt_download(
+            && let Some(installation) = match attempt_download(
                 &request,
                 download_list,
                 client,
@@ -1582,7 +1601,18 @@ pub(crate) async fn find_best_python_installation(
                 pypy_install_mirror,
                 preview,
             )
-            .await?
+            .await
+            {
+                Ok(maybe_installation) => maybe_installation,
+                Err(error) => {
+                    if !previous_fetch_failed {
+                        warn_user!(
+                            "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
+                        );
+                    }
+                    None
+                }
+            }
         {
             return Ok(Ok(installation));
         }

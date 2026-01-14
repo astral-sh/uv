@@ -8,6 +8,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
+use http::StatusCode;
 use indoc::indoc;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -18181,4 +18182,91 @@ fn compile_missing_python_version_patch_fallback() -> Result<()> {
     ");
 
     Ok(())
+}
+
+/// Test that pip compile warns on download errors
+#[cfg(feature = "python-managed")]
+#[tokio::test]
+async fn compile_missing_python_download_error_warning() {
+    let context = TestContext::new("3.12")
+        .with_managed_python_dirs()
+        .with_filter((
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ));
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .mount(&server)
+        .await;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0").unwrap();
+
+    // This produces an error in the end because we've just broken ALL network
+    // traffic. But the goal here is to check the warning.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
+
+    // Also check for the patch fallback
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10.99")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: The requested Python version 3.10.99 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
+
+    // Check that looking up a valid patch version only warns once
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10.19")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: The requested Python version 3.10.19 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
 }
