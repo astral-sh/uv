@@ -1613,6 +1613,7 @@ pub(crate) async fn find_best_python_installation(
                     warn_user!(
                         "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
                     );
+                    previous_fetch_failed = true;
                     None
                 }
             }
@@ -1624,18 +1625,48 @@ pub(crate) async fn find_best_python_installation(
     // If a Python version was requested but cannot be fulfilled, just take any version
     debug!("Looking for a default Python installation");
     let request = PythonRequest::Default;
-    Ok(
-        find_python_installation(&request, environments, preference, cache, preview)?.map_err(
-            |err| {
-                // Use a more general error in this case since we looked for multiple versions
-                PythonNotFound {
-                    request,
-                    python_preference: err.python_preference,
-                    environment_preference: err.environment_preference,
-                }
-            },
-        ),
-    )
+    let result = find_python_installation(&request, environments, preference, cache, preview);
+
+    match result {
+        Ok(Ok(installation)) => {
+            warn_on_unsupported_python(installation.interpreter());
+            return Ok(Ok(installation));
+        }
+        // Continue if we can't find a matching Python and ignore non-critical discovery errors
+        Ok(Err(_)) => {}
+        Err(ref err) if !err.is_critical() => {}
+        _ => return Ok(result?),
+    }
+
+    // Attempt to download the default version if downloads are enabled and the
+    // previous attempt didn't fail.
+    if downloads_enabled
+        && !previous_fetch_failed
+        && let Some(installation) = attempt_download(
+            &request,
+            download_list,
+            client,
+            retry_policy,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+            preview,
+        )
+        .await?
+    {
+        return Ok(Ok(installation));
+    }
+
+    // Re-use the result from the find attempt
+    return Ok(result?.map_err(|err| {
+        // Use a more general error in this case since we looked for multiple versions
+        PythonNotFound {
+            request,
+            python_preference: err.python_preference,
+            environment_preference: err.environment_preference,
+        }
+    }));
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.
