@@ -363,14 +363,31 @@ impl PyxTokenStore {
             return false;
         };
         match jwt.exp {
-            None => false,
-            Some(_) if tolerance_secs == 0 => false,
+            None => {
+                debug!("Access token has no expiration; refreshing...");
+                false
+            }
+            Some(_) if tolerance_secs == 0 => {
+                debug!("Refreshing access token due to zero tolerance...");
+                false
+            }
             Some(exp) => {
                 let Ok(exp) = jiff::Timestamp::from_second(exp) else {
                     return false;
                 };
                 let now = jiff::Timestamp::now();
-                exp >= now + Duration::from_secs(tolerance_secs)
+                if exp < now {
+                    debug!("Access token is expired (`{exp}`); refreshing...");
+                    false
+                } else if exp < now + Duration::from_secs(tolerance_secs) {
+                    debug!(
+                        "Access token will expire within the tolerance (`{exp}`); refreshing..."
+                    );
+                    false
+                } else {
+                    debug!("Access token is up-to-date (`{exp}`)");
+                    true
+                }
             }
         }
     }
@@ -426,7 +443,6 @@ impl PyxTokenStore {
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
         if Self::is_fresh(&tokens, tolerance_secs) {
-            debug!("Access token is up-to-date");
             return Ok(tokens);
         }
 
