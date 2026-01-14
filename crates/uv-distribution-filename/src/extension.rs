@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uv_warnings::warn_user;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DistExtension {
@@ -82,19 +83,27 @@ impl SourceDistExtension {
         };
 
         match extension {
-            "zip" => Ok(Self::Zip),
-            "tar" => Ok(Self::Tar),
-            "tgz" => Ok(Self::Tgz),
-            "tbz" => Ok(Self::Tbz),
-            "txz" => Ok(Self::Txz),
-            "tlz" => Ok(Self::Tlz),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
-            "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
-            "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
-            "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),
-            "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
-            "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
-            _ => Err(ExtensionError::SourceDist),
+            extension => {
+                warn_user!(
+                    "Legacy (non-PEP 625) source distributions are deprecated: '{path:?}'. A future version of uv will reject source distributions that do not use '.tar.gz'",
+                    path = path.as_ref()
+                );
+                match extension {
+                    "zip" => Ok(Self::Zip),
+                    "tar" => Ok(Self::Tar),
+                    "tgz" => Ok(Self::Tgz),
+                    "tbz" => Ok(Self::Tbz),
+                    "txz" => Ok(Self::Txz),
+                    "tlz" => Ok(Self::Tlz),
+                    "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
+                    "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
+                    "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),
+                    "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
+                    "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
+                    _ => Err(ExtensionError::SourceDist),
+                }
+            }
         }
     }
 

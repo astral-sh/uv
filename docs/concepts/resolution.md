@@ -749,6 +749,17 @@ reading and extracting archives in the following formats:
 - lzma tarball (`.tar.lzma`)
 - zip (`.zip`)
 
+!!! important
+
+    Using source distribution extensions other than `.tar.gz` is strongly
+    discouraged, as these extensions are not widely or consistently
+    supported across the Python packaging ecosystem.
+
+!!! warning "Deprecated"
+
+    Support for source distribution extensions other than `.tar.gz` is
+    deprecated and will be removed in a future release of uv.
+
 ## Lockfile versioning
 
 The `uv.lock` file uses a versioned schema. The schema version is included in the `version` field of
