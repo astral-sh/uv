@@ -1465,6 +1465,7 @@ pub(crate) async fn find_best_python_installation(
     preview: Preview,
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {}", request);
+    let original_request = request;
 
     let mut previous_fetch_failed = false;
 
@@ -1482,7 +1483,7 @@ pub(crate) async fn find_best_python_installation(
         _ => None,
     };
 
-    for request in iter::once(request)
+    for request in iter::once(original_request)
         .chain(request_without_patch.iter())
         .chain(iter::once(&PythonRequest::Default))
     {
@@ -1556,7 +1557,7 @@ pub(crate) async fn find_best_python_installation(
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
-                    request: request.clone(),
+                    request: original_request.clone(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
