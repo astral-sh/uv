@@ -1,6 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -8,6 +8,7 @@ use etcetera::BaseStrategy;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
+use uv_fs::{LockedFile, LockedFileMode};
 
 use uv_cache_key::CanonicalUrl;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -92,6 +93,12 @@ impl From<AccessToken> for Credentials {
 
 /// The default tolerance for the access token expiration.
 pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
+
+/// The debounce duration for token refresh operations.
+///
+/// If a token was refreshed within this duration, concurrent refresh attempts will
+/// re-read the tokens from disk instead of making another refresh request.
+const REFRESH_DEBOUNCE_SECS: u64 = 5;
 
 #[derive(Debug, Clone)]
 struct PyxDirectories {
@@ -317,6 +324,26 @@ impl PyxTokenStore {
         Ok(())
     }
 
+    /// Return the path to the refresh lock file.
+    fn lock_path(&self) -> PathBuf {
+        self.subdirectory.join("refresh.lock")
+    }
+
+    /// Read the last refresh timestamp from the lock file.
+    async fn read_last_refresh(&self) -> Option<u64> {
+        let data = fs_err::tokio::read_to_string(self.lock_path()).await.ok()?;
+        data.trim().parse().ok()
+    }
+
+    /// Write the current timestamp to the lock file.
+    async fn write_last_refresh(&self) -> Result<(), io::Error> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before Unix epoch")
+            .as_secs();
+        fs_err::tokio::write(self.lock_path(), now.to_string()).await
+    }
+
     /// Bootstrap the tokens from the store.
     async fn bootstrap(
         &self,
@@ -405,6 +432,30 @@ impl PyxTokenStore {
             return Ok(tokens);
         }
 
+        // Ensure the subdirectory exists before acquiring the lock.
+        fs_err::tokio::create_dir_all(&self.subdirectory).await?;
+
+        // Acquire a lock to prevent concurrent refresh attempts.
+        let _lock = LockedFile::acquire(self.lock_path(), LockedFileMode::Exclusive, "pyx refresh")
+            .await
+            .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
+
+        // Check if another process recently refreshed the tokens.
+        if let Some(last_refresh) = self.read_last_refresh().await {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time before Unix epoch")
+                .as_secs();
+            if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
+                debug!("Token was recently refreshed; re-reading from disk...");
+                // Re-read the tokens from disk (another process just refreshed them).
+                if let Some(tokens) = self.read().await? {
+                    return Ok(tokens);
+                }
+                // If tokens are missing, fall through to refresh.
+            }
+        }
+
         let tokens = match tokens {
             PyxTokens::OAuth(PyxOAuthTokens { refresh_token, .. }) => {
                 // Parse the API URL.
@@ -452,6 +503,12 @@ impl PyxTokenStore {
 
         // Write the new tokens to disk.
         self.write(&tokens).await?;
+
+        // Update the last refresh timestamp.
+        if let Err(err) = self.write_last_refresh().await {
+            debug!("Failed to write refresh timestamp: {err}");
+        }
+
         Ok(tokens)
     }
 
