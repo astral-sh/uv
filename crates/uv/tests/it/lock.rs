@@ -12970,6 +12970,7 @@ fn lock_sources_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Legacy (non-PEP 625) source distributions are deprecated: workspace @ https://github.com/user-attachments/files/16592193/workspace.zip. A future version of uv will reject source distributions that do not use '.tar.gz'
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
@@ -13106,6 +13107,7 @@ fn lock_sources_archive() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Legacy (non-PEP 625) source distributions are deprecated: workspace @ file://[TEMP_DIR]/workspace.zip. A future version of uv will reject source distributions that do not use '.tar.gz'
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
