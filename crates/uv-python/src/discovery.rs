@@ -1541,6 +1541,10 @@ pub(crate) async fn find_best_python_installation(
         .await
         {
             Ok(maybe_installation) => maybe_installation,
+            // Handle download failures here with a warning so to give the rest
+            // of the code a chance to succeed. Also to avoid a breaking change.
+            // Errors encountered here are either network errors or quirky
+            // configuration problems.
             Err(error) => {
                 // If the request was for the default or any version, propagate
                 // the error as nothing else we are about to do will help the
