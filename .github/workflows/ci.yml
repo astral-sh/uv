@@ -16,22 +16,28 @@ jobs:
   plan:
     runs-on: depot-ubuntu-24.04
     outputs:
-      # Run checks/tests if no-test label is not present and code changed (or on main)
-      test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.code_any_changed == 'true' || github.ref == 'refs/heads/main') }}
+      # Run checks/tests if test:skip label is not present and code changed (or on main)
+      test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.code_any_changed == 'true' || github.ref == 'refs/heads/main') }}
       # Run schema check if schema file changed
       check-schema: ${{ steps.changed.outputs.schema_changed == 'true' }}
       # Run release build test if release files changed
-      build-release-binaries: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && steps.changed.outputs.release_build_changed == 'true' }}
-      # Run format/lint checks (always unless no-test label)
-      run-checks: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') }}
+      build-release-binaries: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && steps.changed.outputs.release_build_changed == 'true' }}
+      # Run format/lint checks (always unless test:skip label)
+      run-checks: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
       # Run publish test if publish-related files changed
       test-publish: ${{ steps.changed.outputs.publish_changed == 'true' || github.ref == 'refs/heads/main' }}
       # Run trampoline checks if trampoline-related code changed
-      test-windows-trampoline: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.trampoline_any_changed == 'true' || github.ref == 'refs/heads/main') }}
+      test-windows-trampoline: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.trampoline_any_changed == 'true' || github.ref == 'refs/heads/main') }}
       # Save Rust cache if on main or if cache-relevant files changed (Cargo files, toolchain, workflows)
       save-rust-cache: ${{ github.ref == 'refs/heads/main' || steps.changed.outputs.cache_changed == 'true' }}
       # Run benchmarks only if Rust code changed
-      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/main') }}
+      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/main') }}
+      # Smoke and ecosystem tests - run unless test:skip label
+      test-smoke: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+      test-ecosystem: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+      # Extended test suites - only run on main or with opt-in labels
+      test-integration: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
+      test-system: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -184,13 +190,19 @@ jobs:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   test-smoke:
-    needs: build-dev-binaries
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-smoke == 'true' }}
     uses: ./.github/workflows/test-smoke.yml
     with:
       sha: ${{ github.sha }}
 
   test-integration:
-    needs: build-dev-binaries
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-integration == 'true' }}
     uses: ./.github/workflows/test-integration.yml
     secrets: inherit
     permissions:
@@ -199,13 +211,19 @@ jobs:
       sha: ${{ github.sha }}
 
   test-system:
-    needs: build-dev-binaries
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-system == 'true' }}
     uses: ./.github/workflows/test-system.yml
     with:
       sha: ${{ github.sha }}
 
   test-ecosystem:
-    needs: build-dev-binaries
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-ecosystem == 'true' }}
     uses: ./.github/workflows/test-ecosystem.yml
     with:
       sha: ${{ github.sha }}
