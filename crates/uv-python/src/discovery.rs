@@ -1547,9 +1547,15 @@ pub(crate) async fn find_best_python_installation(
             }
         }
 
+        // If this was a request for the Default or Any version, this means that
+        // either that's what we were called with, or we're on the last
+        // iteration.
+        //
+        // The most recent find error therefore becomes a fatal one.
         if matches!(request, PythonRequest::Default | PythonRequest::Any) {
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
+                    // Use a more general error in this case since we looked for multiple versions
                     request: request.clone(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
