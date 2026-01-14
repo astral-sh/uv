@@ -9,7 +9,6 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
-  RUST_BACKTRACE: 1
 
 jobs:
   # We use the large GitHub actions runners
@@ -59,6 +58,7 @@ jobs:
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
+          RUST_BACKTRACE: 1
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -100,6 +100,7 @@ jobs:
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
+          RUST_BACKTRACE: 1
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -159,6 +160,7 @@ jobs:
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
+          RUST_BACKTRACE: 1
         shell: bash
         run: |
           cargo nextest run \
