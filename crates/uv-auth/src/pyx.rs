@@ -353,6 +353,28 @@ impl PyxTokenStore {
         fs_err::tokio::write(lock_path, now.to_string()).await
     }
 
+    /// Returns `true` if the tokens are fresh (not expired and not expiring within tolerance).
+    fn is_fresh(tokens: &PyxTokens, tolerance_secs: u64) -> bool {
+        let access_token = match tokens {
+            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
+            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+        };
+        let Ok(jwt) = PyxJwt::decode(access_token) else {
+            return false;
+        };
+        match jwt.exp {
+            None => false,
+            Some(_) if tolerance_secs == 0 => false,
+            Some(exp) => {
+                let Ok(exp) = jiff::Timestamp::from_second(exp) else {
+                    return false;
+                };
+                let now = jiff::Timestamp::now();
+                exp >= now + Duration::from_secs(tolerance_secs)
+            }
+        }
+    }
+
     /// Bootstrap the tokens from the store.
     async fn bootstrap(
         &self,
@@ -403,41 +425,8 @@ impl PyxTokenStore {
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
-        // Decode the access token.
-        let jwt = PyxJwt::decode(match &tokens {
-            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
-            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
-        })?;
-
-        // If the access token is expired, refresh it.
-        let is_up_to_date = match jwt.exp {
-            None => {
-                debug!("Access token has no expiration; refreshing...");
-                false
-            }
-            Some(..) if tolerance_secs == 0 => {
-                debug!("Refreshing access token due to zero tolerance...");
-                false
-            }
-            Some(jwt) => {
-                let exp = jiff::Timestamp::from_second(jwt)?;
-                let now = jiff::Timestamp::now();
-                if exp < now {
-                    debug!("Access token is expired (`{exp}`); refreshing...");
-                    false
-                } else if exp < now + Duration::from_secs(tolerance_secs) {
-                    debug!(
-                        "Access token will expire within the tolerance (`{exp}`); refreshing..."
-                    );
-                    false
-                } else {
-                    debug!("Access token is up-to-date (`{exp}`)");
-                    true
-                }
-            }
-        };
-
-        if is_up_to_date {
+        if Self::is_fresh(&tokens, tolerance_secs) {
+            debug!("Access token is up-to-date");
             return Ok(tokens);
         }
 
@@ -459,27 +448,12 @@ impl PyxTokenStore {
                 .expect("system time before Unix epoch")
                 .as_secs();
             if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
-                debug!("Token was recently refreshed; re-reading from disk...");
-                // Re-read the tokens from disk (another process just refreshed them).
+                // Read the tokens from disk (another process may have just refreshed them).
                 if let Some(tokens) = self.read().await? {
-                    // Verify the re-read token is actually fresh before returning it.
-                    let access_token = match &tokens {
-                        PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
-                        PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
-                    };
-                    if let Ok(jwt) = PyxJwt::decode(access_token) {
-                        if let Some(exp) = jwt.exp {
-                            let exp = jiff::Timestamp::from_second(exp);
-                            let now = jiff::Timestamp::now();
-                            if let Ok(exp) = exp {
-                                if exp >= now + Duration::from_secs(tolerance_secs) {
-                                    debug!("Re-read token is fresh; using it");
-                                    return Ok(tokens);
-                                }
-                            }
-                        }
+                    if Self::is_fresh(&tokens, tolerance_secs) {
+                        debug!("Token was recently refreshed; using it");
+                        return Ok(tokens);
                     }
-                    debug!("Re-read token is not fresh; refreshing anyway...");
                 }
                 // If tokens are missing or not fresh, fall through to refresh.
             }
