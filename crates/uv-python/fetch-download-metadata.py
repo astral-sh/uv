@@ -143,8 +143,6 @@ class Variant(StrEnum):
     FREETHREADED = "freethreaded"
     DEBUG = "debug"
     FREETHREADED_DEBUG = "freethreaded+debug"
-    GIL = "gil"
-    GIL_DEBUG = "gil+debug"
 
     @classmethod
     def from_build_options(
@@ -153,11 +151,11 @@ class Variant(StrEnum):
         if "debug" in build_options and "freethreaded" in build_options:
             return cls.FREETHREADED_DEBUG
         elif "debug" in build_options:
-            return cls.GIL_DEBUG
+            return cls.DEBUG
         elif "freethreaded" in build_options:
             return cls.FREETHREADED
         else:
-            return cls.GIL
+            return None
 
 
 @dataclass
@@ -175,18 +173,10 @@ class PythonDownload:
     variant: Variant | None = None
 
     def key(self) -> str:
-        # The key suffix depends on the variant:
-        # - gil (default): no suffix
-        # - gil+debug: +debug suffix (not +gil+debug)
-        # - freethreaded: +freethreaded suffix
-        # - freethreaded+debug: +freethreaded+debug suffix
-        # - debug: +debug suffix
-        if self.variant == Variant.GIL or self.variant is None:
-            return f"{self.implementation}-{self.version}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
-        elif self.variant == Variant.GIL_DEBUG:
-            return f"{self.implementation}-{self.version}+debug-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
-        else:
+        if self.variant:
             return f"{self.implementation}-{self.version}+{self.variant}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
+        else:
+            return f"{self.implementation}-{self.version}-{self.triple.platform}-{self.triple.arch}-{self.triple.libc}"
 
 
 class Finder:
@@ -785,16 +775,12 @@ def render(downloads: list[PythonDownload]) -> None:
         if variant is None:
             return 0
         match variant:
-            case Variant.GIL:
-                return 0
             case Variant.FREETHREADED:
                 return 1
             case Variant.FREETHREADED_DEBUG:
                 return 2
             case Variant.DEBUG:
                 return 3
-            case Variant.GIL_DEBUG:
-                return 4
         raise ValueError(f"Missing sort key implementation for variant: {variant}")
 
     def sort_key(download: PythonDownload) -> tuple:
