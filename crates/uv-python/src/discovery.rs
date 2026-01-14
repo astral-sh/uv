@@ -1491,6 +1491,9 @@ async fn attempt_download(
 /// without comparing the patch version number. If that cannot be found, we fall back to
 /// the first available version.
 ///
+/// At all points, if the specified version cannot be found, we will attempt to
+/// download it if downloads are enabled.
+///
 /// See [`find_python_installation`] for more details on installation discovery.
 #[instrument(skip_all, fields(request))]
 pub(crate) async fn find_best_python_installation(

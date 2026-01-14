@@ -73,8 +73,8 @@ impl PythonInstallation {
         Ok(installation)
     }
 
-    /// Find an installed [`PythonInstallation`] that satisfies a requested version, if the request cannot
-    /// be satisfied, fallback to the best available Python installation.
+    /// Find or download a [`PythonInstallation`] that satisfies a requested version, if the request
+    /// cannot be satisfied, fallback to the best available Python installation.
     pub async fn find_best(
         request: &PythonRequest,
         environments: EnvironmentPreference,
