@@ -109,7 +109,7 @@ impl PythonInstallation {
             pypy_install_mirror,
             preview,
         )
-        .await??;
+        .await?;
         installation.warn_if_outdated_prerelease(request, &download_list);
         Ok(installation)
     }

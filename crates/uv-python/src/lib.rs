@@ -997,7 +997,7 @@ mod tests {
         preference: PythonPreference,
         cache: &Cache,
         preview: Preview,
-    ) -> Result<Result<PythonInstallation, PythonNotFound>, crate::Error> {
+    ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
         let download_list = ManagedPythonDownloadList::new_only_embedded()?;
         tokio::runtime::Builder::new_current_thread()
@@ -1033,7 +1033,7 @@ mod tests {
                 &context.cache,
                 Preview::default(),
             )
-        })??;
+        })?;
 
         assert!(
             matches!(
@@ -1067,7 +1067,7 @@ mod tests {
                 &context.cache,
                 Preview::default(),
             )
-        })??;
+        })?;
 
         assert!(
             matches!(
@@ -1104,7 +1104,7 @@ mod tests {
                     &context.cache,
                     Preview::default(),
                 )
-            })??;
+            })?;
         assert!(
             matches!(
                 python,
@@ -1135,7 +1135,7 @@ mod tests {
                     &context.cache,
                     Preview::default(),
                 )
-            })??;
+            })?;
         assert!(
             matches!(
                 python,

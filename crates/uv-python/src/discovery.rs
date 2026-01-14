@@ -1506,7 +1506,7 @@ pub(crate) async fn find_best_python_installation(
     python_install_mirror: Option<&str>,
     pypy_install_mirror: Option<&str>,
     preview: Preview,
-) -> Result<FindPythonResult, crate::Error> {
+) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
@@ -1515,12 +1515,12 @@ pub(crate) async fn find_best_python_installation(
     match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
-            return Ok(Ok(installation));
+            return Ok(installation);
         }
         // Continue if we can't find a matching Python and ignore non-critical discovery errors
         Ok(Err(_)) => {}
         Err(ref err) if !err.is_critical() => {}
-        _ => return Ok(result?),
+        Err(error) => return Err(error.into()),
     }
 
     let mut previous_fetch_failed = false;
@@ -1560,7 +1560,7 @@ pub(crate) async fn find_best_python_installation(
             }
         }
     {
-        return Ok(Ok(installation));
+        return Ok(installation);
     }
 
     // If both approaches fail, and a specific patch version was requested try
@@ -1583,12 +1583,12 @@ pub(crate) async fn find_best_python_installation(
         match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
-                return Ok(Ok(installation));
+                return Ok(installation);
             }
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
             Ok(Err(_)) => {}
             Err(ref err) if !err.is_critical() => {}
-            _ => return Ok(result?),
+            Err(error) => return Err(error.into()),
         }
 
         // Attempt to download the relaxed version if downloads are enabled and
@@ -1618,7 +1618,7 @@ pub(crate) async fn find_best_python_installation(
                 }
             }
         {
-            return Ok(Ok(installation));
+            return Ok(installation);
         }
     }
 
@@ -1627,16 +1627,16 @@ pub(crate) async fn find_best_python_installation(
     let request = PythonRequest::Default;
     let result = find_python_installation(&request, environments, preference, cache, preview);
 
-    match result {
+    let error = match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
-            return Ok(Ok(installation));
+            return Ok(installation);
         }
         // Continue if we can't find a matching Python and ignore non-critical discovery errors
-        Ok(Err(_)) => {}
-        Err(ref err) if !err.is_critical() => {}
-        _ => return Ok(result?),
-    }
+        Ok(Err(error)) => error.into(),
+        Err(error) if !error.is_critical() => error.into(),
+        Err(error) => return Err(error.into()),
+    };
 
     // Attempt to download the default version if downloads are enabled and the
     // previous attempt didn't fail.
@@ -1655,18 +1655,20 @@ pub(crate) async fn find_best_python_installation(
         )
         .await?
     {
-        return Ok(Ok(installation));
+        return Ok(installation);
     }
 
     // Re-use the result from the find attempt
-    return Ok(result?.map_err(|err| {
+    return Err(match error {
         // Use a more general error in this case since we looked for multiple versions
-        PythonNotFound {
+        crate::Error::MissingPython(err, _) => PythonNotFound {
             request,
             python_preference: err.python_preference,
             environment_preference: err.environment_preference,
         }
-    }));
+        .into(),
+        other => other,
+    });
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.
