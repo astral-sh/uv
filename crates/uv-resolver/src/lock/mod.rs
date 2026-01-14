@@ -3817,16 +3817,45 @@ impl Source {
         )
     }
 
+    /// Check if the user originally provided an absolute path by inspecting the `VerbatimUrl`.
+    fn was_absolute_path(url: &VerbatimUrl) -> bool {
+        // Check the original user-provided string if available
+        if let Some(given) = url.given() {
+            // Check if the given string starts with "/" (Unix) or contains ":" (Windows drive)
+            let path_str = given.strip_prefix("file://").unwrap_or(given);
+            Path::new(path_str).is_absolute()
+        } else {
+            // Fallback: assume file:// URLs with absolute paths were originally absolute
+            url.scheme() == "file"
+        }
+    }
+
+    /// Resolve a path to either absolute or relative based on the user's original intent.
+    ///
+    /// If the user provided an absolute path originally, preserve it as absolute.
+    /// If the user provided a relative path, make it relative to the project root.
+    fn absolute_or_relative_to(
+        install_path: &Path,
+        root: &Path,
+        url: &VerbatimUrl,
+    ) -> Result<PathBuf, io::Error> {
+        if Self::was_absolute_path(url) {
+            // User provided absolute path, preserve it
+            std::path::absolute(install_path)
+        } else {
+            // User provided relative path, make it relative to project root
+            relative_to(install_path, root).or_else(|_| std::path::absolute(install_path))
+        }
+    }
+
     fn from_path_built_dist(path_dist: &PathBuiltDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
+        let path = Self::absolute_or_relative_to(&path_dist.install_path, root, &path_dist.url)
             .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Self, LockError> {
-        let path = relative_to(&path_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&path_dist.install_path))
+        let path = Self::absolute_or_relative_to(&path_dist.install_path, root, &path_dist.url)
             .map_err(LockErrorKind::DistributionRelativePath)?;
         Ok(Self::Path(path.into_boxed_path()))
     }
@@ -3835,16 +3864,32 @@ impl Source {
         directory_dist: &DirectorySourceDist,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let path = relative_to(&directory_dist.install_path, root)
-            .or_else(|_| std::path::absolute(&directory_dist.install_path))
-            .map_err(LockErrorKind::DistributionRelativePath)?;
-        if directory_dist.editable.unwrap_or(false) {
-            Ok(Self::Editable(path.into_boxed_path()))
-        } else if directory_dist.r#virtual.unwrap_or(false) {
-            Ok(Self::Virtual(path.into_boxed_path()))
-        } else {
-            Ok(Self::Directory(path.into_boxed_path()))
+        // Virtual sources and editable sources should always be relative for portability.
+        // For all other sources, preserve the user's intent (absolute vs relative).
+
+        // Check if this is a virtual source (always relative)
+        if directory_dist.r#virtual.unwrap_or(false) {
+            let path = relative_to(&directory_dist.install_path, root)
+                .or_else(|_| std::path::absolute(&directory_dist.install_path))
+                .map_err(LockErrorKind::DistributionRelativePath)?;
+            return Ok(Self::Virtual(path.into_boxed_path()));
         }
+
+        // Check if this is an editable source (always relative)
+        if directory_dist.editable.unwrap_or(false) {
+            let path = relative_to(&directory_dist.install_path, root)
+                .or_else(|_| std::path::absolute(&directory_dist.install_path))
+                .map_err(LockErrorKind::DistributionRelativePath)?;
+            return Ok(Self::Editable(path.into_boxed_path()));
+        }
+
+        // For non-virtual, non-editable directory sources, preserve the user's original intent.
+        // This handles both workspace members and external path dependencies.
+        let path =
+            Self::absolute_or_relative_to(&directory_dist.install_path, root, &directory_dist.url)
+                .map_err(LockErrorKind::DistributionRelativePath)?;
+
+        Ok(Self::Directory(path.into_boxed_path()))
     }
 
     fn from_index_url(index_url: &IndexUrl, root: &Path) -> Result<Self, LockError> {

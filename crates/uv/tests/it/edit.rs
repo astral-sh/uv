@@ -3003,6 +3003,156 @@ fn add_path_no_workspace() -> Result<()> {
     Ok(())
 }
 
+/// Add a path dependency with an absolute path, which should be preserved.
+#[test]
+fn add_path_absolute() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let child = context.temp_dir.child("external").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    context
+        .temp_dir
+        .child("external")
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Use an absolute path
+    let absolute_path = fs_err::canonicalize(child.path())?;
+    uv_snapshot!(context.filters(), context.add().arg(&absolute_path).current_dir(workspace.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/external/child)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
+
+    // Verify the absolute path is preserved in pyproject.toml
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "[TEMP_DIR]/external/child" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Add a path dependency with a relative path, which should stay relative.
+#[test]
+fn add_path_relative() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let child = workspace.child("packages").child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    workspace
+        .child("packages")
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
+
+    // Use a relative path explicitly with --no-workspace to avoid workspace member addition
+    uv_snapshot!(context.filters(), context.add().arg("./packages/child").arg("--no-workspace").current_dir(workspace.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/workspace/packages/child)
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(workspace.join("pyproject.toml"))?;
+
+    // Verify the relative path is preserved
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "child",
+        ]
+
+        [tool.uv.sources]
+        child = { path = "packages/child" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Add a path dependency in an adjacent directory, which should not be added to the workspace.
 #[test]
 fn add_path_adjacent_directory() -> Result<()> {
@@ -3035,7 +3185,8 @@ fn add_path_adjacent_directory() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.add().arg(dependency.path()).current_dir(project.path()), @r"
+    // Use a relative path to test adjacent directory behavior
+    uv_snapshot!(context.filters(), context.add().arg("../dependency").current_dir(project.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
