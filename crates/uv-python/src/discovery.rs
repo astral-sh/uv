@@ -1568,6 +1568,24 @@ pub(crate) async fn find_best_python_installation(
             Err(ref err) if !err.is_critical() => {}
             _ => return Ok(result?),
         }
+
+        // Attempt to download the relaxed version if downloads are enabled
+        if downloads_enabled
+            && let Some(installation) = attempt_download(
+                &request,
+                download_list,
+                client,
+                retry_policy,
+                cache,
+                reporter,
+                python_install_mirror,
+                pypy_install_mirror,
+                preview,
+            )
+            .await?
+        {
+            return Ok(Ok(installation));
+        }
     }
 
     // If a Python version was requested but cannot be fulfilled, just take any version
