@@ -462,9 +462,26 @@ impl PyxTokenStore {
                 debug!("Token was recently refreshed; re-reading from disk...");
                 // Re-read the tokens from disk (another process just refreshed them).
                 if let Some(tokens) = self.read().await? {
-                    return Ok(tokens);
+                    // Verify the re-read token is actually fresh before returning it.
+                    let access_token = match &tokens {
+                        PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
+                        PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+                    };
+                    if let Ok(jwt) = PyxJwt::decode(access_token) {
+                        if let Some(exp) = jwt.exp {
+                            let exp = jiff::Timestamp::from_second(exp);
+                            let now = jiff::Timestamp::now();
+                            if let Ok(exp) = exp {
+                                if exp >= now + Duration::from_secs(tolerance_secs) {
+                                    debug!("Re-read token is fresh; using it");
+                                    return Ok(tokens);
+                                }
+                            }
+                        }
+                    }
+                    debug!("Re-read token is not fresh; refreshing anyway...");
                 }
-                // If tokens are missing, fall through to refresh.
+                // If tokens are missing or not fresh, fall through to refresh.
             }
         }
 
