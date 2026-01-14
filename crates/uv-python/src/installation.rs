@@ -159,10 +159,9 @@ impl PythonInstallation {
             Ok(Err(downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    let request_suffix = match request {
-                        PythonRequest::Default | PythonRequest::Any => String::new(),
-                        _ => format!(" for {request}"),
-                    };
+                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                        return Err(err);
+                    }
                     return Err(err.with_missing_python_hint(format!(
                         "No Python download is available{request_suffix}. This version might be newer than your uv. Update uv and retry."
                     )));
