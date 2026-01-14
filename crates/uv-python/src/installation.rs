@@ -647,7 +647,7 @@ impl FromStr for PythonInstallationKey {
                 })?;
                 (version, variant)
             }
-            None => (*version_str, PythonVariant::Default),
+            None => (*version_str, PythonVariant::Gil),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {

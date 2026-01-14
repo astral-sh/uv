@@ -107,7 +107,7 @@ fn python_install() {
 
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+     ~ cpython-3.14.2-[PLATFORM] (python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -171,7 +171,7 @@ fn python_reinstall() {
 
     ----- stderr -----
     Installed Python 3.13.11 in [TIME]
-     + cpython-3.13.11-[PLATFORM] (python3.13)
+     ~ cpython-3.13.11-[PLATFORM] (python3.13)
     ");
 
     // Reinstall multiple versions
@@ -182,8 +182,8 @@ fn python_reinstall() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
-     + cpython-3.13.11-[PLATFORM] (python3.13)
+     ~ cpython-3.12.12-[PLATFORM] (python3.12)
+     ~ cpython-3.13.11-[PLATFORM] (python3.13)
     ");
 
     // Reinstalling a version that is not installed should also work
@@ -228,7 +228,7 @@ fn python_reinstall_patch() {
 
     ----- stderr -----
     Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
 }
 
@@ -658,7 +658,7 @@ fn python_install_preview() {
 
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
+     ~ cpython-3.14.2-[PLATFORM] (python, python3, python3.14)
     ");
 
     // The executable should still be present in the bin directory
@@ -982,7 +982,7 @@ fn python_install_preview_upgrade() {
 
     ----- stderr -----
     Installed Python 3.12.4 in [TIME]
-     + cpython-3.12.4-[PLATFORM]
+     ~ cpython-3.12.4-[PLATFORM]
     ");
 
     if cfg!(unix) {
@@ -1040,7 +1040,7 @@ fn python_install_preview_upgrade() {
 
     ----- stderr -----
     Installed Python 3.12.6 in [TIME]
-     + cpython-3.12.6-[PLATFORM]
+     + cpython-3.12.6-[PLATFORM] (python3.12)
     ");
 
     if cfg!(unix) {
@@ -1048,7 +1048,7 @@ fn python_install_preview_upgrade() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.4-[PLATFORM]/bin/python3.12"
+                canonicalize_link_path(&bin_python), @"[TEMP_DIR]/managed/cpython-3.12.6-[PLATFORM]/bin/python3.12"
             );
         });
     } else if cfg!(windows) {
@@ -2785,7 +2785,7 @@ fn python_install_no_cache() {
 
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+     ~ cpython-3.14.2-[PLATFORM] (python3.14)
     ");
 
     // Uninstallation requires an argument
@@ -3047,7 +3047,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
 
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
     "
     );
 
@@ -3056,7 +3056,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.9
+    Python 3.12.11
 
     ----- stderr -----
     "
@@ -3305,7 +3305,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
 
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
     "
     );
 
@@ -3383,7 +3383,7 @@ fn install_transparent_patch_upgrade_venv_module() {
 
     ----- stderr -----
     Installed Python 3.12.11 in [TIME]
-     + cpython-3.12.11-[PLATFORM]
+     + cpython-3.12.11-[PLATFORM] (python3.12)
     "
     );
 
@@ -3392,7 +3392,7 @@ fn install_transparent_patch_upgrade_venv_module() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.9
+    Python 3.12.11
 
     ----- stderr -----
     "
@@ -3464,7 +3464,7 @@ fn install_lower_patch_automatically() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.9
+    Python 3.12.11
 
     ----- stderr -----
     "
@@ -3905,8 +3905,7 @@ fn python_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM]
+    The default Python installation is already on the latest supported patch release. Use `uv python install <request>` to install another version.
     ");
 
     // Install an earlier patch version
@@ -3928,7 +3927,7 @@ fn python_install_upgrade() {
 
     ----- stderr -----
     Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM]
+     + cpython-3.10.19-[PLATFORM] (python3.10)
     ");
 
     // Request a patch version with `--upgrade`
@@ -3959,8 +3958,7 @@ fn python_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.14 in [TIME]
-     + cpython-3.11.14-[PLATFORM]
+    Python 3.11 is already on the latest supported patch release
     ");
 
     // Install an outdated version
@@ -3981,8 +3979,7 @@ fn python_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.11.14 in [TIME]
-     + cpython-3.11.14-[PLATFORM]
+    Python 3.11 is already on the latest supported patch release
     ");
 
     // Ask for multiple already satisfied versions
@@ -3992,9 +3989,7 @@ fn python_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 2 versions in [TIME]
-     + cpython-3.10.19-[PLATFORM]
-     + cpython-3.11.14-[PLATFORM]
+    All requested versions already on latest supported patch release
     ");
 
     // Mix in an unsatisfied version and a missing one
@@ -4004,10 +3999,8 @@ fn python_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 4 versions in [TIME]
-     + cpython-3.9.25-[PLATFORM]
-     + cpython-3.10.19-[PLATFORM]
-     + cpython-3.11.14-[PLATFORM]
+    Installed 2 versions in [TIME]
+     + cpython-3.9.25-[PLATFORM] (python3.9)
      + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
 }
@@ -4041,8 +4034,7 @@ fn python_install_upgrade_version_file() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.11 in [TIME]
-     + cpython-3.13.11-[PLATFORM]
+    Python 3.13 is already on the latest supported patch release
     ");
 
     // Pin to a patch version
@@ -4140,7 +4132,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
 
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+     ~ cpython-3.14.2-[PLATFORM] (python3.14)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 
@@ -4207,7 +4199,7 @@ fn python_install_compile_bytecode_upgrade() {
 
     ----- stderr -----
     Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }

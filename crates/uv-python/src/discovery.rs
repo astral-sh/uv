@@ -1727,12 +1727,31 @@ impl PythonVariant {
     }
 
     /// Return the suffix for display purposes, e.g., `+freethreaded`.
+    ///
+    /// This is used when displaying found/resolved interpreters. It returns an empty
+    /// string for `Gil` since GIL-enabled Python is the default and shouldn't be
+    /// explicitly shown.
     pub fn display_suffix(self) -> &'static str {
         match self {
             Self::Default | Self::Gil => "",
             Self::Debug | Self::GilDebug => "+debug",
             Self::Freethreaded => "+freethreaded",
             Self::FreethreadedDebug => "+freethreaded+debug",
+        }
+    }
+
+    /// Return the suffix for displaying user requests, e.g., `+freethreaded` or `+gil`.
+    ///
+    /// Unlike `display_suffix()`, this shows `+gil` when the user explicitly requested
+    /// the GIL variant. Used in error messages and user-facing request display.
+    pub fn request_suffix(self) -> &'static str {
+        match self {
+            Self::Default => "",
+            Self::Debug => "+debug",
+            Self::Freethreaded => "+freethreaded",
+            Self::FreethreadedDebug => "+freethreaded+debug",
+            Self::Gil => "+gil",
+            Self::GilDebug => "+gil+debug",
         }
     }
 
@@ -3149,15 +3168,15 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
-            Self::Major(major, variant) => write!(f, "{major}{}", variant.display_suffix()),
+            Self::Major(major, variant) => write!(f, "{major}{}", variant.request_suffix()),
             Self::MajorMinor(major, minor, variant) => {
-                write!(f, "{major}.{minor}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}{}", variant.request_suffix())
             }
             Self::MajorMinorPatch(major, minor, patch, variant) => {
-                write!(f, "{major}.{minor}.{patch}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}.{patch}{}", variant.request_suffix())
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
-                write!(f, "{major}.{minor}{prerelease}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}{prerelease}{}", variant.request_suffix())
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
