@@ -2117,6 +2117,46 @@ pub async fn download_to_disk(url: &str, path: &Path) {
     file.sync_all().await.unwrap();
 }
 
+/// A guard that sets a directory to read-only and restores original permissions when dropped.
+///
+/// This is useful for tests that need to make a directory read-only and ensure
+/// the permissions are restored even if the test panics.
+#[cfg(unix)]
+pub struct ReadOnlyDirectoryGuard {
+    path: PathBuf,
+    original_mode: u32,
+}
+
+#[cfg(unix)]
+impl ReadOnlyDirectoryGuard {
+    /// Sets the directory to read-only (removes write permission) and returns a guard
+    /// that will restore the original permissions when dropped.
+    pub fn new(path: impl Into<PathBuf>) -> std::io::Result<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        let path = path.into();
+        let metadata = fs_err::metadata(&path)?;
+        let original_mode = metadata.permissions().mode();
+        // Remove write permissions (keep read and execute)
+        let readonly_mode = original_mode & !0o222;
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(readonly_mode))?;
+        Ok(Self {
+            path,
+            original_mode,
+        })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnlyDirectoryGuard {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs_err::set_permissions(
+            &self.path,
+            std::fs::Permissions::from_mode(self.original_mode),
+        );
+    }
+}
+
 /// Utility macro to return the name of the current function.
 ///
 /// https://stackoverflow.com/a/40234666/3549270

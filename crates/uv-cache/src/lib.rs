@@ -40,6 +40,8 @@ pub const ARCHIVE_VERSION: u8 = 0;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Failed to initialize cache at `{}`", _0.user_display())]
+    Init(PathBuf, #[source] io::Error),
     #[error("Could not make the path absolute")]
     Absolute(#[source] io::Error),
     #[error("Could not acquire lock")]
@@ -455,7 +457,7 @@ impl Cache {
     pub async fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
@@ -491,7 +493,7 @@ impl Cache {
     pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let Some(lock_file) = LockedFile::acquire_no_wait(
