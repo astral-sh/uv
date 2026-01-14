@@ -2548,6 +2548,9 @@ where
     #[cfg(windows)]
     windows_exception::setup();
 
+    #[cfg(unix)]
+    uv_unix::adjust_open_file_limit();
+
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
     if let Ok(current_exe) = std::env::current_exe() {
