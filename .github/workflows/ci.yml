@@ -28,6 +28,8 @@ jobs:
       test-publish: ${{ steps.changed.outputs.publish_changed == 'true' || github.ref == 'refs/heads/main' }}
       # Run trampoline checks if trampoline-related code changed
       test-windows-trampoline: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.trampoline_any_changed == 'true' || github.ref == 'refs/heads/main') }}
+      # Save Rust cache if on main or if cache-relevant files changed (Cargo files, toolchain, workflows)
+      save-rust-cache: ${{ github.ref == 'refs/heads/main' || steps.changed.outputs.cache_changed == 'true' }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -45,6 +47,7 @@ jobs:
           RELEASE_BUILD_CHANGED=false
           PUBLISH_CHANGED=false
           TRAMPOLINE_CHANGED=false
+          CACHE_CHANGED=false
 
           while IFS= read -r file; do
             # Check if the schema file changed (e.g., in a release PR)
@@ -69,6 +72,12 @@ jobs:
             if [[ "${file}" =~ ^crates/uv-trampoline/ ]] || [[ "${file}" =~ ^crates/uv-trampoline-builder/ ]]; then
               echo "Detected trampoline change: ${file}"
               TRAMPOLINE_CHANGED=true
+            fi
+
+            # Check if cache-relevant files changed (Cargo files, toolchain, workflows)
+            if [[ "${file}" == "Cargo.lock" || "${file}" == "Cargo.toml" || "${file}" == "rust-toolchain.toml" || "${file}" == ".cargo/config.toml" || "${file}" =~ ^crates/.*/Cargo\.toml$ || "${file}" =~ ^\.github/workflows/.*\.yml$ ]]; then
+              echo "Detected cache-relevant change: ${file}"
+              CACHE_CHANGED=true
             fi
 
             if [[ "${file}" =~ ^docs/ ]]; then
@@ -101,6 +110,7 @@ jobs:
           echo "release_build_changed=${RELEASE_BUILD_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "publish_changed=${PUBLISH_CHANGED}" >> "${GITHUB_OUTPUT}"
           echo "trampoline_any_changed=${TRAMPOLINE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
@@ -110,6 +120,7 @@ jobs:
     uses: ./.github/workflows/check-lint.yml
     with:
       code-changed: ${{ needs.plan.outputs.test-code }}
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
     needs: plan
@@ -141,11 +152,14 @@ jobs:
     uses: ./.github/workflows/check-generated-files.yml
     with:
       schema-changed: ${{ needs.plan.outputs.check-schema }}
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   test:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: ./.github/workflows/test.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   test-windows-trampolines:
     needs: plan
@@ -156,6 +170,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: ./.github/workflows/build-dev-binaries.yml
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   test-smoke:
     needs: build-dev-binaries
@@ -195,6 +211,8 @@ jobs:
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: ./.github/workflows/bench.yml
     secrets: inherit
+    with:
+      save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
