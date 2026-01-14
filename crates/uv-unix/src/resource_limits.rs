@@ -13,7 +13,7 @@
 //!
 //! See: <https://github.com/astral-sh/uv/issues/16999>
 
-use nix::sys::resource::{Resource, getrlimit, setrlimit};
+use nix::sys::resource::{Resource, getrlimit, rlim_t, setrlimit};
 use tracing::debug;
 
 /// Maximum file descriptor limit to request.
@@ -28,7 +28,9 @@ use tracing::debug;
 ///
 /// See: <https://bugs.openjdk.org/browse/JDK-8324577>
 /// See: <https://github.com/oracle/graal/issues/11136>
-const MAX_NOFILE_LIMIT: u64 = 0x0010_0000;
+///
+/// Note: `rlim_t` is platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD).
+const MAX_NOFILE_LIMIT: rlim_t = 0x0010_0000;
 
 /// Attempt to raise the open file descriptor limit to the maximum allowed.
 ///
@@ -37,6 +39,8 @@ const MAX_NOFILE_LIMIT: u64 = 0x0010_0000;
 /// the current workload.
 ///
 /// Returns the new soft limit on success, or the current soft limit if adjustment failed.
+/// The return type is `u64` for API consistency across platforms, though `rlim_t` is
+/// platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD).
 pub fn adjust_open_file_limit() -> u64 {
     let (soft, hard) = match getrlimit(Resource::RLIMIT_NOFILE) {
         Ok(limits) => limits,
@@ -48,15 +52,27 @@ pub fn adjust_open_file_limit() -> u64 {
 
     debug!("Current open file limits: soft={soft}, hard={hard}");
 
-    // Cap the target limit to avoid issues with extremely high values
-    let target = hard.min(MAX_NOFILE_LIMIT);
+    // Convert rlim_t to u64. On FreeBSD, rlim_t is i64, so we need try_from.
+    // On Linux/macOS, rlim_t is u64, so the conversion is infallible.
+    let Some(soft) = rlim_t_to_u64(soft) else {
+        debug!("Soft limit is negative: {soft}");
+        return 0;
+    };
+
+    // Cap the target limit to avoid issues with extremely high values.
+    // If hard is negative or exceeds MAX_NOFILE_LIMIT, use MAX_NOFILE_LIMIT.
+    #[allow(clippy::unnecessary_cast)]
+    let target = rlim_t_to_u64(hard.min(MAX_NOFILE_LIMIT)).unwrap_or(MAX_NOFILE_LIMIT as u64);
 
     if soft >= target {
         return soft;
     }
 
-    // Try to raise the soft limit to the target
-    match setrlimit(Resource::RLIMIT_NOFILE, target, hard) {
+    // Try to raise the soft limit to the target.
+    // Safe because target <= MAX_NOFILE_LIMIT which fits in both i64 and u64.
+    let target_rlim = target as rlim_t;
+
+    match setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard) {
         Ok(()) => {
             debug!("Raised open file limit from {soft} to {target}");
             target
@@ -66,4 +82,13 @@ pub fn adjust_open_file_limit() -> u64 {
             soft
         }
     }
+}
+
+/// Convert `rlim_t` to `u64`, returning `None` if negative.
+///
+/// On Linux/macOS, `rlim_t` is `u64` so this always succeeds.
+/// On FreeBSD, `rlim_t` is `i64` so negative values return `None`.
+#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
+fn rlim_t_to_u64(value: rlim_t) -> Option<u64> {
+    u64::try_from(value).ok()
 }
