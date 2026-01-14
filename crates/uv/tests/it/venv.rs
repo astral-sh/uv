@@ -1379,7 +1379,8 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
+    error: Failed to initialize cache at `[CACHE_DIR]/ `
+      Caused by: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
