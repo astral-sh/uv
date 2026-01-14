@@ -119,6 +119,7 @@ def filter_metadata(
     arch: str | None,
     os: str | None,
     version: re.Pattern | None,
+    exclude: re.Pattern | None,
 ) -> list[tuple[str, dict]]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
@@ -128,6 +129,7 @@ def filter_metadata(
         and (not arch or check_arch(entry[1]["arch"], arch))
         and (not os or entry[1]["os"] == os)
         and (not version or match_version(entry[1], version))
+        and (not exclude or not exclude.search(entry[1]["url"]))
     ]
     # Use a set to ensure unique URLs
     unique_urls = set()
@@ -269,6 +271,10 @@ def parse_arguments():
         "--version", help="Filter version by regex (e.g., '3.13.\\d+$')."
     )
     parser.add_argument(
+        "--exclude",
+        help="Exclude files by regex found in URL (e.g. `freethreaded|debug`).",
+    )
+    parser.add_argument(
         "--max-concurrent",
         type=int,
         default=20,
@@ -312,8 +318,14 @@ def main():
             metadata: list[tuple[str, dict]] = list(json.load(f).items())
 
     version = re.compile(args.version) if args.version else None
+    exclude = re.compile(args.exclude) if args.exclude else None
     filtered_metadata = filter_metadata(
-        metadata, args.name, args.arch, args.os, version
+        metadata,
+        name=args.name,
+        arch=args.arch,
+        os=args.os,
+        version=version,
+        exclude=exclude,
     )
     urls = {(entry[1]["url"], entry[1]["sha256"]) for entry in filtered_metadata}
 
