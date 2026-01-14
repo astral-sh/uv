@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-static = { workspace = true }
 
+backon = { workspace = true }
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
@@ -36,9 +37,8 @@ tracing = { workspace = true }
 rustix = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-backon = { workspace = true }
 junction = { workspace = true }
-windows = { workspace = true }
+windows = { workspace = true, features = ["Win32_Foundation"] }
 
 [features]
 default = []

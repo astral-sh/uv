@@ -206,7 +206,7 @@ async fn do_uninstall(
         tasks.push(async {
             (
                 installation.key(),
-                fs_err::tokio::remove_dir_all(installation.path()).await,
+                uv_fs::remove_dir_all_with_retry(installation.path()).await,
             )
         });
     }

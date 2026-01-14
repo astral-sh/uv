@@ -329,6 +329,45 @@ pub async fn rename_with_retry(
     }
 }
 
+/// Remove a directory and its contents, retrying if it fails due to a transient error.
+#[cfg(feature = "tokio")]
+pub async fn remove_dir_all_with_retry(path: impl AsRef<Path>) -> Result<(), std::io::Error> {
+    use backon::Retryable;
+
+    let path = path.as_ref();
+
+    let remove = || async { fs_err::tokio::remove_dir_all(path).await };
+
+    remove
+        .retry(backoff_open_files())
+        .sleep(tokio::time::sleep)
+        .when(is_too_many_open_files_error)
+        .notify(|err, _dur| {
+            warn!(
+                "Retrying removal of {} due to transient error: {}",
+                path.display(),
+                err
+            );
+        })
+        .await
+}
+
+/// Backoff configuration for "too many open files" errors.
+///
+/// Uses a similar backoff to file moves since we need to wait for other
+/// concurrent operations to complete and release file descriptors.
+fn backoff_open_files() -> backon::ExponentialBackoff {
+    use backon::BackoffBuilder;
+    // This amounts to ~5 total seconds of trying the operation.
+    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
+    // about 10*(2^8) milliseconds ~= 2.5 seconds. All other attempts combined should equal
+    // the length of the last attempt (because it's a sum of powers of 2), so ~5 seconds overall.
+    backon::ExponentialBuilder::default()
+        .with_min_delay(std::time::Duration::from_millis(10))
+        .with_max_times(9)
+        .build()
+}
+
 /// Rename or copy a file, retrying (on Windows) if it fails due to transient operating system
 /// errors, in a synchronous context.
 #[cfg_attr(not(windows), allow(unused_variables))]
@@ -651,6 +690,32 @@ pub fn is_virtualenv_executable(executable: impl AsRef<Path>) -> bool {
 /// unnecessary.
 pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
+}
+
+/// Returns `true` if the error is due to too many open files.
+///
+/// This can occur when performing many concurrent file operations, such as
+/// removing multiple directories simultaneously.
+pub fn is_too_many_open_files_error(err: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        use rustix::io::Errno;
+        // MFILE: Too many open files (per-process limit)
+        // NFILE: Too many open files in system (system-wide limit)
+        matches!(Errno::from_io_error(err), Some(Errno::MFILE | Errno::NFILE))
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::ERROR_TOO_MANY_OPEN_FILES;
+        // SAFETY: ERROR_TOO_MANY_OPEN_FILES is 4, which fits in i32
+        #[allow(clippy::cast_possible_wrap)]
+        let code = ERROR_TOO_MANY_OPEN_FILES.0 as i32;
+        err.raw_os_error() == Some(code)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
 }
 
 /// Whether the error is due to a lock being held.
