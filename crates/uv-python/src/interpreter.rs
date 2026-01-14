@@ -948,7 +948,10 @@ impl InterpreterInfo {
 
         // Sanitize the path by running under isolated mode (`-I`) to ignore any site packages
         // modifications.
-        let script_path = tempdir.path().join("python").join("get_interpreter_info.py");
+        let script_path = tempdir
+            .path()
+            .join("python")
+            .join("get_interpreter_info.py");
         let output = Command::new(interpreter)
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
