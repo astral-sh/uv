@@ -32,8 +32,10 @@ jobs:
       save-rust-cache: ${{ github.ref == 'refs/heads/main' || steps.changed.outputs.cache_changed == 'true' }}
       # Run benchmarks only if Rust code changed
       run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/main') }}
+      # Smoke and ecosystem tests - run unless test:skip label
+      test-smoke: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+      test-ecosystem: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
       # Extended test suites - only run on main or with opt-in labels
-      test-smoke: ${{ contains(github.event.pull_request.labels.*.name, 'test:smoke') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
       test-integration: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
       test-system: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
     steps:
@@ -218,7 +220,10 @@ jobs:
       sha: ${{ github.sha }}
 
   test-ecosystem:
-    needs: build-dev-binaries
+    needs:
+      - plan
+      - build-dev-binaries
+    if: ${{ needs.plan.outputs.test-ecosystem == 'true' }}
     uses: ./.github/workflows/test-ecosystem.yml
     with:
       sha: ${{ github.sha }}
