@@ -13,6 +13,8 @@ import platform
 import struct
 import sysconfig
 
+sys.path.append(os.path.dirname(__file__))
+
 
 def format_full_version(info):
     version = "{0.major}.{0.minor}.{0.micro}".format(info)
@@ -458,10 +460,10 @@ def get_operating_system_and_architecture():
 
     if operating_system == "linux":
         # noinspection PyProtectedMember
-        from .packaging._manylinux import _get_glibc_version
+        from packaging._manylinux import _get_glibc_version
 
         # noinspection PyProtectedMember
-        from .packaging._musllinux import _get_musl_version
+        from packaging._musllinux import _get_musl_version
 
         # https://github.com/pypa/packaging/blob/4dc334c86d43f83371b194ca91618ed99e0e49ca/src/packaging/tags.py#L539-L543
         # https://github.com/astral-sh/uv/issues/9842
@@ -596,7 +598,7 @@ def main() -> None:
 
     if os_and_arch["os"]["name"] == "manylinux":
         # noinspection PyProtectedMember
-        from .packaging._manylinux import _get_glibc_version, _is_compatible
+        from packaging._manylinux import _get_glibc_version, _is_compatible
 
         manylinux_compatible = _is_compatible(
             arch=os_and_arch["arch"], version=_get_glibc_version()

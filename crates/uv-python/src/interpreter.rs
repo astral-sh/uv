@@ -18,9 +18,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{
-    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
-};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -948,18 +946,13 @@ impl InterpreterInfo {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
-        // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
-        // modifications, and then (2) adding the path containing our query script to the front of
-        // `sys.path` so that we can import it.
-        let script = format!(
-            r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
-            tempdir.path().escape_for_python()
-        );
+        // Sanitize the path by running under isolated mode (`-I`) to ignore any site packages
+        // modifications.
+        let script_path = tempdir.path().join("python").join("get_interpreter_info.py");
         let output = Command::new(interpreter)
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
-            .arg("-c")
-            .arg(script)
+            .arg(&script_path)
             .output()
             .map_err(|err| {
                 match err.kind() {
