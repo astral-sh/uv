@@ -338,6 +338,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         &environment,
     );
 
+    // Adjust open file limits on Unix if the preview feature is enabled.
+    #[cfg(unix)]
+    if globals.preview.is_enabled(PreviewFeatures::ADJUST_ULIMIT) {
+        uv_unix::adjust_open_file_limit();
+    }
+
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
@@ -2547,9 +2553,6 @@ where
 {
     #[cfg(windows)]
     windows_exception::setup();
-
-    #[cfg(unix)]
-    uv_unix::adjust_open_file_limit();
 
     // Set the `UV` variable to the current executable so it is implicitly propagated to all child
     // processes, e.g., in `uv run`.
