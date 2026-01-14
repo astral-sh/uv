@@ -29,7 +29,7 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
 use crate::metadata::{ArchiveMetadata, Metadata};
@@ -388,7 +388,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(extension) = dist.extension()
             && !matches!(extension, SourceDistExtension::TarGz)
         {
-            warn_user!(
+            warn_user_once!(
                 "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '{extension}'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625",
             );
         }
