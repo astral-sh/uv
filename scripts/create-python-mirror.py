@@ -244,6 +244,7 @@ def write_metadata(
     Path(metadata_output).parent.mkdir(parents=True, exist_ok=True)
     with open(metadata_output, "w") as f:
         json.dump(dict(filtered_metadata), f, indent=2)
+        print(f"Saved metadata to {metadata_output}")
 
 
 def parse_arguments():
