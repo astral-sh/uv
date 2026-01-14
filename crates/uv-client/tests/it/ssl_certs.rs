@@ -16,19 +16,13 @@ use crate::http_util::{
 };
 
 /// Test certificate paths and data returned by setup
-#[allow(dead_code)]
 struct TestCertificates {
     _temp_dir: tempfile::TempDir,
     standalone_cert: SelfSigned,
     standalone_public_path: PathBuf,
-    standalone_private_path: PathBuf,
     ca_cert: SelfSigned,
     ca_public_path: PathBuf,
-    ca_private_path: PathBuf,
     server_cert: SelfSigned,
-    server_public_path: PathBuf,
-    server_private_path: PathBuf,
-    client_cert: SelfSigned,
     client_combined_path: PathBuf,
     does_not_exist_path: PathBuf,
 }
@@ -43,23 +37,15 @@ fn setup_test_certificates() -> Result<TestCertificates> {
     // Generate self-signed standalone cert
     let standalone_cert = generate_self_signed_certs()?;
     let standalone_public_path = temp_dir.path().join("standalone_public.pem");
-    let standalone_private_path = temp_dir.path().join("standalone_private.pem");
 
     // Generate self-signed CA, server, and client certs
     let (ca_cert, server_cert, client_cert) = generate_self_signed_certs_with_ca()?;
     let ca_public_path = temp_dir.path().join("ca_public.pem");
-    let ca_private_path = temp_dir.path().join("ca_private.pem");
-    let server_public_path = temp_dir.path().join("server_public.pem");
-    let server_private_path = temp_dir.path().join("server_private.pem");
     let client_combined_path = temp_dir.path().join("client_combined.pem");
 
     // Persist the certs
     fs_err::write(&standalone_public_path, standalone_cert.public.pem())?;
-    fs_err::write(&standalone_private_path, standalone_cert.private.serialize_pem())?;
     fs_err::write(&ca_public_path, ca_cert.public.pem())?;
-    fs_err::write(&ca_private_path, ca_cert.private.serialize_pem())?;
-    fs_err::write(&server_public_path, server_cert.public.pem())?;
-    fs_err::write(&server_private_path, server_cert.private.serialize_pem())?;
     fs_err::write(
         &client_combined_path,
         format!("{}\n{}", client_cert.public.pem(), client_cert.private.serialize_pem()),
@@ -69,14 +55,9 @@ fn setup_test_certificates() -> Result<TestCertificates> {
         _temp_dir: temp_dir,
         standalone_cert,
         standalone_public_path,
-        standalone_private_path,
         ca_cert,
         ca_public_path,
-        ca_private_path,
         server_cert,
-        server_public_path,
-        server_private_path,
-        client_cert,
         client_combined_path,
         does_not_exist_path,
     })
