@@ -74,7 +74,7 @@ jobs:
         run: pip install -r docs/requirements.txt
 
       - name: "Build docs"
-        run: mkdocs build --strict -f mkdocs.public.yml
+        run: mkdocs build --strict -f mkdocs.yml
 
       - name: "Clone docs repo"
         run: |

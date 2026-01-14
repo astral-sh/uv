@@ -28,4 +28,4 @@ jobs:
           cargo dev generate-env-vars-reference
 
       - name: "Build docs"
-        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.public.yml
+        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.yml

@@ -183,7 +183,7 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
+   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at

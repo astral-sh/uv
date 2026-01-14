@@ -1,5 +1,0 @@
-# NOTE: Usually, you should edit the template instead.
-INHERIT: mkdocs.template.yml
-
-watch:
-  - mkdocs.template.yml
