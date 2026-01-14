@@ -1436,6 +1436,52 @@ pub(crate) fn find_python_installation(
     }))
 }
 
+/// Attempt to download a specified version if it's something we have a download
+/// for.
+async fn attempt_download(
+    request: &PythonRequest,
+    download_list: &ManagedPythonDownloadList,
+    client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
+    cache: &Cache,
+    reporter: Option<&dyn crate::downloads::Reporter>,
+    python_install_mirror: Option<&str>,
+    pypy_install_mirror: Option<&str>,
+    preview: Preview,
+) -> Result<Option<PythonInstallation>, crate::Error> {
+    let Some(download_request) = PythonDownloadRequest::from_request(request) else {
+        return Ok(None);
+    };
+
+    let download = download_request
+        .clone()
+        .fill()
+        .map(|request| download_list.find(&request));
+
+    let Some(download) = (match download {
+        Ok(Ok(download)) => Some(download),
+        Ok(Err(crate::downloads::Error::NoDownloadFound(_))) => None,
+        Ok(Err(error)) => return Err(error.into()),
+        Err(error) => return Err(error.into()),
+    }) else {
+        return Ok(None);
+    };
+
+    Ok(Some(
+        PythonInstallation::fetch(
+            download,
+            client,
+            retry_policy,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+            preview,
+        )
+        .await?,
+    ))
+}
+
 /// Find the best-matching Python installation.
 ///
 /// If no Python version is provided, we will use the first available installation.
@@ -1479,32 +1525,20 @@ pub(crate) async fn find_best_python_installation(
 
     // Attempt to download the version if downloads are enabled
     if downloads_enabled
-        && let Some(download_request) = PythonDownloadRequest::from_request(request)
+        && let Some(installation) = attempt_download(
+            request,
+            download_list,
+            client,
+            retry_policy,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+            preview,
+        )
+        .await?
     {
-        let download = download_request
-            .clone()
-            .fill()
-            .map(|request| download_list.find(&request));
-        if let Some(download) = match download {
-            Ok(Ok(download)) => Some(download),
-            Ok(Err(crate::downloads::Error::NoDownloadFound(_))) => None,
-            Ok(Err(error)) => return Err(error.into()),
-            Err(error) => return Err(error.into()),
-        } {
-            let installation = PythonInstallation::fetch(
-                download,
-                client,
-                retry_policy,
-                cache,
-                reporter,
-                python_install_mirror,
-                pypy_install_mirror,
-                preview,
-            )
-            .await?;
-
-            return Ok(Ok(installation));
-        }
+        return Ok(Ok(installation));
     }
 
     // If both approaches fail, and a specific patch version was requested try
