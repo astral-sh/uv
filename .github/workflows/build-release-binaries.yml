@@ -31,6 +31,7 @@ permissions: {}
 
 jobs:
   sdist:
+    name: sdist
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     steps:
@@ -84,6 +85,7 @@ jobs:
           path: crates/uv-build/dist
 
   macos-x86_64:
+    name: x86_64-apple-darwin
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-macos-14
     steps:
@@ -143,6 +145,7 @@ jobs:
           path: crates/uv-build/dist
 
   macos-aarch64:
+    name: aarch64-apple-darwin
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-macos-14
     steps:
@@ -213,6 +216,7 @@ jobs:
           path: crates/uv-build/dist
 
   windows:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: github-windows-2022-x86_64-8
     strategy:
@@ -296,6 +300,7 @@ jobs:
           path: crates/uv-build/dist
 
   linux:
+    name: ${{ matrix.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-ubuntu-latest-4
     strategy:
@@ -403,6 +408,7 @@ jobs:
           path: crates/uv-build/dist
 
   linux-arm:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-ubuntu-22.04-8
     timeout-minutes: 30
@@ -519,6 +525,7 @@ jobs:
 
   # Like `linux-arm`.
   linux-s390x:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
@@ -629,6 +636,7 @@ jobs:
 
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
@@ -738,6 +746,7 @@ jobs:
 
   # Like `linux-arm`.
   linux-riscv64:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
@@ -846,6 +855,7 @@ jobs:
           path: crates/uv-build/dist
 
   musllinux:
+    name: ${{ matrix.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     strategy:
@@ -942,6 +952,7 @@ jobs:
           path: crates/uv-build/dist
 
   musllinux-cross:
+    name: ${{ matrix.platform.target }}
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-ubuntu-22.04-8
     strategy:
