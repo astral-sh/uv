@@ -1509,63 +1509,9 @@ pub(crate) async fn find_best_python_installation(
 ) -> Result<PythonInstallation, crate::Error> {
     debug!("Starting Python discovery for {}", request);
 
-    // First, check for an exact match (or the first available version if no Python version was provided)
-    debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache, preview);
-    match result {
-        Ok(Ok(installation)) => {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(installation);
-        }
-        // Continue if we can't find a matching Python and ignore non-critical discovery errors
-        Ok(Err(_)) => {}
-        Err(ref err) if !err.is_critical() => {}
-        Err(error) => return Err(error.into()),
-    }
-
     let mut previous_fetch_failed = false;
 
-    // Attempt to download the version if downloads are enabled
-    if downloads_enabled
-        && let Some(installation) = match attempt_download(
-            request,
-            download_list,
-            client,
-            retry_policy,
-            cache,
-            reporter,
-            python_install_mirror,
-            pypy_install_mirror,
-            preview,
-        )
-        .await
-        {
-            Ok(maybe_installation) => maybe_installation,
-            // Handle download failures here with a warning so to give the rest
-            // of the code a chance to succeed. Also to avoid a breaking change.
-            // Errors encountered here are either network errors or quirky
-            // configuration problems.
-            Err(error) => {
-                // If the request was for the default or any version, propagate
-                // the error as nothing else we are about to do will help the
-                // situation.
-                if matches!(request, PythonRequest::Default | PythonRequest::Any) {
-                    return Err(error);
-                }
-                warn_user!(
-                    "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
-                );
-                previous_fetch_failed = true;
-                None
-            }
-        }
-    {
-        return Ok(installation);
-    }
-
-    // If both approaches fail, and a specific patch version was requested try
-    // again allowing a different patch version
-    if let Some(request) = match request {
+    let request_without_patch = match request {
         PythonRequest::Version(version) => {
             if version.has_patch() {
                 Some(PythonRequest::Version(version.clone().without_patch()))
@@ -1577,26 +1523,30 @@ pub(crate) async fn find_best_python_installation(
             PythonRequest::ImplementationVersion(*implementation, version.clone().without_patch()),
         ),
         _ => None,
-    } {
-        debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache, preview);
-        match result {
+    };
+
+    for request in iter::once(request)
+        .chain(request_without_patch.iter())
+        .chain(iter::once(&PythonRequest::Default))
+    {
+        debug!("Looking for {request}");
+        let result = find_python_installation(request, environments, preference, cache, preview);
+        let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
                 return Ok(installation);
             }
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
-            Ok(Err(_)) => {}
-            Err(ref err) if !err.is_critical() => {}
+            Ok(Err(error)) => error.into(),
+            Err(error) if !error.is_critical() => error.into(),
             Err(error) => return Err(error.into()),
-        }
+        };
 
-        // Attempt to download the relaxed version if downloads are enabled and
-        // the previous attempt didn't fail.
+        // Attempt to download the version if downloads are enabled
         if downloads_enabled
             && !previous_fetch_failed
             && let Some(installation) = match attempt_download(
-                &request,
+                request,
                 download_list,
                 client,
                 retry_policy,
@@ -1609,7 +1559,17 @@ pub(crate) async fn find_best_python_installation(
             .await
             {
                 Ok(maybe_installation) => maybe_installation,
+                // Handle download failures here with a warning so to give the rest
+                // of the code a chance to succeed. Also to avoid a breaking change.
+                // Errors encountered here are either network errors or quirky
+                // configuration problems.
                 Err(error) => {
+                    // If the request was for the default or any version, propagate
+                    // the error as nothing else we are about to do will help the
+                    // situation.
+                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                        return Err(error);
+                    }
                     warn_user!(
                         "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
                     );
@@ -1620,55 +1580,21 @@ pub(crate) async fn find_best_python_installation(
         {
             return Ok(installation);
         }
+
+        if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+            return Err(match error {
+                crate::Error::MissingPython(err, _) => PythonNotFound {
+                    request: request.clone(),
+                    python_preference: err.python_preference,
+                    environment_preference: err.environment_preference,
+                }
+                .into(),
+                other => other,
+            });
+        }
     }
 
-    // If a Python version was requested but cannot be fulfilled, just take any version
-    debug!("Looking for a default Python installation");
-    let request = PythonRequest::Default;
-    let result = find_python_installation(&request, environments, preference, cache, preview);
-
-    let error = match result {
-        Ok(Ok(installation)) => {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(installation);
-        }
-        // Continue if we can't find a matching Python and ignore non-critical discovery errors
-        Ok(Err(error)) => error.into(),
-        Err(error) if !error.is_critical() => error.into(),
-        Err(error) => return Err(error.into()),
-    };
-
-    // Attempt to download the default version if downloads are enabled and the
-    // previous attempt didn't fail.
-    if downloads_enabled
-        && !previous_fetch_failed
-        && let Some(installation) = attempt_download(
-            &request,
-            download_list,
-            client,
-            retry_policy,
-            cache,
-            reporter,
-            python_install_mirror,
-            pypy_install_mirror,
-            preview,
-        )
-        .await?
-    {
-        return Ok(installation);
-    }
-
-    // Re-use the result from the find attempt
-    return Err(match error {
-        // Use a more general error in this case since we looked for multiple versions
-        crate::Error::MissingPython(err, _) => PythonNotFound {
-            request,
-            python_preference: err.python_preference,
-            environment_preference: err.environment_preference,
-        }
-        .into(),
-        other => other,
-    });
+    unreachable!("The loop should have terminated when it reached PythonRequest::Default");
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.
