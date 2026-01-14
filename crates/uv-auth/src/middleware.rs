@@ -14,7 +14,7 @@ use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
-use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
+use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
@@ -138,6 +138,15 @@ enum S3CredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
+#[derive(Clone)]
+enum GcsCredentialState {
+    /// The GCS credential state has not yet been initialized.
+    Uninitialized,
+    /// The GCS credential state has been initialized, with either a signer or `None` if
+    /// no GCS endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -161,6 +170,8 @@ pub struct AuthMiddleware {
     pyx_token_state: Mutex<TokenState>,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
+    /// Cached GCS credentials to avoid running the credential helper multiple times.
+    gcs_credential_state: Mutex<GcsCredentialState>,
     preview: Preview,
 }
 
@@ -184,6 +195,7 @@ impl AuthMiddleware {
             pyx_token_store: None,
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
+            gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -707,6 +719,28 @@ impl AuthMiddleware {
 
             if let Some(credentials) = credentials {
                 debug!("Found S3 credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Some(credentials);
+            }
+        }
+
+        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+            let mut gcs_state = self.gcs_credential_state.lock().await;
+
+            // If the GCS credential state is uninitialized, initialize it.
+            let credentials = match &*gcs_state {
+                GcsCredentialState::Uninitialized => {
+                    trace!("Initializing GCS credentials for {url}");
+                    let signer = GcsEndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
+                }
+                GcsCredentialState::Initialized(credentials) => credentials.clone(),
+            };
+
+            if let Some(credentials) = credentials {
+                debug!("Found GCS credentials for {url}");
                 self.cache().fetches.done(key, Some(credentials.clone()));
                 return Some(credentials);
             }

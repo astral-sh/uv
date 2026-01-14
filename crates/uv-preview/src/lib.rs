@@ -30,6 +30,7 @@ bitflags::bitflags! {
         const DIRECT_PUBLISH = 1 << 18;
         const TARGET_WORKSPACE_DISCOVERY = 1 << 19;
         const METADATA_JSON = 1 << 20;
+        const GCS_ENDPOINT = 1 << 21;
     }
 }
 
@@ -60,6 +61,7 @@ impl PreviewFeatures {
             Self::DIRECT_PUBLISH => "direct-publish",
             Self::TARGET_WORKSPACE_DISCOVERY => "target-workspace-discovery",
             Self::METADATA_JSON => "metadata-json",
+            Self::GCS_ENDPOINT => "gcs-endpoint",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -108,6 +110,7 @@ impl FromStr for PreviewFeatures {
                 "format" => Self::FORMAT,
                 "native-auth" => Self::NATIVE_AUTH,
                 "s3-endpoint" => Self::S3_ENDPOINT,
+                "gcs-endpoint" => Self::GCS_ENDPOINT,
                 "cache-size" => Self::CACHE_SIZE,
                 "init-project-flag" => Self::INIT_PROJECT_FLAG,
                 "workspace-metadata" => Self::WORKSPACE_METADATA,
@@ -293,6 +296,7 @@ mod tests {
         );
         assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
         assert_eq!(PreviewFeatures::S3_ENDPOINT.flag_as_str(), "s3-endpoint");
+        assert_eq!(PreviewFeatures::GCS_ENDPOINT.flag_as_str(), "gcs-endpoint");
         assert_eq!(PreviewFeatures::SBOM_EXPORT.flag_as_str(), "sbom-export");
         assert_eq!(
             PreviewFeatures::DIRECT_PUBLISH.flag_as_str(),

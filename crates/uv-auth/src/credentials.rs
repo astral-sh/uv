@@ -9,7 +9,8 @@ use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
 use http::Uri;
 use netrc::Netrc;
-use reqsign::aws::DefaultSigner;
+use reqsign::aws::DefaultSigner as AwsDefaultSigner;
+use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use reqwest::Request;
 use reqwest::header::HeaderValue;
 use serde::{Deserialize, Serialize};
@@ -388,14 +389,18 @@ pub(crate) enum Authentication {
     Credentials(Credentials),
 
     /// AWS Signature Version 4 signing.
-    Signer(DefaultSigner),
+    AwsSigner(AwsDefaultSigner),
+
+    /// Google Cloud signing.
+    GcsSigner(GcsDefaultSigner),
 }
 
 impl PartialEq for Authentication {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Credentials(a), Self::Credentials(b)) => a == b,
-            (Self::Signer(..), Self::Signer(..)) => true,
+            (Self::AwsSigner(..), Self::AwsSigner(..)) => true,
+            (Self::GcsSigner(..), Self::GcsSigner(..)) => true,
             _ => false,
         }
     }
@@ -409,9 +414,15 @@ impl From<Credentials> for Authentication {
     }
 }
 
-impl From<DefaultSigner> for Authentication {
-    fn from(signer: DefaultSigner) -> Self {
-        Self::Signer(signer)
+impl From<AwsDefaultSigner> for Authentication {
+    fn from(signer: AwsDefaultSigner) -> Self {
+        Self::AwsSigner(signer)
+    }
+}
+
+impl From<GcsDefaultSigner> for Authentication {
+    fn from(signer: GcsDefaultSigner) -> Self {
+        Self::GcsSigner(signer)
     }
 }
 
@@ -420,7 +431,7 @@ impl Authentication {
     pub(crate) fn password(&self) -> Option<&str> {
         match self {
             Self::Credentials(credentials) => credentials.password(),
-            Self::Signer(..) => None,
+            Self::AwsSigner(..) | Self::GcsSigner(..) => None,
         }
     }
 
@@ -428,7 +439,7 @@ impl Authentication {
     pub(crate) fn username(&self) -> Option<&str> {
         match self {
             Self::Credentials(credentials) => credentials.username(),
-            Self::Signer(..) => None,
+            Self::AwsSigner(..) | Self::GcsSigner(..) => None,
         }
     }
 
@@ -436,7 +447,7 @@ impl Authentication {
     pub(crate) fn as_username(&self) -> Cow<'_, Username> {
         match self {
             Self::Credentials(credentials) => credentials.as_username(),
-            Self::Signer(..) => Cow::Owned(Username::none()),
+            Self::AwsSigner(..) | Self::GcsSigner(..) => Cow::Owned(Username::none()),
         }
     }
 
@@ -444,7 +455,7 @@ impl Authentication {
     pub(crate) fn to_username(&self) -> Username {
         match self {
             Self::Credentials(credentials) => credentials.to_username(),
-            Self::Signer(..) => Username::none(),
+            Self::AwsSigner(..) | Self::GcsSigner(..) => Username::none(),
         }
     }
 
@@ -452,7 +463,7 @@ impl Authentication {
     pub(crate) fn is_authenticated(&self) -> bool {
         match self {
             Self::Credentials(credentials) => credentials.is_authenticated(),
-            Self::Signer(..) => true,
+            Self::AwsSigner(..) | Self::GcsSigner(..) => true,
         }
     }
 
@@ -460,7 +471,7 @@ impl Authentication {
     pub(crate) fn is_empty(&self) -> bool {
         match self {
             Self::Credentials(credentials) => credentials.is_empty(),
-            Self::Signer(..) => false,
+            Self::AwsSigner(..) | Self::GcsSigner(..) => false,
         }
     }
 
@@ -471,7 +482,7 @@ impl Authentication {
     pub(crate) async fn authenticate(&self, mut request: Request) -> Request {
         match self {
             Self::Credentials(credentials) => credentials.authenticate(request),
-            Self::Signer(signer) => {
+            Self::AwsSigner(signer) => {
                 // Build an `http::Request` from the `reqwest::Request`.
                 // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
                 let uri = Uri::from_str(request.url().as_str()).unwrap();
@@ -488,6 +499,34 @@ impl Authentication {
                     .sign(&mut parts, None)
                     .await
                     .expect("AWS signing should succeed");
+
+                // Copy over the signed headers.
+                request.headers_mut().extend(parts.headers);
+
+                // Copy over the signed path and query, if any.
+                if let Some(path_and_query) = parts.uri.path_and_query() {
+                    request.url_mut().set_path(path_and_query.path());
+                    request.url_mut().set_query(path_and_query.query());
+                }
+                request
+            }
+            Self::GcsSigner(signer) => {
+                // Build an `http::Request` from the `reqwest::Request`.
+                // SAFETY: If we have a valid `reqwest::Request`, we expect (e.g.) the URL to be valid.
+                let uri = Uri::from_str(request.url().as_str()).unwrap();
+                let mut http_req = http::Request::builder()
+                    .method(request.method().clone())
+                    .uri(uri)
+                    .body(())
+                    .unwrap();
+                *http_req.headers_mut() = request.headers().clone();
+
+                // Sign the parts.
+                let (mut parts, ()) = http_req.into_parts();
+                signer
+                    .sign(&mut parts, None)
+                    .await
+                    .expect("GCS signing should succeed");
 
                 // Copy over the signed headers.
                 request.headers_mut().extend(parts.headers);

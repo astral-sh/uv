@@ -1204,6 +1204,12 @@ impl EnvVars {
     #[attr_added_in("0.8.21")]
     pub const UV_S3_ENDPOINT_URL: &'static str = "UV_S3_ENDPOINT_URL";
 
+    /// The URL to treat as a GCS-compatible storage endpoint. Requests to this endpoint
+    /// will be signed using Google Cloud authentication based on the `GOOGLE_APPLICATION_CREDENTIALS`
+    /// environment variable or Application Default Credentials.
+    #[attr_added_in("next release")]
+    pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
+
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]
     pub const PYX_API_URL: &'static str = "PYX_API_URL";
