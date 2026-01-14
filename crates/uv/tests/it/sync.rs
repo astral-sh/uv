@@ -13278,7 +13278,15 @@ fn sync_python_missing_download_hint() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.100"), @r"
+    let mut filters = context.filters();
+    if cfg!(windows) {
+        filters.push((
+            "managed installations, search path, or registry",
+            "managed installations or search path",
+        ));
+    }
+
+    uv_snapshot!(filters, context.sync().arg("-p").arg("3.100"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
