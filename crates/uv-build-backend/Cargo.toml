@@ -22,6 +22,7 @@ uv-options-metadata = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
@@ -31,10 +32,12 @@ csv = { workspace = true }
 flate2 = { workspace = true, default-features = false }
 fs-err = { workspace = true }
 globset = { workspace = true }
+indexmap = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
 spdx = { workspace = true }
 tar = { workspace = true }

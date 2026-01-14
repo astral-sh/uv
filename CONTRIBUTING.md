@@ -102,6 +102,46 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+## Formatting
+
+```shell
+# Rust
+cargo fmt --all
+
+# Python
+uvx ruff format .
+
+# Markdown, YAML, and other files (requires Node.js)
+npx prettier --write .
+# or in Docker
+docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write .
+```
+
+## Linting
+
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately.
+
+```shell
+# Rust
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+# Python
+uvx ruff check .
+
+# Python type checking
+uvx ty check python/uv
+
+# Shell scripts
+shellcheck <script>
+
+# Spell checking
+uvx typos
+
+# Unused Rust dependencies
+cargo shear
+```
+
 ## Crate structure
 
 Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
@@ -205,18 +245,7 @@ Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
 Cloudflare Pages.
 
-After making changes to the documentation, format the markdown files with:
-
-```shell
-npx prettier --write "**/*.md"
-```
-
-Note that the command above requires Node.js and npm to be installed on your system. As an
-alternative, you can run this command using Docker:
-
-```console
-$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write "**/*.md"
-```
+After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
 
 ## Releases
 

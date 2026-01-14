@@ -212,6 +212,7 @@ pub struct GlobalOptions {
     #[option(
         default = "false",
         value_type = "bool",
+        uv_toml_only = true,
         example = r#"
             native-tls = true
         "#
@@ -243,6 +244,7 @@ pub struct GlobalOptions {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             cache-dir = "./.uv_cache"
         "#
@@ -1054,6 +1056,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
         "#
@@ -1070,6 +1073,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             pypy-install-mirror = "https://downloads.python.org/pypy"
         "#
@@ -1080,6 +1084,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-downloads-json-url = "/etc/uv/python-downloads.json"
         "#

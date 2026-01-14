@@ -5,6 +5,7 @@ use assert_fs::fixture::{FileTouch, FileWriteBin, FileWriteStr, PathChild, PathC
 use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
+use insta::{assert_json_snapshot, assert_snapshot};
 use std::env;
 use std::io::BufReader;
 use std::path::Path;
@@ -1219,6 +1220,228 @@ fn invalid_pyproject_toml() -> Result<()> {
             |        ^
           invalid type: integer `1`, expected a string
     ");
+
+    Ok(())
+}
+
+#[test]
+fn build_with_all_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        description = "A Python package with all metadata fields"
+        readme = "Readme.md"
+        requires-python = ">=3.12"
+        license = "MIT OR Apache-2.0"
+        license-files = ["License*"]
+        authors = [
+            {name = "Jane Doe", email = "jane@example.com"},
+            {name = "John Doe"},
+            {email = "info@example.com"},
+        ]
+        maintainers = [
+            {name = "ferris", email = "ferris@example.com"},
+        ]
+        keywords = ["example", "test", "metadata"]
+        classifiers = [
+            "Development Status :: 4 - Beta",
+            "Programming Language :: Python :: 3",
+            "Programming Language :: Python :: 3.12",
+        ]
+        dependencies = [
+            "anyio>=4,<5",
+        ]
+
+        [project.optional-dependencies]
+        dev = ["pytest>=7.0"]
+
+        [project.urls]
+        Homepage = "https://octocat.github.io/spoon-knife"
+        Repository = "https://github.com/octocat/Spoon-Knife"
+        Changelog = "https://github.com/octocat/Spoon-Knife/blob/main/CHANGELOG.md"
+
+        [project.scripts]
+        foo-cli = "foo:main"
+
+        [project.gui-scripts]
+        foo-gui = "foo:gui_main"
+
+        [project.entry-points."foo.plugins"]
+        bar = "foo:bar_plugin"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src/foo/__init__.py")
+        .write_str(indoc! {r#"
+        def main():
+            print("Hello from foo!")
+
+        def gui_main():
+            print("GUI main")
+
+        def bar_plugin():
+            pass
+    "#})?;
+    context
+        .temp_dir
+        .child("License.txt")
+        .write_str("MIT License")?;
+    context
+        .temp_dir
+        .child("Readme.md")
+        .write_str("Hello World!")?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg("--preview-features")
+        .arg("metadata-json")
+        .arg(temp_dir.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    "###);
+
+    context
+        .pip_install()
+        .arg(temp_dir.path().join("foo-1.0.0-py3-none-any.whl"))
+        .assert()
+        .success();
+
+    let metadata = fs_err::read_to_string(
+        context
+            .site_packages()
+            .join("foo-1.0.0.dist-info")
+            .join("METADATA"),
+    )?;
+    assert_snapshot!(metadata, @r"
+    Metadata-Version: 2.4
+    Name: foo
+    Version: 1.0.0
+    Summary: A Python package with all metadata fields
+    Keywords: example,test,metadata
+    Author: Jane Doe, John Doe
+    Author-email: Jane Doe <jane@example.com>, info@example.com
+    License-Expression: MIT OR Apache-2.0
+    License-File: License.txt
+    Classifier: Development Status :: 4 - Beta
+    Classifier: Programming Language :: Python :: 3
+    Classifier: Programming Language :: Python :: 3.12
+    Requires-Dist: anyio>=4,<5
+    Requires-Dist: pytest>=7.0 ; extra == 'dev'
+    Maintainer: ferris
+    Maintainer-email: ferris <ferris@example.com>
+    Requires-Python: >=3.12
+    Project-URL: Homepage, https://octocat.github.io/spoon-knife
+    Project-URL: Repository, https://github.com/octocat/Spoon-Knife
+    Project-URL: Changelog, https://github.com/octocat/Spoon-Knife/blob/main/CHANGELOG.md
+    Provides-Extra: dev
+    Description-Content-Type: text/markdown
+
+    Hello World!
+    ");
+    let metadata_json = fs_err::read_to_string(
+        context
+            .site_packages()
+            .join("foo-1.0.0.dist-info")
+            .join("METADATA.json"),
+    )?;
+    let metadata_json: serde_json::Value = serde_json::from_str(&metadata_json)?;
+    assert_json_snapshot!(metadata_json, @r#"
+    {
+      "author": "Jane Doe, John Doe",
+      "author_email": "Jane Doe <jane@example.com>, info@example.com",
+      "classifiers": [
+        "Development Status :: 4 - Beta",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12"
+      ],
+      "description": "Hello World!",
+      "description_content_type": "text/markdown",
+      "download_url": null,
+      "dynamic": [],
+      "home_page": null,
+      "keywords": [
+        "example",
+        "test",
+        "metadata"
+      ],
+      "license": null,
+      "license_expression": "MIT OR Apache-2.0",
+      "license_files": [
+        "License.txt"
+      ],
+      "maintainer": "ferris",
+      "maintainer_email": "ferris <ferris@example.com>",
+      "metadata_version": "2.4",
+      "name": "foo",
+      "obsoletes_dist": [],
+      "platforms": [],
+      "project_urls": {
+        "Changelog": "https://github.com/octocat/Spoon-Knife/blob/main/CHANGELOG.md",
+        "Homepage": "https://octocat.github.io/spoon-knife",
+        "Repository": "https://github.com/octocat/Spoon-Knife"
+      },
+      "provides_dist": [],
+      "provides_extra": [
+        "dev"
+      ],
+      "requires_dist": [
+        "anyio>=4,<5",
+        "pytest>=7.0 ; extra == 'dev'"
+      ],
+      "requires_external": [],
+      "requires_python": ">=3.12",
+      "summary": "A Python package with all metadata fields",
+      "supported_platforms": [],
+      "version": "1.0.0"
+    }
+    "#);
+    let wheel = fs_err::read_to_string(
+        context
+            .site_packages()
+            .join("foo-1.0.0.dist-info")
+            .join("WHEEL"),
+    )?;
+    let wheel = wheel.replace(uv_version::version(), "[VERSION]");
+    assert_snapshot!(wheel, @r"
+    Wheel-Version: 1.0
+    Generator: uv [VERSION]
+    Root-Is-Purelib: true
+    Tag: py3-none-any
+    ");
+    let wheel_json = fs_err::read_to_string(
+        context
+            .site_packages()
+            .join("foo-1.0.0.dist-info")
+            .join("WHEEL.json"),
+    )?;
+    let wheel_json = wheel_json.replace(uv_version::version(), "[VERSION]");
+    let wheel_json: serde_json::Value = serde_json::from_str(&wheel_json)?;
+    assert_json_snapshot!(wheel_json, @r#"
+    {
+      "generator": "uv [VERSION]",
+      "root-is-purelib": true,
+      "tags": [
+        "py3-none-any"
+      ],
+      "wheel-version": "1.0"
+    }
+    "#);
 
     Ok(())
 }

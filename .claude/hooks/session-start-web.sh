@@ -10,3 +10,7 @@ if ! command -v gh &> /dev/null; then
     mv /tmp/gh_${GH_VERSION}_linux_amd64/bin/gh ~/.local/bin/
     rm -rf /tmp/gh.tar.gz /tmp/gh_${GH_VERSION}_linux_amd64
 fi
+
+if ! command -v cargo-clippy &> /dev/null; then
+    rustup component add clippy
+fi

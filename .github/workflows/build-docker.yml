@@ -46,6 +46,7 @@ jobs:
   docker-plan:
     name: plan
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     outputs:
       login: ${{ steps.plan.outputs.login }}
       push: ${{ steps.plan.outputs.push }}
@@ -77,6 +78,7 @@ jobs:
     needs:
       - docker-plan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write # for Depot OIDC and GHCR signing
@@ -163,6 +165,7 @@ jobs:
   docker-publish-extra:
     name: ${{ needs.docker-plan.outputs.action }} ${{ matrix.image-mapping }}
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     environment:
       name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:
@@ -356,6 +359,7 @@ jobs:
   docker-annotate-base:
     name: annotate uv
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     permissions:
       contents: read
       id-token: write # for GHCR signing
