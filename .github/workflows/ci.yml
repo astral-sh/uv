@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-24.04
     outputs:
       # Run checks/tests if no-test label is not present and code changed (or on main)
       test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (steps.changed.outputs.code_any_changed == 'true' || github.ref == 'refs/heads/main') }}
