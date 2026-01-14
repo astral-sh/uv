@@ -14,3 +14,7 @@ fi
 if ! command -v cargo-clippy &> /dev/null; then
     rustup component add clippy
 fi
+
+if ! command -v rustfmt &> /dev/null; then
+    rustup component add rustfmt
+fi
