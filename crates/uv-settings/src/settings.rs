@@ -234,15 +234,15 @@ pub struct GlobalOptions {
         "#
     )]
     pub required_version: Option<RequiredVersion>,
-    /// Whether to load TLS certificates from the platform's native certificate store.
+    /// Whether to use the native-tls TLS backend instead of rustls.
     ///
-    /// By default, uv loads certificates from the bundled `webpki-roots` crate. The
-    /// `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
-    /// improves portability and performance (especially on macOS).
+    /// By default, uv uses the rustls TLS backend, which loads certificates from the platform's
+    /// native certificate store via the `rustls-platform-verifier` crate. This provides a good
+    /// balance of portability and performance across platforms.
     ///
-    /// However, in some cases, you may want to use the platform's native certificate store,
-    /// especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's
-    /// included in your system's certificate store.
+    /// However, in some cases, you may want to use the native-tls backend instead, which uses
+    /// the platform's native TLS implementation (e.g., SChannel on Windows, Secure Transport on
+    /// macOS, OpenSSL on Linux).
     #[option(
         default = "false",
         value_type = "bool",
