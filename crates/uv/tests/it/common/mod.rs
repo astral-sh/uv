@@ -1702,12 +1702,34 @@ impl TestContext {
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests, but with the given binary.
     ///
-    /// Clears all environment variables defined in [`EnvVars`] to avoid
-    /// reading test host settings.
+    /// Clears environment variables defined in [`EnvVars`] to avoid reading
+    /// test host settings.
     fn new_command_with(bin: &Path) -> Command {
         let mut command = Command::new(bin);
 
-        for env_var in EnvVars::all_names() {
+        let passthrough = [
+            // For debugging tests.
+            EnvVars::RUST_LOG,
+            EnvVars::RUST_BACKTRACE,
+            // Windows System configuration.
+            EnvVars::SYSTEMDRIVE,
+            // Work around small default stack sizes and large futures in debug builds.
+            EnvVars::RUST_MIN_STACK,
+            EnvVars::UV_STACK_SIZE,
+            // Allow running tests with custom network settings.
+            EnvVars::ALL_PROXY,
+            EnvVars::HTTPS_PROXY,
+            EnvVars::HTTP_PROXY,
+            EnvVars::NO_PROXY,
+            EnvVars::SSL_CERT_DIR,
+            EnvVars::SSL_CERT_FILE,
+            EnvVars::UV_NATIVE_TLS,
+        ];
+
+        for env_var in EnvVars::all_names()
+            .iter()
+            .filter(|name| !passthrough.contains(name))
+        {
             command.env_remove(env_var);
         }
 
