@@ -4029,7 +4029,7 @@ fn direct_url_zip_file_bunk_permissions() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    warning: Legacy (non-PEP 625) source distributions are deprecated: opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip. A future version of uv will reject source distributions that do not use '.tar.gz'
+    warning: opensafely-pipeline @ https://github.com/opensafely-core/pipeline/archive/refs/tags/v2023.11.06.145820.zip is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
     Prepared 5 packages in [TIME]
     Installed 6 packages in [TIME]
      + distro==1.9.0

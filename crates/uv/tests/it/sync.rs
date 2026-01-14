@@ -9575,7 +9575,7 @@ fn sync_derivation_chain() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Legacy (non-PEP 625) source distributions are deprecated: wsgiref==0.1.2. A future version of uv will reject source distributions that do not use '.tar.gz'
+    warning: wsgiref==0.1.2 is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
@@ -9639,7 +9639,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Legacy (non-PEP 625) source distributions are deprecated: wsgiref==0.1.2. A future version of uv will reject source distributions that do not use '.tar.gz'
+    warning: wsgiref==0.1.2 is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
@@ -9705,7 +9705,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    warning: Legacy (non-PEP 625) source distributions are deprecated: wsgiref==0.1.2. A future version of uv will reject source distributions that do not use '.tar.gz'
+    warning: wsgiref==0.1.2 is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
       × Failed to build `wsgiref==0.1.2`
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)

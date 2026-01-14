@@ -385,9 +385,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // a non-compliant distribution isn't a huge problem if it's not actually being
         // materialized into a wheel. Observe that we also allow no extension, since we expect that
         // for directory and Git installs.
-        if !matches!(dist.extension(), Some(SourceDistExtension::TarGz) | None) {
+        if let Some(extension) = dist.extension()
+            && !matches!(extension, SourceDistExtension::TarGz)
+        {
             warn_user!(
-                "Legacy (non-PEP 625) source distributions are deprecated: {dist}. A future version of uv will reject source distributions that do not use '.tar.gz'",
+                "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '{extension}'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625",
             );
         }
 
