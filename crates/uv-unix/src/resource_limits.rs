@@ -16,11 +16,25 @@
 use nix::sys::resource::{Resource, getrlimit, setrlimit};
 use tracing::debug;
 
+/// Maximum file descriptor limit to request.
+///
+/// We cap at 0x100000 (1,048,576) to match the typical Linux default (`/proc/sys/fs/nr_open`)
+/// and to avoid issues with extremely high limits.
+///
+/// `OpenJDK` uses this same cap because:
+///
+/// 1. Some code breaks if `RLIMIT_NOFILE` exceeds `i32::MAX` (despite the type being `u64`)
+/// 2. Code that iterates over all possible FDs to close them can timeout with very high limits
+///
+/// See: <https://bugs.openjdk.org/browse/JDK-8324577>
+/// See: <https://github.com/oracle/graal/issues/11136>
+const MAX_NOFILE_LIMIT: u64 = 0x0010_0000;
+
 /// Attempt to raise the open file descriptor limit to the maximum allowed.
 ///
-/// This function tries to set the soft limit to the hard limit. If the operation fails, it
-/// silently ignores the error since the default limits may still be sufficient for the
-/// current workload.
+/// This function tries to set the soft limit to `min(hard_limit, 0x100000)`. If the operation
+/// fails, it silently ignores the error since the default limits may still be sufficient for
+/// the current workload.
 ///
 /// Returns the new soft limit on success, or the current soft limit if adjustment failed.
 pub fn adjust_open_file_limit() -> u64 {
@@ -34,18 +48,21 @@ pub fn adjust_open_file_limit() -> u64 {
 
     debug!("Current open file limits: soft={soft}, hard={hard}");
 
-    if soft >= hard {
+    // Cap the target limit to avoid issues with extremely high values
+    let target = hard.min(MAX_NOFILE_LIMIT);
+
+    if soft >= target {
         return soft;
     }
 
-    // Try to raise the soft limit to the hard limit
-    match setrlimit(Resource::RLIMIT_NOFILE, hard, hard) {
+    // Try to raise the soft limit to the target
+    match setrlimit(Resource::RLIMIT_NOFILE, target, hard) {
         Ok(()) => {
-            debug!("Raised open file limit from {soft} to {hard}");
-            hard
+            debug!("Raised open file limit from {soft} to {target}");
+            target
         }
         Err(err) => {
-            debug!("Failed to raise open file limit from {soft} to {hard}: {err}");
+            debug!("Failed to raise open file limit from {soft} to {target}: {err}");
             soft
         }
     }
