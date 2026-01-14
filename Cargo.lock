@@ -6356,6 +6356,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-small-str",
+ "uv-warnings",
 ]
 
 [[package]]
