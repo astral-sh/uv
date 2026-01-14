@@ -116,6 +116,7 @@ def filter_metadata(
     os: Optional[str],
     version: Optional[re.Pattern],
     exclude: Optional[re.Pattern],
+    only_latest_per_major_minor: bool = False,
 ) -> List[Tuple[str, Dict]]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
@@ -134,6 +135,14 @@ def filter_metadata(
         if entry[1]["url"] not in unique_urls:
             unique_urls.add(entry[1]["url"])
             unique_filtered.append(entry)
+    if only_latest_per_major_minor:
+        latest_dict: Dict[Tuple[int, int], Tuple[str, Dict]] = {}
+        for entry in unique_filtered:
+            patch = entry[1]["patch"]
+            key = (entry[1]["major"], entry[1]["minor"])
+            if key not in latest_dict or patch > latest_dict[key][1]["patch"]:
+                latest_dict[key] = entry
+        unique_filtered = list(latest_dict.values())
     return unique_filtered
 
 
@@ -270,6 +279,11 @@ def parse_arguments():
         help="Exclude files by regex found in URL (e.g. `freethreaded|debug`).",
     )
     parser.add_argument(
+        "--only-latest-per-major-minor",
+        action="store_true",
+        help="Only include the latest patch version for each major.minor combination.",
+    )
+    parser.add_argument(
         "--max-concurrent",
         type=int,
         default=20,
@@ -321,6 +335,7 @@ def main():
         os=args.os,
         version=version,
         exclude=exclude,
+        only_latest_per_major_minor=args.only_latest_per_major_minor,
     )
     urls = {(entry[1]["url"], entry[1]["sha256"]) for entry in filtered_metadata}
 
