@@ -58,6 +58,8 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
     type Error = anyhow::Error;
 }
 
+const DEFAULT_TOKEN_TOLERANCE_SECONDS: u64 = 30 * 60;
+
 async fn credentials_for_url(
     url: &DisplaySafeUrl,
     client_builder: BaseClientBuilder<'_>,
@@ -89,7 +91,10 @@ async fn credentials_for_url(
             .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
             .build();
         let token = pyx_store
-            .access_token(client.for_host(pyx_store.api()).raw_client(), 0)
+            .access_token(
+                client.for_host(pyx_store.api()).raw_client(),
+                DEFAULT_TOKEN_TOLERANCE_SECONDS,
+            )
             .await
             .context("Authentication failure")?
             .context("No access token found")?;
