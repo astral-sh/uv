@@ -155,7 +155,7 @@ cargo install cargo-xwin --version 0.18.0
 rustup target add x86_64-pc-windows-msvc
 
 # Run clippy for Windows
-cargo xwin clippy --all-features
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure
