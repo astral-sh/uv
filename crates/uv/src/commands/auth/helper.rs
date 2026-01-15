@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Credentials, PyxTokenStore};
+use uv_auth::{AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
@@ -58,8 +58,6 @@ impl TryFrom<Credentials> for BazelCredentialResponse {
     type Error = anyhow::Error;
 }
 
-const DEFAULT_TOKEN_TOLERANCE_SECONDS: u64 = 30 * 60;
-
 async fn credentials_for_url(
     url: &DisplaySafeUrl,
     client_builder: BaseClientBuilder<'_>,
@@ -93,7 +91,7 @@ async fn credentials_for_url(
         let token = pyx_store
             .access_token(
                 client.for_host(pyx_store.api()).raw_client(),
-                DEFAULT_TOKEN_TOLERANCE_SECONDS,
+                DEFAULT_TOLERANCE_SECS,
             )
             .await
             .context("Authentication failure")?
