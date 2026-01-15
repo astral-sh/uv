@@ -3,7 +3,7 @@
 //! Provides functionality for unpacking, modifying, and repacking wheel files,
 //! including RECORD file updates.
 
-use std::io::{self, Read};
+use std::io;
 use std::path::Path;
 
 use base64::Engine;

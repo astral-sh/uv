@@ -10,10 +10,9 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
+use uv_platform::MacOSVersion;
 use uv_platform_tags::PlatformTag;
 use uv_static::EnvVars;
-
-use uv_platform::MacOSVersion;
 
 use crate::error::DelocateError;
 use crate::macho::{self, Arch};
@@ -29,30 +28,14 @@ pub struct DelocateOptions {
     pub require_archs: Vec<Arch>,
     /// Libraries to exclude from delocating (by name pattern).
     pub exclude: Vec<String>,
-    /// Remove absolute rpaths from binaries.
-    /// This prevents issues when wheels are installed in different locations.
-    pub sanitize_rpaths: bool,
-    /// Check that bundled libraries don't require a newer macOS version than
-    /// declared in the wheel's platform tag.
-    pub check_version_compatibility: bool,
-    /// Target macOS version. If set, overrides the version from the wheel's platform tag.
-    /// This can also be set via the `MACOSX_DEPLOYMENT_TARGET` environment variable.
-    pub target_macos_version: Option<MacOSVersion>,
 }
 
 impl Default for DelocateOptions {
     fn default() -> Self {
-        let target_macos_version = env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET)
-            .ok()
-            .and_then(|value| MacOSVersion::parse(&value));
-
         Self {
             lib_subdir: ".dylibs".to_string(),
             require_archs: Vec::new(),
             exclude: Vec::new(),
-            sanitize_rpaths: true,
-            check_version_compatibility: true,
-            target_macos_version,
         }
     }
 }
@@ -451,10 +434,10 @@ pub fn delocate_wheel(
     let platform_tags = filename.platform_tags();
 
     // Determine the target macOS version:
-    // 1. Use explicitly set target_macos_version from options (includes MACOSX_DEPLOYMENT_TARGET).
+    // 1. Use `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     // 2. Fall back to parsing from wheel's platform tag.
     let wheel_platform_version = get_macos_version(platform_tags);
-    let target_version = options.target_macos_version.or(wheel_platform_version);
+    let target_version = MacOSVersion::from_env().or(wheel_platform_version);
 
     // Unpack the wheel.
     wheel::unpack_wheel(wheel_path, wheel_dir)?;
@@ -480,10 +463,8 @@ pub fn delocate_wheel(
         }
 
         // Check macOS version compatibility against target version.
-        if options.check_version_compatibility {
-            if let Some(version) = target_version {
-                check_macos_version_compatible(lib_path, version)?;
-            }
+        if let Some(version) = target_version {
+            check_macos_version_compatible(lib_path, version)?;
         }
     }
 
@@ -503,12 +484,9 @@ pub fn delocate_wheel(
         _ => platform_tags.to_vec(),
     };
 
-    // No modifications needed, just copy the wheel.
-    if libraries.is_empty() && !options.sanitize_rpaths {
+    // No external dependencies to bundle.
+    if libraries.is_empty() {
         debug!("No external dependencies found");
-        let dest_path = dest_dir.join(&filename_str);
-        fs::copy(wheel_path, &dest_path)?;
-        return Ok(dest_path);
     }
 
     // Bundle external libraries into the wheel.
@@ -560,9 +538,7 @@ pub fn delocate_wheel(
             fs::copy(lib_path, &dest_lib)?;
 
             // Sanitize rpaths in the copied library.
-            if options.sanitize_rpaths {
-                sanitize_rpaths(&dest_lib)?;
-            }
+            sanitize_rpaths(&dest_lib)?;
 
             // Set the install ID of the copied library.
             let new_id = format!(
@@ -605,10 +581,8 @@ pub fn delocate_wheel(
     }
 
     // Sanitize rpaths in original wheel binaries.
-    if options.sanitize_rpaths {
-        for binary in &binaries {
-            sanitize_rpaths(binary)?;
-        }
+    for binary in &binaries {
+        sanitize_rpaths(binary)?;
     }
 
     // Update RECORD.

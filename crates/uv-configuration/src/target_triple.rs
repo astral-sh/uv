@@ -752,7 +752,7 @@ impl TargetTriple {
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
                 let MacOSVersion { major, minor } =
-                    macos_deployment_target().map_or(MacOSVersion::DEFAULT, |version| {
+                    MacOSVersion::from_env().map_or(MacOSVersion::DEFAULT, |version| {
                         debug!(
                             "Found macOS deployment target: {}.{}",
                             version.major, version.minor
@@ -764,7 +764,7 @@ impl TargetTriple {
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
                 let MacOSVersion { major, minor } =
-                    macos_deployment_target().map_or(MacOSVersion::DEFAULT, |version| {
+                    MacOSVersion::from_env().map_or(MacOSVersion::DEFAULT, |version| {
                         debug!(
                             "Found macOS deployment target: {}.{}",
                             version.major, version.minor
@@ -1886,12 +1886,6 @@ impl TargetTriple {
             .with_platform_release(self.platform_release())
             .with_platform_version(self.platform_version())
     }
-}
-
-/// Return the macOS deployment target as parsed from the environment.
-fn macos_deployment_target() -> Option<MacOSVersion> {
-    let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
-    MacOSVersion::parse(&version)
 }
 
 /// Return the iOS deployment target as parsed from the environment.
