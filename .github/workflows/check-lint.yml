@@ -143,6 +143,31 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+  check-linux-musl-aarch64:
+    name: "check on linux musl aarch64"
+    timeout-minutes: 10
+    if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Install Rust toolchain"
+        run: rustup target add aarch64-unknown-linux-musl
+      - name: "Install zig"
+        run: |
+          curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ
+          echo "$PWD/zig-linux-x86_64-0.13.0" >> "$GITHUB_PATH"
+      - name: "Check (warnings as errors)"
+        run: cargo check --workspace --all-features --locked --target aarch64-unknown-linux-musl
+        env:
+          RUSTFLAGS: "-D warnings"
+          CC_aarch64_unknown_linux_musl: "zig cc -target aarch64-linux-musl"
+          AR_aarch64_unknown_linux_musl: "zig ar"
+
   shear:
     name: "cargo shear"
     timeout-minutes: 10
