@@ -390,7 +390,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             && !matches!(extension, SourceDistExtension::TarGz)
         {
             warn_user_once!(
-                "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '{extension}'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625",
+                "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625",
             );
         }
 
