@@ -31,6 +31,7 @@ bitflags::bitflags! {
         const TARGET_WORKSPACE_DISCOVERY = 1 << 19;
         const METADATA_JSON = 1 << 20;
         const GCS_ENDPOINT = 1 << 21;
+        const ADJUST_ULIMIT = 1 << 22;
     }
 }
 
@@ -62,6 +63,7 @@ impl PreviewFeatures {
             Self::TARGET_WORKSPACE_DISCOVERY => "target-workspace-discovery",
             Self::METADATA_JSON => "metadata-json",
             Self::GCS_ENDPOINT => "gcs-endpoint",
+            Self::ADJUST_ULIMIT => "adjust-ulimit",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -121,6 +123,7 @@ impl FromStr for PreviewFeatures {
                 "direct-publish" => Self::DIRECT_PUBLISH,
                 "target-workspace-discovery" => Self::TARGET_WORKSPACE_DISCOVERY,
                 "metadata-json" => Self::METADATA_JSON,
+                "adjust-ulimit" => Self::ADJUST_ULIMIT,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -309,6 +312,10 @@ mod tests {
         assert_eq!(
             PreviewFeatures::METADATA_JSON.flag_as_str(),
             "metadata-json"
+        );
+        assert_eq!(
+            PreviewFeatures::ADJUST_ULIMIT.flag_as_str(),
+            "adjust-ulimit"
         );
     }
 

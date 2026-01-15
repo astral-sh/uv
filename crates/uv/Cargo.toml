@@ -149,6 +149,7 @@ zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
+uv-unix = { workspace = true }
 
 [features]
 default = ["performance", "uv-distribution/static", "default-tests"]

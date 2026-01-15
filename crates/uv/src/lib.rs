@@ -338,6 +338,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         &environment,
     );
 
+    // Adjust open file limits on Unix if the preview feature is enabled.
+    #[cfg(unix)]
+    if globals.preview.is_enabled(PreviewFeatures::ADJUST_ULIMIT) {
+        match uv_unix::adjust_open_file_limit() {
+            Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
+            // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
+            // a warning because it's okay if we fail here.
+            Err(err) => warn_user!("{err}"),
+        }
+    }
+
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
