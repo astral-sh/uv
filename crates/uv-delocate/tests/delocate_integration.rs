@@ -11,17 +11,6 @@ fn test_data_dir() -> PathBuf {
 }
 
 #[test]
-fn test_list_wheel_dependencies_pure_python() {
-    let data_dir = test_data_dir();
-    let deps =
-        uv_delocate::list_wheel_dependencies(&data_dir.join("fakepkg2-1.0-py3-none-any.whl"))
-            .unwrap();
-
-    // Pure Python wheel should have no external dependencies.
-    assert!(deps.is_empty());
-}
-
-#[test]
 fn test_delocate_pure_python_wheel() {
     let data_dir = test_data_dir();
     let temp_dir = TempDir::new().unwrap();

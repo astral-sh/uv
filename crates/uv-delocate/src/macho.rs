@@ -100,14 +100,11 @@ pub struct MachOFile {
 
 /// Check if a file is a Mach-O binary by examining its magic bytes.
 pub fn is_macho_file(path: &Path) -> Result<bool, DelocateError> {
-    let mut file = match fs::File::open(path) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(e.into()),
-    };
+    let mut file = fs::File::open(path)?;
 
     let mut bytes = [0u8; 16];
     if file.read_exact(&mut bytes).is_err() {
+        // File too small to be a Mach-O.
         return Ok(false);
     }
 

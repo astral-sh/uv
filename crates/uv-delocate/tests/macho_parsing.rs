@@ -26,8 +26,8 @@ fn test_is_macho_file() {
         .unwrap()
     );
 
-    // Non-existent files should return false.
-    assert!(!uv_delocate::macho::is_macho_file(&data_dir.join("nonexistent.dylib")).unwrap());
+    // Non-existent files should return an error.
+    assert!(uv_delocate::macho::is_macho_file(&data_dir.join("nonexistent.dylib")).is_err());
 }
 
 #[test]
