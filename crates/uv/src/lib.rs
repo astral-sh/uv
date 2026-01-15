@@ -585,7 +585,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipCompileSettings::resolve(args, filesystem, environment)?;
+            let args = PipCompileSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -700,7 +700,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipSyncSettings::resolve(args, filesystem, environment)?;
+            let args = PipSyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -786,7 +786,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = PipInstallSettings::resolve(args, filesystem, environment)?;
+            let mut args = PipInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             let mut requirements = Vec::with_capacity(
@@ -1004,7 +1004,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipListSettings::resolve(args, filesystem, environment)?;
+            let args = PipListSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -1060,7 +1060,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: PipCommand::Tree(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipTreeSettings::resolve(args, filesystem, environment)?;
+            let args = PipTreeSettings::resolve(args, filesystem, environment);
 
             // Initialize the cache.
             let cache = cache.init().await?;
@@ -1135,7 +1135,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => commands::cache_size(&cache, args.human, printer, globals.preview),
         Commands::Build(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::BuildSettings::resolve(args, filesystem, environment)?;
+            let args = settings::BuildSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1201,7 +1201,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VenvSettings::resolve(args, filesystem, environment)?;
+            let args = settings::VenvSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1373,7 +1373,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 filesystem,
                 invocation_source,
                 environment,
-            )?;
+            );
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1463,7 +1463,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Install(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment)?;
+            let args = settings::ToolInstallSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -1583,7 +1583,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::Upgrade(args),
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment)?;
+            let args = settings::ToolUpgradeSettings::resolve(args, filesystem, &environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -2021,7 +2021,7 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment)?;
+            let args = settings::RunSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2090,7 +2090,7 @@ async fn run_project(
         }
         ProjectCommand::Sync(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::SyncSettings::resolve(args, filesystem, environment)?;
+            let args = settings::SyncSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2145,7 +2145,7 @@ async fn run_project(
         }
         ProjectCommand::Lock(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::LockSettings::resolve(args, filesystem, environment)?;
+            let args = settings::LockSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2196,7 +2196,7 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let mut args = settings::AddSettings::resolve(args, filesystem, environment)?;
+            let mut args = settings::AddSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -2330,7 +2330,7 @@ async fn run_project(
         }
         ProjectCommand::Remove(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RemoveSettings::resolve(args, filesystem, environment)?;
+            let args = settings::RemoveSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2379,7 +2379,7 @@ async fn run_project(
         }
         ProjectCommand::Version(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::VersionSettings::resolve(args, filesystem, environment)?;
+            let args = settings::VersionSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2424,7 +2424,7 @@ async fn run_project(
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::TreeSettings::resolve(args, filesystem, environment)?;
+            let args = settings::TreeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -2469,7 +2469,7 @@ async fn run_project(
         }
         ProjectCommand::Export(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::ExportSettings::resolve(args, filesystem, environment)?;
+            let args = settings::ExportSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
