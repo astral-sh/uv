@@ -126,8 +126,8 @@ impl PyxTokens {
 
     /// Check if the token is fresh (not expired and not expiring within tolerance).
     ///
-    /// Returns `Ok(())` if fresh, or `Err(reason)` if refresh is needed.
-    fn check_fresh(&self, tolerance_secs: u64) -> Result<(), ExpiredTokenReason> {
+    /// Returns `Ok(expiration)` if fresh, or `Err(reason)` if refresh is needed.
+    fn check_fresh(&self, tolerance_secs: u64) -> Result<jiff::Timestamp, ExpiredTokenReason> {
         let Ok(jwt) = PyxJwt::decode(self.access_token()) else {
             return Err(ExpiredTokenReason::MissingExpiration);
         };
@@ -144,7 +144,7 @@ impl PyxTokens {
                 } else if exp < now + Duration::from_secs(tolerance_secs) {
                     Err(ExpiredTokenReason::ExpiringSoon(exp))
                 } else {
-                    Ok(())
+                    Ok(exp)
                 }
             }
         }
@@ -464,7 +464,10 @@ impl PyxTokenStore {
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
         let reason = match tokens.check_fresh(tolerance_secs) {
-            Ok(()) => return Ok(tokens),
+            Ok(exp) => {
+                debug!("Access token is up-to-date (`{exp}`)");
+                return Ok(tokens);
+            }
             Err(reason) => reason,
         };
         debug!("Refreshing token due to {reason}");
@@ -490,8 +493,8 @@ impl PyxTokenStore {
                 // Read the tokens from disk (another process may have just refreshed them)
                 if let Some(tokens) = self.read().await? {
                     match tokens.check_fresh(tolerance_secs) {
-                        Ok(()) => {
-                            debug!("Token was recently refreshed; using it");
+                        Ok(exp) => {
+                            debug!("Token was recently refreshed (`{exp}`); using it");
                             return Ok(tokens);
                         }
                         Err(reason) => {
