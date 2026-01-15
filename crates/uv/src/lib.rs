@@ -339,9 +339,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     );
 
     // Adjust open file limits on Unix if the preview feature is enabled.
+    // Errors are logged at debug level; we don't fail if adjustment doesn't succeed.
     #[cfg(unix)]
     if globals.preview.is_enabled(PreviewFeatures::ADJUST_ULIMIT) {
-        uv_unix::adjust_open_file_limit();
+        let _ = uv_unix::adjust_open_file_limit();
     }
 
     // Resolve the cache settings.

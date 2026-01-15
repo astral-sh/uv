@@ -17,4 +17,5 @@ workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }

@@ -13,8 +13,30 @@
 //!
 //! See: <https://github.com/astral-sh/uv/issues/16999>
 
+use nix::errno::Errno;
 use nix::sys::resource::{Resource, getrlimit, rlim_t, setrlimit};
+use thiserror::Error;
 use tracing::debug;
+
+/// Errors that can occur when adjusting resource limits.
+#[derive(Debug, Error)]
+pub enum OpenFileLimitError {
+    #[error("failed to get open file limit: {}", .0.desc())]
+    GetLimitFailed(Errno),
+
+    #[error("encountered unexpected negative soft limit: {value}")]
+    NegativeSoftLimit { value: rlim_t },
+
+    #[error("soft limit ({current}) already meets the target ({target})")]
+    AlreadySufficient { current: u64, target: u64 },
+
+    #[error("failed to raise open file limit from {current} to {target}: {}", source.desc())]
+    SetLimitFailed {
+        current: u64,
+        target: u64,
+        source: Errno,
+    },
+}
 
 /// Maximum file descriptor limit to request.
 ///
@@ -35,28 +57,30 @@ const MAX_NOFILE_LIMIT: rlim_t = 0x0010_0000;
 /// Attempt to raise the open file descriptor limit to the maximum allowed.
 ///
 /// This function tries to set the soft limit to `min(hard_limit, 0x100000)`. If the operation
-/// fails, it silently ignores the error since the default limits may still be sufficient for
-/// the current workload.
+/// fails, it returns an error since the default limits may still be sufficient for the
+/// current workload.
 ///
-/// Returns the new soft limit on success, or the current soft limit if adjustment failed.
-/// The return type is `u64` for API consistency across platforms, though `rlim_t` is
-/// platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD).
-pub fn adjust_open_file_limit() -> u64 {
+/// Returns [`Ok`] with the new soft limit on successful adjustment, or an appropriate
+/// [`OpenFileLimitError`] if adjustment failed.
+///
+/// Note the type of `rlim_t` is platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD), but
+/// this function always returns a [`u64`].
+pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
     let (soft, hard) = match getrlimit(Resource::RLIMIT_NOFILE) {
         Ok(limits) => limits,
         Err(err) => {
             debug!("Failed to get open file limit: {err}");
-            return 0;
+            return Err(OpenFileLimitError::GetLimitFailed(err));
         }
     };
 
     debug!("Current open file limits: soft={soft}, hard={hard}");
 
-    // Convert rlim_t to u64. On FreeBSD, rlim_t is i64, so we need try_from.
-    // On Linux/macOS, rlim_t is u64, so the conversion is infallible.
+    // Convert `rlim_t` to `u64`. On FreeBSD, `rlim_t` is `i64` which may fail.
+    // On Linux and macOS, `rlim_t` is a `u64`, and the conversion is infallible.
     let Some(soft) = rlim_t_to_u64(soft) else {
-        debug!("Soft limit is negative: {soft}");
-        return 0;
+        debug!("Encountered unexpected negative soft limit: {soft}");
+        return Err(OpenFileLimitError::NegativeSoftLimit { value: soft });
     };
 
     // Cap the target limit to avoid issues with extremely high values.
@@ -65,7 +89,10 @@ pub fn adjust_open_file_limit() -> u64 {
     let target = rlim_t_to_u64(hard.min(MAX_NOFILE_LIMIT)).unwrap_or(MAX_NOFILE_LIMIT as u64);
 
     if soft >= target {
-        return soft;
+        return Err(OpenFileLimitError::AlreadySufficient {
+            current: soft,
+            target,
+        });
     }
 
     // Try to raise the soft limit to the target.
@@ -75,11 +102,15 @@ pub fn adjust_open_file_limit() -> u64 {
     match setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard) {
         Ok(()) => {
             debug!("Raised open file limit from {soft} to {target}");
-            target
+            Ok(target)
         }
         Err(err) => {
             debug!("Failed to raise open file limit from {soft} to {target}: {err}");
-            soft
+            Err(OpenFileLimitError::SetLimitFailed {
+                current: soft,
+                target,
+                source: err,
+            })
         }
     }
 }
