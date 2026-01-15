@@ -5,7 +5,7 @@ use thiserror::Error;
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
-use uv_distribution_filename::{DistExtension, ExtensionError};
+use uv_distribution_filename::{DistExtension, ExtensionError, SourceDistExtension};
 use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
     Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
@@ -343,7 +343,20 @@ impl TryFrom<DisplaySafeUrl> for ParsedArchiveUrl {
             Err(..) if looks_like_git_repository(&url) => {
                 return Err(ParsedUrlError::MissingGitPrefix(url.to_string()));
             }
-            Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
+            Err(err) => {
+                // Only default to tar.gz if there's no extension at all.
+                // If there's an extension but it's not recognized, that's an error.
+                let path = Path::new(url.path());
+                if path.extension().is_none() {
+                    // If the URL doesn't have a recognized extension, assume it's a gzipped tarball.
+                    // This is a common pattern for dynamically-generated archives (e.g., GitHub's
+                    // tarball API), which return `.tar.gz` files without an extension in the URL.
+                    DistExtension::Source(SourceDistExtension::TarGz)
+                } else {
+                    // Has an extension but it's not recognized - this is an error
+                    return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err));
+                }
+            }
         };
 
         Ok(Self {
