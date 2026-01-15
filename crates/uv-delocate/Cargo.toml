@@ -27,7 +27,6 @@ uv-static = { workspace = true }
 base64 = { workspace = true }
 fs-err = { workspace = true }
 goblin = { workspace = true }
-pathdiff = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
