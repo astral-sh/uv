@@ -38,12 +38,8 @@ pub enum DelocateError {
     #[error("Invalid library filename in {}: {reason}", path.user_display())]
     InvalidLibraryFilename { path: PathBuf, reason: &'static str },
 
-    #[error("Invalid wheel filename: {filename}")]
-    InvalidWheelFilename {
-        filename: String,
-        #[source]
-        err: WheelFilenameError,
-    },
+    #[error(transparent)]
+    InvalidWheelFilename(#[from] WheelFilenameError),
 
     #[error("Invalid wheel path: {}", path.user_display())]
     InvalidWheelPath { path: PathBuf },

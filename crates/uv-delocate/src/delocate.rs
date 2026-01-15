@@ -93,32 +93,27 @@ fn resolve_dynamic_path(
     binary_path: &Path,
     rpaths: &[String],
 ) -> Option<PathBuf> {
-    if install_name.starts_with("@loader_path/") {
+    if let Some(relative) = install_name.strip_prefix("@loader_path/") {
         // @loader_path is relative to the binary containing the reference.
-        let relative = install_name.strip_prefix("@loader_path/").unwrap();
         let parent = binary_path.parent()?;
         let resolved = parent.join(relative);
         if let Ok(path) = resolved.canonicalize() {
             return Some(path);
         }
-    } else if install_name.starts_with("@executable_path/") {
+    } else if let Some(relative) = install_name.strip_prefix("@executable_path/") {
         // @executable_path; for wheels, we treat this similarly to @loader_path.
-        let relative = install_name.strip_prefix("@executable_path/").unwrap();
         let parent = binary_path.parent()?;
         let resolved = parent.join(relative);
         if let Ok(path) = resolved.canonicalize() {
             return Some(path);
         }
-    } else if install_name.starts_with("@rpath/") {
+    } else if let Some(relative) = install_name.strip_prefix("@rpath/") {
         // @rpath; search through rpaths.
-        let relative = install_name.strip_prefix("@rpath/").unwrap();
         for rpath in rpaths {
             // Resolve rpath itself if it contains tokens.
-            let resolved_rpath = if rpath.starts_with("@loader_path/") {
-                let rpath_relative = rpath.strip_prefix("@loader_path/").unwrap();
+            let resolved_rpath = if let Some(rpath_relative) = rpath.strip_prefix("@loader_path/") {
                 binary_path.parent()?.join(rpath_relative)
-            } else if rpath.starts_with("@executable_path/") {
-                let rpath_relative = rpath.strip_prefix("@executable_path/").unwrap();
+            } else if let Some(rpath_relative) = rpath.strip_prefix("@executable_path/") {
                 binary_path.parent()?.join(rpath_relative)
             } else {
                 PathBuf::from(rpath)
@@ -422,12 +417,7 @@ pub fn delocate_wheel(
         .ok_or_else(|| DelocateError::InvalidWheelPath {
             path: wheel_path.to_path_buf(),
         })?;
-    let filename = WheelFilename::from_str(filename_str).map_err(|err| {
-        DelocateError::InvalidWheelFilename {
-            filename: filename_str.to_string(),
-            err,
-        }
-    })?;
+    let filename = WheelFilename::from_str(filename_str)?;
 
     let temp_dir = tempfile::tempdir()?;
     let wheel_dir = temp_dir.path();
