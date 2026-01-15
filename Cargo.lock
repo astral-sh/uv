@@ -7141,7 +7141,6 @@ version = "0.0.14"
 dependencies = [
  "nix",
  "thiserror 2.0.17",
- "tracing",
 ]
 
 [[package]]

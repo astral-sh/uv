@@ -16,7 +16,6 @@
 use nix::errno::Errno;
 use nix::sys::resource::{Resource, getrlimit, rlim_t, setrlimit};
 use thiserror::Error;
-use tracing::debug;
 
 /// Errors that can occur when adjusting resource limits.
 #[derive(Debug, Error)]
@@ -66,20 +65,12 @@ const MAX_NOFILE_LIMIT: rlim_t = 0x0010_0000;
 /// Note the type of `rlim_t` is platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD), but
 /// this function always returns a [`u64`].
 pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
-    let (soft, hard) = match getrlimit(Resource::RLIMIT_NOFILE) {
-        Ok(limits) => limits,
-        Err(err) => {
-            debug!("Failed to get open file limit: {err}");
-            return Err(OpenFileLimitError::GetLimitFailed(err));
-        }
-    };
-
-    debug!("Current open file limits: soft={soft}, hard={hard}");
+    let (soft, hard) =
+        getrlimit(Resource::RLIMIT_NOFILE).map_err(OpenFileLimitError::GetLimitFailed)?;
 
     // Convert `rlim_t` to `u64`. On FreeBSD, `rlim_t` is `i64` which may fail.
     // On Linux and macOS, `rlim_t` is a `u64`, and the conversion is infallible.
     let Some(soft) = rlim_t_to_u64(soft) else {
-        debug!("Encountered unexpected negative soft limit: {soft}");
         return Err(OpenFileLimitError::NegativeSoftLimit { value: soft });
     };
 
@@ -99,20 +90,15 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
     // Safe because target <= MAX_NOFILE_LIMIT which fits in both i64 and u64.
     let target_rlim = target as rlim_t;
 
-    match setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard) {
-        Ok(()) => {
-            debug!("Raised open file limit from {soft} to {target}");
-            Ok(target)
+    setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard).map_err(|err| {
+        OpenFileLimitError::SetLimitFailed {
+            current: soft,
+            target,
+            source: err,
         }
-        Err(err) => {
-            debug!("Failed to raise open file limit from {soft} to {target}: {err}");
-            Err(OpenFileLimitError::SetLimitFailed {
-                current: soft,
-                target,
-                source: err,
-            })
-        }
-    }
+    })?;
+
+    Ok(target)
 }
 
 /// Convert `rlim_t` to `u64`, returning `None` if negative.
