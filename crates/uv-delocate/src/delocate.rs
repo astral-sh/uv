@@ -52,38 +52,36 @@ fn is_system_library(path: &str) -> bool {
         .any(|prefix| path.starts_with(prefix))
 }
 
-/// Search for a library in DYLD environment paths.
-fn search_dyld_paths(lib_name: &str) -> Option<PathBuf> {
+/// Collect library search paths from DYLD environment variables.
+fn collect_dyld_paths() -> Vec<PathBuf> {
     const DEFAULT_FALLBACK_PATHS: &[&str] = &["/usr/local/lib", "/usr/lib"];
 
-    // Search DYLD_LIBRARY_PATH first.
-    if let Ok(paths) = env::var(EnvVars::DYLD_LIBRARY_PATH) {
-        for dir in paths.split(':') {
-            let candidate = Path::new(dir).join(lib_name);
-            if let Ok(path) = candidate.canonicalize() {
-                return Some(path);
-            }
-        }
+    let mut paths = Vec::new();
+
+    // DYLD_LIBRARY_PATH first.
+    if let Ok(env_paths) = env::var(EnvVars::DYLD_LIBRARY_PATH) {
+        paths.extend(env_paths.split(':').map(PathBuf::from));
     }
 
-    // Then search DYLD_FALLBACK_LIBRARY_PATH.
-    if let Ok(paths) = env::var(EnvVars::DYLD_FALLBACK_LIBRARY_PATH) {
-        for dir in paths.split(':') {
-            let candidate = Path::new(dir).join(lib_name);
-            if let Ok(path) = candidate.canonicalize() {
-                return Some(path);
-            }
-        }
+    // Then DYLD_FALLBACK_LIBRARY_PATH.
+    if let Ok(env_paths) = env::var(EnvVars::DYLD_FALLBACK_LIBRARY_PATH) {
+        paths.extend(env_paths.split(':').map(PathBuf::from));
     }
 
     // Default fallback paths.
-    for dir in DEFAULT_FALLBACK_PATHS {
-        let candidate = Path::new(dir).join(lib_name);
+    paths.extend(DEFAULT_FALLBACK_PATHS.iter().map(PathBuf::from));
+
+    paths
+}
+
+/// Search for a library in the given search paths.
+fn search_library_paths(lib_name: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
+    for dir in search_paths {
+        let candidate = dir.join(lib_name);
         if let Ok(path) = candidate.canonicalize() {
             return Some(path);
         }
     }
-
     None
 }
 
@@ -92,16 +90,13 @@ fn resolve_dynamic_path(
     install_name: &str,
     binary_path: &Path,
     rpaths: &[String],
+    dyld_paths: &[PathBuf],
 ) -> Option<PathBuf> {
-    if let Some(relative) = install_name.strip_prefix("@loader_path/") {
-        // @loader_path is relative to the binary containing the reference.
-        let parent = binary_path.parent()?;
-        let resolved = parent.join(relative);
-        if let Ok(path) = resolved.canonicalize() {
-            return Some(path);
-        }
-    } else if let Some(relative) = install_name.strip_prefix("@executable_path/") {
-        // @executable_path; for wheels, we treat this similarly to @loader_path.
+    if let Some(relative) = install_name
+        .strip_prefix("@loader_path/")
+        .or_else(|| install_name.strip_prefix("@executable_path/"))
+    {
+        // @loader_path and @executable_path are relative to the binary containing the reference.
         let parent = binary_path.parent()?;
         let resolved = parent.join(relative);
         if let Ok(path) = resolved.canonicalize() {
@@ -111,9 +106,10 @@ fn resolve_dynamic_path(
         // @rpath; search through rpaths.
         for rpath in rpaths {
             // Resolve rpath itself if it contains tokens.
-            let resolved_rpath = if let Some(rpath_relative) = rpath.strip_prefix("@loader_path/") {
-                binary_path.parent()?.join(rpath_relative)
-            } else if let Some(rpath_relative) = rpath.strip_prefix("@executable_path/") {
+            let resolved_rpath = if let Some(rpath_relative) = rpath
+                .strip_prefix("@loader_path/")
+                .or_else(|| rpath.strip_prefix("@executable_path/"))
+            {
                 binary_path.parent()?.join(rpath_relative)
             } else {
                 PathBuf::from(rpath)
@@ -140,8 +136,8 @@ fn resolve_dynamic_path(
             }
         }
         // Try DYLD environment paths for bare library names.
-        if let Some(lib_name) = Path::new(install_name).file_name() {
-            if let Some(resolved) = search_dyld_paths(&lib_name.to_string_lossy()) {
+        if !install_name.contains('/') {
+            if let Some(resolved) = search_library_paths(install_name, dyld_paths) {
                 return Some(resolved);
             }
         }
@@ -297,6 +293,7 @@ fn analyze_dependencies(
 ) -> Result<HashMap<PathBuf, LibraryInfo>, DelocateError> {
     let mut libraries: HashMap<PathBuf, LibraryInfo> = HashMap::new();
     let mut to_process: Vec<(PathBuf, PathBuf, String)> = Vec::new();
+    let dyld_paths = collect_dyld_paths();
 
     // Initial pass: collect direct dependencies.
     for binary_path in binaries {
@@ -314,7 +311,9 @@ fn analyze_dependencies(
             }
 
             // Try to resolve the dependency.
-            if let Some(resolved) = resolve_dynamic_path(dep, binary_path, &macho.rpaths) {
+            if let Some(resolved) =
+                resolve_dynamic_path(dep, binary_path, &macho.rpaths, &dyld_paths)
+            {
                 // Skip if the resolved path is within our directory (already bundled).
                 if resolved.starts_with(dir) {
                     continue;
@@ -350,7 +349,9 @@ fn analyze_dependencies(
                         continue;
                     }
 
-                    if let Some(resolved) = resolve_dynamic_path(dep, &lib_path, &macho.rpaths) {
+                    if let Some(resolved) =
+                        resolve_dynamic_path(dep, &lib_path, &macho.rpaths, &dyld_paths)
+                    {
                         if resolved.starts_with(dir) {
                             continue;
                         }
@@ -782,6 +783,40 @@ mod tests {
             vec![PlatformTag::Linux {
                 arch: uv_platform_tags::Arch::X86_64
             }]
+        );
+    }
+
+    #[test]
+    fn test_resolve_dynamic_path_bare_vs_relative() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let lib_dir = temp_dir.path().join("lib");
+        fs::create_dir_all(&lib_dir).unwrap();
+
+        // Create a dummy library file.
+        let lib_path = lib_dir.join("libtest.dylib");
+        fs::write(&lib_path, b"dummy").unwrap();
+
+        // Create a binary path (doesn't need to exist for this test).
+        let binary_path = temp_dir.path().join("bin").join("test");
+
+        // Use the lib directory as a search path.
+        let dyld_paths = vec![lib_dir];
+
+        // Bare library name should be found via DYLD paths.
+        let result = resolve_dynamic_path("libtest.dylib", &binary_path, &[], &dyld_paths);
+        assert!(
+            result.is_some(),
+            "bare library name should resolve via DYLD paths"
+        );
+
+        // Relative path with `/` should NOT search DYLD paths.
+        // (It would try relative to binary, which doesn't exist.)
+        let result = resolve_dynamic_path("../lib/libtest.dylib", &binary_path, &[], &dyld_paths);
+        assert!(
+            result.is_none(),
+            "relative path should not search DYLD paths"
         );
     }
 }
