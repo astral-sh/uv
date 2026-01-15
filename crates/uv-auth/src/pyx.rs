@@ -489,9 +489,14 @@ impl PyxTokenStore {
             if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
                 // Read the tokens from disk (another process may have just refreshed them).
                 if let Some(tokens) = self.read().await? {
-                    if tokens.check_fresh(tolerance_secs).is_ok() {
-                        debug!("Token was recently refreshed; using it");
-                        return Ok(tokens);
+                    match tokens.check_fresh(tolerance_secs) {
+                        Ok(()) => {
+                            debug!("Token was recently refreshed; using it");
+                            return Ok(tokens);
+                        }
+                        Err(reason) => {
+                            debug!("Token on disk still needs refresh due to {reason}");
+                        }
                     }
                 }
                 // If tokens are missing or not fresh, fall through to refresh.
