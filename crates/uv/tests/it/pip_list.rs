@@ -13,13 +13,13 @@ fn list_empty_columns() {
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
-        .arg("columns"), @r###"
+        .arg("columns"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -29,13 +29,13 @@ fn list_empty_freeze() {
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
-        .arg("freeze"), @r###"
+        .arg("freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -45,14 +45,14 @@ fn list_empty_json() {
 
     uv_snapshot!(context.pip_list()
         .arg("--format")
-        .arg("json"), @r###"
+        .arg("json"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     []
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -67,7 +67,7 @@ fn list_single_no_editable() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -77,12 +77,12 @@ fn list_single_no_editable() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + markupsafe==2.1.3
-    "###
+    "
     );
 
     context.assert_command("import markupsafe").success();
 
-    uv_snapshot!(context.pip_list(), @r###"
+    uv_snapshot!(context.pip_list(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -91,7 +91,7 @@ fn list_single_no_editable() -> Result<()> {
     markupsafe 2.1.3
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -108,7 +108,7 @@ fn list_outdated_columns() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -120,10 +120,10 @@ fn list_outdated_columns() -> Result<()> {
      + anyio==3.0.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_list().arg("--outdated"), @r###"
+    uv_snapshot!(context.pip_list().arg("--outdated"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -132,7 +132,7 @@ fn list_outdated_columns() -> Result<()> {
     anyio   3.0.0   4.3.0  wheel
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -149,7 +149,7 @@ fn list_outdated_json() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -161,17 +161,17 @@ fn list_outdated_json() -> Result<()> {
      + anyio==3.0.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r###"
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     [{"name":"anyio","version":"3.0.0","latest_version":"4.3.0","latest_filetype":"wheel"}]
 
     ----- stderr -----
-    "###
+    "#
     );
 
     Ok(())
@@ -181,14 +181,14 @@ fn list_outdated_json() -> Result<()> {
 fn list_outdated_freeze() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @r###"
+    uv_snapshot!(context.pip_list().arg("--outdated").arg("--format").arg("freeze"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `--outdated` cannot be used with `--format freeze`
-    "###
+    "
     );
 }
 
@@ -206,7 +206,7 @@ fn list_outdated_git() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -217,10 +217,10 @@ fn list_outdated_git() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==1.0.0
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_list().arg("--outdated"), @r###"
+    uv_snapshot!(context.pip_list().arg("--outdated"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -229,7 +229,7 @@ fn list_outdated_git() -> Result<()> {
     iniconfig 1.0.0   2.0.0  wheel
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -246,7 +246,7 @@ fn list_outdated_index() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -258,13 +258,13 @@ fn list_outdated_index() -> Result<()> {
      + anyio==3.0.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     uv_snapshot!(context.pip_list()
         .arg("--outdated")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple"), @r###"
+        .arg("https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -273,7 +273,7 @@ fn list_outdated_index() -> Result<()> {
     anyio   3.0.0   3.5.0  wheel
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -287,7 +287,7 @@ fn list_editable() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -300,7 +300,7 @@ fn list_editable() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters = context
@@ -309,7 +309,7 @@ fn list_editable() {
         .chain(vec![(r"\-\-\-\-\-\-+.*", "[UNDERLINE]"), ("  +", " ")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, context.pip_list(), @r###"
+    uv_snapshot!(filters, context.pip_list(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -321,7 +321,7 @@ fn list_editable() {
     sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -333,7 +333,7 @@ fn list_editable_only() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -346,7 +346,7 @@ fn list_editable_only() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters = context
@@ -356,7 +356,7 @@ fn list_editable_only() {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--editable"), @r###"
+        .arg("--editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -365,11 +365,11 @@ fn list_editable_only() {
     poetry-editable 0.1.0 [WORKSPACE]/test/packages/poetry_editable
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--exclude-editable"), @r###"
+        .arg("--exclude-editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -380,12 +380,12 @@ fn list_editable_only() {
     sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
         .arg("--editable")
-        .arg("--exclude-editable"), @r###"
+        .arg("--exclude-editable"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -396,7 +396,7 @@ fn list_editable_only() {
     Usage: uv pip list --cache-dir [CACHE_DIR] --editable --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
-    "###
+    "
     );
 }
 
@@ -408,7 +408,7 @@ fn list_exclude() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -421,7 +421,7 @@ fn list_exclude() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters = context
@@ -432,7 +432,7 @@ fn list_exclude() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
-    .arg("numpy"), @r###"
+    .arg("numpy"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -444,12 +444,12 @@ fn list_exclude() {
     sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
-    .arg("poetry-editable"), @r###"
+    .arg("poetry-editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -460,14 +460,14 @@ fn list_exclude() {
     sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--exclude")
     .arg("numpy")
     .arg("--exclude")
-    .arg("poetry-editable"), @r###"
+    .arg("poetry-editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -478,7 +478,7 @@ fn list_exclude() {
     sniffio 1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -491,7 +491,7 @@ fn list_format_json() {
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -504,7 +504,7 @@ fn list_format_json() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters: Vec<_> = context
@@ -514,38 +514,38 @@ fn list_format_json() {
         .collect();
 
     uv_snapshot!(filters, context.pip_list()
-    .arg("--format=json"), @r###"
+    .arg("--format=json"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
-    .arg("--editable"), @r###"
+    .arg("--editable"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     [{"name":"poetry-editable","version":"0.1.0","editable_project_location":"[WORKSPACE]/test/packages/poetry_editable"}]
 
     ----- stderr -----
-    "###
+    "#
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=json")
-    .arg("--exclude-editable"), @r###"
+    .arg("--exclude-editable"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     [{"name":"anyio","version":"4.3.0"},{"name":"idna","version":"3.6"},{"name":"sniffio","version":"1.3.1"}]
 
     ----- stderr -----
-    "###
+    "#
     );
 }
 
@@ -558,7 +558,7 @@ fn list_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -571,7 +571,7 @@ fn list_format_freeze() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters = context
@@ -581,7 +581,7 @@ fn list_format_freeze() {
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-    .arg("--format=freeze"), @r###"
+    .arg("--format=freeze"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -591,24 +591,24 @@ fn list_format_freeze() {
     sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
-    .arg("--editable"), @r###"
+    .arg("--editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     poetry-editable==0.1.0
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
-    .arg("--exclude-editable"), @r###"
+    .arg("--exclude-editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -617,7 +617,7 @@ fn list_format_freeze() {
     sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -658,7 +658,7 @@ Version: 0.22.0
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--editable"), @r###"
+        .arg("--editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -667,7 +667,7 @@ Version: 0.22.0
     zstandard 0.22.0 [TEMP_DIR]/zstandard_project
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -701,7 +701,7 @@ Version: 0.1-bulbasaur
         .collect::<Vec<_>>();
 
     uv_snapshot!(filters, context.pip_list()
-        .arg("--editable"), @r###"
+        .arg("--editable"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -709,7 +709,7 @@ Version: 0.1-bulbasaur
     ----- stderr -----
     error: Failed to read metadata from: `[SITE_PACKAGES]/paramiko.egg-link`
      Caused by: after parsing `0.1-b`, found `ulbasaur`, which is not part of a valid version
-    "###
+    "
     );
 
     Ok(())
@@ -724,7 +724,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     uv_snapshot!(context.filters(), context
         .pip_install()
         .arg("-e")
-        .arg(context.workspace_root.join("test/packages/poetry_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/poetry_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -737,7 +737,7 @@ fn list_ignores_quiet_flag_format_freeze() {
      + idna==3.6
      + poetry-editable==0.1.0 (from file://[WORKSPACE]/test/packages/poetry_editable)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     let filters = context
@@ -748,7 +748,7 @@ fn list_ignores_quiet_flag_format_freeze() {
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
-    .arg("--quiet"), @r###"
+    .arg("--quiet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -758,26 +758,26 @@ fn list_ignores_quiet_flag_format_freeze() {
     sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--editable")
-    .arg("--quiet"), @r###"
+    .arg("--quiet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     poetry-editable==0.1.0
 
     ----- stderr -----
-    "###
+    "
     );
 
     uv_snapshot!(filters, context.pip_list()
     .arg("--format=freeze")
     .arg("--exclude-editable")
-    .arg("--quiet"), @r###"
+    .arg("--quiet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -786,7 +786,7 @@ fn list_ignores_quiet_flag_format_freeze() {
     sniffio==1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 }
 
@@ -813,7 +813,7 @@ fn list_target() -> Result<()> {
     // List packages in the target directory.
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--target")
-        .arg(target.path()), @r###"
+        .arg(target.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -823,17 +823,17 @@ fn list_target() -> Result<()> {
     tomli      2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     // Without --target, the packages should not be visible.
-    uv_snapshot!(context.pip_list(), @r###"
+    uv_snapshot!(context.pip_list(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -862,7 +862,7 @@ fn list_prefix() -> Result<()> {
     // List packages in the prefix directory.
     uv_snapshot!(context.filters(), context.pip_list()
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -872,17 +872,17 @@ fn list_prefix() -> Result<()> {
     tomli      2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     // Without --prefix, the packages should not be visible.
-    uv_snapshot!(context.pip_list(), @r###"
+    uv_snapshot!(context.pip_list(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())

@@ -1613,7 +1613,7 @@ mod tests {
             &DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
         )
         .unwrap();
-        insta::assert_debug_snapshot!(result.project_status, @r"
+        insta::assert_debug_snapshot!(result.project_status, @"
         ProjectStatus {
             status: Archived,
             reason: None,
@@ -1716,7 +1716,7 @@ mod tests {
             text,
             &DisplaySafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
         );
-        insta::assert_debug_snapshot!(result.unwrap().project_status, @r"
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @"
         ProjectStatus {
             status: Active,
             reason: None,

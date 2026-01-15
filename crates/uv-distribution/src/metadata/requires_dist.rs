@@ -509,14 +509,13 @@ mod test {
             tqdm = true
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = true
           |        ^^^^
         invalid type: boolean `true`, expected a single source (as a map) or list of sources
-
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -532,13 +531,13 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         expected at most one of `rev`, `tag`, or `branch`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -575,13 +574,13 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 7, column 8
           |
         7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         cannot specify both `extra` and `group`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -597,13 +596,13 @@ mod test {
             tqdm = { path = "tqdm", index = "torch" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         cannot specify both `path` and `index`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -654,13 +653,13 @@ mod test {
             tqdm = { url = "§invalid#+#*Ä" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @r#"
         error: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |                ^^^^^^^^^^^^^^^^^
         relative URL without a base: "§invalid#+#*Ä"
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -676,10 +675,10 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @"
         error: Failed to parse entry: `tqdm`
           Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -695,10 +694,10 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @"
         error: Failed to parse entry: `tqdm`
           Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -714,9 +713,7 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: The following field was marked as dynamic: dependencies
-        "###);
+        assert_snapshot!(format_err(input).await, @"error: The following field was marked as dynamic: dependencies");
     }
 
     #[tokio::test]
@@ -726,9 +723,7 @@ mod test {
             tqdm = { workspace = true }
         "};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: metadata field project not found
-        "###);
+        assert_snapshot!(format_err(input).await, @"error: metadata field project not found");
     }
 
     #[test]

@@ -950,7 +950,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
-        assert_snapshot!(metadata.core_metadata_format(), @r"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: Hello-World
         Version: 0.1.0
@@ -1034,7 +1034,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1067,9 +1067,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -1078,8 +1078,7 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
@@ -1128,7 +1127,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1220,7 +1219,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1260,9 +1259,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -1271,8 +1270,7 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
@@ -1299,7 +1297,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
+            @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
 
@@ -1353,7 +1351,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
+            @r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"#
         );
     }
 
@@ -1366,11 +1364,11 @@ mod tests {
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1423,7 +1421,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: `project.description` must be a single line
         ");
@@ -1441,7 +1439,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: When `project.license-files` is defined, `project.license` must be an SPDX expression string
         ");
@@ -1457,12 +1455,12 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.4
         Name: hello-world
         Version: 0.1.0
         License-Expression: MIT OR Apache-2.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1476,7 +1474,7 @@ mod tests {
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: `project.license` is not a valid SPDX expression: MIT XOR Apache-2
           Caused by: MIT XOR Apache-2
@@ -1495,7 +1493,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: Dynamic metadata is not supported
         ");

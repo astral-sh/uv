@@ -1082,7 +1082,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("public")
         .arg("--password")
-        .arg("heron"), @r"
+        .arg("heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1096,7 +1096,7 @@ fn login_text_store() {
     uv_snapshot!(context.auth_login()
         .arg("https://example.com/simple")
         .arg("--token")
-        .arg("test-token"), @r"
+        .arg("test-token"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1112,7 +1112,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1128,7 +1128,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1144,7 +1144,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1161,7 +1161,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1178,7 +1178,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1193,7 +1193,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1219,7 +1219,7 @@ fn login_password_stdin() -> Result<()> {
         .arg("testuser")
         .arg("--password")
         .arg("-")
-        .stdin(std::fs::File::open(password_file)?), @r"
+        .stdin(std::fs::File::open(password_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1233,7 +1233,7 @@ fn login_password_stdin() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1260,7 +1260,7 @@ fn login_token_stdin() -> Result<()> {
         .arg("https://example.com/simple")
         .arg("--token")
         .arg("-")
-        .stdin(std::fs::File::open(token_file)?), @r"
+        .stdin(std::fs::File::open(token_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1272,7 +1272,7 @@ fn login_token_stdin() -> Result<()> {
 
     // Verify the credentials work by retrieving the token
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1304,7 +1304,7 @@ fn token_text_store() {
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1325,7 +1325,7 @@ fn token_text_store() {
 
     // Retrieve token without username
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1339,7 +1339,7 @@ fn token_text_store() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1369,7 +1369,7 @@ fn logout_text_store() {
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1389,7 +1389,7 @@ fn logout_text_store() {
         .success();
 
     uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1403,7 +1403,7 @@ fn logout_text_store() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1426,7 +1426,7 @@ fn auth_disabled_provider_uses_text_store() {
         .arg("--password")
         .arg("heron")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1442,7 +1442,7 @@ fn auth_disabled_provider_uses_text_store() {
         .arg("--username")
         .arg("public")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1463,7 +1463,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1479,7 +1479,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("devpiuser")
         .arg("--password")
-        .arg("devpipass"), @r"
+        .arg("devpipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1495,7 +1495,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("caseuser")
         .arg("--password")
-        .arg("casepass"), @r"
+        .arg("casepass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1511,7 +1511,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("apiuser")
         .arg("--password")
-        .arg("apipass"), @r"
+        .arg("apipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1527,7 +1527,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("slashuser")
         .arg("--password")
-        .arg("slashpass"), @r"
+        .arg("slashpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1557,7 +1557,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1582,7 +1582,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://devpi.example.com/root/+simple")
         .arg("--username")
-        .arg("devpiuser"), @r"
+        .arg("devpiuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1612,7 +1612,7 @@ fn token_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1633,7 +1633,7 @@ fn token_text_store_strips_simple_suffix() {
 
     // Retrieve token using URL with `/simple` - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1663,7 +1663,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1675,7 +1675,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1689,7 +1689,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("wronguser"), @r"
+        .arg("wronguser"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1710,7 +1710,7 @@ fn token_text_store_username() {
 
     // Retrieve token without specifying username - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1733,7 +1733,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username should fail
     uv_snapshot!(context.auth_token()
-        .arg("https://userexample.com/simple"), @r"
+        .arg("https://userexample.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1773,7 +1773,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1787,7 +1787,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1800,7 +1800,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user2"), @r"
+        .arg("user2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1812,7 +1812,7 @@ fn logout_text_store_multiple_usernames() {
 
     // Try to logout without specifying username (defaults to `__token__`)
     uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1946,14 +1946,14 @@ fn bazel_helper_basic_auth() {
     uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://test.example.com")
         .arg("--username").arg("testuser")
-        .arg("--password").arg("testpass"), @r###"
+        .arg("--password").arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Stored credentials for testuser@https://test.example.com/
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.auth_helper()
         .arg("--protocol=bazel")
@@ -1979,14 +1979,14 @@ fn bazel_helper_token() {
     // Store token
     uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://api.example.com")
-        .arg("--token").arg("mytoken123"), @r###"
+        .arg("--token").arg("mytoken123"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Stored credentials for https://api.example.com/
-    "###);
+    ");
 
     // Test credential helper - tokens are stored as Basic auth with __token__ username
     uv_snapshot!(context.filters(), context.auth_helper()
@@ -2034,7 +2034,7 @@ fn bazel_helper_invalid_json() {
         .arg("--protocol=bazel")
         .arg("get"),
         input="not json",
-        @r"
+        @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2078,14 +2078,14 @@ fn bazel_helper_username_in_uri() {
     uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://test.example.com")
         .arg("--username").arg("specificuser")
-        .arg("--password").arg("specificpass"), @r###"
+        .arg("--password").arg("specificpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Stored credentials for specificuser@https://test.example.com/
-    "###);
+    ");
 
     // Test with username in URI
     uv_snapshot!(context.filters(), context.auth_helper()
@@ -2113,14 +2113,14 @@ fn bazel_helper_unknown_username_in_uri() {
     uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://test.example.com")
         .arg("--username").arg("specificuser")
-        .arg("--password").arg("specificpass"), @r###"
+        .arg("--password").arg("specificpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Stored credentials for specificuser@https://test.example.com/
-    "###);
+    ");
 
     // Test with username in URI
     uv_snapshot!(context.filters(), context.auth_helper()

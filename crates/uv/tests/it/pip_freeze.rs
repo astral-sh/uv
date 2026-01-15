@@ -21,7 +21,7 @@ fn freeze_many() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -29,7 +29,7 @@ fn freeze_many() -> Result<()> {
     tomli==2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -72,7 +72,7 @@ fn freeze_duplicate() -> Result<()> {
     )?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @r###"
+    uv_snapshot!(context1.filters(), context1.pip_freeze().arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -83,7 +83,7 @@ fn freeze_duplicate() -> Result<()> {
     warning: The package `pip` has multiple installed distributions:
       - [SITE_PACKAGES]/pip-21.3.1.dist-info
       - [SITE_PACKAGES]/pip-22.1.1.dist-info
-    "###
+    "
     );
 
     Ok(())
@@ -106,7 +106,7 @@ fn freeze_url() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.pip_freeze()
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -116,7 +116,7 @@ fn freeze_url() -> Result<()> {
     ----- stderr -----
     warning: The package `anyio` requires `idna>=2.8`, but it's not installed
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed
-    "###
+    "
     );
 
     Ok(())
@@ -144,7 +144,7 @@ fn freeze_with_editable() -> Result<()> {
 
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze()
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -154,13 +154,13 @@ fn freeze_with_editable() -> Result<()> {
     ----- stderr -----
     warning: The package `anyio` requires `idna>=2.8`, but it's not installed
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed
-    "###
+    "
     );
 
     // Exclude editable package.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--exclude-editable")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +169,7 @@ fn freeze_with_editable() -> Result<()> {
     ----- stderr -----
     warning: The package `anyio` requires `idna>=2.8`, but it's not installed
     warning: The package `anyio` requires `sniffio>=1.1`, but it's not installed
-    "###
+    "
     );
 
     Ok(())
@@ -215,14 +215,14 @@ fn freeze_with_egg_info() -> Result<()> {
         .write_str("")?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
     zstandard==0.22.0
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -268,14 +268,14 @@ fn freeze_with_egg_info_no_py() -> Result<()> {
         .write_str("")?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
     zstandard==0.22.0
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -305,7 +305,7 @@ fn freeze_with_egg_info_file() -> Result<()> {
         "})?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -313,7 +313,7 @@ fn freeze_with_egg_info_file() -> Result<()> {
     vtk==9.2.6
 
     ----- stderr -----
-    "###);
+    ");
     Ok(())
 }
 
@@ -343,14 +343,14 @@ Version: 0.22.0
         .write_str(target.path().to_str().unwrap())?;
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), context.pip_freeze(), @r###"
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
     -e [TEMP_DIR]/zstandard_project
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -376,7 +376,7 @@ fn freeze_path() -> Result<()> {
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
-        .arg(target.path()), @r"
+        .arg(target.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -417,7 +417,7 @@ fn freeze_multiple_paths() -> Result<()> {
     }
 
     // Run `pip freeze`.
-    uv_snapshot!(context.filters(), context.pip_freeze().arg("--path").arg(target1.path()).arg("--path").arg(target2.path()), @r"
+    uv_snapshot!(context.filters(), context.pip_freeze().arg("--path").arg(target1.path()).arg("--path").arg(target2.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -445,7 +445,7 @@ fn freeze_nonexistent_path() {
     // Run `pip freeze`.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--path")
-        .arg(nonexistent_dir.path()), @r"
+        .arg(nonexistent_dir.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -469,7 +469,7 @@ fn freeze_with_quiet_flag() -> Result<()> {
         .success();
 
     // Run `pip freeze` with `--quiet` flag.
-    uv_snapshot!(context.pip_freeze().arg("--quiet"), @r###"
+    uv_snapshot!(context.pip_freeze().arg("--quiet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -477,7 +477,7 @@ fn freeze_with_quiet_flag() -> Result<()> {
     tomli==2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -505,7 +505,7 @@ fn freeze_target() -> Result<()> {
     // Freeze packages in the target directory.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--target")
-        .arg(target.path()), @r###"
+        .arg(target.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -513,17 +513,17 @@ fn freeze_target() -> Result<()> {
     tomli==2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     // Without --target, the packages should not be visible.
-    uv_snapshot!(context.pip_freeze(), @r###"
+    uv_snapshot!(context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -551,7 +551,7 @@ fn freeze_prefix() -> Result<()> {
     // Freeze packages in the prefix directory.
     uv_snapshot!(context.filters(), context.pip_freeze()
         .arg("--prefix")
-        .arg(prefix.path()), @r###"
+        .arg(prefix.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -559,17 +559,17 @@ fn freeze_prefix() -> Result<()> {
     tomli==2.0.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     // Without --prefix, the packages should not be visible.
-    uv_snapshot!(context.pip_freeze(), @r###"
+    uv_snapshot!(context.pip_freeze(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())

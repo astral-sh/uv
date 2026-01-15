@@ -56,7 +56,7 @@ fn cache_init_failure() -> Result<()> {
     context.add_shared_env(&mut command, false);
 
     // Running a command should fail with a chained error about cache initialization
-    uv_snapshot!(&filters, command, @r"
+    uv_snapshot!(&filters, command, @"
     success: false
     exit_code: 2
     ----- stdout -----

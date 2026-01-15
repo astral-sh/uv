@@ -31,14 +31,14 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("3 weeks"), @r###"
+        .arg("3 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
@@ -80,7 +80,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -96,7 +96,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks"), @r"
+        .arg("2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -147,7 +147,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
-        .arg("--upgrade"), @r"
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -196,7 +196,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
-        .arg("--refresh"), @r"
+        .arg("--refresh"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -234,7 +234,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=3 weeks"), @r"
+        .arg("idna=3 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -284,7 +284,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -300,7 +300,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=2 weeks"), @r"
+        .arg("idna=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -352,7 +352,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
-        .arg("--upgrade"), @r"
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -424,7 +424,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -495,7 +495,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -577,7 +577,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -645,7 +645,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("3 weeks")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=2 weeks")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -663,7 +663,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -682,7 +682,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=3 days"), @r"
+        .arg("typing-extensions=3 days"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -700,7 +700,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2024-05-20T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @r"
+        .arg("typing-extensions=2 weeks"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -766,7 +766,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2024-04-01T00:00:00Z"), @r"
+        .arg("typing-extensions=2024-04-01T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -849,20 +849,20 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 day"), @r###"
+        .arg("1 day"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("30days"), @r"
+        .arg("30days"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -876,7 +876,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("P1D"), @r"
+        .arg("P1D"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -890,7 +890,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 week"), @r"
+        .arg("1 week"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -904,7 +904,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 week ago"), @r"
+        .arg("1 week ago"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -918,7 +918,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("3 months"), @r"
+        .arg("3 months"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -933,7 +933,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("2 months ago"), @r"
+        .arg("2 months ago"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -948,7 +948,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 year"), @r"
+        .arg("1 year"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -963,7 +963,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--exclude-newer")
-        .arg("1 year ago"), @r"
+        .arg("1 year ago"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -977,7 +977,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("invalid span"), @r"
+        .arg("invalid span"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1005,7 +1005,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("2006-12-02T02:07:43"), @r"
+        .arg("2006-12-02T02:07:43"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1019,7 +1019,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("12/02/2006"), @r"
+        .arg("12/02/2006"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1047,7 +1047,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("30"), @r"
+        .arg("30"), @"
     success: false
     exit_code: 2
     ----- stdout -----

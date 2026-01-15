@@ -225,7 +225,7 @@ mod tests {
         let result: Result<ProxyUrl, _> = serde_json::from_str(r#""ftp://proxy.example.com:8080""#);
         insta::assert_snapshot!(
             result.unwrap_err().to_string(),
-            @r#"invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h"#
+            @"invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h"
         );
 
         let result: Result<ProxyUrl, _> = serde_json::from_str(r#""not a url""#);

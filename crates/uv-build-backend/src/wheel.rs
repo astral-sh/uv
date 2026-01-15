@@ -884,12 +884,12 @@ mod test {
             PlatformTag::Any,
         );
 
-        assert_snapshot!(WheelInfo::new(&filename, "1.0.0+test").to_string(), @r"
+        assert_snapshot!(WheelInfo::new(&filename, "1.0.0+test").to_string(), @"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
         Tag: py3-none-any
-    ");
+        ");
     }
 
     #[test]
@@ -902,9 +902,9 @@ mod test {
 
         let mut writer = Vec::new();
         write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
-        assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
-            built_by_uv-0.1.0/RECORD,,
+        assert_snapshot!(String::from_utf8(writer).unwrap(), @"
+        built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
+        built_by_uv-0.1.0/RECORD,,
         ");
     }
 
@@ -936,18 +936,18 @@ mod test {
             .filter(|path| !path.is_empty())
             .collect();
         files.sort();
-        assert_snapshot!(files.join("\n"), @r###"
+        assert_snapshot!(files.join("\n"), @"
         built_by_uv-0.1.0.dist-info
         built_by_uv-0.1.0.dist-info/METADATA
         built_by_uv-0.1.0.dist-info/RECORD
         built_by_uv-0.1.0.dist-info/WHEEL
         built_by_uv-0.1.0.dist-info/entry_points.txt
-        "###);
+        ");
 
         let metadata_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/METADATA");
-        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @"
         Metadata-Version: 2.4
         Name: built-by-uv
         Version: 0.1.0
@@ -962,12 +962,12 @@ mod test {
         # built_by_uv
 
         A package to be built with the uv build backend that uses all features exposed by the build backend.
-        "###);
+        ");
 
         let record_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
-        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r"
+        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @"
         built_by_uv-0.1.0.dist-info/WHEEL,sha256=JBpLtoa_WBz5WPGpRsAUTD4Dz6H0KkkdiKWCkfMSS1U,84
         built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
         built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
@@ -977,11 +977,11 @@ mod test {
         let wheel_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/WHEEL");
-        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
         Tag: py3-none-any
-    "###);
+        ");
     }
 }

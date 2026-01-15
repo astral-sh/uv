@@ -12,7 +12,7 @@ fn no_arguments() {
     uv_snapshot!(Command::new(get_bin())
         .arg("pip")
         .arg("uninstall")
-        .env_clear(), @r###"
+        .env_clear(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -24,7 +24,7 @@ fn no_arguments() {
     Usage: uv pip uninstall <PACKAGE|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 }
 
@@ -36,7 +36,7 @@ fn invalid_requirement() -> Result<()> {
         .arg("pip")
         .arg("uninstall")
         .arg("flask==1.0.x")
-        .current_dir(&temp_dir), @r###"
+        .current_dir(&temp_dir), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -46,7 +46,7 @@ fn invalid_requirement() -> Result<()> {
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
-    "###);
+    ");
 
     Ok(())
 }
@@ -60,14 +60,14 @@ fn missing_requirements_txt() -> Result<()> {
         .arg("uninstall")
         .arg("-r")
         .arg("requirements.txt")
-        .current_dir(&temp_dir), @r###"
+        .current_dir(&temp_dir), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: File not found: `requirements.txt`
-    "###
+    "
     );
 
     Ok(())
@@ -84,7 +84,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
         .arg("uninstall")
         .arg("-r")
         .arg("requirements.txt")
-        .current_dir(&temp_dir), @r###"
+        .current_dir(&temp_dir), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -94,7 +94,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
       Caused by: after parsing `1.0`, found `.x`, which is not part of a valid version
     flask==1.0.x
          ^^^^^^^
-    "###);
+    ");
 
     Ok(())
 }
@@ -116,7 +116,7 @@ fn uninstall() -> Result<()> {
     context.assert_command("import markupsafe").success();
 
     uv_snapshot!(context.pip_uninstall()
-        .arg("MarkupSafe"), @r###"
+        .arg("MarkupSafe"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -124,7 +124,7 @@ fn uninstall() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - markupsafe==2.1.3
-    "###
+    "
     );
 
     context.assert_command("import markupsafe").failure();
@@ -153,7 +153,7 @@ fn missing_record() -> Result<()> {
     fs_err::remove_file(dist_info.join("RECORD"))?;
 
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("MarkupSafe"), @r"
+        .arg("MarkupSafe"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -191,7 +191,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 
     // Uninstall the editable by name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg("flit-editable"), @r###"
+        .arg("flit-editable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -199,7 +199,7 @@ fn uninstall_editable_by_name() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
-    "###
+    "
     );
 
     context.assert_command("import flit_editable").failure();
@@ -232,7 +232,7 @@ fn uninstall_by_path() -> Result<()> {
 
     // Uninstall the editable by path.
     uv_snapshot!(context.filters(), context.pip_uninstall()
-        .arg(context.workspace_root.join("test/packages/flit_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/flit_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -240,7 +240,7 @@ fn uninstall_by_path() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
-    "###
+    "
     );
 
     context.assert_command("import flit_editable").failure();
@@ -274,7 +274,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     // Uninstall the editable by both path and name.
     uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("flit-editable")
-        .arg(context.workspace_root.join("test/packages/flit_editable")), @r###"
+        .arg(context.workspace_root.join("test/packages/flit_editable")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -282,7 +282,7 @@ fn uninstall_duplicate_by_path() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - flit-editable==0.1.0 (from file://[WORKSPACE]/test/packages/flit_editable)
-    "###
+    "
     );
 
     context.assert_command("import flit_editable").failure();
@@ -328,7 +328,7 @@ fn uninstall_duplicate() -> Result<()> {
 
     // Run `pip uninstall`.
     uv_snapshot!(context1.pip_uninstall()
-        .arg("pip"), @r###"
+        .arg("pip"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -337,7 +337,7 @@ fn uninstall_duplicate() -> Result<()> {
     Uninstalled 2 packages in [TIME]
      - pip==21.3.1
      - pip==22.1.1
-    "###
+    "
     );
 
     Ok(())
@@ -384,7 +384,7 @@ fn uninstall_egg_info() -> Result<()> {
 
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
-        .arg("zstandard"), @r###"
+        .arg("zstandard"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -392,7 +392,7 @@ fn uninstall_egg_info() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - zstandard==0.22.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -438,7 +438,7 @@ Version: 0.22.0
 
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
-        .arg("zstandard"), @r###"
+        .arg("zstandard"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -446,7 +446,7 @@ Version: 0.22.0
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - zstandard==0.22.0
-    "###);
+    ");
 
     // The entry in `easy-install.pth` should be removed.
     assert_eq!(
@@ -503,7 +503,7 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
     // Run `pip uninstall`.
     uv_snapshot!(context.pip_uninstall()
         .arg("--dry-run")
-        .arg("zstandard"), @r###"
+        .arg("zstandard"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -511,7 +511,7 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
     ----- stderr -----
     Would uninstall 1 package
      - zstandard==0.22.0
-    "###);
+    ");
 
     // The `.egg-info` directory should still exist.
     assert!(

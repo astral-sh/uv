@@ -30,14 +30,14 @@ fn lock_wheel_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -99,28 +99,28 @@ fn lock_wheel_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -131,17 +131,17 @@ fn lock_wheel_registry() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -162,14 +162,14 @@ fn lock_sdist_registry() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -206,17 +206,17 @@ fn lock_sdist_registry() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -225,17 +225,17 @@ fn lock_sdist_registry() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -260,14 +260,14 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -303,28 +303,28 @@ fn lock_sdist_git() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -333,7 +333,7 @@ fn lock_sdist_git() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    ");
 
     // Re-lock with a precise commit that maps to the same tag.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -350,14 +350,14 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -407,7 +407,7 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -465,14 +465,14 @@ fn lock_sdist_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -527,14 +527,14 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -570,17 +570,17 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -589,17 +589,17 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + example-pkg-a==1 (from git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a)
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -621,14 +621,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -664,14 +664,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-lock with a precise commit that maps to the same tag.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -685,14 +685,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -739,7 +739,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -794,14 +794,14 @@ fn lock_sdist_git_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -859,14 +859,14 @@ fn lock_sdist_git_short_rev() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -902,28 +902,28 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -932,17 +932,17 @@ fn lock_sdist_git_short_rev() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -963,14 +963,14 @@ fn lock_wheel_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1054,17 +1054,17 @@ fn lock_wheel_url() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. This should fail: we need network access to resolve mutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1072,10 +1072,10 @@ fn lock_wheel_url() -> Result<()> {
     ----- stderr -----
     error: Failed to generate package metadata for `anyio==4.3.0 @ direct+https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
       Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1086,17 +1086,17 @@ fn lock_wheel_url() -> Result<()> {
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1117,14 +1117,14 @@ fn lock_sdist_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1206,17 +1206,17 @@ fn lock_sdist_url() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1227,17 +1227,17 @@ fn lock_sdist_url() -> Result<()> {
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1261,14 +1261,14 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1342,17 +1342,17 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1364,17 +1364,17 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
      + idna==3.6
      + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1395,14 +1395,14 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1476,17 +1476,17 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1498,17 +1498,17 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
      + idna==3.6
      + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Re-install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Audited 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1532,14 +1532,14 @@ fn lock_project_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -1619,17 +1619,17 @@ fn lock_project_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1640,10 +1640,10 @@ fn lock_project_extra() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     // Install the extras from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1652,7 +1652,7 @@ fn lock_project_extra() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -1676,27 +1676,27 @@ fn lock_project_with_overrides() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1711,7 +1711,7 @@ fn lock_project_with_overrides() -> Result<()> {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==2.3.8
-    "###);
+    ");
 
     Ok(())
 }
@@ -1738,27 +1738,27 @@ fn lock_project_with_override_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1769,7 +1769,7 @@ fn lock_project_with_override_sources() -> Result<()> {
      + anyio==3.7.0
      + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -1793,27 +1793,27 @@ fn lock_project_with_excludes() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1827,7 +1827,7 @@ fn lock_project_with_excludes() -> Result<()> {
      + itsdangerous==2.1.2
      + jinja2==3.1.3
      + markupsafe==2.1.5
-    "###);
+    ");
 
     // Check the lockfile contains the excludes.
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
@@ -1958,7 +1958,7 @@ fn lock_project_with_excludes() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1990,27 +1990,27 @@ fn lock_project_with_constraints() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2021,7 +2021,7 @@ fn lock_project_with_constraints() -> Result<()> {
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2048,27 +2048,27 @@ fn lock_project_with_constraint_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2079,7 +2079,7 @@ fn lock_project_with_constraint_sources() -> Result<()> {
      + anyio==3.7.0
      + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2104,27 +2104,27 @@ fn lock_project_with_build_constraints() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2135,7 +2135,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2152,7 +2152,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2190,27 +2190,27 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install the base dependencies from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2219,7 +2219,7 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -2240,7 +2240,7 @@ fn lock_dependency_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2389,17 +2389,17 @@ fn lock_dependency_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2415,7 +2415,7 @@ fn lock_dependency_extra() -> Result<()> {
      + markupsafe==2.1.5
      + python-dotenv==1.0.1
      + werkzeug==3.0.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2439,7 +2439,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2669,7 +2669,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     // "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2682,7 +2682,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    "###);
+    ");
 
     // Validate that the extra is included on relevant Python versions.
     let context_38 = TestContext::new("3.8");
@@ -2691,17 +2691,17 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     fs_err::copy(lockfile, context_38.temp_dir.join("uv.lock"))?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context_38.filters(), context_38.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context_38.filters(), context_38.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2715,7 +2715,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
      + pysocks==1.7.1
      + requests==2.31.0
      + urllib3==2.2.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2736,7 +2736,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2872,17 +2872,17 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2897,7 +2897,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -2929,7 +2929,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2969,7 +2969,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3038,7 +3038,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3049,7 +3049,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3059,11 +3059,11 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     Installed 2 packages in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sortedcontainers==2.3.0
-    "###);
+    ");
 
     // Another install, but with the group enabled, which
     // should fail because it conflicts with the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3073,7 +3073,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ");
     // Another install, but this time with `--only-group=foo`,
     // which excludes the project and is thus okay.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3085,7 +3085,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -3144,7 +3144,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     )?;
 
     // Lock should succeed because we declared the conflict
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3222,7 +3222,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     });
 
     // Install from the lockfile
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3235,7 +3235,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ");
 
     // Install subexample without the root
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3251,7 +3251,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ");
 
     // Attempt to install them together, i.e., with `--all-packages`
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-packages"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--all-packages"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3261,7 +3261,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
     ");
 
     // Attempt to install them together, i.e., with `--package`
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("example").arg("--package").arg("subexample"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("example").arg("--package").arg("subexample"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3331,7 +3331,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
     )?;
 
     // This should fail to resolve, because these conflict
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3411,7 +3411,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     )?;
 
     // This should succeed, because the conflict is optional
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3494,7 +3494,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     });
 
     // Install from the lockfile
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3507,7 +3507,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ");
 
     // Attempt to install with the extra selected
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra").arg("foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3517,7 +3517,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ");
 
     // Install just the child package
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3533,7 +3533,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     ");
 
     // Install with just development dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3628,7 +3628,7 @@ fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
     )?;
 
     // This should fail to resolve, because these conflict
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3729,7 +3729,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
 
     // This succeeds, but should fail. We have an unconditional conflict via `example ->
     // indirection[foo] -> subexample`, so `example` is unusable.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3826,7 +3826,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     });
 
     // Install from the lockfile
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3836,7 +3836,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     ");
 
     // Install with `--only-dev`
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3846,7 +3846,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     ");
 
     // Install just the child package
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--package").arg("subexample"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3899,7 +3899,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3994,7 +3994,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4005,7 +4005,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4020,7 +4020,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     ");
     // Another install, but with the group enabled, which
     // should fail because it conflicts with the project.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4030,7 +4030,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
     ");
     // Another install, but this time with `--only-group=foo`,
     // which excludes the project and is thus okay.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=foo"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--only-group=foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4075,7 +4075,7 @@ fn lock_conflicting_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4118,14 +4118,14 @@ fn lock_conflicting_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4189,17 +4189,17 @@ fn lock_conflicting_mixed() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4208,9 +4208,9 @@ fn lock_conflicting_mixed() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
     // Another install, but with the group enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4219,9 +4219,9 @@ fn lock_conflicting_mixed() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + sortedcontainers==2.3.0
-    "###);
+    ");
     // Another install, but with the extra enabled.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project2"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=project2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4232,9 +4232,9 @@ fn lock_conflicting_mixed() -> Result<()> {
     Installed 1 package in [TIME]
      - sortedcontainers==2.3.0
      + sortedcontainers==2.4.0
-    "###);
+    ");
     // And finally, installing both the group and the extra should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1").arg("--extra=project2"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=project1").arg("--extra=project2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4262,14 +4262,14 @@ fn lock_upgrade_log() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4319,14 +4319,14 @@ fn lock_upgrade_log() -> Result<()> {
     });
 
     // Run with `--upgrade`; ensure that nothing is changed.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Modify the `pyproject.toml` to loosen a requirement, drop a requirement, and add a
     // requirement.
@@ -4341,7 +4341,7 @@ fn lock_upgrade_log() -> Result<()> {
     )?;
 
     // Run with `--upgrade`; ensure that the updates are reported.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4351,7 +4351,7 @@ fn lock_upgrade_log() -> Result<()> {
     Removed iniconfig v2.0.0
     Updated markupsafe v1.1.1 -> v2.1.5
     Added typing-extensions v4.10.0
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4432,14 +4432,14 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4496,14 +4496,14 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     });
 
     // Run with `--upgrade`; ensure that nothing is changed.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Modify the `pyproject.toml` to loosen the requirement.
     pyproject_toml.write_str(
@@ -4517,7 +4517,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     )?;
 
     // Run with `--upgrade`; ensure that `markupsafe` is upgraded.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4525,7 +4525,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Updated markupsafe v1.1.1, v2.0.0 -> v2.1.5
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4592,14 +4592,14 @@ fn lock_preference() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4652,14 +4652,14 @@ fn lock_preference() -> Result<()> {
     // Ensure that the locked version is still respected.
     //
     // Note that we do not use `deterministic!` here because the results depend on the existing lockfile.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4698,7 +4698,7 @@ fn lock_preference() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4706,7 +4706,7 @@ fn lock_preference() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Updated iniconfig v1.1.1 -> v2.0.0
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4768,7 +4768,7 @@ fn lock_git_plus_prefix() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4811,17 +4811,17 @@ fn lock_git_plus_prefix() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile, excluding development dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4830,7 +4830,7 @@ fn lock_git_plus_prefix() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-    "###);
+    ");
 
     Ok(())
 }
@@ -4854,14 +4854,14 @@ fn lock_partial_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -4966,17 +4966,17 @@ fn lock_partial_git() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile, excluding development dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4987,7 +4987,7 @@ fn lock_partial_git() -> Result<()> {
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -5051,17 +5051,17 @@ fn lock_unsupported_tag() -> Result<()> {
     "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5070,7 +5070,7 @@ fn lock_unsupported_tag() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + watchdog==6.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -5134,17 +5134,17 @@ fn lock_git_sha() -> Result<()> {
     )?;
 
     // The lockfile should be unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Relock with `--upgrade`.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("uv-public-pypackage"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5211,7 +5211,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5248,14 +5248,14 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 17 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -5539,14 +5539,14 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 13 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -5759,14 +5759,14 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -5853,18 +5853,18 @@ fn lock_requires_python() -> Result<()> {
     fs_err::copy(&lockfile, context_unsupported.temp_dir.join("uv.lock"))?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(context_unsupported.filters(), context_unsupported.sync().arg("--frozen").arg("--no-python-downloads"), @r"
+    uv_snapshot!(context_unsupported.filters(), context_unsupported.sync().arg("--frozen").arg("--no-python-downloads"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5898,14 +5898,14 @@ fn lock_requires_python_upper() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -5991,14 +5991,14 @@ fn lock_requires_python_upper() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6165,14 +6165,14 @@ fn lock_requires_python_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -6228,14 +6228,14 @@ fn lock_requires_python_fork() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6259,7 +6259,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6267,7 +6267,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -6322,7 +6322,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6330,7 +6330,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Change to ==3.11.*, which should different wheels in the lockfile.
     pyproject_toml.write_str(
@@ -6343,7 +6343,7 @@ fn lock_requires_python_wheels() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6407,7 +6407,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6415,7 +6415,7 @@ fn lock_requires_python_wheels() -> Result<()> {
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6439,14 +6439,14 @@ fn lock_requires_python_star() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -6530,14 +6530,14 @@ fn lock_requires_python_star() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6561,7 +6561,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6608,14 +6608,14 @@ fn lock_requires_python_not_equal() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6640,14 +6640,14 @@ fn lock_requires_python_pre() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -6731,14 +6731,14 @@ fn lock_requires_python_pre() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6761,7 +6761,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6769,7 +6769,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     ----- stderr -----
     warning: The workspace `requires-python` value (`<=3.12`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -6829,7 +6829,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6837,7 +6837,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
     ----- stderr -----
     warning: The workspace `requires-python` value (`<=3.12`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `>=3.11`).
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -6872,7 +6872,7 @@ fn lock_requires_python_disjoint() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -6903,14 +6903,14 @@ fn lock_requires_python_maximum_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -7030,14 +7030,14 @@ fn lock_requires_python_maximum_version() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7062,14 +7062,14 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -7136,14 +7136,14 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7179,14 +7179,14 @@ fn lock_python_version_marker_complement() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -7259,14 +7259,14 @@ fn lock_python_version_marker_complement() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7290,7 +7290,7 @@ fn lock_dev() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7354,7 +7354,7 @@ fn lock_dev() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7365,7 +7365,7 @@ fn lock_dev() -> Result<()> {
     ");
 
     // Install from the lockfile, excluding development dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7378,7 +7378,7 @@ fn lock_dev() -> Result<()> {
     ");
 
     // Install from the lockfile, including development dependencies (the default).
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7408,7 +7408,7 @@ fn lock_conditional_unconditional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7458,14 +7458,14 @@ fn lock_conditional_unconditional() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7486,14 +7486,14 @@ fn lock_multiple_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -7536,14 +7536,14 @@ fn lock_multiple_markers() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7602,14 +7602,14 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     "#})?;
     context.temp_dir.child("c/c/__init__.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 3 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -7654,14 +7654,14 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7682,7 +7682,7 @@ fn lock_cycles() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7836,17 +7836,17 @@ fn lock_cycles() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7864,7 +7864,7 @@ fn lock_cycles() -> Result<()> {
      + testtools==2.3.0
      + traceback2==1.4.0
      + unittest2==1.1.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -7885,14 +7885,14 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 6 packages in [TIME]
-        "###);
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -7989,14 +7989,14 @@ fn lock_new_extras() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Enable a new extra.
     pyproject_toml.write_str(
@@ -8009,15 +8009,15 @@ fn lock_new_extras() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-        ----- stderr -----
-        Resolved 7 packages in [TIME]
-        Added pysocks v1.7.1
-        "###);
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Added pysocks v1.7.1
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -8128,14 +8128,14 @@ fn lock_new_extras() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -8210,7 +8210,7 @@ fn lock_invalid_hash() -> Result<()> {
         "#)?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8221,7 +8221,7 @@ fn lock_invalid_hash() -> Result<()> {
     ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8319,7 +8319,7 @@ fn lock_mixed_hashes() -> Result<()> {
         .collect::<Vec<_>>();
 
     // Lock with SHA256 hashes.
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8363,7 +8363,7 @@ fn lock_mixed_hashes() -> Result<()> {
     });
 
     // Sync with SHA256 hashes to populate the cache.
-    uv_snapshot!(filters.clone(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(filters.clone(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8401,7 +8401,7 @@ fn lock_mixed_hashes() -> Result<()> {
     })?;
 
     // Lock again with `--refresh` to pick up the SHA512 hash from the updated index.
-    uv_snapshot!(context.filters(), context.lock().arg("--refresh").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8445,7 +8445,7 @@ fn lock_mixed_hashes() -> Result<()> {
     });
 
     // Reinstalling should re-compute the hash for the `basic-package` wheel to reflect SHA512.
-    uv_snapshot!(filters, context.sync().arg("--frozen").arg("--reinstall"), @r"
+    uv_snapshot!(filters, context.sync().arg("--frozen").arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8544,7 +8544,7 @@ async fn lock_zstd_wheel() -> Result<()> {
         server.uri()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8603,14 +8603,14 @@ fn lock_resolution_mode() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -8672,17 +8672,17 @@ fn lock_resolution_mode() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Locking with `lowest-direct` should ignore the existing lockfile.
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8691,7 +8691,7 @@ fn lock_resolution_mode() -> Result<()> {
     Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
     Resolved 4 packages in [TIME]
     Updated anyio v4.3.0 -> v3.0.0
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -8754,14 +8754,14 @@ fn lock_resolution_mode() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -8783,7 +8783,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8793,7 +8793,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
       ╰─▶ Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
           hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
-    "###);
+    ");
 
     Ok(())
 }
@@ -8846,14 +8846,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -8970,14 +8970,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -9003,7 +9003,7 @@ fn lock_unsafe_lowest() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9014,14 +9014,14 @@ fn lock_unsafe_lowest() -> Result<()> {
     ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -9067,7 +9067,7 @@ fn lock_exclusion() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9075,7 +9075,7 @@ fn lock_exclusion() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(child.join("uv.lock")).unwrap();
 
@@ -9111,14 +9111,14 @@ fn lock_exclusion() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
-    "###);
+    ");
 
     Ok(())
 }
@@ -9210,7 +9210,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -9220,7 +9220,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
     error: Failed to generate package metadata for `child==0.1.0 @ editable+.`
       Caused by: Failed to parse entry: `member`
       Caused by: `member` references a workspace in `tool.uv.sources` (e.g., `member = { workspace = true }`), but is not a workspace member
-    "###);
+    ");
 
     Ok(())
 }
@@ -9265,7 +9265,7 @@ fn lock_non_workspace_source() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9274,7 +9274,7 @@ fn lock_non_workspace_source() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` is included as a workspace member, but references a path in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `child = { workspace = true }`).
-    "###);
+    ");
 
     Ok(())
 }
@@ -9316,7 +9316,7 @@ fn lock_no_workspace_source() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9325,7 +9325,7 @@ fn lock_no_workspace_source() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `child = { workspace = true }`)
-    "###);
+    ");
 
     Ok(())
 }
@@ -9373,7 +9373,7 @@ fn lock_peer_member() -> Result<()> {
         "#,
         )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.child("project")), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.child("project")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9381,7 +9381,7 @@ fn lock_peer_member() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.child("project").child("uv.lock")).unwrap();
 
@@ -9423,14 +9423,14 @@ fn lock_peer_member() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
-    "###);
+    ");
 
     Ok(())
 }
@@ -9484,7 +9484,7 @@ fn lock_index_workspace_member() -> Result<()> {
     )?;
 
     // Locking without the necessary credentials should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9497,7 +9497,7 @@ fn lock_index_workspace_member() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
-        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @r"
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9564,14 +9564,14 @@ fn lock_index_workspace_member() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
         .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron")
-        .arg("--locked"), @r###"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -9645,7 +9645,7 @@ fn lock_dev_transitive() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&bar), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&bar), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9740,14 +9740,14 @@ fn lock_dev_transitive() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No `pyproject.toml` found in current directory or any parent directory
-    "###);
+    ");
 
     Ok(())
 }
@@ -9779,14 +9779,14 @@ fn lock_redact_https() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -9827,18 +9827,18 @@ fn lock_redact_https() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
     // when installing `iniconfig`, rather than when building `foo`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9848,10 +9848,10 @@ fn lock_redact_https() -> Result<()> {
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing from the lockfile should fail without an index.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9861,10 +9861,10 @@ fn lock_redact_https() -> Result<()> {
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9873,10 +9873,10 @@ fn lock_redact_https() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // A subsequent sync will succeed because the credentials are in uv's request cache.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9886,10 +9886,10 @@ fn lock_redact_https() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
-    "###);
+    ");
 
     // Installing without credentials will fail without a cache.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -9899,10 +9899,10 @@ fn lock_redact_https() -> Result<()> {
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9912,7 +9912,7 @@ fn lock_redact_https() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
-    "###);
+    ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9930,7 +9930,7 @@ fn lock_redact_https() -> Result<()> {
 
     // Installing from the lockfile should succeed when credentials are included via
     // `pyproject.toml`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9940,7 +9940,7 @@ fn lock_redact_https() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -9969,14 +9969,14 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10004,14 +10004,14 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
 
     // Run `uv lock`  to update the lockfile
     // The package should stay at 4.0.0
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock_after = context.read("uv.lock");
 
@@ -10041,14 +10041,14 @@ fn lock_redact_git_pep508() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&context.filters(), context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10084,17 +10084,17 @@ fn lock_redact_git_pep508() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10103,7 +10103,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+    ");
 
     Ok(())
 }
@@ -10129,14 +10129,14 @@ fn lock_redact_git_sources() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&context.filters(), context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10172,17 +10172,17 @@ fn lock_redact_git_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10191,7 +10191,7 @@ fn lock_redact_git_sources() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+    ");
 
     Ok(())
 }
@@ -10214,7 +10214,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&context.filters(), context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10222,7 +10222,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10252,7 +10252,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10260,10 +10260,10 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10272,7 +10272,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+    ");
 
     Ok(())
 }
@@ -10299,14 +10299,14 @@ fn lock_redact_index_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(&context.filters(), context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10346,17 +10346,17 @@ fn lock_redact_index_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10365,7 +10365,7 @@ fn lock_redact_index_sources() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -10386,14 +10386,14 @@ fn lock_redact_url_sources() -> Result<()> {
         iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
         "#)?;
 
-    uv_snapshot!(&context.filters(), context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10433,17 +10433,17 @@ fn lock_redact_url_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10479,7 +10479,7 @@ fn lock_env_credentials() -> Result<()> {
     )?;
 
     // Without credentials, the resolution should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10494,7 +10494,7 @@ fn lock_env_credentials() -> Result<()> {
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::index_username("INTERNAL_PROXY"), "public")
-        .env(EnvVars::index_password("INTERNAL_PROXY"), "heron"), @r"
+        .env(EnvVars::index_password("INTERNAL_PROXY"), "heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10579,14 +10579,14 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
         .env(EnvVars::index_username("INTERNAL_PROXY_HERON"), "public")
         .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
         .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
-        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
+        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -10625,14 +10625,14 @@ fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Re
         .env(EnvVars::index_username("INTERNAL_PROXY_HERON"), "public")
         .env(EnvVars::index_password("INTERNAL_PROXY_HERON"), "heron")
         .env(EnvVars::index_username("INTERNAL_PROXY_EAGLE"), "public")
-        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @r###"
+        .env(EnvVars::index_password("INTERNAL_PROXY_EAGLE"), "eagle"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -10656,14 +10656,14 @@ fn lock_relative_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -10703,17 +10703,17 @@ fn lock_relative_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10722,7 +10722,7 @@ fn lock_relative_index() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -10768,7 +10768,7 @@ fn lock_no_sources() -> Result<()> {
     )?;
 
     // Lock the root package with `tool.uv.sources` enabled.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10844,7 +10844,7 @@ fn lock_no_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10855,7 +10855,7 @@ fn lock_no_sources() -> Result<()> {
     ");
 
     // Lock the root package with `tool.uv.sources` disabled.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10946,7 +10946,7 @@ fn lock_no_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11027,7 +11027,7 @@ fn lock_migrate() -> Result<()> {
         "#
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11038,7 +11038,7 @@ fn lock_migrate() -> Result<()> {
     Added idna v3.6
     Added project v0.1.0
     Added sniffio v1.3.1
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -11120,24 +11120,24 @@ fn lock_upgrade_package() -> Result<()> {
     )?;
 
     // Lock the root package.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -11215,7 +11215,7 @@ fn lock_upgrade_package() -> Result<()> {
     )?;
 
     // Upgrade `anyio`, but nothing else.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11223,17 +11223,17 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Updated anyio v2.0.0 -> v4.3.0
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -11299,7 +11299,7 @@ fn lock_upgrade_package() -> Result<()> {
     });
 
     // Upgrade everything.
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11307,17 +11307,17 @@ fn lock_upgrade_package() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Updated idna v3.0 -> v3.6
-    "###);
+    ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -11444,7 +11444,7 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11454,7 +11454,7 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
     warning: The transitive dependency `packaging` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
     warning: The transitive dependency `iniconfig` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
     warning: The transitive dependency `colorama` is unpinned. Consider setting a lower bound with a constraint when using `--resolution lowest` to avoid using outdated versions.
-    "###);
+    ");
 
     Ok(())
 }
@@ -11499,7 +11499,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
         context.temp_dir.join("links/").portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11546,7 +11546,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11554,10 +11554,10 @@ fn lock_find_links_local_wheel() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11568,7 +11568,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==1000.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -11620,7 +11620,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
         context.temp_dir.join("links/").portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11680,7 +11680,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11737,7 +11737,7 @@ fn lock_find_links_relative_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11797,7 +11797,7 @@ fn lock_find_links_relative_url() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11850,7 +11850,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
         context.temp_dir.join("links/").portable_display(),
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11895,7 +11895,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11903,10 +11903,10 @@ fn lock_find_links_local_sdist() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11917,7 +11917,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + tqdm==999.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -11942,7 +11942,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
         build_vendor_links_url()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11989,17 +11989,17 @@ fn lock_find_links_http_wheel() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12008,7 +12008,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + packaging==23.2
-    "###);
+    ");
 
     Ok(())
 }
@@ -12033,7 +12033,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
         build_vendor_links_url()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12080,17 +12080,17 @@ fn lock_find_links_http_sdist() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12099,7 +12099,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + packaging==23.2
-    "###);
+    ");
 
     Ok(())
 }
@@ -12150,7 +12150,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12197,7 +12197,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12252,7 +12252,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12347,7 +12347,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("links/")).unwrap()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12478,7 +12478,7 @@ fn lock_local_index() -> Result<()> {
         Url::from_file_path(&root).unwrap().as_str()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12528,17 +12528,17 @@ fn lock_local_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12572,14 +12572,14 @@ fn lock_sources_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -12653,17 +12653,17 @@ fn lock_sources_url() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12675,7 +12675,7 @@ fn lock_sources_url() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
-    "###);
+    ");
 
     Ok(())
 }
@@ -12708,14 +12708,14 @@ fn lock_sources_archive() -> Result<()> {
         Url::from_file_path(&workspace_archive).unwrap(),
     })?;
 
-    uv_snapshot!( context.lock(), @r###"
+    uv_snapshot!( context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -12789,17 +12789,17 @@ fn lock_sources_archive() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12811,7 +12811,7 @@ fn lock_sources_archive() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + workspace==0.1.0 (from file://[TEMP_DIR]/workspace.zip)
-    "###);
+    ");
 
     Ok(())
 }
@@ -12859,14 +12859,14 @@ fn lock_sources_source_tree() -> Result<()> {
         context.temp_dir.child("workspace").portable_display()
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -12913,17 +12913,17 @@ fn lock_sources_source_tree() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12934,7 +12934,7 @@ fn lock_sources_source_tree() -> Result<()> {
      + anyio==0.1.0 (from file://[TEMP_DIR]/workspace/anyio)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + workspace==0.1.0 (from file://[TEMP_DIR]/workspace)
-    "###);
+    ");
 
     Ok(())
 }
@@ -12996,14 +12996,14 @@ fn lock_editable() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // First, lock without marking the dependency as editable from either member.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13056,14 +13056,14 @@ fn lock_editable() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Next, mark the dependency as editable from one member.
     leaf.child("pyproject.toml").write_str(indoc! {r#"
@@ -13080,7 +13080,7 @@ fn lock_editable() -> Result<()> {
         library = { path = "../../library", editable = true }
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13178,7 +13178,7 @@ fn lock_mixed_extras() -> Result<()> {
     leaf2.child("src/leaf2/__init__.py").touch()?;
 
     // Lock the first workspace.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace1), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace1), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13286,7 +13286,7 @@ fn lock_mixed_extras() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace1), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace1), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13294,11 +13294,11 @@ fn lock_mixed_extras() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile. This should include the first-party packages, but no third-party
     // packages, since they all rely on extras.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace1), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13311,12 +13311,12 @@ fn lock_mixed_extras() -> Result<()> {
      + leaf1==0.1.0 (from file://[TEMP_DIR]/workspace1/packages/leaf1)
      + leaf2==0.1.0 (from file://[TEMP_DIR]/workspace2/packages/leaf2)
      + workspace2==0.1.0 (from file://[TEMP_DIR]/workspace2)
-    "###);
+    ");
 
     // Install from the lockfile with the `async` extra. This should include `typing-extensions`,
     // but not `iniconfig` or `packaging`, since we're installing the root package, whereas
     // `iniconfig` is an extra on another package, and `packaging` is an extra in another workspace.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace1), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace1), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13325,7 +13325,7 @@ fn lock_mixed_extras() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -13375,7 +13375,7 @@ fn lock_transitive_extra() -> Result<()> {
     leaf.child("src/leaf/__init__.py").touch()?;
 
     // Lock the workspace.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13383,7 +13383,7 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(workspace.join("uv.lock")).unwrap();
 
@@ -13463,7 +13463,7 @@ fn lock_transitive_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13471,11 +13471,11 @@ fn lock_transitive_extra() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile. This should include the first-party packages, but no third-party
     // packages, since they all rely on extras.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13486,11 +13486,11 @@ fn lock_transitive_extra() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + leaf==0.1.0 (from file://[TEMP_DIR]/workspace/packages/leaf)
-    "###);
+    ");
 
     // Install from the lockfile with the `async` extra. This should include `typing-extensions`
     // and `iniconfig`.
-    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("async").arg("--frozen").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13500,7 +13500,7 @@ fn lock_transitive_extra() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -13527,14 +13527,14 @@ fn lock_mismatched_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13570,7 +13570,7 @@ fn lock_mismatched_sources() -> Result<()> {
     });
 
     // If we run with `--no-sources`, we should use the URL provided in `project.dependencies`.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13639,14 +13639,14 @@ fn lock_mismatched_versions() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13682,17 +13682,17 @@ fn lock_mismatched_versions() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13701,7 +13701,7 @@ fn lock_mismatched_versions() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
-    "###);
+    ");
 
     Ok(())
 }
@@ -13726,7 +13726,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13756,7 +13756,7 @@ fn check_no_lock() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .arg("--check"), @r"
+        .arg("--check"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13784,7 +13784,7 @@ fn check_outdated_lock() -> Result<()> {
     )?;
 
     // Generate the lock
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13795,7 +13795,7 @@ fn check_outdated_lock() -> Result<()> {
 
     // Check the --check returns fine
     uv_snapshot!(context.filters(), context.lock()
-        .arg("--check"), @r"
+        .arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13816,7 +13816,7 @@ fn check_outdated_lock() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .arg("--check"), @r"
+        .arg("--check"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13828,7 +13828,7 @@ fn check_outdated_lock() -> Result<()> {
 
     // Providing both `--check` and `--locked` is okay
     uv_snapshot!(context.filters(), context.lock()
-        .arg("--check").arg("--locked"), @r"
+        .arg("--check").arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13862,7 +13862,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13871,7 +13871,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13930,7 +13930,7 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13939,7 +13939,7 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
     Resolved 1 package in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13992,7 +13992,7 @@ fn lock_change_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14039,14 +14039,14 @@ fn lock_change_index() -> Result<()> {
     });
 
     // Re-run against PyPI.
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14086,14 +14086,14 @@ fn lock_change_index() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14133,14 +14133,14 @@ fn lock_remove_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14219,7 +14219,7 @@ fn lock_remove_member() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14246,7 +14246,7 @@ fn lock_remove_member() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14257,7 +14257,7 @@ fn lock_remove_member() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14348,7 +14348,7 @@ fn lock_remove_member() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14359,7 +14359,7 @@ fn lock_remove_member() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14370,7 +14370,7 @@ fn lock_remove_member() -> Result<()> {
     Removed idna v3.6
     Removed leaf v0.1.0
     Removed sniffio v1.3.1
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14421,14 +14421,14 @@ fn lock_add_member_with_build_system() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14453,14 +14453,14 @@ fn lock_add_member_with_build_system() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     // Create a workspace member.
     let leaf = context.temp_dir.child("leaf");
@@ -14493,7 +14493,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14504,7 +14504,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14515,10 +14515,10 @@ fn lock_add_member_with_build_system() -> Result<()> {
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###);
+    ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14532,7 +14532,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14633,14 +14633,14 @@ fn lock_add_member_without_build_system() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14665,14 +14665,14 @@ fn lock_add_member_without_build_system() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     // Create a workspace member.
     let leaf = context.temp_dir.child("leaf");
@@ -14701,7 +14701,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14712,7 +14712,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14723,10 +14723,10 @@ fn lock_add_member_without_build_system() -> Result<()> {
           And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###);
+    ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14740,7 +14740,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14837,7 +14837,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14848,7 +14848,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14858,7 +14858,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ");
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14969,14 +14969,14 @@ fn lock_redundant_add_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15038,14 +15038,14 @@ fn lock_redundant_add_member() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Add a dependency that's already included in the lockfile.
     pyproject_toml.write_str(
@@ -15063,7 +15063,7 @@ fn lock_redundant_add_member() -> Result<()> {
 
     // Re-run with `--locked`. This will fail, though in theory it could succeed, since the current
     // _resolution_ satisfies the requirements, even if the inputs are not identical
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15074,14 +15074,14 @@ fn lock_redundant_add_member() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15166,14 +15166,14 @@ fn lock_new_constraints() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15235,14 +15235,14 @@ fn lock_new_constraints() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Add a constraint.
     pyproject_toml.write_str(
@@ -15261,7 +15261,7 @@ fn lock_new_constraints() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15272,7 +15272,7 @@ fn lock_new_constraints() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15280,7 +15280,7 @@ fn lock_new_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     Updated anyio v4.3.0 -> v4.2.0
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15378,14 +15378,14 @@ fn lock_remove_member_non_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15452,14 +15452,14 @@ fn lock_remove_member_non_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Remove the member.
     pyproject_toml.write_str(
@@ -15470,7 +15470,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15482,7 +15482,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15494,7 +15494,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     Removed idna v3.6
     Removed leaf v0.1.0
     Removed sniffio v1.3.1
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15534,14 +15534,14 @@ fn lock_rename_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15581,14 +15581,14 @@ fn lock_rename_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Rename the project.
     pyproject_toml.write_str(
@@ -15602,7 +15602,7 @@ fn lock_rename_project() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15613,7 +15613,7 @@ fn lock_rename_project() -> Result<()> {
     ");
 
     // Re-run without `--locked`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15622,7 +15622,7 @@ fn lock_rename_project() -> Result<()> {
     Resolved 2 packages in [TIME]
     Removed project v0.1.0
     Added renamed v0.1.0
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15732,14 +15732,14 @@ fn lock_missing_metadata() -> Result<()> {
     "#)?;
 
     // Re-locking should add `[package.metadata]`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -15860,7 +15860,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
     "#)?;
 
     // Re-locking should be a no-op.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15884,7 +15884,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15969,14 +15969,14 @@ fn lock_reorder() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -16051,14 +16051,14 @@ fn lock_reorder() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     // Reorder the dependencies.
     pyproject_toml.write_str(
@@ -16072,14 +16072,14 @@ fn lock_reorder() -> Result<()> {
     )?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16119,14 +16119,14 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -16183,14 +16183,14 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16230,14 +16230,14 @@ fn lock_narrowed_python_version() -> Result<()> {
 
     let lockfile = context.temp_dir.join("uv.lock");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(&lockfile).unwrap();
 
@@ -16296,14 +16296,14 @@ fn lock_narrowed_python_version() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16330,7 +16330,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16406,14 +16406,14 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16437,7 +16437,7 @@ fn lock_constrained_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16546,25 +16546,25 @@ fn lock_constrained_environment() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Rewrite with a list, rather than a string.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -16582,14 +16582,14 @@ fn lock_constrained_environment() -> Result<()> {
     )?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Re-lock without the environment constraint.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -16604,7 +16604,7 @@ fn lock_constrained_environment() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. This should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -16614,7 +16614,7 @@ fn lock_constrained_environment() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16622,7 +16622,7 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     Added colorama v0.4.6
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -16761,7 +16761,7 @@ fn lock_constrained_environment_legacy() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16875,25 +16875,25 @@ fn lock_constrained_environment_legacy() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16917,7 +16917,7 @@ fn lock_overlapping_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -16926,7 +16926,7 @@ fn lock_overlapping_environment() -> Result<()> {
     error: Supported environments must be disjoint, but the following markers overlap: `sys_platform != 'win32'` and `python_full_version >= '3.11'`.
 
     hint: replace `python_full_version >= '3.11'` with `python_full_version >= '3.11' and sys_platform == 'win32'`.
-    "###);
+    ");
 
     Ok(())
 }
@@ -16950,7 +16950,7 @@ fn lock_non_project_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16958,7 +16958,7 @@ fn lock_non_project_fork() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -17060,7 +17060,7 @@ fn lock_non_project_fork() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17068,11 +17068,11 @@ fn lock_non_project_fork() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17080,7 +17080,7 @@ fn lock_non_project_fork() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Add `iniconfig`.
     pyproject_toml.write_str(
@@ -17097,7 +17097,7 @@ fn lock_non_project_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17106,9 +17106,9 @@ fn lock_non_project_fork() -> Result<()> {
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 7 packages in [TIME]
     Added iniconfig v2.0.0
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17122,7 +17122,7 @@ fn lock_non_project_fork() -> Result<()> {
      + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -17143,7 +17143,7 @@ fn lock_non_project_conditional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17151,7 +17151,7 @@ fn lock_non_project_conditional() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -17207,7 +17207,7 @@ fn lock_non_project_conditional() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17215,11 +17215,11 @@ fn lock_non_project_conditional() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17227,7 +17227,7 @@ fn lock_non_project_conditional() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -17252,7 +17252,7 @@ fn lock_non_project_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17260,7 +17260,7 @@ fn lock_non_project_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -17349,7 +17349,7 @@ fn lock_non_project_group() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17357,11 +17357,11 @@ fn lock_non_project_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17369,7 +17369,7 @@ fn lock_non_project_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.10`.
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -17393,7 +17393,7 @@ fn lock_non_project_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17401,7 +17401,7 @@ fn lock_non_project_sources() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -17434,7 +17434,7 @@ fn lock_non_project_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17442,11 +17442,11 @@ fn lock_non_project_sources() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17454,7 +17454,7 @@ fn lock_non_project_sources() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -17477,7 +17477,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17538,7 +17538,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17550,7 +17550,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17561,7 +17561,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
     ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17595,7 +17595,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17646,7 +17646,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17658,7 +17658,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17669,7 +17669,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
     ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17703,7 +17703,7 @@ fn lock_empty_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17753,28 +17753,28 @@ fn lock_empty_dependency_group() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17783,7 +17783,7 @@ fn lock_empty_dependency_group() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -17804,7 +17804,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17851,14 +17851,14 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Add an empty group.
     pyproject_toml.write_str(
@@ -17875,7 +17875,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     )?;
 
     // Re-run with `--locked`; this should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -17886,14 +17886,14 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ");
 
     // Re-lock the project.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -17936,14 +17936,14 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Remove the empty group.
     pyproject_toml.write_str(
@@ -17957,7 +17957,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     )?;
 
     // Re-run with `--locked`; this should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -17968,14 +17968,14 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ");
 
     // Re-lock the project.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -18015,14 +18015,14 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -18046,14 +18046,14 @@ fn lock_trailing_slash_index_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -18115,28 +18115,28 @@ fn lock_trailing_slash_index_url() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18147,7 +18147,7 @@ fn lock_trailing_slash_index_url() -> Result<()> {
      + anyio==3.7.0
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -18175,7 +18175,7 @@ fn lock_invalid_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18194,7 +18194,7 @@ fn lock_invalid_index() -> Result<()> {
     9 |         iniconfig = { index = "internal proxy" }
       |                               ^^^^^^^^^^^^^^^^
     Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
-    "###);
+    "#);
 
     Ok(())
 }
@@ -18222,7 +18222,7 @@ fn lock_explicit_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18330,7 +18330,7 @@ fn lock_explicit_default_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18495,14 +18495,14 @@ fn lock_named_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -18564,7 +18564,7 @@ fn lock_default_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18626,7 +18626,7 @@ fn lock_default_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -18634,7 +18634,7 @@ fn lock_default_index() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -18695,7 +18695,7 @@ fn lock_named_index_cli() -> Result<()> {
     )?;
 
     // The package references a non-existent index.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -18704,17 +18704,17 @@ fn lock_named_index_cli() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `jinja2`
       ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
-    "###);
+    ");
 
     // But it's fine if it comes from the CLI.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("pytorch=https://astral-sh.github.io/pytorch-mirror/whl/cu121"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -18790,7 +18790,7 @@ fn lock_repeat_named_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18802,7 +18802,7 @@ fn lock_repeat_named_index() -> Result<()> {
     8 |         [[tool.uv.index]]
       |         ^^^^^^^^^^^^^^^^^
     duplicate index name `pytorch`
-    "###);
+    ");
 
     Ok(())
 }
@@ -18857,14 +18857,14 @@ fn lock_repeat_named_index_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -18946,14 +18946,14 @@ fn lock_unique_named_index() -> Result<()> {
     )?;
 
     // Fall back to PyPI, since `iniconfig` doesn't exist on the PyTorch index.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -19020,14 +19020,14 @@ fn lock_repeat_named_index_cli() -> Result<()> {
     )?;
 
     // Resolve to the PyTorch index.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -19087,14 +19087,14 @@ fn lock_repeat_named_index_cli() -> Result<()> {
 
     // Resolve to PyPI, since the PyTorch index is replaced by the Packse index, which doesn't
     // include `jinja2`.
-    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", packse_index_url())), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg(format!("pytorch={}", packse_index_url())), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -19186,14 +19186,14 @@ fn lock_named_index_overlap() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -19268,7 +19268,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19423,7 +19423,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19435,7 +19435,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19446,7 +19446,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
     ");
 
     // Install from the lockfile. The virtual project should _not_ be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19490,7 +19490,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19645,7 +19645,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19657,7 +19657,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19668,7 +19668,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
     ");
 
     // Install from the lockfile. The virtual project should _not_ be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19722,7 +19722,7 @@ fn lock_implicit_package_path() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19815,28 +19815,28 @@ fn lock_implicit_package_path() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile. The path dependency should be installed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -19872,14 +19872,14 @@ fn lock_conflicting_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Environment markers `python_full_version < '3.11'` don't overlap with Python requirement `>=3.12`
-    "###);
+    ");
 
     Ok(())
 }
@@ -19906,14 +19906,14 @@ fn lock_split_python_environment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -19976,25 +19976,25 @@ fn lock_split_python_environment() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -20017,14 +20017,14 @@ fn lock_python_upper_bound() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 18 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -20344,25 +20344,25 @@ fn lock_python_upper_bound() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 18 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 18 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -20389,14 +20389,14 @@ fn lock_simplified_environments() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -20444,28 +20444,28 @@ fn lock_simplified_environments() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20474,7 +20474,7 @@ fn lock_simplified_environments() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -20499,7 +20499,7 @@ fn lock_dependency_metadata() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20565,28 +20565,28 @@ fn lock_dependency_metadata() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20596,7 +20596,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Installed 2 packages in [TIME]
      + anyio==3.7.0
      + iniconfig==2.0.0
-    "###);
+    ");
 
     // Update the static metadata.
     pyproject_toml.write_str(
@@ -20615,7 +20615,7 @@ fn lock_dependency_metadata() -> Result<()> {
     )?;
 
     // The lockfile should update.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20624,7 +20624,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Resolved 3 packages in [TIME]
     Removed iniconfig v2.0.0
     Added typing-extensions v4.10.0
-    "###);
+    ");
 
     // Remove the static metadata.
     pyproject_toml.write_str(
@@ -20638,7 +20638,7 @@ fn lock_dependency_metadata() -> Result<()> {
     )?;
 
     // The lockfile should update.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20648,7 +20648,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Added idna v3.6
     Added sniffio v1.3.1
     Removed typing-extensions v4.10.0
-    "###);
+    ");
 
     // Use a blanket match.
     pyproject_toml.write_str(
@@ -20666,7 +20666,7 @@ fn lock_dependency_metadata() -> Result<()> {
     )?;
 
     // The lockfile should update.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20676,7 +20676,7 @@ fn lock_dependency_metadata() -> Result<()> {
     Removed idna v3.6
     Added iniconfig v2.0.0
     Removed sniffio v1.3.1
-    "###);
+    ");
 
     // Update the static metadata.
     pyproject_toml.write_str(
@@ -20741,7 +20741,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20803,28 +20803,28 @@ fn lock_dependency_metadata_git() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20834,7 +20834,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
     Installed 2 packages in [TIME]
      + anyio==4.6.2 (from git+https://github.com/agronholm/anyio@c4844254e6db0cb804c240ba07405db73d810e0b)
      + iniconfig==2.0.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -20854,14 +20854,14 @@ fn lock_strip_fragment() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -20900,17 +20900,17 @@ fn lock_strip_fragment() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -20918,7 +20918,7 @@ fn lock_strip_fragment() -> Result<()> {
     ----- stderr -----
     Installed 1 package in [TIME]
      + iniconfig==2.0.0 (from https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    "###);
+    ");
 
     Ok(())
 }
@@ -20939,7 +20939,7 @@ fn lock_request_requires_python() -> Result<()> {
     )?;
 
     // Request a version that conflicts with `--requires-python`.
-    uv_snapshot!(context.filters(), context.lock().arg("--python").arg("3.12"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--python").arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -20953,7 +20953,7 @@ fn lock_request_requires_python() -> Result<()> {
     let python_version = context.temp_dir.child(".python-version");
     python_version.write_str("3.12")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21020,7 +21020,7 @@ fn lock_duplicate_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21032,8 +21032,7 @@ fn lock_duplicate_sources() -> Result<()> {
     7 |         [tool.uv.sources]
       |         ^^^^^^^^^^^^^^^^^
     duplicate sources for package `python-multipart`
-
-    "###);
+    ");
 
     Ok(())
 }
@@ -21064,7 +21063,7 @@ fn lock_invalid_project_table() -> Result<()> {
         ",
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("a")), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("a")), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -21078,7 +21077,7 @@ fn lock_invalid_project_table() -> Result<()> {
           2 |         [project.urls]
             |          ^^^^^^^
           `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
-    "###);
+    ");
 
     Ok(())
 }
@@ -21097,7 +21096,7 @@ fn lock_missing_name() -> Result<()> {
         "#,
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21109,7 +21108,7 @@ fn lock_missing_name() -> Result<()> {
     1 | [project]
       | ^^^^^^^^^
     `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
-    "###);
+    ");
 
     Ok(())
 }
@@ -21128,7 +21127,7 @@ fn lock_missing_version() -> Result<()> {
         "#,
     })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21140,7 +21139,7 @@ fn lock_missing_version() -> Result<()> {
     1 | [project]
       | ^^^^^^^^^
     `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
-    "###);
+    ");
 
     Ok(())
 }
@@ -21191,14 +21190,14 @@ fn lock_unsupported_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: The lockfile at `uv.lock` uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
-    "###);
+    ");
 
     // Invalid schema (`iniconfig` is referenced, but missing), invalid version.
     context.temp_dir.child("uv.lock").write_str(
@@ -21222,7 +21221,7 @@ fn lock_unsupported_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21230,7 +21229,7 @@ fn lock_unsupported_version() -> Result<()> {
     ----- stderr -----
     error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
       Caused by: Dependency `iniconfig` has missing `source` field but has more than one matching package
-    "###);
+    ");
 
     Ok(())
 }
@@ -21254,7 +21253,7 @@ fn lock_change_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -21364,14 +21363,14 @@ fn lock_change_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -21506,7 +21505,7 @@ fn lock_keyring_credentials() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::index_username("PROXY"), "public")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -21611,7 +21610,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
     // First, try some invalid credentials — we should not fall back to the default index
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "frog"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -21628,7 +21627,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
     // With valid credentials, we should succeed
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -21694,7 +21693,7 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -21789,7 +21788,7 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21824,14 +21823,14 @@ fn lock_multiple_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -21890,14 +21889,14 @@ fn lock_multiple_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -21923,7 +21922,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21937,7 +21936,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
     Source markers must be disjoint, but the following markers overlap: `python_full_version == '3.12.*' and sys_platform == 'win32'` and `sys_platform == 'win32'`.
 
     hint: replace `sys_platform == 'win32'` with `python_full_version != '3.12.*' and sys_platform == 'win32'`.
-    "###);
+    ");
 
     Ok(())
 }
@@ -21963,7 +21962,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21975,7 +21974,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
     9 |         iniconfig = [
       |                     ^
     When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -22012,14 +22011,14 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -22103,14 +22102,14 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22143,14 +22142,14 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -22241,14 +22240,14 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22277,14 +22276,14 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -22341,14 +22340,14 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22378,14 +22377,14 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -22492,14 +22491,14 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22524,14 +22523,14 @@ fn lock_multiple_sources_non_total() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -22593,14 +22592,14 @@ fn lock_multiple_sources_non_total() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22625,14 +22624,14 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -22672,14 +22671,14 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22707,14 +22706,14 @@ fn lock_multiple_sources_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -22759,14 +22758,14 @@ fn lock_multiple_sources_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -22809,7 +22808,7 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -22850,7 +22849,7 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -22858,7 +22857,7 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/`
       ╰─▶ Source entry for `jinja2` only applies to extra `cu118`, but the `cu118` extra does not exist. When an extra is present on a source (e.g., `extra = "cu118"`), the relevant package must be included in the `project.optional-dependencies` section for that extra (e.g., `project.optional-dependencies = { "cu118" = ["jinja2"] }`).
-    "###);
+    "#);
 
     Ok(())
 }
@@ -22893,7 +22892,7 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -22901,7 +22900,7 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/`
       ╰─▶ Source entry for `jinja2` only applies to extra `cu118`, but `jinja2` was not found under the `project.optional-dependencies` section for that extra. When an extra is present on a source (e.g., `extra = "cu118"`), the relevant package must be included in the `project.optional-dependencies` section for that extra (e.g., `project.optional-dependencies = { "cu118" = ["jinja2"] }`).
-    "###);
+    "#);
 
     Ok(())
 }
@@ -22932,7 +22931,7 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -22940,7 +22939,7 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/`
       ╰─▶ Source entry for `jinja2` only applies to dependency group `cu118`, but the `cu118` group does not exist. When a group is present on a source (e.g., `group = "cu118"`), the relevant package must be included in the `dependency-groups` section for that extra (e.g., `dependency-groups = { "cu118" = ["jinja2"] }`).
-    "###);
+    "#);
 
     Ok(())
 }
@@ -22975,7 +22974,7 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -22983,7 +22982,7 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
     ----- stderr -----
       × Failed to build `project @ file://[TEMP_DIR]/`
       ╰─▶ Source entry for `jinja2` only applies to dependency group `cu118`, but `jinja2` was not found under the `dependency-groups` section for that group. When a group is present on a source (e.g., `group = "cu118"`), the relevant package must be included in the `dependency-groups` section for that extra (e.g., `dependency-groups = { "cu118" = ["jinja2"] }`).
-    "###);
+    "#);
 
     Ok(())
 }
@@ -23007,7 +23006,7 @@ fn lock_dry_run() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23029,7 +23028,7 @@ fn lock_dry_run() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23073,7 +23072,7 @@ fn lock_dry_run_noop() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23086,7 +23085,7 @@ fn lock_dry_run_noop() -> Result<()> {
     Add sniffio v1.3.1
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23095,7 +23094,7 @@ fn lock_dry_run_noop() -> Result<()> {
     Resolved 5 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23105,7 +23104,7 @@ fn lock_dry_run_noop() -> Result<()> {
     No lockfile changes detected
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--dry-run").arg("-U"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run").arg("-U"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23137,7 +23136,7 @@ fn lock_group_include() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23324,7 +23323,7 @@ fn lock_group_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23446,7 +23445,7 @@ fn lock_group_includes_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23592,7 +23591,7 @@ fn lock_group_requires_undefined_group() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23626,7 +23625,7 @@ fn lock_group_requires_dev_dep() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23662,7 +23661,7 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -23782,7 +23781,7 @@ fn lock_group_include_cycle() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23848,7 +23847,7 @@ fn lock_group_include_missing() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23926,7 +23925,7 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23938,8 +23937,7 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
     9 |         foo = [{include-group = "invalid!"}]
       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     Not a valid package or extra name: "invalid!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
-
-    "###);
+    "#);
 
     Ok(())
 }
@@ -23963,7 +23961,7 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -23975,7 +23973,7 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     8 |         [dependency-groups]
       |         ^^^^^^^^^^^^^^^^^^^
     duplicate dependency group: `foo-bar`
-    "###);
+    ");
 
     Ok(())
 }
@@ -24029,7 +24027,7 @@ fn lock_group_invalid_entry_type() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -24041,8 +24039,7 @@ fn lock_group_invalid_entry_type() -> Result<()> {
     9 |         foo = [{include-group = true}]
       |                                 ^^^^
     invalid type: boolean `true`, expected a string
-
-    "###);
+    ");
 
     Ok(())
 }
@@ -24065,7 +24062,7 @@ fn lock_group_empty_entry_table() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -24077,8 +24074,7 @@ fn lock_group_empty_entry_table() -> Result<()> {
     9 |         foo = [{}]
       |                ^^
     missing field `include-group`
-
-    "###);
+    ");
 
     Ok(())
 }
@@ -24128,7 +24124,7 @@ fn lock_group_workspace() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -24319,14 +24315,14 @@ fn lock_transitive_git() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -24404,28 +24400,28 @@ fn lock_transitive_git() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -24438,7 +24434,7 @@ fn lock_transitive_git() -> Result<()> {
      + d==1.0.0 (from git+https://github.com/astral-sh/workspace-virtual-root-test@fac39c8d4c5d0ef32744e2bb309bbe34a759fd46#subdirectory=packages/d)
      + idna==3.6
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -24482,7 +24478,7 @@ fn lock_dynamic_version() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -24521,14 +24517,14 @@ fn lock_dynamic_version() -> Result<()> {
         .write_str("__version__ = '0.1.1'")?;
 
     // Re-run with `--locked`. We should accept the lockfile, since dynamic versions are omitted.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -24592,7 +24588,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -24631,14 +24627,14 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
         .write_str("__version__ = '0.1.1'")?;
 
     // Re-run with `--locked`. We should accept the lockfile, since dynamic versions are omitted.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -24719,14 +24715,14 @@ fn lock_dynamic_version_no_build() -> Result<()> {
         "#})?;
 
     // Validate the lockfile with `--offline` to ensure that the package itself isn't built.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -24788,7 +24784,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -24858,14 +24854,14 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
         .write_str("__version__ = '0.1.1'")?;
 
     // Re-run with `--locked`. We should accept the lockfile, since dynamic versions are omitted.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -24976,7 +24972,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25040,14 +25036,14 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
         .write_str("__version__ = '0.1.1'")?;
 
     // Re-run with `--locked`. We should accept the lockfile, since dynamic versions are omitted.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -25140,7 +25136,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
         .child("__about__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25227,26 +25223,26 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -25300,7 +25296,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25387,26 +25383,26 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     });
 
     // Re-run with `--locked`. We should accept the lockfile, since the metadata is unchanged.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     fs_err::remove_dir_all(&context.cache_dir)?;
 
     // Running with `--offline` should also succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -25452,7 +25448,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
         .touch()?;
 
     // Lock the project, which should omit the dynamic version.
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25483,7 +25479,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
     });
 
     // Install the project, to force a build.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25493,20 +25489,20 @@ fn lock_dynamic_built_cache() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     // Remove the lockfile.
     fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
 
     // Lock the project, which should omit the dynamic version.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -25574,14 +25570,14 @@ fn lock_shared_build_dependency() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock()
         .arg("--no-build-package")
-        .arg("libcst"), @r###"
+        .arg("libcst"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -25802,14 +25798,14 @@ fn lock_shared_build_dependency() -> Result<()> {
     });
 
     uv_snapshot!(context.filters(), context.lock()
-        .arg("--locked"), @r###"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -25853,7 +25849,7 @@ fn lock_dynamic_to_static() -> Result<()> {
         .child("__init__.py")
         .write_str("__version__ = '0.1.0'")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25899,7 +25895,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     )?;
 
     // Rerunning with `--locked` should fail, since the project is no longer dynamic.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -25909,7 +25905,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25917,7 +25913,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Updated project (dynamic) -> v0.1.0
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -25964,14 +25960,14 @@ fn lock_static_to_dynamic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -26030,7 +26026,7 @@ fn lock_static_to_dynamic() -> Result<()> {
         .write_str("__version__ = '0.1.0'")?;
 
     // Rerunning with `--locked` should fail, since the project is no longer static.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -26040,7 +26036,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26048,7 +26044,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Updated project v0.1.0 -> (dynamic)
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -26089,14 +26085,14 @@ fn lock_bump_static_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -26132,7 +26128,7 @@ fn lock_bump_static_version() -> Result<()> {
     )?;
 
     // Rerunning with `--locked` should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -26142,7 +26138,7 @@ fn lock_bump_static_version() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26150,7 +26146,7 @@ fn lock_bump_static_version() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Updated project v0.1.0 -> v0.2.0
-    "###);
+    ");
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -26440,7 +26436,7 @@ fn mismatched_name_self_editable() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -26450,7 +26446,7 @@ fn mismatched_name_self_editable() -> Result<()> {
       × Failed to build `foo @ file://[TEMP_DIR]/`
       ╰─▶ Package metadata name `project` does not match given name `foo`
       help: `foo` was included because `project` (v0.1.0) depends on `foo`
-    "###);
+    ");
 
     Ok(())
 }
@@ -26476,7 +26472,7 @@ fn lock_relative_project() -> Result<()> {
     let peer = context.temp_dir.child("peer");
     fs_err::create_dir_all(&peer)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--project").arg("../project").current_dir(&peer), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--project").arg("../project").current_dir(&peer), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26484,7 +26480,7 @@ fn lock_relative_project() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read(context.temp_dir.child("project").child("uv.lock"));
 
@@ -26524,7 +26520,7 @@ fn lock_relative_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--project").arg("../project").current_dir(&peer), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--project").arg("../project").current_dir(&peer), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26532,7 +26528,7 @@ fn lock_relative_project() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Create a virtual environment in the project directory.
     context
@@ -26543,7 +26539,7 @@ fn lock_relative_project() -> Result<()> {
         .success();
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--project").arg("../project").current_dir(&peer), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--project").arg("../project").current_dir(&peer), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26552,7 +26548,7 @@ fn lock_relative_project() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -26579,14 +26575,14 @@ fn lock_recursive_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -26647,14 +26643,14 @@ fn lock_recursive_extra() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -26691,14 +26687,14 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -26718,14 +26714,14 @@ fn lock_no_build_static_metadata() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -26765,28 +26761,28 @@ fn lock_no_build_static_metadata() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build").arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26815,7 +26811,7 @@ fn lock_no_build_dynamic_metadata() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-build"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -26823,7 +26819,7 @@ fn lock_no_build_dynamic_metadata() -> Result<()> {
     ----- stderr -----
       × Failed to build `dummy @ file://[TEMP_DIR]/`
       ╰─▶ Building source distributions for `dummy` is disabled
-    "###);
+    ");
 
     Ok(())
 }
@@ -26843,14 +26839,14 @@ fn lock_self_compatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -26893,28 +26889,28 @@ fn lock_self_compatible() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26923,7 +26919,7 @@ fn lock_self_compatible() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -26943,14 +26939,14 @@ fn lock_self_exact() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -26993,28 +26989,28 @@ fn lock_self_exact() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27023,7 +27019,7 @@ fn lock_self_exact() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -27043,7 +27039,7 @@ fn lock_self_incompatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27076,14 +27072,14 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27127,28 +27123,28 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27157,7 +27153,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -27180,7 +27176,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27214,7 +27210,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27247,14 +27243,14 @@ fn lock_self_extra_compatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27298,28 +27294,28 @@ fn lock_self_extra_compatible() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27328,7 +27324,7 @@ fn lock_self_extra_compatible() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -27351,7 +27347,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27381,14 +27377,14 @@ fn lock_self_marker_compatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27431,28 +27427,28 @@ fn lock_self_marker_compatible() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27461,7 +27457,7 @@ fn lock_self_marker_compatible() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
-    "###);
+    ");
 
     Ok(())
 }
@@ -27481,7 +27477,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27516,14 +27512,14 @@ fn lock_split_on_windows() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27608,7 +27604,7 @@ fn lock_missing_git_prefix() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -27617,7 +27613,7 @@ fn lock_missing_git_prefix() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `workspace-in-root-test`
       ╰─▶ `workspace-in-root-test` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `workspace-in-root-test = { git = "https://github.com/astral-sh/workspace-in-root-test" }`)
-    "###);
+    "#);
 
     Ok(())
 }
@@ -27640,7 +27636,7 @@ fn lock_arm() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -27715,14 +27711,14 @@ fn lock_x86_64() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27791,14 +27787,14 @@ fn lock_x86() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -27863,14 +27859,14 @@ fn lock_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -27924,14 +27920,14 @@ fn lock_script() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Modify the script metadata.
     script.write_str(indoc! { r#"
@@ -27948,7 +27944,7 @@ fn lock_script() -> Result<()> {
     })?;
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -28000,14 +27996,14 @@ fn lock_script_path() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -28084,14 +28080,14 @@ fn lock_script_path() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -28101,7 +28097,7 @@ fn lock_script_path() -> Result<()> {
 fn lock_script_initialize() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_missing_file_error();
 
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -28116,14 +28112,14 @@ fn lock_script_initialize() -> Result<()> {
        "
     })?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg("script.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -28224,14 +28220,14 @@ fn lock_pytorch_cpu() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 33 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -28877,14 +28873,14 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 25 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -29344,7 +29340,7 @@ fn lock_intel_mac() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -29735,14 +29731,14 @@ fn lock_pytorch_local_preference() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 15 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -30070,14 +30066,14 @@ fn windows_arm() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -30147,14 +30143,14 @@ fn windows_amd64_required() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -30221,14 +30217,14 @@ fn windows_arm64_required() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -30289,7 +30285,7 @@ fn lock_empty_extra() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30350,7 +30346,7 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -30360,7 +30356,7 @@ fn lock_empty_extra() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30368,7 +30364,7 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Added typing-extensions v4.10.0
-    "###);
+    ");
 
     // Add an empty extra.
     pyproject_toml.write_str(
@@ -30386,7 +30382,7 @@ fn lock_empty_extra() -> Result<()> {
     )?;
 
     // Re-run with `--locked`. We expect this to fail, since we've added an extra.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -30396,14 +30392,14 @@ fn lock_empty_extra() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -30520,7 +30516,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30532,14 +30528,14 @@ fn lock_invalid_fork_markers() -> Result<()> {
     ");
 
     // Check that the lockfile got updated and we don't show the warning anymore.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -30559,7 +30555,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30611,7 +30607,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30622,7 +30618,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30653,7 +30649,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -30680,7 +30676,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30875,7 +30871,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -30906,7 +30902,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30939,7 +30935,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
     let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(no_trailing_slash_url), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(no_trailing_slash_url), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31035,7 +31031,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31125,7 +31121,7 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
     )?;
 
     // Run `uv lock --locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -31216,7 +31212,7 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
     )?;
 
     // Run `uv lock --locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -31307,7 +31303,7 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
     )?;
 
     // Run `uv lock --locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31336,7 +31332,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31382,7 +31378,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31407,7 +31403,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     )?;
 
     // Re-run with `--locked`
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -31417,7 +31413,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31480,7 +31476,7 @@ fn lock_prefix_match() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -31512,7 +31508,7 @@ fn test_tilde_equals_python_version() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31547,14 +31543,14 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2022-04-04T12:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("idna=false"), @r###"
+        .arg("idna=false"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -31635,14 +31631,14 @@ fn lock_exclude_newer_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2022-04-04T12:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("tqdm=2022-09-04T00:00:00Z"), @r###"
+        .arg("tqdm=2022-09-04T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -31807,7 +31803,7 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31817,7 +31813,7 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
     Resolved 3 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31907,7 +31903,7 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31916,7 +31912,7 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31986,7 +31982,7 @@ fn lock_path_dependency_mixed_indexes() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -31996,7 +31992,7 @@ fn lock_path_dependency_mixed_indexes() -> Result<()> {
     Resolved 6 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32047,7 +32043,7 @@ fn lock_path_dependency_no_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32057,7 +32053,7 @@ fn lock_path_dependency_no_index() -> Result<()> {
     Resolved 7 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_b), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32140,7 +32136,7 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_c), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_c), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32150,7 +32146,7 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_c), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_c), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32218,7 +32214,7 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
     )?;
 
     // This should not hang or crash due to the circular dependency.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_a), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&pkg_a), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32228,7 +32224,7 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
     Resolved 8 packages in [TIME]
     ");
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_a), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check").current_dir(&pkg_a), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32261,7 +32257,7 @@ fn lock_android() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32315,7 +32311,7 @@ fn lock_android() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32326,14 +32322,14 @@ fn lock_android() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -32361,7 +32357,7 @@ fn lock_required_intersection() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32418,7 +32414,7 @@ fn lock_required_intersection() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32429,14 +32425,14 @@ fn lock_required_intersection() -> Result<()> {
 
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -32456,14 +32452,14 @@ fn lock_refresh() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // Write a `uv.lock` that accidentally omits the `anyio` wheel, and uses an outdated revision.
     context.temp_dir.child("uv.lock").write_str(
@@ -32517,14 +32513,14 @@ fn lock_refresh() -> Result<()> {
     )?;
 
     // Run `uv lock`.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -32534,6 +32530,7 @@ fn lock_refresh() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
+
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -32584,7 +32581,7 @@ fn lock_refresh() -> Result<()> {
     });
 
     // Re-run with `--refresh`.
-    uv_snapshot!(context.filters(), context.lock().arg("--refresh"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32654,7 +32651,7 @@ fn lock_refresh() -> Result<()> {
     });
 
     // Re-run with `--refresh --locked`.
-    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--locked"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--refresh").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32686,7 +32683,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -32720,7 +32717,7 @@ fn no_warning_without_and_with_lower_bound() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32747,7 +32744,7 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -32779,7 +32776,7 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -32828,7 +32825,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -32878,7 +32875,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
         );
     });
 
-    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----

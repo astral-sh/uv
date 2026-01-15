@@ -308,7 +308,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_metadata(), @r"
+    uv_snapshot!(context.filters(), context.workspace_metadata(), @"
     success: false
     exit_code: 2
     ----- stdout -----

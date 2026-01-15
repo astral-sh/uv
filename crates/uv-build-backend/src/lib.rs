@@ -673,7 +673,7 @@ mod tests {
             @"bb74bff575b135bb39e5c9bce56349441fb0923bb8857e32a5eaf34ec1843967"
         );
         // Check both the files we report and the actual files
-        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"
+        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
@@ -690,7 +690,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         ");
-        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @r"
+        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @"
         built_by_uv-0.1.0/
         built_by_uv-0.1.0/LICENSE-APACHE
         built_by_uv-0.1.0/LICENSE-MIT
@@ -726,7 +726,7 @@ mod tests {
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
             @"dbe56fd8bd52184095b2e0ea3e83c95d1bc8b4aa53cf469cec5af62251b24abb"
         );
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         built_by_uv-0.1.0.data/data/
         built_by_uv-0.1.0.data/data/data.csv
         built_by_uv-0.1.0.data/headers/
@@ -751,7 +751,7 @@ mod tests {
         built_by_uv/arithmetic/pi.txt
         built_by_uv/cli.py
         ");
-        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @r"
+        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @"
         built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
@@ -775,7 +775,7 @@ mod tests {
             .unwrap()
             .read_to_string(&mut record)
             .unwrap();
-        assert_snapshot!(record, @r"
+        assert_snapshot!(record, @"
         built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
         built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
         built_by_uv/arithmetic/circle.py,sha256=FYZkv6KwrF9nJcwGOKigjke1dm1Fkie7qW1lWJoh3AE,287
@@ -856,13 +856,13 @@ mod tests {
             .read_to_string(&mut metadata)
             .unwrap();
 
-        assert_snapshot!(metadata, @r###"
+        assert_snapshot!(metadata, @"
         Metadata-Version: 2.3
         Name: pep-pep639-license
         Version: 1.0.0
         License: Copy carefully.
                  Sincerely, the authors
-        "###);
+        ");
     }
 
     /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
@@ -930,11 +930,11 @@ mod tests {
 
         assert_eq!(metadata_prepared, metadata_wheel);
 
-        assert_snapshot!(metadata_wheel, @r###"
+        assert_snapshot!(metadata_wheel, @"
         Metadata-Version: 2.3
         Name: two-step-build
         Version: 1.0.0
-        "###);
+        ");
     }
 
     /// Check that non-normalized paths for `module-root` work with the glob inclusions.
@@ -965,7 +965,7 @@ mod tests {
         let dist = TempDir::new().unwrap();
         let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
 
-        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
@@ -973,7 +973,7 @@ mod tests {
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
 
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         two_step_build-1.0.0.dist-info/
         two_step_build-1.0.0.dist-info/METADATA
         two_step_build-1.0.0.dist-info/RECORD
@@ -1031,7 +1031,7 @@ mod tests {
         let dist = TempDir::new().unwrap();
         let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
 
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         camelCase/
         camelCase/__init__.py
         camelcase-1.0.0.dist-info/
@@ -1250,7 +1250,7 @@ mod tests {
         let err_message = format_err(&build_err);
         assert_snapshot!(
             err_message,
-            @r"
+            @"
         Invalid module name: django@home-stubs
           Caused by: Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
         "
@@ -1302,7 +1302,7 @@ mod tests {
         .unwrap();
 
         let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         stuffed_bird-stubs/
         stuffed_bird-stubs/__init__.pyi
         stuffed_bird_stubs-1.0.0.dist-info/
@@ -1382,7 +1382,7 @@ mod tests {
 
         let dist = TempDir::new().unwrap();
         let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
@@ -1391,7 +1391,7 @@ mod tests {
         simple_namespace_part-1.0.0/src/simple_namespace/part
         simple_namespace_part-1.0.0/src/simple_namespace/part/__init__.py
         ");
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         simple_namespace/
         simple_namespace/part/
         simple_namespace/part/__init__.py
@@ -1473,7 +1473,7 @@ mod tests {
 
         let dist = TempDir::new().unwrap();
         let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         complex_namespace-1.0.0.dist-info/
         complex_namespace-1.0.0.dist-info/METADATA
         complex_namespace-1.0.0.dist-info/RECORD
@@ -1544,7 +1544,7 @@ mod tests {
 
         let dist = TempDir::new().unwrap();
         let build = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         cloud-stubs/
         cloud-stubs/db/
         cloud-stubs/db/schema/
@@ -1641,7 +1641,7 @@ mod tests {
 
         let dist = TempDir::new().unwrap();
         let build = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
@@ -1654,7 +1654,7 @@ mod tests {
         simple_namespace_part-1.0.0/src/simple_namespace/part_b
         simple_namespace_part-1.0.0/src/simple_namespace/part_b/__init__.py
         ");
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         foo/
         foo/__init__.py
         simple_namespace/
@@ -1755,7 +1755,7 @@ mod tests {
 
         let dist = TempDir::new().unwrap();
         let build = build(src.path(), dist.path(), Preview::default()).unwrap();
-        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
@@ -1766,7 +1766,7 @@ mod tests {
         duplicate-1.0.0/src/foo
         duplicate-1.0.0/src/foo/__init__.py
         ");
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         bar/
         bar/baz/
         bar/baz/__init__.py
@@ -1814,7 +1814,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         metadata_json_preview-1.0.0.dist-info/
         metadata_json_preview-1.0.0.dist-info/METADATA
         metadata_json_preview-1.0.0.dist-info/METADATA.json

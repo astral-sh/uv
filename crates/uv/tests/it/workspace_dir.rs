@@ -16,7 +16,7 @@ fn workspace_dir_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -37,7 +37,7 @@ fn workspace_dir_specific_package() {
     let workspace = context.temp_dir.child("foo");
 
     // root workspace
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -49,7 +49,7 @@ fn workspace_dir_specific_package() {
     );
 
     // with --package bar
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -75,7 +75,7 @@ fn workspace_metadata_from_member() -> Result<()> {
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&member_dir), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().current_dir(&member_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -99,7 +99,7 @@ fn workspace_dir_package_doesnt_exist() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -116,7 +116,7 @@ fn workspace_dir_package_doesnt_exist() {
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_dir(), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir(), @"
     success: false
     exit_code: 2
     ----- stdout -----
