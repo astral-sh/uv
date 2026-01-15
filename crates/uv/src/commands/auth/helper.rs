@@ -92,7 +92,6 @@ async fn credentials_for_url(
             .access_token(
                 client.for_host(pyx_store.api()).raw_client(),
                 DEFAULT_TOLERANCE_SECS,
-                true,
             )
             .await
             .context("Authentication failure")?

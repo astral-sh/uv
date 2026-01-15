@@ -1,6 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -127,17 +127,13 @@ impl PyxTokens {
     /// Check if the token is fresh (not expired and not expiring within tolerance).
     ///
     /// Returns `Ok(expiration)` if fresh, or `Err(reason)` if refresh is needed.
-    fn check_fresh(
-        &self,
-        tolerance_secs: u64,
-        force: bool,
-    ) -> Result<jiff::Timestamp, ExpiredTokenReason> {
+    fn check_fresh(&self, tolerance_secs: u64) -> Result<jiff::Timestamp, ExpiredTokenReason> {
         let Ok(jwt) = PyxJwt::decode(self.access_token()) else {
             return Err(ExpiredTokenReason::MissingExpiration);
         };
         match jwt.exp {
             None => Err(ExpiredTokenReason::MissingExpiration),
-            Some(_) if force => Err(ExpiredTokenReason::ForcedRefresh),
+            Some(_) if tolerance_secs == 0 => Err(ExpiredTokenReason::ForcedRefresh),
             Some(exp) => {
                 let Ok(exp) = jiff::Timestamp::from_second(exp) else {
                     return Err(ExpiredTokenReason::MissingExpiration);
@@ -157,12 +153,6 @@ impl PyxTokens {
 
 /// The default tolerance for the access token expiration.
 pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
-
-/// The debounce duration for token refresh operations.
-///
-/// If a token was refreshed within this duration, concurrent refresh attempts will
-/// re-read the tokens from disk instead of making another refresh request.
-const REFRESH_DEBOUNCE_SECS: u64 = 5;
 
 #[derive(Debug, Clone)]
 struct PyxDirectories {
@@ -271,7 +261,6 @@ impl PyxTokenStore {
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
-        force_refresh: bool,
     ) -> Result<Option<AccessToken>, TokenStoreError> {
         // If the access token is already set in the environment, return it.
         if let Some(access_token) = read_pyx_auth_token() {
@@ -279,7 +268,7 @@ impl PyxTokenStore {
         }
 
         // Initialize the tokens from the store.
-        let tokens = self.init(client, tolerance_secs, force_refresh).await?;
+        let tokens = self.init(client, tolerance_secs).await?;
 
         // Extract the access token from the OAuth tokens or API key.
         Ok(tokens.map(AccessToken::from))
@@ -295,14 +284,11 @@ impl PyxTokenStore {
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
-        force_refresh: bool,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
         match self.read().await? {
             Some(tokens) => {
                 // Refresh the tokens if they are expired.
-                let tokens = self
-                    .refresh(tokens, client, tolerance_secs, force_refresh)
-                    .await?;
+                let tokens = self.refresh(tokens, client, tolerance_secs).await?;
                 Ok(Some(tokens))
             }
             None => {
@@ -406,21 +392,6 @@ impl PyxTokenStore {
         }
     }
 
-    /// Read the last refresh timestamp from the lock file.
-    async fn read_last_refresh(&self, lock_path: &Path) -> Option<u64> {
-        let data = fs_err::tokio::read_to_string(lock_path).await.ok()?;
-        data.trim().parse().ok()
-    }
-
-    /// Write the current timestamp to the lock file.
-    async fn write_last_refresh(&self, lock_path: &Path) -> Result<(), io::Error> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time before Unix epoch")
-            .as_secs();
-        fs_err::tokio::write(lock_path, now.to_string()).await
-    }
-
     /// Bootstrap the tokens from the store.
     async fn bootstrap(
         &self,
@@ -470,9 +441,8 @@ impl PyxTokenStore {
         tokens: PyxTokens,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
-        force: bool,
     ) -> Result<PyxTokens, TokenStoreError> {
-        let reason = match tokens.check_fresh(tolerance_secs, force) {
+        let reason = match tokens.check_fresh(tolerance_secs) {
             Ok(exp) => {
                 debug!("Access token is up-to-date (`{exp}`)");
                 return Ok(tokens);
@@ -492,28 +462,20 @@ impl PyxTokenStore {
             .await
             .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
 
-        // Check if another process recently refreshed the tokens
-        if let Some(last_refresh) = self.read_last_refresh(&lock_path).await {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time before Unix epoch")
-                .as_secs();
-            if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
-                if let Some(tokens) = self.read().await? {
-                    match tokens.check_fresh(tolerance_secs, false) {
-                        Ok(exp) => {
-                            debug!("Using recently refreshed token (`{exp}`)");
-                            return Ok(tokens);
-                        }
-                        Err(reason) => {
-                            debug!("Token on disk still needs refresh due to {reason}");
-                        }
-                    }
+        // Check if another process has already refreshed the tokens
+        if let Some(tokens) = self.read().await? {
+            match tokens.check_fresh(tolerance_secs) {
+                Ok(exp) => {
+                    debug!("Using recently refreshed token (`{exp}`)");
+                    return Ok(tokens);
                 }
-                // If tokens are missing or not fresh, fall through to refresh
+                Err(reason) => {
+                    debug!("Token on disk still needs refresh due to {reason}");
+                }
             }
         }
 
+        // Refresh the tokens
         let tokens = match tokens {
             PyxTokens::OAuth(PyxOAuthTokens { refresh_token, .. }) => {
                 // Parse the API URL.
@@ -561,11 +523,6 @@ impl PyxTokenStore {
 
         // Write the new tokens to disk
         self.write(&tokens).await?;
-
-        // Update the last refresh timestamp
-        if let Err(err) = self.write_last_refresh(&lock_path).await {
-            debug!("Failed to write refresh timestamp: {err}");
-        }
 
         Ok(tokens)
     }

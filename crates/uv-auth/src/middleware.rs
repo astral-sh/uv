@@ -723,7 +723,7 @@ impl AuthMiddleware {
                         TokenState::Uninitialized => {
                             trace!("Initializing token store for {url}");
                             let generated = match token_store
-                                .access_token(base_client, DEFAULT_TOLERANCE_SECS, false)
+                                .access_token(base_client, DEFAULT_TOLERANCE_SECS)
                                 .await
                             {
                                 Ok(Some(token)) => Some(token),

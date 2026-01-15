@@ -93,7 +93,6 @@ async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printe
         .access_token(
             client.for_host(store.api()).raw_client(),
             DEFAULT_TOLERANCE_SECS,
-            true,
         )
         .await
     {
