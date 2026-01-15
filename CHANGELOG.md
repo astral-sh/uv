@@ -3,6 +3,36 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.26
+
+Released on 2026-01-15.
+
+### Python
+
+- Add CPython 3.15.0a5
+
+### Enhancements
+
+- Add a hint to update uv when a managed Python download is not found ([#17461](https://github.com/astral-sh/uv/pull/17461))
+- Improve cache initialization failure error message ([#17469](https://github.com/astral-sh/uv/pull/17469))
+- Improve error message for abi3 wheels on free-threaded Python ([#17442](https://github.com/astral-sh/uv/pull/17442))
+- Add support for `--no-sources-package` ([#14910](https://github.com/astral-sh/uv/pull/14910))
+
+### Preview features
+
+- Add `METADATA.json` and `WHEEL.json` in uv build backend ([#15510](https://github.com/astral-sh/uv/pull/15510))
+- Add support for GCS request signing ([#17474](https://github.com/astral-sh/uv/pull/17474))
+- Adjust the process ulimit to the maximum allowed on startup ([#17464](https://github.com/astral-sh/uv/pull/17464))
+
+### Bug fixes
+
+- Lock to avoid concurrent refresh of pyx tokens ([#17479](https://github.com/astral-sh/uv/pull/17479))
+
+### Documentation
+
+- Add linting and formatting instructions to the CONTRIBUTING guide ([#17470](https://github.com/astral-sh/uv/pull/17470))
+- Avoid rendering `pyproject.toml` examples for more system-level settings ([#17462](https://github.com/astral-sh/uv/pull/17462))
+
 ## 0.9.25
 
 Released on 2026-01-13.
