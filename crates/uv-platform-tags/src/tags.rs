@@ -32,6 +32,8 @@ pub enum IncompatibleTag {
     Python,
     /// The ABI tag is incompatible.
     Abi,
+    /// The wheel uses an ABI, e.g., `abi3`, which is incompatible with free-threaded Python.
+    FreethreadedAbi,
     /// The Python version component of the ABI tag is incompatible with `requires-python`.
     AbiPythonVersion,
     /// The platform tag is incompatible.
@@ -86,6 +88,8 @@ pub struct Tags {
     /// Whether the tags are for a different Python interpreter than the current one, for error
     /// messages.
     is_cross: bool,
+    /// Whether this is free-threaded Python.
+    is_freethreaded: bool,
 }
 
 impl Tags {
@@ -98,6 +102,7 @@ impl Tags {
         python_platform: Platform,
         python_version: (u8, u8),
         is_cross: bool,
+        is_freethreaded: bool,
     ) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
@@ -119,6 +124,7 @@ impl Tags {
             python_platform,
             python_version,
             is_cross,
+            is_freethreaded,
         }
     }
 
@@ -235,7 +241,13 @@ impl Tags {
                 ));
             }
         }
-        Ok(Self::new(tags, platform.clone(), python_version, is_cross))
+        Ok(Self::new(
+            tags,
+            platform.clone(),
+            python_version,
+            is_cross,
+            gil_disabled,
+        ))
     }
 
     /// Returns true when there exists at least one tag for this platform
@@ -284,6 +296,11 @@ impl Tags {
         wheel_abi_tags: &[AbiTag],
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
+        // The stable ABI (abi3) is not supported on free-threaded Python
+        if self.is_freethreaded && wheel_abi_tags.iter().all(|abi| *abi == AbiTag::Abi3) {
+            return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+        }
+
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
 
         for wheel_py in wheel_python_tags {

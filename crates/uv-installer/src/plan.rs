@@ -583,10 +583,29 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 ))
             }
         }
+        IncompatibleTag::FreethreadedAbi => {
+            let wheel_abi = filename
+                .abi_tags()
+                .iter()
+                .map(|tag| format!("`{}`", tag.cyan()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let message = if let Some(current) = tags.abi_tag() {
+                if let Some(pretty) = current.pretty() {
+                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
+                } else {
+                    format!("`{}`", current.cyan())
+                }
+            } else {
+                "free-threaded Python".to_string()
+            };
+            Some(format!(
+                "The wheel uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
+            ))
+        }
         IncompatibleTag::Abi => {
             let wheel_tags = filename.abi_tags();
             let current_tag = tags.abi_tag();
-
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
                     format!("{} (`{}`)", pretty.cyan(), current.cyan())
@@ -752,5 +771,79 @@ impl Plan {
         };
 
         (left_plan, right_plan)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+    use uv_platform_tags::{Arch, Os, Platform};
+
+    #[test]
+    fn test_abi3_on_free_threaded_python_hint() {
+        // Create a Tags object for free-threaded Python 3.14
+        let platform = Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            Arch::X86_64,
+        );
+        let tags = Tags::from_env(
+            &platform,
+            (3, 14),   // python_version
+            "cpython", // implementation_name
+            (3, 14),   // implementation_version
+            true,      // manylinux_compatible
+            true,      // gil_disabled (free-threaded)
+            false,     // is_cross
+        )
+        .unwrap();
+
+        // Create a wheel filename with abi3 tag
+        let filename =
+            WheelFilename::from_str("foo-1.0-cp37-abi3-manylinux_2_17_x86_64.whl").unwrap();
+
+        // Generate the hint
+        let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
+
+        let hint = anstream::adapter::strip_str(&hint);
+        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible");
+    }
+
+    #[test]
+    fn test_abi3_on_regular_python_no_special_hint() {
+        // Create a Tags object for regular (non-free-threaded) Python 3.14
+        let platform = Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            Arch::X86_64,
+        );
+        let tags = Tags::from_env(
+            &platform,
+            (3, 14),   // python_version
+            "cpython", // implementation_name
+            (3, 14),   // implementation_version
+            true,      // manylinux_compatible
+            false,     // gil_disabled (regular Python)
+            false,     // is_cross
+        )
+        .unwrap();
+
+        // Create a wheel filename with abi3 tag
+        let filename =
+            WheelFilename::from_str("foo-1.0-cp37-abi3-manylinux_2_17_x86_64.whl").unwrap();
+
+        // The wheel should be compatible (abi3 works on regular Python)
+        let hint = generate_wheel_compatibility_hint(&filename, &tags);
+
+        // No hint should be generated because the wheel is compatible
+        assert!(
+            hint.is_none(),
+            "Expected no hint (wheel should be compatible), got: {hint:?}"
+        );
     }
 }

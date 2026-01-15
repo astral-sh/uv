@@ -6455,10 +6455,12 @@ dependencies = [
 name = "uv-installer"
 version = "0.0.14"
 dependencies = [
+ "anstream",
  "anyhow",
  "async-channel",
  "fs-err",
  "futures",
+ "insta",
  "owo-colors",
  "rayon",
  "rustc-hash",

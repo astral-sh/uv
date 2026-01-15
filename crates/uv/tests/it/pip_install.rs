@@ -13722,3 +13722,53 @@ fn record_uses_forward_slashes() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that abi3 wheels are rejected on free-threaded Python with a helpful error message.
+///
+/// The stable ABI (abi3) is not supported by free-threaded Python, so we should provide
+/// a clear error message when a user tries to install an abi3 wheel.
+#[test]
+#[cfg(unix)]
+fn abi3_wheel_on_freethreaded_python() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin()
+        .with_filtered_python_names()
+        .with_filtered_exe_suffix();
+
+    // Install free-threaded Python 3.14
+    context
+        .python_install()
+        .arg("--preview")
+        .arg("3.14t")
+        .assert()
+        .success();
+
+    // Create a virtual environment with the free-threaded Python
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.14t")
+        .assert()
+        .success();
+
+    // Try to install an abi3 wheel - this should fail with a helpful error
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install().arg(wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
+
+    hint: The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible
+    ");
+}
