@@ -392,6 +392,7 @@ async fn gather_credentials(
                 .access_token(
                     base_client.for_host(token_store.api()).raw_client(),
                     DEFAULT_TOLERANCE_SECS,
+                    false,
                 )
                 .await?
             {

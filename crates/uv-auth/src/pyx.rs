@@ -97,7 +97,7 @@ enum ExpiredTokenReason {
     /// The token has no expiration claim.
     MissingExpiration,
     /// Zero tolerance was requested, forcing a refresh.
-    ZeroTolerance,
+    ForcedRefresh,
     /// The token's expiration time has passed.
     Expired(jiff::Timestamp),
     /// The token will expire within the tolerance window.
@@ -108,7 +108,7 @@ impl std::fmt::Display for ExpiredTokenReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingExpiration => write!(f, "missing expiration"),
-            Self::ZeroTolerance => write!(f, "zero tolerance"),
+            Self::ForcedRefresh => write!(f, "forced refresh"),
             Self::Expired(exp) => write!(f, "token expired (`{exp}`)"),
             Self::ExpiringSoon(exp) => write!(f, "token will expire within tolerance (`{exp}`)"),
         }
@@ -127,13 +127,17 @@ impl PyxTokens {
     /// Check if the token is fresh (not expired and not expiring within tolerance).
     ///
     /// Returns `Ok(expiration)` if fresh, or `Err(reason)` if refresh is needed.
-    fn check_fresh(&self, tolerance_secs: u64) -> Result<jiff::Timestamp, ExpiredTokenReason> {
+    fn check_fresh(
+        &self,
+        tolerance_secs: u64,
+        force: bool,
+    ) -> Result<jiff::Timestamp, ExpiredTokenReason> {
         let Ok(jwt) = PyxJwt::decode(self.access_token()) else {
             return Err(ExpiredTokenReason::MissingExpiration);
         };
         match jwt.exp {
             None => Err(ExpiredTokenReason::MissingExpiration),
-            Some(_) if tolerance_secs == 0 => Err(ExpiredTokenReason::ZeroTolerance),
+            Some(_) if force => Err(ExpiredTokenReason::ForcedRefresh),
             Some(exp) => {
                 let Ok(exp) = jiff::Timestamp::from_second(exp) else {
                     return Err(ExpiredTokenReason::MissingExpiration);
@@ -267,6 +271,7 @@ impl PyxTokenStore {
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        force_refresh: bool,
     ) -> Result<Option<AccessToken>, TokenStoreError> {
         // If the access token is already set in the environment, return it.
         if let Some(access_token) = read_pyx_auth_token() {
@@ -274,7 +279,7 @@ impl PyxTokenStore {
         }
 
         // Initialize the tokens from the store.
-        let tokens = self.init(client, tolerance_secs).await?;
+        let tokens = self.init(client, tolerance_secs, force_refresh).await?;
 
         // Extract the access token from the OAuth tokens or API key.
         Ok(tokens.map(AccessToken::from))
@@ -290,11 +295,14 @@ impl PyxTokenStore {
         &self,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        force_refresh: bool,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
         match self.read().await? {
             Some(tokens) => {
                 // Refresh the tokens if they are expired.
-                let tokens = self.refresh(tokens, client, tolerance_secs).await?;
+                let tokens = self
+                    .refresh(tokens, client, tolerance_secs, force_refresh)
+                    .await?;
                 Ok(Some(tokens))
             }
             None => {
@@ -462,8 +470,9 @@ impl PyxTokenStore {
         tokens: PyxTokens,
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
+        force: bool,
     ) -> Result<PyxTokens, TokenStoreError> {
-        let reason = match tokens.check_fresh(tolerance_secs) {
+        let reason = match tokens.check_fresh(tolerance_secs, force) {
             Ok(exp) => {
                 debug!("Access token is up-to-date (`{exp}`)");
                 return Ok(tokens);
@@ -490,9 +499,8 @@ impl PyxTokenStore {
                 .expect("system time before Unix epoch")
                 .as_secs();
             if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
-                // Read the tokens from disk (another process may have just refreshed them)
                 if let Some(tokens) = self.read().await? {
-                    match tokens.check_fresh(tolerance_secs) {
+                    match tokens.check_fresh(tolerance_secs, false) {
                         Ok(exp) => {
                             debug!("Using recently refreshed token (`{exp}`)");
                             return Ok(tokens);

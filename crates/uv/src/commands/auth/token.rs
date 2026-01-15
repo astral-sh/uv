@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Result, bail};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Service};
+use uv_auth::{AuthBackend, DEFAULT_TOLERANCE_SECS, Service};
 use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_preview::Preview;
@@ -90,7 +90,11 @@ pub(crate) async fn token(
 async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printer) -> Result<()> {
     // Retrieve the token store.
     let token = match store
-        .access_token(client.for_host(store.api()).raw_client(), 0)
+        .access_token(
+            client.for_host(store.api()).raw_client(),
+            DEFAULT_TOLERANCE_SECS,
+            true,
+        )
         .await
     {
         // If the tokens were successfully refreshed, return them.
