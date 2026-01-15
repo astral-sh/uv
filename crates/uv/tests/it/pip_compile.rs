@@ -2871,6 +2871,7 @@ fn compatible_broader_url_dependency() -> Result<()> {
 /// Request `uv-public-pypackage` via two different URLs: `0.0.2`, and a precise SHA, followed by
 /// `0.0.2` again. All three are compatible, since they resolve to the same canonical version.
 #[test]
+#[cfg(feature = "git")]
 fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");

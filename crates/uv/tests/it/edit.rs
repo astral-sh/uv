@@ -1799,6 +1799,7 @@ fn add_remove_inline_optional() -> Result<()> {
 
 /// Add and remove a workspace dependency.
 #[test]
+#[cfg(feature = "git")]
 fn add_remove_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
