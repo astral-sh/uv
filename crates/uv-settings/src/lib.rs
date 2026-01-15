@@ -793,7 +793,7 @@ where
                 name: name.to_string(),
                 value,
                 err: if let Some(help) = help {
-                    format!("{}; {}", err, help)
+                    format!("{err}; {help}")
                 } else {
                     err.to_string()
                 },
