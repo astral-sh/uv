@@ -13288,7 +13288,7 @@ fn sync_python_missing_download_hint() -> Result<()> {
     ----- stderr -----
     error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
 
-    hint: This uv release may not support managed Python 3.100 yet. Update uv and retry.
+    hint: uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv.
     ");
 
     Ok(())
