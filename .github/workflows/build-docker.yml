@@ -73,7 +73,7 @@ jobs:
           fi
 
   docker-publish-base:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip') && !contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'build:docker') || (!contains(github.event.pull_request.labels.*.name, 'build:skip') && !contains(github.event.pull_request.labels.*.name, 'build:skip-docker')) }}
     name: ${{ needs.docker-plan.outputs.action }} uv
     needs:
       - docker-plan
