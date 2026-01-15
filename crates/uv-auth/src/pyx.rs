@@ -99,7 +99,7 @@ enum ExpiredTokenReason {
     /// Zero tolerance was requested, forcing a refresh.
     ZeroTolerance,
     /// The token's expiration time has passed.
-    Expired,
+    Expired(jiff::Timestamp),
     /// The token will expire within the tolerance window.
     ExpiringSoon(jiff::Timestamp),
 }
@@ -109,7 +109,7 @@ impl std::fmt::Display for ExpiredTokenReason {
         match self {
             Self::MissingExpiration => write!(f, "missing expiration"),
             Self::ZeroTolerance => write!(f, "zero tolerance"),
-            Self::Expired => write!(f, "token expired"),
+            Self::Expired(exp) => write!(f, "token expired (`{exp}`)"),
             Self::ExpiringSoon(exp) => write!(f, "token will expire within tolerance (`{exp}`)"),
         }
     }
@@ -140,7 +140,7 @@ impl PyxTokens {
                 };
                 let now = jiff::Timestamp::now();
                 if exp < now {
-                    Err(ExpiredTokenReason::Expired)
+                    Err(ExpiredTokenReason::Expired(exp))
                 } else if exp < now + Duration::from_secs(tolerance_secs) {
                     Err(ExpiredTokenReason::ExpiringSoon(exp))
                 } else {
@@ -469,25 +469,25 @@ impl PyxTokenStore {
         };
         debug!("Refreshing token due to {reason}");
 
-        // Ensure the subdirectory exists before acquiring the lock.
+        // Ensure the subdirectory exists before acquiring the lock
         fs_err::tokio::create_dir_all(&self.subdirectory).await?;
 
-        // Get the lock path for this specific token.
+        // Get the lock path for this specific token
         let lock_path = self.lock_path(&tokens);
 
-        // Acquire a lock to prevent concurrent refresh attempts for this token.
+        // Acquire a lock to prevent concurrent refresh attempts for this token
         let _lock = LockedFile::acquire(&lock_path, LockedFileMode::Exclusive, "pyx refresh")
             .await
             .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
 
-        // Check if another process recently refreshed the tokens.
+        // Check if another process recently refreshed the tokens
         if let Some(last_refresh) = self.read_last_refresh(&lock_path).await {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("system time before Unix epoch")
                 .as_secs();
             if now.saturating_sub(last_refresh) < REFRESH_DEBOUNCE_SECS {
-                // Read the tokens from disk (another process may have just refreshed them).
+                // Read the tokens from disk (another process may have just refreshed them)
                 if let Some(tokens) = self.read().await? {
                     match tokens.check_fresh(tolerance_secs) {
                         Ok(()) => {
@@ -499,7 +499,7 @@ impl PyxTokenStore {
                         }
                     }
                 }
-                // If tokens are missing or not fresh, fall through to refresh.
+                // If tokens are missing or not fresh, fall through to refresh
             }
         }
 
@@ -548,10 +548,10 @@ impl PyxTokenStore {
             }
         };
 
-        // Write the new tokens to disk.
+        // Write the new tokens to disk
         self.write(&tokens).await?;
 
-        // Update the last refresh timestamp.
+        // Update the last refresh timestamp
         if let Err(err) = self.write_last_refresh(&lock_path).await {
             debug!("Failed to write refresh timestamp: {err}");
         }
