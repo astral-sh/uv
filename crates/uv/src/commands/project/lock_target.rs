@@ -398,7 +398,7 @@ impl<'lock> LockTarget<'lock> {
                     .into_iter()
                     .flat_map(|requirement| {
                         // Check if sources should be disabled for this specific package
-                        if sources.no_sources_package(&requirement.name) {
+                        if sources.for_package(&requirement.name) {
                             vec![Ok(Requirement::from(requirement))].into_iter()
                         } else {
                             let requirement_name = requirement.name.clone();

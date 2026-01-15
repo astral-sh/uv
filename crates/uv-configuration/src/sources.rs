@@ -31,12 +31,12 @@ impl NoSources {
     }
 
     /// Returns `true` if all sources should be ignored.
-    pub fn no_sources(&self) -> bool {
+    pub fn all(&self) -> bool {
         matches!(self, Self::All)
     }
 
     /// Returns `true` if sources should be ignored for the given package.
-    pub fn no_sources_package(&self, package_name: &PackageName) -> bool {
+    pub fn for_package(&self, package_name: &PackageName) -> bool {
         match self {
             Self::None => false,
             Self::All => true,

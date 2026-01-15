@@ -580,7 +580,7 @@ impl SourceBuild {
                         .map(|project| &project.name)
                         .or(package_name)
                         // If sources are disabled, there's nothing to do here
-                        .filter(|_| !no_sources.no_sources())
+                        .filter(|_| !no_sources.all())
                     {
                         let build_requires = uv_pypi_types::BuildRequires {
                             name: Some(name.clone()),
@@ -1041,7 +1041,7 @@ async fn create_pep517_build_environment(
     };
 
     // If necessary, lower the requirements.
-    let extra_requires = if no_sources.no_sources() {
+    let extra_requires = if no_sources.all() {
         extra_requires.into_iter().map(Requirement::from).collect()
     } else {
         let build_requires = uv_pypi_types::BuildRequires {

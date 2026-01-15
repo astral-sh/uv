@@ -45,7 +45,7 @@ impl BuildRequires {
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
-        let discovery = if sources.no_sources() {
+        let discovery = if sources.all() {
             DiscoveryOptions {
                 members: MemberDiscovery::None,
                 ..Default::default()
@@ -78,7 +78,7 @@ impl BuildRequires {
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = if sources.no_sources() {
+        let project_indexes = if sources.all() {
             &empty
         } else {
             project_workspace
@@ -93,7 +93,7 @@ impl BuildRequires {
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = if sources.no_sources() {
+        let project_sources = if sources.all() {
             &empty
         } else {
             project_workspace
@@ -109,13 +109,13 @@ impl BuildRequires {
 
         // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
-        let requires_dist = if sources.no_sources() {
+        let requires_dist = if sources.all() {
             requires_dist.into_iter().map(Requirement::from).collect()
         } else {
             requires_dist
                 .flat_map(|requirement| {
                     // Check if sources should be disabled for this specific package
-                    if sources.no_sources_package(&requirement.name) {
+                    if sources.for_package(&requirement.name) {
                         vec![Ok(Requirement::from(requirement))].into_iter()
                     } else {
                         let requirement_name = requirement.name.clone();
@@ -188,7 +188,7 @@ impl BuildRequires {
         let requires_dist = requires_dist
             .flat_map(|requirement| {
                 // Check if sources should be disabled for this specific package
-                if sources.no_sources_package(&requirement.name) {
+                if sources.for_package(&requirement.name) {
                     vec![Ok(Requirement::from(requirement))].into_iter()
                 } else {
                     let requirement_name = requirement.name.clone();

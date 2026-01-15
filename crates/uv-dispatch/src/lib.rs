@@ -216,8 +216,8 @@ impl BuildContext for BuildDispatch<'_> {
         self.config_settings_package
     }
 
-    fn sources(&self) -> NoSources {
-        self.sources.clone()
+    fn sources(&self) -> &NoSources {
+        &self.sources
     }
 
     fn locations(&self) -> &IndexLocations {
