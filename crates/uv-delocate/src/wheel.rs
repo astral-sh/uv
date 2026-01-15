@@ -11,11 +11,11 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use fs_err as fs;
 use fs_err::File;
 use sha2::{Digest, Sha256};
+use uv_fs::Simplified;
+use uv_install_wheel::{RecordEntry, write_record_file};
 use walkdir::WalkDir;
 use zip::ZipWriter;
 use zip::write::FileOptions;
-
-use uv_install_wheel::{RecordEntry, write_record_file};
 
 use crate::error::DelocateError;
 
@@ -76,25 +76,12 @@ pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateEr
     Ok(())
 }
 
-/// Compute the SHA256 hash of a file in the format used by RECORD files.
 fn hash_file(path: &Path) -> Result<(String, u64), DelocateError> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
-    let mut size = 0u64;
-
-    loop {
-        let n = file.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-        size += n as u64;
-    }
-
+    let size = io::copy(&mut file, &mut hasher)?;
     let hash = hasher.finalize();
     let hash_str = format!("sha256={}", URL_SAFE_NO_PAD.encode(hash));
-
     Ok((hash_str, size))
 }
 
@@ -118,7 +105,7 @@ pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), Deloca
                 wheel_dir: wheel_dir.to_path_buf(),
             })?;
 
-        let relative_str = relative.to_string_lossy().replace('\\', "/");
+        let relative_str = relative.portable_display().to_string();
 
         // RECORD file itself has no hash.
         if relative_str == format!("{dist_info_dir}/RECORD") {

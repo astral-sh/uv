@@ -10,6 +10,17 @@ pub struct MacOSVersion {
 }
 
 impl MacOSVersion {
+    /// Default macOS version: the least-recent non-EOL macOS version at time of writing.
+    ///
+    /// See: <https://endoflife.date/macos>
+    ///
+    /// When changing this value, also update the documentation for
+    /// [`EnvVars::MACOSX_DEPLOYMENT_TARGET`](uv_static::EnvVars::MACOSX_DEPLOYMENT_TARGET).
+    pub const DEFAULT: Self = Self {
+        major: 13,
+        minor: 0,
+    };
+
     pub const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
