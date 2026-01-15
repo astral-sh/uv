@@ -43,6 +43,9 @@ jobs:
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
           HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
+          HAS_BUILD_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip') }}
+          HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
+          HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
@@ -50,6 +53,9 @@ jobs:
           [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
           [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
           [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
+          [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
+          [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
+          [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
 
           # Detect changed files
           while IFS= read -r file; do
@@ -78,7 +84,7 @@ jobs:
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
           [[ $schema_changed ]] && check_schema=1
-          [[ ! $has_skip_label && $release_build_changed ]] && build_release_binaries=1
+          [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
           [[ $publish_changed || $on_main_branch ]] && test_publish=1
           [[ ! $has_skip_label && ($trampoline_changed || $on_main_branch) ]] && test_windows_trampoline=1
