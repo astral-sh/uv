@@ -35,6 +35,9 @@ pub enum DelocateError {
     #[error("Library name collision: {name} exists at multiple paths: {paths:?}")]
     LibraryCollision { name: String, paths: Vec<PathBuf> },
 
+    #[error("Invalid library filename in {}: {reason}", path.user_display())]
+    InvalidLibraryFilename { path: PathBuf, reason: &'static str },
+
     #[error("Invalid wheel filename: {filename}")]
     InvalidWheelFilename {
         filename: String,
