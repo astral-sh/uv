@@ -484,11 +484,8 @@ pub fn delocate_wheel(
     if !libraries.is_empty() {
         debug!("Found {} external libraries to bundle", libraries.len());
 
-        // Find the package directory (first directory that's not .dist-info or .data)
-        let package_dir = find_package_dir(wheel_dir, &filename)?;
-
-        // Create the library directory.
-        let lib_dir = package_dir.join(&options.lib_subdir);
+        // Create the library directory following delocate's placement logic.
+        let lib_dir = find_lib_dir(wheel_dir, &filename, &options.lib_subdir)?;
         fs::create_dir_all(&lib_dir)?;
 
         // Check for library name collisions.
@@ -590,10 +587,20 @@ pub fn delocate_wheel(
     Ok(output_path)
 }
 
-/// Find the main package directory in a wheel.
-fn find_package_dir(wheel_dir: &Path, filename: &WheelFilename) -> Result<PathBuf, DelocateError> {
-    // Look for a directory that matches the package name.
+/// Find the directory to place bundled libraries.
+///
+/// Follows Python delocate's placement logic:
+/// 1. If a package directory matches the package name, use `package/.dylibs/`.
+/// 2. If packages exist but none match, use the first package alphabetically.
+/// 3. If no packages exist, use `{package_name}.dylibs/` at wheel root.
+fn find_lib_dir(
+    wheel_dir: &Path,
+    filename: &WheelFilename,
+    lib_subdir: &str,
+) -> Result<PathBuf, DelocateError> {
     let dist_info_name = filename.name.as_dist_info_name();
+
+    let mut first_package: Option<PathBuf> = None;
 
     for entry in fs::read_dir(wheel_dir)? {
         let entry = entry?;
@@ -604,19 +611,36 @@ fn find_package_dir(wheel_dir: &Path, filename: &WheelFilename) -> Result<PathBu
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
 
-        // Skip `.dist-info` and `.data` directories.
-        if name_str.ends_with(".dist-info") || name_str.ends_with(".data") {
+        // Skip special directories.
+        if name_str.ends_with(".dist-info") || name_str.ends_with(".data") || name_str == lib_subdir
+        {
             continue;
         }
 
-        // Check if it matches normalized name.
+        let path = entry.path();
+
+        // 1. Use matching package if found.
         if name_str == *dist_info_name || name_str.replace('-', "_") == *dist_info_name {
-            return Ok(entry.path());
+            return Ok(path.join(lib_subdir));
+        }
+
+        // Track first package alphabetically.
+        if first_package.as_ref().is_none_or(|p| path < *p) {
+            first_package = Some(path);
         }
     }
 
-    // If no matching directory, use the wheel directory itself.
-    Ok(wheel_dir.to_path_buf())
+    // 2. Use first package alphabetically if any exist.
+    if let Some(pkg) = first_package {
+        return Ok(pkg.join(lib_subdir));
+    }
+
+    // 3. No packages; use {package_name}.dylibs at wheel root.
+    Ok(wheel_dir.join(format!(
+        "{}.{}",
+        dist_info_name,
+        lib_subdir.trim_start_matches('.')
+    )))
 }
 
 #[cfg(test)]
@@ -902,5 +926,99 @@ mod tests {
             transitive_deps.iter().any(|p| p.ends_with("liba.dylib")),
             "libb.dylib should have liba.dylib as a transitive dependency"
         );
+    }
+
+    #[test]
+    fn test_find_lib_dir_matching_package() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path();
+
+        // Create a package directory matching the package name.
+        fs::create_dir(wheel_dir.join("my_package")).unwrap();
+        fs::create_dir(wheel_dir.join("my_package-1.0.dist-info")).unwrap();
+
+        let filename = WheelFilename::from_str("my_package-1.0-py3-none-any.whl").unwrap();
+        let lib_dir = find_lib_dir(wheel_dir, &filename, ".dylibs").unwrap();
+
+        assert_eq!(lib_dir, wheel_dir.join("my_package").join(".dylibs"));
+    }
+
+    #[test]
+    fn test_find_lib_dir_first_package_alphabetically() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path();
+
+        // Create package directories that don't match the package name.
+        fs::create_dir(wheel_dir.join("zebra")).unwrap();
+        fs::create_dir(wheel_dir.join("alpha")).unwrap();
+        fs::create_dir(wheel_dir.join("beta")).unwrap();
+        fs::create_dir(wheel_dir.join("my_package-1.0.dist-info")).unwrap();
+
+        let filename = WheelFilename::from_str("my_package-1.0-py3-none-any.whl").unwrap();
+        let lib_dir = find_lib_dir(wheel_dir, &filename, ".dylibs").unwrap();
+
+        // Should use "alpha" as it's first alphabetically.
+        assert_eq!(lib_dir, wheel_dir.join("alpha").join(".dylibs"));
+    }
+
+    #[test]
+    fn test_find_lib_dir_no_packages() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path();
+
+        // Only create dist-info, no package directories.
+        fs::create_dir(wheel_dir.join("my_package-1.0.dist-info")).unwrap();
+        // Create a standalone module file (not a directory).
+        fs::write(wheel_dir.join("my_module.py"), b"# module").unwrap();
+
+        let filename = WheelFilename::from_str("my_package-1.0-py3-none-any.whl").unwrap();
+        let lib_dir = find_lib_dir(wheel_dir, &filename, ".dylibs").unwrap();
+
+        // Should use {package_name}.dylibs at wheel root.
+        assert_eq!(lib_dir, wheel_dir.join("my_package.dylibs"));
+    }
+
+    #[test]
+    fn test_find_lib_dir_skips_existing_dylibs() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path();
+
+        // Create package and an existing .dylibs directory.
+        fs::create_dir(wheel_dir.join("my_package")).unwrap();
+        fs::create_dir(wheel_dir.join(".dylibs")).unwrap();
+        fs::create_dir(wheel_dir.join("my_package-1.0.dist-info")).unwrap();
+
+        let filename = WheelFilename::from_str("my_package-1.0-py3-none-any.whl").unwrap();
+        let lib_dir = find_lib_dir(wheel_dir, &filename, ".dylibs").unwrap();
+
+        // Should use the package, not the existing .dylibs.
+        assert_eq!(lib_dir, wheel_dir.join("my_package").join(".dylibs"));
+    }
+
+    #[test]
+    fn test_find_lib_dir_skips_data_directory() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path();
+
+        // Create .data directory and a regular package.
+        fs::create_dir(wheel_dir.join("my_package-1.0.data")).unwrap();
+        fs::create_dir(wheel_dir.join("actual_package")).unwrap();
+        fs::create_dir(wheel_dir.join("my_package-1.0.dist-info")).unwrap();
+
+        let filename = WheelFilename::from_str("my_package-1.0-py3-none-any.whl").unwrap();
+        let lib_dir = find_lib_dir(wheel_dir, &filename, ".dylibs").unwrap();
+
+        // Should use actual_package, not the .data directory.
+        assert_eq!(lib_dir, wheel_dir.join("actual_package").join(".dylibs"));
     }
 }
