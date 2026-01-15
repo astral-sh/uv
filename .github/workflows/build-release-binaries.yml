@@ -32,7 +32,6 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -86,7 +85,6 @@ jobs:
 
   macos-x86_64:
     name: x86_64-apple-darwin
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: depot-macos-14
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -146,7 +144,6 @@ jobs:
 
   macos-aarch64:
     name: aarch64-apple-darwin
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: depot-macos-14
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -218,7 +215,6 @@ jobs:
 
   windows:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: github-windows-2022-x86_64-8
     strategy:
       matrix:
@@ -302,7 +298,6 @@ jobs:
 
   linux:
     name: ${{ matrix.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
@@ -410,7 +405,6 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: depot-ubuntu-22.04-8
     timeout-minutes: 30
     strategy:
@@ -531,7 +525,6 @@ jobs:
   # Like `linux-arm`.
   linux-s390x:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
     strategy:
@@ -642,7 +635,6 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -752,7 +744,6 @@ jobs:
   # Like `linux-arm`.
   linux-riscv64:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
     strategy:
@@ -861,7 +852,6 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -958,7 +948,6 @@ jobs:
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
     runs-on: depot-ubuntu-22.04-8
     strategy:
       matrix:
