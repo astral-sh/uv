@@ -50,8 +50,8 @@ fn test_find_dist_info() {
     )
     .unwrap();
 
-    let dist_info = uv_delocate::wheel::find_dist_info(temp_dir.path()).unwrap();
-    assert_eq!(dist_info, "fakepkg1-1.0.dist-info");
+    let dist_info_prefix = uv_install_wheel::find_dist_info(temp_dir.path()).unwrap();
+    assert_eq!(dist_info_prefix, "fakepkg1-1.0");
 }
 
 #[test]
@@ -88,7 +88,8 @@ fn test_update_wheel_file() {
     )
     .unwrap();
 
-    let dist_info = uv_delocate::wheel::find_dist_info(temp_dir.path()).unwrap();
+    let dist_info_prefix = uv_install_wheel::find_dist_info(temp_dir.path()).unwrap();
+    let dist_info = format!("{dist_info_prefix}.dist-info");
     let wheel_path = temp_dir.path().join(&dist_info).join("WHEEL");
 
     // Verify original content (has trailing blank line).

@@ -17,7 +17,7 @@ pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 pub use wheel::{
-    WheelFile, read_record, write_record_file, read_record_into_iter, reserved_script_name, validate_and_heal_record,
+    WheelFile, find_dist_info, read_record, write_record_file, read_record_into_iter, reserved_script_name, validate_and_heal_record,
 };
 
 mod install;

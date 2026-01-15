@@ -121,20 +121,6 @@ pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), Deloca
     Ok(())
 }
 
-/// Find the .dist-info directory in an unpacked wheel.
-pub fn find_dist_info(wheel_dir: &Path) -> Result<String, DelocateError> {
-    for entry in fs::read_dir(wheel_dir)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.ends_with(".dist-info") && entry.file_type()?.is_dir() {
-            return Ok(name_str.into_owned());
-        }
-    }
-
-    Err(DelocateError::MissingDistInfo)
-}
-
 /// Update the WHEEL file with new platform tags.
 ///
 /// This replaces all `Tag:` entries with the new tags derived from the wheel filename.
