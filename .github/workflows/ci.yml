@@ -28,6 +28,7 @@ jobs:
       test-ecosystem: ${{ steps.plan.outputs.test_ecosystem }}
       test-integration: ${{ steps.plan.outputs.test_integration }}
       test-system: ${{ steps.plan.outputs.test_system }}
+      build-docker: ${{ steps.plan.outputs.build_docker }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -71,6 +72,8 @@ jobs:
             [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ ]] && publish_code_changed=1
             [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
+            [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
+            [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
             any_code_changed=1
           done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
@@ -80,6 +83,7 @@ jobs:
           [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $uv_build_changed || $release_workflow_changed ]] && release_build_changed=1
           [[ $publish_code_changed || $ci_workflow_changed ]] && publish_changed=1
           [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $dockerfile_changed || $docker_workflow_changed ]] && docker_build_changed=1
 
           # Decisions
           [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
@@ -94,6 +98,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch ]] && test_system=1
+          [[ ! $has_skip_label && $docker_build_changed ]] && build_docker=1
 
           # Output (convert 1/empty to true/false for GHA)
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
@@ -110,6 +115,7 @@ jobs:
             out test_ecosystem          "$test_ecosystem"
             out test_integration        "$test_integration"
             out test_system             "$test_system"
+            out build_docker            "$build_docker"
           } >> "$GITHUB_OUTPUT"
 
   check-fmt:
@@ -217,6 +223,17 @@ jobs:
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
     uses: ./.github/workflows/build-release-binaries.yml
     secrets: inherit
+
+  build-docker:
+    needs: plan
+    if: ${{ needs.plan.outputs.build-docker == 'true' }}
+    uses: ./.github/workflows/build-docker.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      attestations: write
 
   bench:
     needs: plan
