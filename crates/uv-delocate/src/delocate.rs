@@ -146,10 +146,10 @@ fn resolve_dynamic_path(
     None
 }
 
-/// Information about a library and its dependents.
+/// Information about an external library to bundle.
 #[derive(Debug)]
 struct LibraryInfo {
-    /// Binaries that depend on this library and their install names.
+    /// Wheel binaries that depend on this library, mapped to the install name they use to reference it.
     dependents: HashMap<PathBuf, String>,
 }
 
@@ -339,30 +339,29 @@ fn analyze_dependencies(
 
         // Process transitive dependencies.
         if processed.insert(lib_path.clone()) {
-            if let Ok(macho) = macho::parse_macho(&lib_path) {
-                for dep in &macho.dependencies {
-                    if exclude.iter().any(|pat| dep.contains(pat)) {
+            let macho = macho::parse_macho(&lib_path)?;
+            for dep in &macho.dependencies {
+                if exclude.iter().any(|pat| dep.contains(pat)) {
+                    continue;
+                }
+
+                if is_system_library(dep) {
+                    continue;
+                }
+
+                if let Some(resolved) =
+                    resolve_dynamic_path(dep, &lib_path, &macho.rpaths, &dyld_paths)
+                {
+                    if resolved.starts_with(dir) {
                         continue;
                     }
 
-                    if is_system_library(dep) {
-                        continue;
-                    }
-
-                    if let Some(resolved) =
-                        resolve_dynamic_path(dep, &lib_path, &macho.rpaths, &dyld_paths)
-                    {
-                        if resolved.starts_with(dir) {
-                            continue;
-                        }
-
-                        debug!(
-                            "Found transitive dependency: {} -> {}",
-                            lib_path.display(),
-                            resolved.display()
-                        );
-                        to_process.push((resolved, lib_path.clone(), dep.clone()));
-                    }
+                    debug!(
+                        "Found transitive dependency: {} -> {}",
+                        lib_path.display(),
+                        resolved.display()
+                    );
+                    to_process.push((resolved, lib_path.clone(), dep.clone()));
                 }
             }
         }
@@ -817,6 +816,89 @@ mod tests {
         assert!(
             result.is_none(),
             "relative path should not search DYLD paths"
+        );
+    }
+
+    #[test]
+    fn test_analyze_transitive_dependencies() {
+        use tempfile::TempDir;
+
+        let test_data = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+        let temp_dir = TempDir::new().unwrap();
+        let wheel_dir = temp_dir.path().join("wheel");
+        let lib_dir = temp_dir.path().join("libs");
+        fs::create_dir_all(&wheel_dir).unwrap();
+        fs::create_dir_all(&lib_dir).unwrap();
+
+        // Copy libc.dylib into the "wheel" as a binary (it depends on liba.dylib and libb.dylib).
+        // Copy liba.dylib and libb.dylib to the lib dir (libb depends on liba).
+        fs::copy(test_data.join("libc.dylib"), wheel_dir.join("libc.dylib")).unwrap();
+        fs::copy(test_data.join("liba.dylib"), lib_dir.join("liba.dylib")).unwrap();
+        fs::copy(test_data.join("libb.dylib"), lib_dir.join("libb.dylib")).unwrap();
+
+        // Verify the test data relationships.
+        let libc_macho = macho::parse_macho(&wheel_dir.join("libc.dylib")).unwrap();
+        assert!(libc_macho.dependencies.iter().any(|d| d.contains("liba")));
+        assert!(libc_macho.dependencies.iter().any(|d| d.contains("libb")));
+
+        let libb_macho = macho::parse_macho(&lib_dir.join("libb.dylib")).unwrap();
+        assert!(
+            libb_macho.dependencies.iter().any(|d| d.contains("liba")),
+            "libb.dylib should depend on liba.dylib for transitive test"
+        );
+
+        // The dependencies use bare names, which need DYLD paths to resolve.
+        // We can't easily set env vars in tests, so we test the resolve_dynamic_path
+        // function directly with explicit DYLD paths.
+        let dyld_paths = vec![lib_dir.clone()];
+        let binary_path = wheel_dir.join("libc.dylib");
+
+        // Resolve libc's direct dependencies.
+        let mut direct_deps = Vec::new();
+        for dep in &libc_macho.dependencies {
+            if is_system_library(dep) {
+                continue;
+            }
+            if let Some(resolved) =
+                resolve_dynamic_path(dep, &binary_path, &libc_macho.rpaths, &dyld_paths)
+            {
+                direct_deps.push(resolved);
+            }
+        }
+
+        // Should find both liba and libb.
+        assert!(
+            direct_deps.iter().any(|p| p.ends_with("liba.dylib")),
+            "should resolve liba.dylib"
+        );
+        assert!(
+            direct_deps.iter().any(|p| p.ends_with("libb.dylib")),
+            "should resolve libb.dylib"
+        );
+
+        // Now resolve libb's transitive dependencies.
+        let libb_path = direct_deps
+            .iter()
+            .find(|p| p.ends_with("libb.dylib"))
+            .unwrap();
+        let libb_macho = macho::parse_macho(libb_path).unwrap();
+
+        let mut transitive_deps = Vec::new();
+        for dep in &libb_macho.dependencies {
+            if is_system_library(dep) {
+                continue;
+            }
+            if let Some(resolved) =
+                resolve_dynamic_path(dep, libb_path, &libb_macho.rpaths, &dyld_paths)
+            {
+                transitive_deps.push(resolved);
+            }
+        }
+
+        // libb should transitively depend on liba.
+        assert!(
+            transitive_deps.iter().any(|p| p.ends_with("liba.dylib")),
+            "libb.dylib should have liba.dylib as a transitive dependency"
         );
     }
 }
