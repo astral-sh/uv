@@ -143,6 +143,21 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         return quote! { #ast #(#added_in_errors)* }.into();
     }
 
+    let env_var_names = ast.items.iter().filter_map(|item| {
+        if let ImplItem::Const(item) = item {
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit),
+                ..
+            }) = &item.expr
+            else {
+                return None;
+            };
+            Some(lit.value())
+        } else {
+            None
+        }
+    });
+
     let struct_name = &ast.self_ty;
     let pairs = constants.iter().map(|(name, doc, added_in, _span)| {
         if let Some(added_in) = added_in {
@@ -159,6 +174,11 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
             /// Returns a list of pairs of env var and their documentation defined in this impl block.
             pub fn metadata<'a>() -> &'a [(&'static str, &'static str, Option<&'static str>)] {
                 &[#(#pairs),*]
+            }
+
+            /// Returns all environment variable names defined as constants (including hidden ones).
+            pub fn all_names() -> &'static [&'static str] {
+                &[#(#env_var_names),*]
             }
         }
     };
