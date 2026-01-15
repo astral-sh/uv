@@ -142,13 +142,13 @@ uvx typos
 cargo shear
 ```
 
-### Cross-compiling clippy for Windows
+### Compiling for Windows from Unix
 
 To run clippy for the Windows target from Linux, you can use
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin):
 
 ```shell
-# Install cargo-xwin (use 0.18.0 due to dependency issues in newer versions)
+# Install cargo-xwin
 cargo install cargo-xwin --version 0.18.0
 
 # Add the Windows target
