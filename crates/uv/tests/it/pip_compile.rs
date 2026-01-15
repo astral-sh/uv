@@ -18260,7 +18260,11 @@ async fn compile_missing_python_download_error_warning() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
     warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
       Caused by: error sending request for url (https://pypi.org/simple/anyio/)
@@ -18281,7 +18285,11 @@ async fn compile_missing_python_download_error_warning() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
     warning: The requested Python version 3.10.99 is not available; 3.12.[X] will be used to build dependencies instead.
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
       Caused by: error sending request for url (https://pypi.org/simple/anyio/)
@@ -18302,7 +18310,11 @@ async fn compile_missing_python_download_error_warning() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
     warning: The requested Python version 3.10.19 is not available; 3.12.[X] will be used to build dependencies instead.
     error: Failed to fetch: `https://pypi.org/simple/anyio/`
       Caused by: error sending request for url (https://pypi.org/simple/anyio/)

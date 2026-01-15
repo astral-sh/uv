@@ -1,4 +1,5 @@
 use itertools::{Either, Itertools};
+use owo_colors::AnsiColors;
 use regex::Regex;
 use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
@@ -20,7 +21,8 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::anstream;
+use uv_warnings::warn_user_once;
 use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
@@ -1546,15 +1548,30 @@ pub(crate) async fn find_best_python_installation(
             // Errors encountered here are either network errors or quirky
             // configuration problems.
             if let Err(error) = result {
+                // This is a hack to get `write_error_chain` to format things the way we want.
+                #[derive(Debug, thiserror::Error)]
+                #[error(
+                    "A managed Python download is available for {0}, but an error occurred when attempting to download it."
+                )]
+                struct WrappedError<'a>(&'a PythonRequest, #[source] crate::Error);
+
                 // If the request was for the default or any version, propagate
                 // the error as nothing else we are about to do will help the
                 // situation.
                 if matches!(request, PythonRequest::Default | PythonRequest::Any) {
                     return Err(error);
                 }
-                warn_user!(
-                    "A managed Python download is available for {request}, but an error occurred when attempting to download it: {error}"
-                );
+
+                let mut error_chain = String::new();
+                // Writing to a string can't fail with errors (panics on allocation failure)
+                uv_warnings::write_error_chain(
+                    &WrappedError(request, error),
+                    &mut error_chain,
+                    "warning",
+                    AnsiColors::Yellow,
+                )
+                .unwrap();
+                anstream::eprint!("{}", error_chain);
                 previous_fetch_failed = true;
             }
         }
