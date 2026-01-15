@@ -4,7 +4,9 @@
 # is just the binary in a scratch image, and a set of extra, common images with
 # the uv binary installed.
 #
-# Images are built on all runs.
+# On pull requests, triggered via CI workflow when Docker-related files change
+# (e.g., Dockerfile, Cargo.toml, rust-toolchain.toml). Images are built but not
+# pushed, to verify the build still works.
 #
 # On release, assumed to run as a subworkflow of .github/workflows/release.yml;
 # specifically, as a local artifacts job within `cargo-dist`. In this case,
@@ -19,22 +21,9 @@ on:
   workflow_call:
     inputs:
       plan:
-        required: true
+        required: false
         type: string
-  pull_request:
-    paths:
-      # We want to ensure that the maturin builds still work when we change
-      # Project metadata
-      - pyproject.toml
-      - Cargo.toml
-      - .cargo/config.toml
-      # Toolchain or dependency versions
-      - Cargo.lock
-      - rust-toolchain.toml
-      # The Dockerfile itself
-      - Dockerfile
-      # And the workflow itself
-      - .github/workflows/build-docker.yml
+        default: ""
 
 env:
   UV_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/uv
@@ -73,7 +62,6 @@ jobs:
           fi
 
   docker-publish-base:
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'build:docker') || (!contains(github.event.pull_request.labels.*.name, 'build:skip') && !contains(github.event.pull_request.labels.*.name, 'build:skip-docker')) }}
     name: ${{ needs.docker-plan.outputs.action }} uv
     needs:
       - docker-plan
@@ -105,6 +93,7 @@ jobs:
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
       - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        if: ${{ needs.docker-plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
