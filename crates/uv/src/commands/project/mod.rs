@@ -1862,7 +1862,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -2098,7 +2098,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2493,7 +2493,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2707,8 +2707,8 @@ pub(crate) fn script_specification(
     };
 
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     let requirements = dependencies
         .iter()
@@ -2783,8 +2783,8 @@ pub(crate) fn script_extra_build_requires(
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();

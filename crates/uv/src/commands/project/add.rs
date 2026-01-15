@@ -17,8 +17,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions,
-    SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -396,7 +395,7 @@ pub(crate) async fn add(
             let build_constraints = Constraints::default();
             let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
-            let sources = SourceStrategy::Enabled;
+            let sources = NoSources::None;
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -442,7 +441,7 @@ pub(crate) async fn add(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
-                    settings.resolver.sources,
+                    &settings.resolver.sources,
                     client.credentials_cache(),
                 )?
             } else {

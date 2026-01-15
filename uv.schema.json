@@ -377,6 +377,13 @@
       "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the\nstandards-compliant, publishable package metadata, as opposed to using any local or Git\nsources.",
       "type": ["boolean", "null"]
     },
+    "no-sources-package": {
+      "description": "Ignore `tool.uv.sources` for the specified packages.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/PackageName"
+      }
+    },
     "offline": {
       "description": "Disable network access, relying only on locally cached data and locally available files.",
       "type": ["boolean", "null"]
@@ -1407,6 +1414,13 @@
         "no-sources": {
           "description": "Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the\nstandards-compliant, publishable package metadata, as opposed to using any local or Git\nsources.",
           "type": ["boolean", "null"]
+        },
+        "no-sources-package": {
+          "description": "Ignore `tool.uv.sources` for the specified packages.",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
         },
         "no-strip-extras": {
           "description": "Include extras in the output file.\n\nBy default, uv strips extras, as any packages pulled in by the extras are already included\nas dependencies in the output file directly. Further, output files generated with\n`--no-strip-extras` cannot be used as constraints files in `install` and `sync` invocations.",

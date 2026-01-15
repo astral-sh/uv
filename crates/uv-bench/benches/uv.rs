@@ -88,7 +88,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, SourceStrategy};
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -168,7 +168,7 @@ mod resolver {
         let options = OptionsBuilder::new()
             .exclude_newer(exclude_newer.clone())
             .build();
-        let sources = SourceStrategy::default();
+        let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
         let workspace_cache = WorkspaceCache::default();

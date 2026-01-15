@@ -331,6 +331,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package: _,
                 upgrade,
                 upgrade_package,
                 reinstall,

@@ -498,25 +498,25 @@ async fn do_lock(
     let requirements = target.lower(
         requirements,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let overrides = target.lower(
         overrides,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let constraints = target.lower(
         constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let build_constraints = target.lower(
         build_constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let dependency_groups = dependency_groups
@@ -525,7 +525,7 @@ async fn do_lock(
             let requirements = target.lower(
                 group.requirements,
                 index_locations,
-                *sources,
+                sources,
                 client_builder.credentials_cache(),
             )?;
             Ok((name, requirements))
@@ -741,7 +741,7 @@ async fn do_lock(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
-            *sources,
+            sources,
             client.credentials_cache(),
         )?,
         LockTarget::Script(script) => {
@@ -774,7 +774,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,

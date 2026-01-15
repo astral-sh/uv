@@ -10949,6 +10949,57 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
+/// Test `--no-sources-package` with pip install to selectively disable sources.
+#[test]
+#[cfg(feature = "git")]
+fn pip_install_no_sources_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = ["anyio", "iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        anyio = { git = "https://github.com/agronholm/anyio", tag = "3.7.0" }
+        iniconfig = { git = "https://github.com/pytest-dev/iniconfig", tag = "v2.0.0" }
+        "#
+    })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Install with sources disabled for anyio only
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-sources-package")
+        .arg("anyio")
+        .arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn unsupported_git_scheme() {
     let context = TestContext::new("3.12");

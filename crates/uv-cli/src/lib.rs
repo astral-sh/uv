@@ -5933,6 +5933,10 @@ pub struct ToolUpgradeArgs {
     )]
     pub no_sources: bool,
 
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
+    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    pub no_sources_package: Vec<PackageName>,
+
     #[command(flatten)]
     pub build: BuildOptionsArgs,
 }
@@ -6950,6 +6954,10 @@ pub struct InstallerArgs {
         help_heading = "Resolver options"
     )]
     pub no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
+    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    pub no_sources_package: Vec<PackageName>,
 }
 
 /// Arguments that are used by commands that need to resolve (but not install) packages.
@@ -7157,6 +7165,10 @@ pub struct ResolverArgs {
         help_heading = "Resolver options",
     )]
     pub no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
+    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    pub no_sources_package: Vec<PackageName>,
 }
 
 /// Arguments that are used by commands that need to resolve and install packages.
@@ -7421,6 +7433,10 @@ pub struct ResolverInstallerArgs {
         help_heading = "Resolver options",
     )]
     pub no_sources: bool,
+
+    /// Don't use sources from the `tool.uv.sources` table for the specified packages.
+    #[arg(long, help_heading = "Resolver options", env = EnvVars::UV_NO_SOURCES_PACKAGE, value_delimiter = ' ')]
+    pub no_sources_package: Vec<PackageName>,
 }
 
 /// Arguments that are used by commands that need to fetch from the Simple API.

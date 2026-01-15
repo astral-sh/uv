@@ -30,8 +30,8 @@ use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
-    InstallOptions, KeyringProviderType, NoBinary, NoBuild, PipCompileFormat, ProjectBuildBackend,
-    ProxyUrl, Reinstall, RequiredVersion, SourceStrategy, TargetTriple, TrustedHost,
+    InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, PipCompileFormat,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
     TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
@@ -1016,6 +1016,7 @@ impl ToolUpgradeSettings {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
             exclude_newer_package,
             build,
         } = args;
@@ -1053,6 +1054,7 @@ impl ToolUpgradeSettings {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
         };
 
         let args = resolver_installer_options(installer, build);
@@ -3448,7 +3450,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -3472,7 +3474,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
     pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) upgrade: Upgrade,
 }
@@ -3529,7 +3531,10 @@ impl From<ResolverOptions> for ResolverSettings {
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
-            sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+            sources: NoSources::from_args(
+                value.no_sources,
+                value.no_sources_package.unwrap_or_default(),
+            ),
             upgrade: value.upgrade.unwrap_or_default(),
             build_options: BuildOptions::new(
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
@@ -3619,7 +3624,10 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
-                sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+                sources: NoSources::from_args(
+                    value.no_sources,
+                    value.no_sources_package.unwrap_or_default(),
+                ),
                 torch_backend: value.torch_backend,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
@@ -3680,7 +3688,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
@@ -3759,6 +3767,7 @@ impl PipSettings {
             require_hashes,
             verify_hashes,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -3788,6 +3797,7 @@ impl PipSettings {
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
             no_sources: top_level_no_sources,
+            no_sources_package: top_level_no_sources_package,
             upgrade: top_level_upgrade,
             upgrade_package: top_level_upgrade_package,
             reinstall: top_level_reinstall,
@@ -3836,6 +3846,7 @@ impl PipSettings {
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
         let no_sources = no_sources.combine(top_level_no_sources);
+        let no_sources_package = no_sources_package.combine(top_level_no_sources_package);
         let upgrade = upgrade.combine(top_level_upgrade);
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
@@ -3994,8 +4005,11 @@ impl PipSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
-            sources: SourceStrategy::from_args(
-                args.no_sources.combine(no_sources).unwrap_or_default(),
+            sources: NoSources::from_args(
+                args.no_sources.combine(no_sources),
+                args.no_sources_package
+                    .combine(no_sources_package)
+                    .unwrap_or_default(),
             ),
             strict: args.strict.combine(strict).unwrap_or_default(),
             upgrade: Upgrade::from_args(
@@ -4063,7 +4077,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
-            sources: settings.resolver.sources,
+            sources: settings.resolver.sources.clone(),
         }
     }
 }

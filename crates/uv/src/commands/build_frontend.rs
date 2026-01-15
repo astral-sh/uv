@@ -15,8 +15,7 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -358,7 +357,7 @@ async fn build_impl(
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
-            *sources,
+            sources.clone(),
             concurrency,
             build_options,
             sdist,
@@ -467,7 +466,7 @@ async fn build_package(
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
+    sources: NoSources,
     concurrency: Concurrency,
     build_options: &BuildOptions,
     sdist: bool,
@@ -627,7 +626,7 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -687,7 +686,7 @@ async fn build_package(
                     printer,
                     "source distribution",
                     &build_dispatch,
-                    sources,
+                    &sources,
                     dist,
                     subdirectory,
                     version_id,
@@ -704,7 +703,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -756,7 +755,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -794,7 +793,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -903,7 +902,7 @@ async fn build_sdist(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: &NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
@@ -912,11 +911,12 @@ async fn build_sdist(
     let build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
                 uv_build_backend::list_source_dist(
                     &source_tree_,
                     uv_version::version(),
-                    sources == SourceStrategy::Enabled,
+                    sources_enabled,
                 )
             })
             .await??;
@@ -941,12 +941,13 @@ async fn build_sdist(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
-                    sources == SourceStrategy::Enabled,
+                    sources_enabled,
                 )
             })
             .await??
@@ -1011,7 +1012,7 @@ async fn build_wheel(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
@@ -1023,11 +1024,12 @@ async fn build_wheel(
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
                 uv_build_backend::list_wheel(
                     &source_tree_,
                     uv_version::version(),
-                    sources == SourceStrategy::Enabled,
+                    sources_enabled,
                     preview,
                 )
             })
@@ -1053,13 +1055,14 @@ async fn build_wheel(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_wheel(
                     &source_tree,
                     &output_dir_,
                     None,
                     uv_version::version(),
-                    sources == SourceStrategy::Enabled,
+                    sources_enabled,
                     preview,
                 )
             })
@@ -1090,7 +1093,7 @@ async fn build_wheel(
                     source.path(),
                     version_id,
                     dist,
-                    sources,
+                    &sources,
                     BuildKind::Wheel,
                     build_output,
                     BuildStack::default(),

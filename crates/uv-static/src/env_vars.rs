@@ -268,6 +268,11 @@ impl EnvVars {
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
+    /// Equivalent to the `--no-sources-package` command line argument. If set, uv will
+    /// ignore the `tool.uv.sources` table for the given space-delimited list of packages.
+    #[attr_added_in("next release")]
+    pub const UV_NO_SOURCES_PACKAGE: &'static str = "UV_NO_SOURCES_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     #[attr_added_in("0.4.16")]

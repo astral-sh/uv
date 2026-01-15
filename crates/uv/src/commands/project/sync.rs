@@ -661,7 +661,7 @@ pub(super) async fn do_sync(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
-                sources,
+                &sources,
                 client_builder.credentials_cache(),
             )?
         }
@@ -683,7 +683,7 @@ pub(super) async fn do_sync(
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
-                sources,
+                sources: sources.clone(),
                 torch_backend: None,
                 upgrade: Upgrade::default(),
             };
@@ -825,7 +825,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
