@@ -10,6 +10,7 @@ use tracing::{debug, trace};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
+use uv_fs::relative_to;
 use uv_platform::MacOSVersion;
 use uv_platform_tags::PlatformTag;
 use uv_static::EnvVars;
@@ -549,8 +550,7 @@ pub fn delocate_wheel(
                 };
 
                 let dependent_parent = dependent_in_wheel.parent().unwrap();
-                let relative_to_package = pathdiff::diff_paths(&lib_dir, dependent_parent)
-                    .unwrap_or_else(|| PathBuf::from(&options.lib_subdir));
+                let relative_to_package = relative_to(&lib_dir, dependent_parent)?;
 
                 let new_install_name = format!(
                     "@loader_path/{}/{}",
@@ -558,7 +558,9 @@ pub fn delocate_wheel(
                     lib_name.to_string_lossy()
                 );
 
-                // Update the install name.
+                // Update the install name in the dependent binary. Skip if the dependent
+                // doesn't exist yet (e.g., a transitive dependency that will be copied
+                // in a later iteration).
                 if dependent_in_wheel.exists() {
                     macho::change_install_name(
                         &dependent_in_wheel,
