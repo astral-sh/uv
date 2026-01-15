@@ -270,7 +270,7 @@ impl EnvVars {
 
     /// Equivalent to the `--no-sources-package` command line argument. If set, uv will
     /// ignore the `tool.uv.sources` table for the given space-delimited list of packages.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.26")]
     pub const UV_NO_SOURCES_PACKAGE: &'static str = "UV_NO_SOURCES_PACKAGE";
 
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
@@ -1212,7 +1212,7 @@ impl EnvVars {
     /// The URL to treat as a GCS-compatible storage endpoint. Requests to this endpoint
     /// will be signed using Google Cloud authentication based on the `GOOGLE_APPLICATION_CREDENTIALS`
     /// environment variable or Application Default Credentials.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.26")]
     pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
 
     /// The URL of the pyx Simple API server.
