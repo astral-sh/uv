@@ -144,7 +144,7 @@ cargo shear
 
 ### Compiling for Windows from Unix
 
-To run clippy for the Windows target from Linux, you can use
+To run clippy for the Windows target from Linux or macOS, you can use
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin):
 
 ```shell
