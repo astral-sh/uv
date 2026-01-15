@@ -18,7 +18,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
@@ -587,10 +587,25 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
             let wheel_abi = filename
                 .abi_tags()
                 .iter()
-                .map(|tag| format!("`{}`", tag.cyan()))
+                .map(|tag| match tag {
+                    AbiTag::CPython {
+                        gil_disabled: false,
+                        python_version: (major, minor),
+                    } => {
+                        format!("the CPython {}.{} ABI (`{}`)", major, minor, tag.cyan())
+                    }
+                    AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
+                    _ => {
+                        if let Some(pretty) = tag.pretty() {
+                            format!("the {} ABI (`{}`)", pretty.cyan(), tag.cyan())
+                        } else {
+                            format!("`{}`", tag.cyan())
+                        }
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
-            let message = if let Some(current) = tags.abi_tag() {
+            let current = if let Some(current) = tags.abi_tag() {
                 if let Some(pretty) = current.pretty() {
                     format!("{} (`{}`)", pretty.cyan(), current.cyan())
                 } else {
@@ -600,7 +615,7 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 "free-threaded Python".to_string()
             };
             Some(format!(
-                "The wheel uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
+                "You're using {current}, but the wheel was built for {wheel_abi}, which requires a GIL-enabled interpreter"
             ))
         }
         IncompatibleTag::Abi => {
@@ -809,7 +824,39 @@ mod tests {
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
         let hint = anstream::adapter::strip_str(&hint);
-        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible");
+        insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter");
+    }
+
+    #[test]
+    fn test_gil_enabled_cpython_on_free_threaded_python_hint() {
+        // Create a Tags object for free-threaded Python 3.14
+        let platform = Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            Arch::X86_64,
+        );
+        let tags = Tags::from_env(
+            &platform,
+            (3, 14),   // python_version
+            "cpython", // implementation_name
+            (3, 14),   // implementation_version
+            true,      // manylinux_compatible
+            true,      // gil_disabled (free-threaded)
+            false,     // is_cross
+        )
+        .unwrap();
+
+        // Create a wheel filename with cp314 ABI tag (same version, GIL-enabled)
+        let filename =
+            WheelFilename::from_str("foo-1.0-cp314-cp314-manylinux_2_17_x86_64.whl").unwrap();
+
+        // Generate the hint
+        let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
+
+        let hint = anstream::adapter::strip_str(&hint);
+        insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter");
     }
 
     #[test]

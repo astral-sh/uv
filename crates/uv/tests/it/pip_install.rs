@@ -13723,13 +13723,15 @@ fn record_uses_forward_slashes() -> Result<()> {
     Ok(())
 }
 
-/// Test that abi3 wheels are rejected on free-threaded Python with a helpful error message.
+/// Test ABI compatibility checking on free-threaded Python.
 ///
-/// The stable ABI (abi3) is not supported by free-threaded Python, so we should provide
-/// a clear error message when a user tries to install an abi3 wheel.
+/// Free-threaded Python has a different ABI, so wheels must be built specifically for it.
+/// This test verifies:
+/// 1. abi3 (stable ABI) wheels are rejected with a helpful error
+/// 2. GIL-enabled CPython wheels (e.g., cp312) are rejected with a helpful error
+/// 3. Wheels with multiple ABI tags succeed if at least one is compatible (e.g., cp314t)
 #[test]
-#[cfg(unix)]
-fn abi3_wheel_on_freethreaded_python() {
+fn abi_compatibility_on_freethreaded_python() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
@@ -13754,12 +13756,14 @@ fn abi3_wheel_on_freethreaded_python() {
         .assert()
         .success();
 
-    // Try to install an abi3 wheel - this should fail with a helpful error
+    // An abi3 wheel should fail with a helpful error
     let wheel_path = context
         .workspace_root
         .join("test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl");
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(wheel_path), @r"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13769,6 +13773,45 @@ fn abi3_wheel_on_freethreaded_python() {
     error: Failed to determine installation plan
       Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
 
-    hint: The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible
+    hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
+    ");
+
+    // A GIL-enabled wheel for the same Python version should also fail
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl
+
+    hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
+    ");
+
+    // A wheel with both cp314t (compatible) and abi3 (incompatible) should succeed
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + multi-abi-package==1.0.0 (from file://[WORKSPACE]/test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl)
     ");
 }
