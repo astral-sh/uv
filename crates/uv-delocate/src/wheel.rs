@@ -134,3 +134,36 @@ pub fn find_dist_info(wheel_dir: &Path) -> Result<String, DelocateError> {
 
     Err(DelocateError::MissingDistInfo)
 }
+
+/// Update the WHEEL file with new platform tags.
+///
+/// This replaces all `Tag:` entries with the new tags derived from the wheel filename.
+pub fn update_wheel_file(
+    wheel_dir: &Path,
+    dist_info_dir: &str,
+    new_tags: &[String],
+) -> Result<(), DelocateError> {
+    use std::io::{BufRead, BufReader, Write};
+
+    let wheel_path = wheel_dir.join(dist_info_dir).join("WHEEL");
+    let content = fs::read_to_string(&wheel_path)?;
+
+    let mut output = Vec::new();
+
+    // Copy all non-Tag lines, skipping empty lines.
+    for line in BufReader::new(content.as_bytes()).lines() {
+        let line = line?;
+        if !line.starts_with("Tag:") && !line.is_empty() {
+            writeln!(output, "{line}")?;
+        }
+    }
+
+    // Add new tags.
+    for tag in new_tags {
+        writeln!(output, "Tag: {tag}")?;
+    }
+
+    fs::write(&wheel_path, output)?;
+
+    Ok(())
+}

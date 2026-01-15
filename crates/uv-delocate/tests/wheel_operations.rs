@@ -76,3 +76,51 @@ fn test_unpack_repack_wheel() {
     let archive = zip::ZipArchive::new(file).unwrap();
     assert!(!archive.is_empty());
 }
+
+#[test]
+fn test_update_wheel_file() {
+    let data_dir = test_data_dir();
+    let temp_dir = TempDir::new().unwrap();
+
+    uv_delocate::wheel::unpack_wheel(
+        &data_dir.join("fakepkg1-1.0-cp36-abi3-macosx_10_9_universal2.whl"),
+        temp_dir.path(),
+    )
+    .unwrap();
+
+    let dist_info = uv_delocate::wheel::find_dist_info(temp_dir.path()).unwrap();
+    let wheel_path = temp_dir.path().join(&dist_info).join("WHEEL");
+
+    // Verify original content (has trailing blank line).
+    let original_content = fs::read_to_string(&wheel_path).unwrap();
+    assert_eq!(
+        original_content,
+        "\
+Wheel-Version: 1.0
+Generator: bdist_wheel (0.36.2)
+Root-Is-Purelib: false
+Tag: cp36-abi3-macosx_10_9_universal2
+
+"
+    );
+
+    // Update with new tags.
+    let new_tags = vec![
+        "cp36-abi3-macosx_14_0_arm64".to_string(),
+        "cp36-abi3-macosx_14_0_x86_64".to_string(),
+    ];
+    uv_delocate::wheel::update_wheel_file(temp_dir.path(), &dist_info, &new_tags).unwrap();
+
+    // Verify updated content.
+    let updated_content = fs::read_to_string(&wheel_path).unwrap();
+    assert_eq!(
+        updated_content,
+        "\
+Wheel-Version: 1.0
+Generator: bdist_wheel (0.36.2)
+Root-Is-Purelib: false
+Tag: cp36-abi3-macosx_14_0_arm64
+Tag: cp36-abi3-macosx_14_0_x86_64
+"
+    );
+}

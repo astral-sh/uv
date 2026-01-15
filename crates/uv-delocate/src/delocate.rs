@@ -233,6 +233,8 @@ fn find_max_macos_version<'a>(paths: impl Iterator<Item = &'a Path>) -> Option<M
 ///
 /// For example, `macosx_10_9_x86_64` with version 11.0 becomes `macosx_11_0_x86_64`.
 /// Non-macOS tags are preserved unchanged.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#compressed-tag-sets>
 fn update_platform_tags_version(
     platform_tags: &[PlatformTag],
     version: MacOSVersion,
@@ -244,7 +246,7 @@ fn update_platform_tags_version(
         (version.major, version.minor)
     };
 
-    platform_tags
+    let mut tags: Vec<PlatformTag> = platform_tags
         .iter()
         .map(|tag| match tag {
             PlatformTag::Macos { binary_format, .. } => PlatformTag::Macos {
@@ -254,7 +256,11 @@ fn update_platform_tags_version(
             },
             other => other.clone(),
         })
-        .collect()
+        .collect();
+
+    // Sort the compressed tag sets.
+    tags.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    tags
 }
 
 /// Find all Mach-O binaries in a directory.
@@ -574,8 +580,18 @@ pub fn delocate_wheel(
         sanitize_rpaths(binary)?;
     }
 
-    // Update RECORD.
     let dist_info = wheel::find_dist_info(wheel_dir)?;
+
+    // Update WHEEL file if platform tags changed.
+    if final_platform_tags != platform_tags {
+        let tag_strings: Vec<String> = final_platform_tags
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        wheel::update_wheel_file(wheel_dir, &dist_info, &tag_strings)?;
+    }
+
+    // Update RECORD (must be after WHEEL file update to include correct hash).
     wheel::update_record(wheel_dir, &dist_info)?;
 
     // Create output wheel with potentially updated platform tag.
@@ -809,9 +825,47 @@ mod tests {
                 arch: uv_platform_tags::Arch::X86_64
             }]
         );
+
+        // Tags are sorted by string representation, which can reverse order.
+        // Before: macosx_11_0_x86_64 < macosx_12_0_arm64 (because "11" < "12")
+        // After updating to 13: macosx_13_0_arm64 < macosx_13_0_x86_64 (because "arm64" < "x86_64")
+        let tags = [
+            PlatformTag::Macos {
+                major: 11,
+                minor: 0,
+                binary_format: BinaryFormat::X86_64,
+            },
+            PlatformTag::Macos {
+                major: 12,
+                minor: 0,
+                binary_format: BinaryFormat::Arm64,
+            },
+        ];
+        // Verify input order: x86_64 first, arm64 second.
+        assert_eq!(tags[0].to_string(), "macosx_11_0_x86_64");
+        assert_eq!(tags[1].to_string(), "macosx_12_0_arm64");
+
+        let updated = update_platform_tags_version(&tags, MacOSVersion::new(13, 0));
+        // After update, sorted by string: arm64 < x86_64.
+        assert_eq!(
+            updated,
+            vec![
+                PlatformTag::Macos {
+                    major: 13,
+                    minor: 0,
+                    binary_format: BinaryFormat::Arm64,
+                },
+                PlatformTag::Macos {
+                    major: 13,
+                    minor: 0,
+                    binary_format: BinaryFormat::X86_64,
+                },
+            ]
+        );
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_resolve_dynamic_path_bare_vs_relative() {
         use tempfile::TempDir;
 
@@ -837,7 +891,8 @@ mod tests {
         );
 
         // Relative path with `/` should NOT search DYLD paths.
-        // (It would try relative to binary, which doesn't exist.)
+        // On macOS, canonicalize() requires intermediate directories to exist,
+        // so `bin/../lib/libtest.dylib` fails because `bin` doesn't exist.
         let result = resolve_dynamic_path("../lib/libtest.dylib", &binary_path, &[], &dyld_paths);
         assert!(
             result.is_none(),
