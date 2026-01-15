@@ -494,7 +494,7 @@ impl PyxTokenStore {
                 if let Some(tokens) = self.read().await? {
                     match tokens.check_fresh(tolerance_secs) {
                         Ok(exp) => {
-                            debug!("Token was recently refreshed (`{exp}`); using it");
+                            debug!("Using recently refreshed token (`{exp}`)");
                             return Ok(tokens);
                         }
                         Err(reason) => {
