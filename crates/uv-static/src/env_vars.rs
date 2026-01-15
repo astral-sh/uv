@@ -724,13 +724,13 @@ impl EnvVars {
     /// Search path for dynamic libraries on macOS (checked before system paths).
     ///
     /// Used during wheel delocating to find library dependencies.
-    #[attr_added_in("0.9.22")]
+    #[attr_added_in("next version")]
     pub const DYLD_LIBRARY_PATH: &'static str = "DYLD_LIBRARY_PATH";
 
     /// Fallback search path for dynamic libraries on macOS.
     ///
     /// Used during wheel delocating to find library dependencies.
-    #[attr_added_in("0.9.22")]
+    #[attr_added_in("next version")]
     pub const DYLD_FALLBACK_LIBRARY_PATH: &'static str = "DYLD_FALLBACK_LIBRARY_PATH";
 
     /// Used with `--python-platform arm64-apple-ios` and related variants to set the

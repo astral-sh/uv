@@ -24,7 +24,7 @@ use crate::wheel;
 pub struct DelocateOptions {
     /// Subdirectory within the package to store copied libraries.
     /// Defaults to ".dylibs".
-    pub lib_sdir: String,
+    pub lib_subdir: String,
     /// Required architectures to validate.
     pub require_archs: Vec<Arch>,
     /// Libraries to exclude from delocating (by name pattern).
@@ -47,7 +47,7 @@ impl Default for DelocateOptions {
             .and_then(|value| MacOSVersion::parse(&value));
 
         Self {
-            lib_sdir: ".dylibs".to_string(),
+            lib_subdir: ".dylibs".to_string(),
             require_archs: Vec::new(),
             exclude: Vec::new(),
             sanitize_rpaths: true,
@@ -377,6 +377,11 @@ fn analyze_dependencies(
                             continue;
                         }
 
+                        debug!(
+                            "Found transitive dependency: {} -> {}",
+                            lib_path.display(),
+                            resolved.display()
+                        );
                         to_process.push((resolved, lib_path.clone(), dep.clone()));
                     }
                 }
@@ -518,7 +523,7 @@ pub fn delocate_wheel(
         }
 
         // No modifications needed, just copy the wheel.
-        let dest_path = dest_dir.join(wheel_path.file_name().unwrap());
+        let dest_path = dest_dir.join(&filename_str);
         fs::copy(wheel_path, &dest_path)?;
         return Ok(dest_path);
     }
@@ -529,7 +534,7 @@ pub fn delocate_wheel(
     let package_dir = find_package_dir(wheel_dir, &filename)?;
 
     // Create the library directory.
-    let lib_dir = package_dir.join(&options.lib_sdir);
+    let lib_dir = package_dir.join(&options.lib_subdir);
     fs::create_dir_all(&lib_dir)?;
 
     // Check for library name collisions.
@@ -569,7 +574,7 @@ pub fn delocate_wheel(
         // Set the install ID of the copied library.
         let new_id = format!(
             "@loader_path/{}/{}",
-            options.lib_sdir,
+            options.lib_subdir,
             lib_name.to_string_lossy()
         );
         macho::change_install_id(&dest_lib, &new_id)?;
@@ -586,7 +591,7 @@ pub fn delocate_wheel(
 
             let dependent_parent = dependent_in_wheel.parent().unwrap();
             let relative_to_package = pathdiff::diff_paths(&lib_dir, dependent_parent)
-                .unwrap_or_else(|| PathBuf::from(&options.lib_sdir));
+                .unwrap_or_else(|| PathBuf::from(&options.lib_subdir));
 
             let new_install_name = format!(
                 "@loader_path/{}/{}",

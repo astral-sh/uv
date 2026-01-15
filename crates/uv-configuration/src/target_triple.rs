@@ -298,36 +298,26 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let MacOSVersion { major, minor } = macos_deployment_target().map_or(
-                    MacOSVersion {
-                        major: 13,
-                        minor: 0,
-                    },
-                    |version| {
+                let MacOSVersion { major, minor } =
+                    macos_deployment_target().map_or(MacOSVersion::DEFAULT, |version| {
                         debug!(
                             "Found macOS deployment target: {}.{}",
                             version.major, version.minor
                         );
                         version
-                    },
-                );
+                    });
                 Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let MacOSVersion { major, minor } = macos_deployment_target().map_or(
-                    MacOSVersion {
-                        major: 13,
-                        minor: 0,
-                    },
-                    |version| {
+                let MacOSVersion { major, minor } =
+                    macos_deployment_target().map_or(MacOSVersion::DEFAULT, |version| {
                         debug!(
                             "Found macOS deployment target: {}.{}",
                             version.major, version.minor
                         );
                         version
-                    },
-                );
+                    });
                 Platform::new(Os::Macos { major, minor }, Arch::X86_64)
             }
             Self::Aarch64UnknownLinuxGnu => Platform::new(
