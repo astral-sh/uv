@@ -1518,7 +1518,7 @@ pub(crate) async fn find_best_python_installation(
                 .fill()
                 .map(|request| download_list.find(&request));
 
-            let installation = match download {
+            let result = match download {
                 Ok(Ok(download)) => PythonInstallation::fetch(
                     download,
                     client,
@@ -1535,7 +1535,7 @@ pub(crate) async fn find_best_python_installation(
                 Ok(Err(error)) => Err(error.into()),
                 Err(error) => Err(error.into()),
             };
-            if let Ok(Some(installation)) = installation {
+            if let Ok(Some(installation)) = result {
                 return Ok(installation);
             }
             // Emit a warning instead of failing since we may find a suitable
@@ -1545,7 +1545,7 @@ pub(crate) async fn find_best_python_installation(
             // backwards compatibility.
             // Errors encountered here are either network errors or quirky
             // configuration problems.
-            if let Err(error) = installation {
+            if let Err(error) = result {
                 // If the request was for the default or any version, propagate
                 // the error as nothing else we are about to do will help the
                 // situation.
