@@ -89,6 +89,7 @@ pub(crate) async fn token(
 /// Refresh the authentication tokens in the [`PyxTokenStore`], prompting for login if necessary.
 async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printer) -> Result<()> {
     // Retrieve the token store.
+    // Use zero tolerance to force a refresh.
     let token = match store
         .access_token(client.for_host(store.api()).raw_client(), 0)
         .await

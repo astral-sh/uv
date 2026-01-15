@@ -8,6 +8,7 @@ use etcetera::BaseStrategy;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 use url::Url;
+use uv_fs::{LockedFile, LockedFileMode};
 
 use uv_cache_key::CanonicalUrl;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
@@ -86,6 +87,66 @@ impl From<AccessToken> for Credentials {
     fn from(access_token: AccessToken) -> Self {
         Self::Bearer {
             token: Token::new(access_token.into_bytes()),
+        }
+    }
+}
+
+/// Reason why a token is considered expired and needs refresh.
+#[derive(Debug, Clone)]
+enum ExpiredTokenReason {
+    /// The token has no expiration claim.
+    MissingExpiration,
+    /// Zero tolerance was requested, forcing a refresh.
+    ForcedRefresh,
+    /// The token's expiration time has passed.
+    Expired(jiff::Timestamp),
+    /// The token will expire within the tolerance window.
+    ExpiringSoon(jiff::Timestamp),
+}
+
+impl std::fmt::Display for ExpiredTokenReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingExpiration => write!(f, "missing expiration"),
+            Self::ForcedRefresh => write!(f, "forced refresh"),
+            Self::Expired(exp) => write!(f, "token expired (`{exp}`)"),
+            Self::ExpiringSoon(exp) => write!(f, "token will expire within tolerance (`{exp}`)"),
+        }
+    }
+}
+
+impl PyxTokens {
+    /// Returns the access token.
+    fn access_token(&self) -> &AccessToken {
+        match self {
+            Self::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
+            Self::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
+        }
+    }
+
+    /// Check if the token is fresh (not expired and not expiring within tolerance).
+    ///
+    /// Returns `Ok(expiration)` if fresh, or `Err(reason)` if refresh is needed.
+    fn check_fresh(&self, tolerance_secs: u64) -> Result<jiff::Timestamp, ExpiredTokenReason> {
+        let Ok(jwt) = PyxJwt::decode(self.access_token()) else {
+            return Err(ExpiredTokenReason::MissingExpiration);
+        };
+        match jwt.exp {
+            None => Err(ExpiredTokenReason::MissingExpiration),
+            Some(_) if tolerance_secs == 0 => Err(ExpiredTokenReason::ForcedRefresh),
+            Some(exp) => {
+                let Ok(exp) = jiff::Timestamp::from_second(exp) else {
+                    return Err(ExpiredTokenReason::MissingExpiration);
+                };
+                let now = jiff::Timestamp::now();
+                if exp < now {
+                    Err(ExpiredTokenReason::Expired(exp))
+                } else if exp < now + Duration::from_secs(tolerance_secs) {
+                    Err(ExpiredTokenReason::ExpiringSoon(exp))
+                } else {
+                    Ok(exp)
+                }
+            }
         }
     }
 }
@@ -317,6 +378,20 @@ impl PyxTokenStore {
         Ok(())
     }
 
+    /// Return the path to the refresh lock file for a given token type.
+    ///
+    /// For OAuth tokens, uses a fixed "tokens.lock" file.
+    /// For API key tokens, uses a file based on the API key digest.
+    fn lock_path(&self, tokens: &PyxTokens) -> PathBuf {
+        match tokens {
+            PyxTokens::OAuth(_) => self.subdirectory.join("tokens.lock"),
+            PyxTokens::ApiKey(PyxApiKeyTokens { api_key, .. }) => {
+                let digest = uv_cache_key::cache_digest(api_key);
+                self.subdirectory.join(format!("{digest}.lock"))
+            }
+        }
+    }
+
     /// Bootstrap the tokens from the store.
     async fn bootstrap(
         &self,
@@ -367,44 +442,40 @@ impl PyxTokenStore {
         client: &ClientWithMiddleware,
         tolerance_secs: u64,
     ) -> Result<PyxTokens, TokenStoreError> {
-        // Decode the access token.
-        let jwt = PyxJwt::decode(match &tokens {
-            PyxTokens::OAuth(PyxOAuthTokens { access_token, .. }) => access_token,
-            PyxTokens::ApiKey(PyxApiKeyTokens { access_token, .. }) => access_token,
-        })?;
+        let reason = match tokens.check_fresh(tolerance_secs) {
+            Ok(exp) => {
+                debug!("Access token is up-to-date (`{exp}`)");
+                return Ok(tokens);
+            }
+            Err(reason) => reason,
+        };
+        debug!("Refreshing token due to {reason}");
 
-        // If the access token is expired, refresh it.
-        let is_up_to_date = match jwt.exp {
-            None => {
-                debug!("Access token has no expiration; refreshing...");
-                false
-            }
-            Some(..) if tolerance_secs == 0 => {
-                debug!("Refreshing access token due to zero tolerance...");
-                false
-            }
-            Some(jwt) => {
-                let exp = jiff::Timestamp::from_second(jwt)?;
-                let now = jiff::Timestamp::now();
-                if exp < now {
-                    debug!("Access token is expired (`{exp}`); refreshing...");
-                    false
-                } else if exp < now + Duration::from_secs(tolerance_secs) {
-                    debug!(
-                        "Access token will expire within the tolerance (`{exp}`); refreshing..."
-                    );
-                    false
-                } else {
-                    debug!("Access token is up-to-date (`{exp}`)");
-                    true
+        // Ensure the subdirectory exists before acquiring the lock
+        fs_err::tokio::create_dir_all(&self.subdirectory).await?;
+
+        // Get the lock path for this specific token
+        let lock_path = self.lock_path(&tokens);
+
+        // Acquire a lock to prevent concurrent refresh attempts for this token
+        let _lock = LockedFile::acquire(&lock_path, LockedFileMode::Exclusive, "pyx refresh")
+            .await
+            .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
+
+        // Check if another process has already refreshed the tokens
+        if let Some(tokens) = self.read().await? {
+            match tokens.check_fresh(tolerance_secs) {
+                Ok(exp) => {
+                    debug!("Using recently refreshed token (`{exp}`)");
+                    return Ok(tokens);
+                }
+                Err(reason) => {
+                    debug!("Token on disk still needs refresh due to {reason}");
                 }
             }
-        };
-
-        if is_up_to_date {
-            return Ok(tokens);
         }
 
+        // Refresh the tokens
         let tokens = match tokens {
             PyxTokens::OAuth(PyxOAuthTokens { refresh_token, .. }) => {
                 // Parse the API URL.
@@ -450,8 +521,9 @@ impl PyxTokenStore {
             }
         };
 
-        // Write the new tokens to disk.
+        // Write the new tokens to disk
         self.write(&tokens).await?;
+
         Ok(tokens)
     }
 
