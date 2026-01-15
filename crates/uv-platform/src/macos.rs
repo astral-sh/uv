@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use uv_static::EnvVars;
+
 /// macOS version requirement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MacOSVersion {
@@ -20,6 +22,12 @@ impl MacOSVersion {
         major: 13,
         minor: 0,
     };
+
+    /// Read the macOS deployment target from the `MACOSX_DEPLOYMENT_TARGET` environment variable.
+    pub fn from_env() -> Option<Self> {
+        let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
+        Self::parse(&version)
+    }
 
     pub const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
