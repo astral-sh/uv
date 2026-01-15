@@ -8,8 +8,6 @@ jobs:
     timeout-minutes: 10
     name: "mkdocs"
     runs-on: ubuntu-latest
-    env:
-      MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -28,15 +26,6 @@ jobs:
           cargo dev generate-options-reference
           cargo dev generate-cli-reference
           cargo dev generate-env-vars-reference
-      - name: "Add SSH key"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd # v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
 
-      - name: "Build docs (public)"
-        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.public.yml
-
-      - name: "Build docs (insiders)"
-        if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        run: uvx --with-requirements docs/requirements-insiders.txt mkdocs build --strict -f mkdocs.insiders.yml
+      - name: "Build docs"
+        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.yml
