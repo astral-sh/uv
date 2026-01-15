@@ -16,117 +16,95 @@ jobs:
   plan:
     runs-on: depot-ubuntu-24.04
     outputs:
-      # Run checks/tests if test:skip label is not present and code changed (or on main)
-      test-code: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.code_any_changed == 'true' || github.ref == 'refs/heads/main') }}
-      # Run schema check if schema file changed
-      check-schema: ${{ steps.changed.outputs.schema_changed == 'true' }}
-      # Run release build test if release files changed
-      build-release-binaries: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && steps.changed.outputs.release_build_changed == 'true' }}
-      # Run format/lint checks (always unless test:skip label)
-      run-checks: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
-      # Run publish test if publish-related files changed
-      test-publish: ${{ steps.changed.outputs.publish_changed == 'true' || github.ref == 'refs/heads/main' }}
-      # Run trampoline checks if trampoline-related code changed
-      test-windows-trampoline: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.trampoline_any_changed == 'true' || github.ref == 'refs/heads/main') }}
-      # Save Rust cache if on main or if cache-relevant files changed (Cargo files, toolchain, workflows)
-      save-rust-cache: ${{ github.ref == 'refs/heads/main' || steps.changed.outputs.cache_changed == 'true' }}
-      # Run benchmarks only if Rust code changed
-      run-bench: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') && (steps.changed.outputs.rust_code_changed == 'true' || github.ref == 'refs/heads/main') }}
-      # Smoke and ecosystem tests - run unless test:skip label
-      test-smoke: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
-      test-ecosystem: ${{ !contains(github.event.pull_request.labels.*.name, 'test:skip') }}
-      # Extended test suites - only run on main or with opt-in labels
-      test-integration: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
-      test-system: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') || contains(github.event.pull_request.labels.*.name, 'test:extended') || github.ref == 'refs/heads/main' }}
+      test-code: ${{ steps.plan.outputs.test_code }}
+      check-schema: ${{ steps.plan.outputs.check_schema }}
+      build-release-binaries: ${{ steps.plan.outputs.build_release_binaries }}
+      run-checks: ${{ steps.plan.outputs.run_checks }}
+      test-publish: ${{ steps.plan.outputs.test_publish }}
+      test-windows-trampoline: ${{ steps.plan.outputs.test_windows_trampoline }}
+      save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
+      run-bench: ${{ steps.plan.outputs.run_bench }}
+      test-smoke: ${{ steps.plan.outputs.test_smoke }}
+      test-ecosystem: ${{ steps.plan.outputs.test_ecosystem }}
+      test-integration: ${{ steps.plan.outputs.test_integration }}
+      test-system: ${{ steps.plan.outputs.test_system }}
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: "Determine changed files"
-        id: changed
+      - name: "Plan"
+        id: plan
         shell: bash
+        env:
+          GH_REF: ${{ github.ref }}
+          HAS_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:skip') }}
+          HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
+          HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+          HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/main' }}...HEAD)
+          [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
+          [[ "$HAS_SKIP_LABEL" == "true" ]] && has_skip_label=1
+          [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
+          [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
+          [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
 
-          CODE_CHANGED=false
-          SCHEMA_CHANGED=false
-          RELEASE_BUILD_CHANGED=false
-          PUBLISH_CHANGED=false
-          TRAMPOLINE_CHANGED=false
-          CACHE_CHANGED=false
-          RUST_CODE_CHANGED=false
-
+          # Detect changed files
           while IFS= read -r file; do
-            # Check if the schema file changed (e.g., in a release PR)
-            if [[ "${file}" == "uv.schema.json" ]]; then
-              echo "Detected schema change: ${file}"
-              SCHEMA_CHANGED=true
-            fi
+            [[ -z "$file" ]] && continue
+            [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
+            [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
+            [[ "$file" == "rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
+            [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
+            [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
+            [[ "$file" == ".github/workflows/build-release-binaries.yml" ]] && release_workflow_changed=1
+            [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
+            [[ "$file" == "uv.schema.json" ]] && schema_changed=1
+            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ ]] && publish_code_changed=1
+            [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_changed=1
+            [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
+            [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
+            any_code_changed=1
+          done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
 
-            # Check if release build files changed (pyproject.toml, Cargo.toml, etc.)
-            if [[ "${file}" == "pyproject.toml" || "${file}" == "Cargo.toml" || "${file}" == "Cargo.lock" || "${file}" == "rust-toolchain.toml" || "${file}" == ".cargo/config.toml" || "${file}" == "crates/uv-build/Cargo.toml" || "${file}" == "crates/uv-build/pyproject.toml" || "${file}" == ".github/workflows/build-release-binaries.yml" ]]; then
-              echo "Detected release build change: ${file}"
-              RELEASE_BUILD_CHANGED=true
-            fi
+          # Derived groups
+          [[ $rust_code_changed || $rust_deps_changed || $rust_config_changed ]] && any_rust_changed=1
+          [[ $python_config_changed || $rust_deps_changed || $rust_config_changed || $uv_build_changed || $release_workflow_changed ]] && release_build_changed=1
+          [[ $publish_code_changed || $ci_workflow_changed ]] && publish_changed=1
+          [[ $rust_deps_changed || $rust_config_changed || $workflow_changed ]] && cache_relevant_changed=1
 
-            # Check if publish-related files changed
-            if [[ "${file}" =~ ^crates/uv-publish/ || "${file}" =~ ^scripts/publish/ || "${file}" == ".github/workflows/ci.yml" ]]; then
-              echo "Detected publish change: ${file}"
-              PUBLISH_CHANGED=true
-            fi
+          # Decisions
+          [[ ! $has_skip_label && ($any_code_changed || $on_main_branch) ]] && test_code=1
+          [[ $schema_changed ]] && check_schema=1
+          [[ ! $has_skip_label && $release_build_changed ]] && build_release_binaries=1
+          [[ ! $has_skip_label ]] && run_checks=1
+          [[ $publish_changed || $on_main_branch ]] && test_publish=1
+          [[ ! $has_skip_label && ($trampoline_changed || $on_main_branch) ]] && test_windows_trampoline=1
+          [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
+          [[ ! $has_skip_label && ($any_rust_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label ]] && test_smoke=1
+          [[ ! $has_skip_label ]] && test_ecosystem=1
+          [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
+          [[ $has_system_label || $has_extended_label || $on_main_branch ]] && test_system=1
 
-            # Check if trampoline-related files changed
-            if [[ "${file}" =~ ^crates/uv-trampoline/ ]] || [[ "${file}" =~ ^crates/uv-trampoline-builder/ ]]; then
-              echo "Detected trampoline change: ${file}"
-              TRAMPOLINE_CHANGED=true
-            fi
-
-            # Check if cache-relevant files changed (Cargo files, toolchain, workflows)
-            if [[ "${file}" == "Cargo.lock" || "${file}" == "Cargo.toml" || "${file}" == "rust-toolchain.toml" || "${file}" == ".cargo/config.toml" || "${file}" =~ ^crates/.*/Cargo\.toml$ || "${file}" =~ ^\.github/workflows/.*\.yml$ ]]; then
-              echo "Detected cache-relevant change: ${file}"
-              CACHE_CHANGED=true
-            fi
-
-            # Check if Rust code changed (for benchmarks)
-            if [[ "${file}" =~ \.rs$ ]] || [[ "${file}" =~ Cargo\.toml$ ]] || [[ "${file}" == "Cargo.lock" ]] || [[ "${file}" == "rust-toolchain.toml" ]] || [[ "${file}" =~ ^\.cargo/ ]]; then
-              echo "Detected Rust code change: ${file}"
-              RUST_CODE_CHANGED=true
-            fi
-
-            if [[ "${file}" =~ ^docs/ ]]; then
-              echo "Skipping ${file} (matches docs/ pattern)"
-              continue
-            fi
-            if [[ "${file}" =~ ^mkdocs.*\.yml$ ]]; then
-              echo "Skipping ${file} (matches mkdocs*.yml pattern)"
-              continue
-            fi
-            if [[ "${file}" =~ \.md$ ]]; then
-              echo "Skipping ${file} (matches *.md pattern)"
-              continue
-            fi
-            if [[ "${file}" =~ ^bin/ ]]; then
-              echo "Skipping ${file} (matches bin/ pattern)"
-              continue
-            fi
-            if [[ "${file}" =~ ^assets/ ]]; then
-              echo "Skipping ${file} (matches assets/ pattern)"
-              continue
-            fi
-
-            echo "Detected code change in: ${file}"
-            CODE_CHANGED=true
-
-          done <<< "${CHANGED_FILES}"
-          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "schema_changed=${SCHEMA_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "release_build_changed=${RELEASE_BUILD_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "publish_changed=${PUBLISH_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "trampoline_any_changed=${TRAMPOLINE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "cache_changed=${CACHE_CHANGED}" >> "${GITHUB_OUTPUT}"
-          echo "rust_code_changed=${RUST_CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
+          # Output (convert 1/empty to true/false for GHA)
+          out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
+          {
+            out test_code               "$test_code"
+            out check_schema            "$check_schema"
+            out build_release_binaries  "$build_release_binaries"
+            out run_checks              "$run_checks"
+            out test_publish            "$test_publish"
+            out test_windows_trampoline "$test_windows_trampoline"
+            out save_rust_cache         "$save_rust_cache"
+            out run_bench               "$run_bench"
+            out test_smoke              "$test_smoke"
+            out test_ecosystem          "$test_ecosystem"
+            out test_integration        "$test_integration"
+            out test_system             "$test_system"
+          } >> "$GITHUB_OUTPUT"
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
