@@ -682,7 +682,10 @@ impl EnvironmentOptions {
                     None,
                 )?,
                 builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
-                installs: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_INSTALLS, None)?,
+                installs: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
             },
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: parse_string_environment_variable(
