@@ -159,7 +159,13 @@ impl PythonInstallation {
             Ok(Err(downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    return Err(err);
+                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                        return Err(err);
+                    }
+                    return Err(err.with_missing_python_hint(
+                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
+                            .to_string(),
+                    ));
                 }
                 None
             }

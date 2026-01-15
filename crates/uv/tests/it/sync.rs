@@ -13264,6 +13264,37 @@ fn sync_python_preference() -> Result<()> {
 }
 
 #[test]
+fn sync_python_missing_download_hint() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"])
+        .with_managed_python_dirs()
+        .with_filtered_python_sources();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.100"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
+
+    hint: uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv.
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_config_settings_package() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-07-25T00:00:00Z");
 
