@@ -146,7 +146,7 @@ mod tests {
         write_error_chain(err.as_ref(), &mut rendered, "error", AnsiColors::Red).unwrap();
         let rendered = anstream::adapter::strip_str(&rendered);
 
-        assert_snapshot!(rendered, @r"
+        assert_snapshot!(rendered, @"
         error: Failed to download Python 3.12
           Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
                      Server says: This endpoint only support POST requests.

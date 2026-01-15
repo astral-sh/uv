@@ -890,7 +890,7 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -919,7 +919,7 @@ fn help_unknown_subcommand() {
         generate-shell-completion
     ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -953,7 +953,7 @@ fn help_unknown_subcommand() {
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1056,7 +1056,7 @@ fn help_with_global_option() {
 fn help_with_help() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--help"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1068,14 +1068,14 @@ fn help_with_help() {
       --no-pager Disable pager when printing help
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----

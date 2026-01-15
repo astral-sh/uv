@@ -620,7 +620,7 @@ mod tests {
             .clone();
         header.set_sensitive(false);
 
-        assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZA==""###);
+        assert_debug_snapshot!(header, @r#""Basic dXNlcjpwYXNzd29yZA==""#);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
@@ -642,7 +642,7 @@ mod tests {
             .clone();
         header.set_sensitive(false);
 
-        assert_debug_snapshot!(header, @r###""Basic dXNlckBkb21haW46cGFzc3dvcmQ=""###);
+        assert_debug_snapshot!(header, @r#""Basic dXNlckBkb21haW46cGFzc3dvcmQ=""#);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
@@ -664,7 +664,7 @@ mod tests {
             .clone();
         header.set_sensitive(false);
 
-        assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
+        assert_debug_snapshot!(header, @r#""Basic dXNlcjpwYXNzd29yZD09""#);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 

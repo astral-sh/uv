@@ -1775,7 +1775,7 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r"
+        assert_snapshot!(&formatted_metadata, @"
         :action: file_upload
         sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
         blake2_256_digest: 40ab79b48c4e289e4990f7e689177adae4096c07a634034eb1d10c0b6700e4d2
@@ -2082,7 +2082,7 @@ mod tests {
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
-            @r"
+            @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
           Caused by: Too many redirects, only 10 redirects are allowed
         "
@@ -2110,7 +2110,7 @@ mod tests {
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
-            @r"
+            @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
           Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "

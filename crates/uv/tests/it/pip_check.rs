@@ -16,7 +16,7 @@ fn check_compatible_packages() -> Result<()> {
         .pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30,10 +30,10 @@ fn check_compatible_packages() -> Result<()> {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.pip_check(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -41,7 +41,7 @@ fn check_compatible_packages() -> Result<()> {
     ----- stderr -----
     Checked 5 packages in [TIME]
     All installed packages are compatible
-    "###
+    "
     );
 
     Ok(())
@@ -60,7 +60,7 @@ fn check_incompatible_packages() -> Result<()> {
         .pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -74,7 +74,7 @@ fn check_incompatible_packages() -> Result<()> {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    "###
+    "
     );
 
     let requirements_txt_idna = context.temp_dir.child("requirements_idna.txt");
@@ -84,7 +84,7 @@ fn check_incompatible_packages() -> Result<()> {
         .pip_install()
         .arg("-r")
         .arg("requirements_idna.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -97,10 +97,10 @@ fn check_incompatible_packages() -> Result<()> {
      - idna==3.6
      + idna==2.4
     warning: The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.pip_check(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -109,7 +109,7 @@ fn check_incompatible_packages() -> Result<()> {
     Checked 5 packages in [TIME]
     Found 1 incompatibility
     The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
-    "###
+    "
     );
 
     Ok(())
@@ -129,7 +129,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
         .pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -143,7 +143,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    "###
+    "
     );
 
     let requirements_txt_two = context.temp_dir.child("requirements_two.txt");
@@ -153,7 +153,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
         .pip_install()
         .arg("-r")
         .arg("requirements_two.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,10 +169,10 @@ fn check_multiple_incompatible_packages() -> Result<()> {
      + urllib3==1.20
     warning: The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     warning: The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
-    "###
+    "
     );
 
-    uv_snapshot!(context.pip_check(), @r###"
+    uv_snapshot!(context.pip_check(), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -182,7 +182,7 @@ fn check_multiple_incompatible_packages() -> Result<()> {
     Found 2 incompatibilities
     The package `requests` requires `idna>=2.5,<4`, but `2.4` is installed
     The package `requests` requires `urllib3>=1.21.1,<3`, but `1.20` is installed
-    "###
+    "
     );
 
     Ok(())
@@ -195,7 +195,7 @@ fn check_python_version() {
     uv_snapshot!(context
         .pip_install()
         .arg("urllib3")
-        .arg("--strict"), @r"
+        .arg("--strict"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -208,7 +208,7 @@ fn check_python_version() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.pip_check().arg("--python-version").arg("3.7"), @r"
+    uv_snapshot!(context.filters(), context.pip_check().arg("--python-version").arg("3.7"), @"
     success: false
     exit_code: 1
     ----- stdout -----

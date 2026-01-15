@@ -250,16 +250,17 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
             ".name" => "[distro.name]",
             ".version" => "[distro.version]"
             // We mock the libc version already
-        }, @r###"
-            {
-              "name": "[distro.name]",
-              "version": "[distro.version]",
-              "id": "[distro.id]",
-              "libc": {
-                "lib": "glibc",
-                "version": "2.38"
-              }
-            }"###
+        }, @r#"
+        {
+          "name": "[distro.name]",
+          "version": "[distro.version]",
+          "id": "[distro.id]",
+          "libc": {
+            "lib": "glibc",
+            "version": "2.38"
+          }
+        }
+        "#
         );
         // Check dynamic values
         let distro_info = linehaul

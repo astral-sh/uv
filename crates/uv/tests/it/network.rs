@@ -181,7 +181,7 @@ async fn simple_http_500() {
         .arg("--index-url")
         .arg(&mock_server_uri)
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -207,7 +207,7 @@ async fn simple_io_err() {
         .arg("--index-url")
         .arg(&mock_server_uri)
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -236,7 +236,7 @@ async fn find_links_http_500() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -264,7 +264,7 @@ async fn find_links_io_error() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -295,7 +295,7 @@ async fn find_links_mixed_error() {
         .arg("--find-links")
         .arg(&mock_server_uri)
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -324,7 +324,7 @@ async fn direct_url_http_500() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -352,7 +352,7 @@ async fn direct_url_io_error() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r#"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -364,7 +364,7 @@ async fn direct_url_io_error() {
       ├─▶ error sending request for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
       ├─▶ client error (SendRequest)
       ╰─▶ connection closed before message completed
-    "#);
+    ");
 }
 
 /// Check the error message for direct package URL, a streaming request, when the server returns
@@ -383,7 +383,7 @@ async fn direct_url_mixed_error() {
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -442,7 +442,7 @@ async fn python_install_http_500() {
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -474,7 +474,7 @@ async fn python_install_io_error() {
         .arg("--python-downloads-json-url")
         .arg(python_downloads_json.path())
         .env_remove(EnvVars::UV_HTTP_RETRIES)
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -506,7 +506,7 @@ async fn install_http_retries() {
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
-        .env(EnvVars::UV_HTTP_RETRIES, "foo"), @r"
+        .env(EnvVars::UV_HTTP_RETRIES, "foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -520,7 +520,7 @@ async fn install_http_retries() {
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
-        .env(EnvVars::UV_HTTP_RETRIES, "-1"), @r"
+        .env(EnvVars::UV_HTTP_RETRIES, "-1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -534,7 +534,7 @@ async fn install_http_retries() {
         .arg("anyio")
         .arg("--index")
         .arg(server.uri())
-        .env(EnvVars::UV_HTTP_RETRIES, "999999999999"), @r"
+        .env(EnvVars::UV_HTTP_RETRIES, "999999999999"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -549,7 +549,7 @@ async fn install_http_retries() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "5")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -581,7 +581,7 @@ async fn install_http_retry_low_level() {
         .arg("--index")
         .arg(server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "1")
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @r"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -632,7 +632,7 @@ async fn rfc9457_problem_details_license_violation() {
     uv_snapshot!(filters, context
         .pip_install()
         .arg(format!("tqdm @ {tqdm_url}"))
-        .env_remove(EnvVars::UV_HTTP_RETRIES), @r"
+        .env_remove(EnvVars::UV_HTTP_RETRIES), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -744,7 +744,7 @@ async fn proxy_valid_url_in_uv_toml() {
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
-        .env_remove(EnvVars::NO_PROXY), @r"
+        .env_remove(EnvVars::NO_PROXY), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -790,7 +790,7 @@ fn proxy_https_proxy_in_uv_toml() {
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
-        .env_remove(EnvVars::NO_PROXY), @r"
+        .env_remove(EnvVars::NO_PROXY), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -849,7 +849,7 @@ no-proxy = ["{target_host}"]
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
-        .env_remove(EnvVars::NO_PROXY), @r"
+        .env_remove(EnvVars::NO_PROXY), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -914,7 +914,7 @@ async fn proxy_schemeless_url_in_uv_toml() {
         .env_remove(EnvVars::HTTP_PROXY)
         .env_remove(EnvVars::HTTPS_PROXY)
         .env_remove(EnvVars::ALL_PROXY)
-        .env_remove(EnvVars::NO_PROXY), @r"
+        .env_remove(EnvVars::NO_PROXY), @"
     success: true
     exit_code: 0
     ----- stdout -----

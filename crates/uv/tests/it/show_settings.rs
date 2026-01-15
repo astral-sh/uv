@@ -4434,7 +4434,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4446,7 +4446,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     7 | conflicts = [
       |             ^
     Each set of conflicts must have at least two entries, but found only one
-    "###
+    "
     );
 
     // Now test the empty case.
@@ -4461,7 +4461,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     "#})?;
 
     // The file should be rejected for violating the schema.
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4473,7 +4473,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     7 | conflicts = [[]]
       |             ^^^^
     Each set of conflicts must have at least two entries, but found none
-    "###
+    "
     );
 
     Ok(())
@@ -4499,14 +4499,14 @@ fn valid_conflicts() -> anyhow::Result<()> {
         ]
     "#})?;
     uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
-        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4759,7 +4759,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
