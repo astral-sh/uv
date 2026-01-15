@@ -13508,6 +13508,7 @@ fn lock_transitive_extra() -> Result<()> {
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[test]
+#[cfg(feature = "git")]
 fn lock_mismatched_sources() -> Result<()> {
     let context = TestContext::new("3.12");
 

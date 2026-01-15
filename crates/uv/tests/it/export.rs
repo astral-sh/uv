@@ -4149,6 +4149,7 @@ fn pep_751_project_extra() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn pep_751_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
