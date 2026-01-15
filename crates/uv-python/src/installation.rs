@@ -162,9 +162,10 @@ impl PythonInstallation {
                     if matches!(request, PythonRequest::Default | PythonRequest::Any) {
                         return Err(err);
                     }
-                    return Err(err.with_missing_python_hint(format!(
+                    return Err(err.with_missing_python_hint(
                         "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
-                    )));
+                            .to_string(),
+                    ));
                 }
                 None
             }
