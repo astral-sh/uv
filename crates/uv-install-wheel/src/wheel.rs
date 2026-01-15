@@ -865,7 +865,7 @@ fn parse_email_message_file(
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
 ///
 /// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
-pub(crate) fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
+pub fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
         let entry = entry.ok()?;

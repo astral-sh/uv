@@ -44,9 +44,6 @@ pub enum DelocateError {
     #[error("Invalid wheel path: {}", path.user_display())]
     InvalidWheelPath { path: PathBuf },
 
-    #[error("Missing `.dist-info` directory in wheel")]
-    MissingDistInfo,
-
     #[error("Path `{}` is not within wheel directory `{}`", path.user_display(), wheel_dir.user_display())]
     PathNotInWheel { path: PathBuf, wheel_dir: PathBuf },
 

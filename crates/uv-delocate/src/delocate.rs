@@ -259,7 +259,7 @@ fn update_platform_tags_version(
         .collect();
 
     // Sort the compressed tag sets.
-    tags.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
+    tags.sort_unstable_by_key(|tag| tag.to_string());
     tags
 }
 
@@ -275,10 +275,8 @@ fn find_binaries(dir: &Path) -> Result<Vec<PathBuf>, DelocateError> {
 
         let path = entry.path();
 
-        // Check extension.
         let ext = path.extension().and_then(|ext| ext.to_str());
         if !matches!(ext, Some("so" | "dylib")) {
-            // Also check if it's a Mach-O without extension.
             if ext.is_some() {
                 continue;
             }
@@ -580,7 +578,8 @@ pub fn delocate_wheel(
         sanitize_rpaths(binary)?;
     }
 
-    let dist_info = wheel::find_dist_info(wheel_dir)?;
+    let dist_info_prefix = uv_install_wheel::find_dist_info(wheel_dir)?;
+    let dist_info = format!("{dist_info_prefix}.dist-info");
 
     // Update WHEEL file if platform tags changed.
     if final_platform_tags != platform_tags {
