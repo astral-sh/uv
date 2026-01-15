@@ -1530,8 +1530,11 @@ pub(crate) async fn find_best_python_installation(
             if let Ok(Some(installation)) = installation {
                 return Ok(installation);
             }
-            // Handle download failures here with a warning so to give the rest
-            // of the code a chance to succeed. Also to avoid a breaking change.
+            // Emit a warning instead of failing since we may find a suitable
+            // interpreter on the system after relaxing the request further.
+            // Additionally, uv did not previously attempt downloads in this
+            // code path and we want to minimize the fatal cases for
+            // backwards compatibility.
             // Errors encountered here are either network errors or quirky
             // configuration problems.
             if let Err(error) = installation {
