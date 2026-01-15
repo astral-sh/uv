@@ -541,6 +541,11 @@ impl CachedClient {
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+        trace!(
+            "Received response for revalidation request with status {} for: {}",
+            response.status(),
+            url
+        );
 
         // Check for HTTP error status and extract problem details if available
         if let Err(status_error) = response.error_for_status_ref() {
@@ -604,13 +609,18 @@ impl CachedClient {
         cache_control: CacheControl<'_>,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
         let url = DisplaySafeUrl::from_url(req.url().clone());
-        trace!("Sending fresh {} request for {}", req.method(), url);
+        debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let mut response = self
             .0
             .execute(req)
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+        trace!(
+            "Received response for fresh request with status {} for: {}",
+            response.status(),
+            url
+        );
 
         // If the user set a custom `Cache-Control` header, override it.
         if let CacheControl::Override(header) = cache_control {
