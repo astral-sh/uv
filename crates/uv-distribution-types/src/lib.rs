@@ -634,6 +634,16 @@ impl BuiltDist {
 }
 
 impl SourceDist {
+    /// Returns the [`SourceDistExtension`] of the distribution, if it has one.
+    pub fn extension(&self) -> Option<SourceDistExtension> {
+        match self {
+            Self::Registry(source_dist) => Some(source_dist.ext),
+            Self::DirectUrl(source_dist) => Some(source_dist.ext),
+            Self::Path(source_dist) => Some(source_dist.ext),
+            Self::Git(_) | Self::Directory(_) => None,
+        }
+    }
+
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
     pub fn index(&self) -> Option<&IndexUrl> {
         match self {

@@ -12663,19 +12663,20 @@ fn lock_sources_url() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: workspace @ https://github.com/user-attachments/files/16592193/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
      + workspace==0.1.0 (from https://github.com/user-attachments/files/16592193/workspace.zip)
-    "###);
+    ");
 
     Ok(())
 }
@@ -12799,19 +12800,20 @@ fn lock_sources_archive() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: workspace @ file://[TEMP_DIR]/workspace.zip is not a standards-compliant source distribution: expected '.tar.gz' but found 'zip'. A future version of uv will reject source distributions that do not match the specification defined in PEP 625
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
      + workspace==0.1.0 (from file://[TEMP_DIR]/workspace.zip)
-    "###);
+    ");
 
     Ok(())
 }
