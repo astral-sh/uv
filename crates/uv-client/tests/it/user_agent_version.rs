@@ -54,7 +54,13 @@ async fn test_user_agent_has_version() -> Result<()> {
         // Assert uv version
         assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
-        assert_json_snapshot!(&linehaul.installer, @"uv/[VERSION]");
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]",
+          "subcommand": null
+        }
+        "#);
     });
 
     // Wait for the server task to complete, to be a good citizen.
@@ -107,7 +113,16 @@ async fn test_user_agent_has_subcommand() -> Result<()> {
         // Assert uv version
         assert_snapshot!(uv_version, @"uv/[VERSION]");
         // Assert linehaul json
-        assert_json_snapshot!(&linehaul.installer, @"uv/[VERSION]");
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]",
+          "subcommand": [
+            "foo",
+            "bar"
+          ]
+        }
+        "#);
     });
 
     // Wait for the server task to complete, to be a good citizen.
@@ -200,7 +215,30 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_json_snapshot!(&linehaul, {
             ".distro" => "[distro]",
             ".ci" => "[ci]"
-        }, @"uv/[VERSION]");
+        }, @r#"
+        {
+          "installer": {
+            "name": "uv",
+            "version": "[VERSION]",
+            "subcommand": null
+          },
+          "python": "3.12.2",
+          "implementation": {
+            "name": "CPython",
+            "version": "3.12.2"
+          },
+          "distro": "[distro]",
+          "system": {
+            "name": "Linux",
+            "release": "6.5.0-1016-azure"
+          },
+          "cpu": "x86_64",
+          "openssl_version": null,
+          "setuptools_version": null,
+          "rustc_version": null,
+          "ci": "[ci]"
+        }
+        "#);
     });
 
     // Assert distro
