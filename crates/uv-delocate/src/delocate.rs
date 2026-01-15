@@ -503,109 +503,103 @@ pub fn delocate_wheel(
         _ => platform_tags.to_vec(),
     };
 
-    if libraries.is_empty() {
+    // No modifications needed, just copy the wheel.
+    if libraries.is_empty() && !options.sanitize_rpaths {
         debug!("No external dependencies found");
-
-        // No external dependencies, but still sanitize rpaths if requested.
-        if options.sanitize_rpaths {
-            for binary in &binaries {
-                sanitize_rpaths(binary)?;
-            }
-            // Need to update RECORD after modifying binaries.
-            let dist_info = wheel::find_dist_info(wheel_dir)?;
-            wheel::update_record(wheel_dir, &dist_info)?;
-
-            // Repack the wheel.
-            let output_filename = filename.with_platform_tags(&final_platform_tags);
-            let output_path = dest_dir.join(output_filename.to_string());
-            wheel::pack_wheel(wheel_dir, &output_path)?;
-            return Ok(output_path);
-        }
-
-        // No modifications needed, just copy the wheel.
         let dest_path = dest_dir.join(&filename_str);
         fs::copy(wheel_path, &dest_path)?;
         return Ok(dest_path);
     }
 
-    debug!("Found {} external libraries to bundle", libraries.len());
+    // Bundle external libraries into the wheel.
+    if !libraries.is_empty() {
+        debug!("Found {} external libraries to bundle", libraries.len());
 
-    // Find the package directory (first directory that's not .dist-info or .data)
-    let package_dir = find_package_dir(wheel_dir, &filename)?;
+        // Find the package directory (first directory that's not .dist-info or .data)
+        let package_dir = find_package_dir(wheel_dir, &filename)?;
 
-    // Create the library directory.
-    let lib_dir = package_dir.join(&options.lib_subdir);
-    fs::create_dir_all(&lib_dir)?;
+        // Create the library directory.
+        let lib_dir = package_dir.join(&options.lib_subdir);
+        fs::create_dir_all(&lib_dir)?;
 
-    // Check for library name collisions.
-    let mut lib_names: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    for path in libraries.keys() {
-        let name = path
-            .file_name()
-            .and_then(|file_name| file_name.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-        lib_names.entry(name).or_default().push(path.clone());
-    }
-
-    for (name, paths) in &lib_names {
-        if paths.len() > 1 {
-            return Err(DelocateError::LibraryCollision {
-                name: name.clone(),
-                paths: paths.clone(),
-            });
-        }
-    }
-
-    // Copy libraries and update install names.
-    for (lib_path, info) in &libraries {
-        let lib_name = lib_path.file_name().unwrap();
-        let dest_lib = lib_dir.join(lib_name);
-
-        // Copy the library.
-        trace!("Copying {} to {}", lib_path.display(), dest_lib.display());
-        fs::copy(lib_path, &dest_lib)?;
-
-        // Sanitize rpaths in the copied library.
-        if options.sanitize_rpaths {
-            sanitize_rpaths(&dest_lib)?;
+        // Check for library name collisions.
+        let mut lib_names: HashMap<String, Vec<PathBuf>> = HashMap::new();
+        for path in libraries.keys() {
+            let file_name =
+                path.file_name()
+                    .ok_or_else(|| DelocateError::InvalidLibraryFilename {
+                        path: path.clone(),
+                        reason: "path has no filename",
+                    })?;
+            let name = file_name
+                .to_str()
+                .ok_or_else(|| DelocateError::InvalidLibraryFilename {
+                    path: path.clone(),
+                    reason: "filename is not valid UTF-8",
+                })?
+                .to_string();
+            lib_names.entry(name).or_default().push(path.clone());
         }
 
-        // Set the install ID of the copied library.
-        let new_id = format!(
-            "@loader_path/{}/{}",
-            options.lib_subdir,
-            lib_name.to_string_lossy()
-        );
-        macho::change_install_id(&dest_lib, &new_id)?;
+        for (name, paths) in &lib_names {
+            if paths.len() > 1 {
+                return Err(DelocateError::LibraryCollision {
+                    name: name.clone(),
+                    paths: paths.clone(),
+                });
+            }
+        }
 
-        // Update install names in dependents.
-        for (dependent_path, old_install_name) in &info.dependents {
-            // Calculate the relative path from dependent to library.
-            let dependent_in_wheel = if dependent_path.starts_with(wheel_dir) {
-                dependent_path.clone()
-            } else {
-                // This is a transitive dependency that was copied.
-                lib_dir.join(dependent_path.file_name().unwrap())
-            };
+        // Copy libraries and update install names.
+        for (lib_path, info) in &libraries {
+            let lib_name = lib_path.file_name().unwrap();
+            let dest_lib = lib_dir.join(lib_name);
 
-            let dependent_parent = dependent_in_wheel.parent().unwrap();
-            let relative_to_package = pathdiff::diff_paths(&lib_dir, dependent_parent)
-                .unwrap_or_else(|| PathBuf::from(&options.lib_subdir));
+            // Copy the library.
+            trace!("Copying {} to {}", lib_path.display(), dest_lib.display());
+            fs::copy(lib_path, &dest_lib)?;
 
-            let new_install_name = format!(
+            // Sanitize rpaths in the copied library.
+            if options.sanitize_rpaths {
+                sanitize_rpaths(&dest_lib)?;
+            }
+
+            // Set the install ID of the copied library.
+            let new_id = format!(
                 "@loader_path/{}/{}",
-                relative_to_package.to_string_lossy(),
+                options.lib_subdir,
                 lib_name.to_string_lossy()
             );
+            macho::change_install_id(&dest_lib, &new_id)?;
 
-            // Update the install name.
-            if dependent_in_wheel.exists() {
-                macho::change_install_name(
-                    &dependent_in_wheel,
-                    old_install_name,
-                    &new_install_name,
-                )?;
+            // Update install names in dependents.
+            for (dependent_path, old_install_name) in &info.dependents {
+                // Calculate the relative path from dependent to library.
+                let dependent_in_wheel = if dependent_path.starts_with(wheel_dir) {
+                    dependent_path.clone()
+                } else {
+                    // This is a transitive dependency that was copied.
+                    lib_dir.join(dependent_path.file_name().unwrap())
+                };
+
+                let dependent_parent = dependent_in_wheel.parent().unwrap();
+                let relative_to_package = pathdiff::diff_paths(&lib_dir, dependent_parent)
+                    .unwrap_or_else(|| PathBuf::from(&options.lib_subdir));
+
+                let new_install_name = format!(
+                    "@loader_path/{}/{}",
+                    relative_to_package.to_string_lossy(),
+                    lib_name.to_string_lossy()
+                );
+
+                // Update the install name.
+                if dependent_in_wheel.exists() {
+                    macho::change_install_name(
+                        &dependent_in_wheel,
+                        old_install_name,
+                        &new_install_name,
+                    )?;
+                }
             }
         }
     }

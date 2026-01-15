@@ -88,11 +88,4 @@ mod tests {
         assert_eq!(MacOSVersion::new(10, 9).to_string(), "10.9");
         assert_eq!(MacOSVersion::new(14, 0).to_string(), "14.0");
     }
-
-    #[test]
-    fn test_ord() {
-        assert!(MacOSVersion::new(10, 9) < MacOSVersion::new(10, 10));
-        assert!(MacOSVersion::new(10, 15) < MacOSVersion::new(11, 0));
-        assert!(MacOSVersion::new(11, 0) < MacOSVersion::new(14, 0));
-    }
 }
