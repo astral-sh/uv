@@ -97,7 +97,7 @@ pub trait BuildContext {
     fn config_settings_package(&self) -> &PackageConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
-    fn sources(&self) -> NoSources;
+    fn sources(&self) -> &NoSources;
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;

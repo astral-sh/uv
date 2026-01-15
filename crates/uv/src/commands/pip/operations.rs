@@ -217,7 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 pyproject_path,
                 None,
                 build_dispatch.locations(),
-                build_dispatch.sources(),
+                build_dispatch.sources().clone(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
             )
