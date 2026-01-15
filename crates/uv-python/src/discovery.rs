@@ -1464,7 +1464,7 @@ pub(crate) async fn find_best_python_installation(
     pypy_install_mirror: Option<&str>,
     preview: Preview,
 ) -> Result<PythonInstallation, crate::Error> {
-    debug!("Starting Python discovery for {}", request);
+    debug!("Starting Python discovery for {request}");
     let original_request = request;
 
     let mut previous_fetch_failed = false;
@@ -1483,11 +1483,19 @@ pub(crate) async fn find_best_python_installation(
         _ => None,
     };
 
-    for request in iter::once(original_request)
+    for (attempt, request) in iter::once(original_request)
         .chain(request_without_patch.iter())
         .chain(iter::once(&PythonRequest::Default))
+        .enumerate()
     {
-        debug!("Looking for {request}");
+        debug!(
+            "Looking for {request}{}",
+            if request != original_request {
+                format!(" attempt {attempt} (fallback after failing to find: {original_request})")
+            } else {
+                String::new()
+            }
+        );
         let result = find_python_installation(request, environments, preference, cache, preview);
         let error = match result {
             Ok(Ok(installation)) => {
