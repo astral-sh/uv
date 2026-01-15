@@ -11,10 +11,5 @@ if ! command -v gh &> /dev/null; then
     rm -rf /tmp/gh.tar.gz /tmp/gh_${GH_VERSION}_linux_amd64
 fi
 
-if ! command -v cargo-clippy &> /dev/null; then
-    rustup component add clippy
-fi
-
-if ! command -v rustfmt &> /dev/null; then
-    rustup component add rustfmt
-fi
+# Install clippy and rustfmt for the active toolchain.
+rustup component add clippy rustfmt
