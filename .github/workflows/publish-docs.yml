@@ -16,6 +16,11 @@ on:
       plan:
         required: true
         type: string
+    secrets:
+      ASTRAL_DOCS_PAT:
+        required: true
+      MKDOCS_INSIDERS_SSH_KEY:
+        required: false
 
 permissions: {}
 

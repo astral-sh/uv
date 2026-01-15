@@ -21,6 +21,11 @@ on:
       plan:
         required: true
         type: string
+    secrets:
+      DOCKERHUB_TOKEN_RW:
+        required: false
+      DOCKERHUB_TOKEN_RO:
+        required: false
   pull_request:
     paths:
       # We want to ensure that the maturin builds still work when we change
