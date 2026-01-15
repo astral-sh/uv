@@ -101,7 +101,7 @@ enum ExpiredTokenReason {
     /// The token's expiration time has passed.
     Expired,
     /// The token will expire within the tolerance window.
-    ExpiringSoon,
+    ExpiringSoon(jiff::Timestamp),
 }
 
 impl std::fmt::Display for ExpiredTokenReason {
@@ -110,7 +110,7 @@ impl std::fmt::Display for ExpiredTokenReason {
             Self::MissingExpiration => write!(f, "missing expiration"),
             Self::ZeroTolerance => write!(f, "zero tolerance"),
             Self::Expired => write!(f, "token expired"),
-            Self::ExpiringSoon => write!(f, "token expiring soon"),
+            Self::ExpiringSoon(exp) => write!(f, "token will expire within tolerance (`{exp}`)"),
         }
     }
 }
@@ -142,7 +142,7 @@ impl PyxTokens {
                 if exp < now {
                     Err(ExpiredTokenReason::Expired)
                 } else if exp < now + Duration::from_secs(tolerance_secs) {
-                    Err(ExpiredTokenReason::ExpiringSoon)
+                    Err(ExpiredTokenReason::ExpiringSoon(exp))
                 } else {
                     Ok(())
                 }
