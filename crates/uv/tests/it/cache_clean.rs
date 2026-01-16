@@ -253,3 +253,99 @@ async fn cache_timeout() {
     error: Timeout ([TIME]) when waiting for lock on `[CACHE_DIR]/` at `[CACHE_DIR]/.lock`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
     ");
 }
+
+/// `cache clean --background` should move the cache and delete in the background.
+#[test]
+fn clean_background() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("typing-extensions\niniconfig")?;
+
+    // Install a requirement, to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    // Assert the cache exists
+    assert!(context.cache_dir.path().exists());
+
+    // Run the background clean
+    uv_snapshot!(context.filters(), context.clean().arg("--background"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Clearing cache at: [CACHE_DIR]/ (in background)
+    Cache moved; deletion continuing in background
+    ");
+
+    // The cache directory should no longer exist (it was moved/renamed)
+    assert!(
+        !context.cache_dir.path().exists(),
+        "Expected the cache directory to be moved"
+    );
+
+    // Poll for the background daemon to finish deletion (up to 30 seconds).
+    let parent = context.cache_dir.path().parent().unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        let temp_dirs: Vec<_> = std::fs::read_dir(parent)?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with(".uv-cache-clean-")
+            })
+            .collect();
+        if temp_dirs.is_empty() {
+            break;
+        }
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(30),
+            "Timed out waiting for background daemon to clean up temp directories: {temp_dirs:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    Ok(())
+}
+
+/// `cache clean --background` with packages should return an error.
+#[test]
+fn clean_background_with_packages() {
+    let context = TestContext::new("3.12");
+
+    // --background is not supported with specific packages
+    uv_snapshot!(context.filters(), context.clean().arg("--background").arg("iniconfig"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The `--background` flag is not supported when clearing specific packages
+    ");
+}
+
+/// `cache clean --background` on a non-existent cache should succeed gracefully.
+#[test]
+fn clean_background_no_cache() {
+    let context = TestContext::new("3.12");
+
+    // Remove the cache directory if it exists
+    if context.cache_dir.path().exists() {
+        std::fs::remove_dir_all(context.cache_dir.path()).unwrap();
+    }
+
+    uv_snapshot!(context.filters(), context.clean().arg("--background"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    No cache found at: [CACHE_DIR]/
+    ");
+}

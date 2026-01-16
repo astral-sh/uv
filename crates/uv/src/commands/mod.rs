@@ -78,6 +78,7 @@ mod auth;
 pub(crate) mod build_backend;
 mod build_frontend;
 mod cache_clean;
+pub(crate) mod cache_clean_daemon;
 mod cache_dir;
 mod cache_prune;
 mod cache_size;
