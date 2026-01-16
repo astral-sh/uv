@@ -13726,10 +13726,6 @@ fn record_uses_forward_slashes() -> Result<()> {
 /// Test ABI compatibility checking on free-threaded Python.
 ///
 /// Free-threaded Python has a different ABI, so wheels must be built specifically for it.
-/// This test verifies:
-/// 1. abi3 (stable ABI) wheels are rejected with a helpful error
-/// 2. GIL-enabled CPython wheels (e.g., cp312) are rejected with a helpful error
-/// 3. Wheels with multiple ABI tags succeed if at least one is compatible (e.g., cp314t)
 #[test]
 fn abi_compatibility_on_freethreaded_python() {
     let context: TestContext = TestContext::new_with_versions(&[])
