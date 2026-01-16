@@ -1986,7 +1986,7 @@ fn install_no_index() {
     error: No solution found when resolving dependencies:
       Caused by: Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -2010,7 +2010,7 @@ fn install_no_index_version() {
     error: No solution found when resolving dependencies:
       Caused by: Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -2963,9 +2963,9 @@ fn install_only_binary_all_and_no_binary_all() {
     error: No solution found when resolving dependencies:
       Caused by: Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-                 hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
+    hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
 
@@ -3058,7 +3058,7 @@ fn only_binary_requirements_txt() {
     error: No solution found when resolving dependencies:
       Caused by: Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
+    hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "
     );
 }
@@ -3887,8 +3887,6 @@ fn build_prerelease_hint() -> Result<()> {
       Caused by: No solution found when resolving: `transitive-package-only-prereleases-in-range-a`
       Caused by: Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
                  And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
-
-                 hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
@@ -5948,7 +5946,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
@@ -5991,7 +5989,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
@@ -6157,7 +6155,7 @@ fn reinstall_no_index() {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 }
@@ -6524,7 +6522,7 @@ fn already_installed_local_version_of_remote_package() {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -6784,7 +6782,7 @@ fn already_installed_remote_url() {
     error: No solution found when resolving dependencies:
       Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 
     // Request installation again with just the full URL
@@ -6830,7 +6828,7 @@ fn already_installed_remote_url() {
     error: No solution found when resolving dependencies:
       Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 }
 

@@ -9629,7 +9629,7 @@ fn add_shadowed_name() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+    hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
@@ -9650,7 +9650,7 @@ fn add_shadowed_name() -> Result<()> {
                  And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
                  And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
+    hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
@@ -9750,7 +9750,7 @@ fn add_warn_index_url() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+    hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
@@ -13120,7 +13120,7 @@ fn add_full_url_in_keyring() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
@@ -13156,7 +13156,7 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
@@ -13238,7 +13238,7 @@ fn add_empty_ignore_error_codes() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
+    hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
@@ -13593,7 +13593,7 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
@@ -13688,7 +13688,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
@@ -13818,7 +13818,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
 
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "

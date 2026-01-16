@@ -797,7 +797,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
                  And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
                  And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync` should always fail, as now sphinx is involved
@@ -812,7 +812,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
                  And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
                  And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it
@@ -941,7 +941,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
                  And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
                  And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
@@ -957,7 +957,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
                  And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
                  And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
+    hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
     // Adding group requires python should fix it

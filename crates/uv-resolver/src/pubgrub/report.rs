@@ -1017,7 +1017,7 @@ impl PubGrubReportFormatter<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum PubGrubHint {
+pub enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///

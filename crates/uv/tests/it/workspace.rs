@@ -1142,7 +1142,7 @@ fn workspace_inherit_sources() -> Result<()> {
       Caused by: Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
                  And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 

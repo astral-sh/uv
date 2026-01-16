@@ -77,7 +77,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                    Caused by: Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                               And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-                              hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
+                 hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
                  "
     );
 
@@ -386,7 +386,7 @@ fn python_patch_override_no_patch() -> Result<()> {
                    Caused by: Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and package-a==1.0.0 depends on Python>=3.9.4, we can conclude that package-a==1.0.0 cannot be used.
                               And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-                              hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.9.4). Consider using a higher `--python-version` value.
+                 hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.9.4). Consider using a higher `--python-version` value.
                  "
     );
 

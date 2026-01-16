@@ -5233,9 +5233,7 @@ fn lock_requires_python() -> Result<()> {
                  And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
                  And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-
-                 hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -8794,7 +8792,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because dearpygui==1.9.1 has no wheels with a matching Python version tag (e.g., `cp312`) and your project depends on dearpygui==1.9.1, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
+    hint: Wheels are available for `dearpygui` (v1.9.1) with the following Python ABI tags: `cp37m`, `cp38`, `cp39`, `cp310`, `cp311`
     ");
 
     Ok(())
@@ -10493,7 +10491,7 @@ fn lock_env_credentials() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // Provide credentials via environment variables.
@@ -14962,7 +14960,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
       Caused by: Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
                  And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -15170,7 +15168,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
       Caused by: Because anyio was not found in the cache and leaf depends on anyio>3, we can conclude that leaf's requirements are unsatisfiable.
                  And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-                 hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
 
     // Re-run without `--locked`.
@@ -22069,7 +22067,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // With valid credentials, we should succeed
@@ -27501,7 +27499,7 @@ fn lock_self_incompatible() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -27638,7 +27636,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -27672,7 +27670,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -27809,7 +27807,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because project[foo] depends on itself at an incompatible version (project==0.2.0) and your project requires project[foo], we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -27939,7 +27937,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
     error: No solution found when resolving dependencies:
       Caused by: Because your project depends on itself at an incompatible version (project{sys_platform == 'win32'}>0.1), we can conclude that your project's requirements are unsatisfiable.
 
-                 hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
     ");
 
     Ok(())
@@ -31111,8 +31109,6 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
     error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.11'):
       Caused by: Because pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas==1.5.3 are incompatible.
                  And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
-
-                 hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
 
     // Check that the resolution passes on the restricted Python environment.
@@ -31332,8 +31328,6 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: sys_platform == 'exotic'):
       Caused by: Because your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26 and numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
-
-                 hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     // Check that the resolution passes on the restricted environment.
@@ -33144,8 +33138,6 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
     ----- stderr -----
     error: No solution found when resolving dependencies for split (markers: python_full_version < '3.14' and sys_platform == 'other'):
       Caused by: Because your project depends on anyio{sys_platform == 'other'} and anyio{python_full_version < '3.14'}>=4.4.0, we can conclude that your project's requirements are unsatisfiable.
-
-                 hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     ");
 
     Ok(())

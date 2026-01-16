@@ -13,7 +13,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
-use uv_warnings::write_error_chain;
+use uv_warnings::{write_error_chain, write_error_chain_with_hints};
 
 use crate::commands::pip;
 use crate::printer::Stderr;
@@ -81,7 +81,7 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     no_solution_context(&err, context);
                 } else if let Some(hint) = self.hint {
-                    no_solution_hint(err, &hint);
+                    no_solution_hint(&err, &hint);
                 } else {
                     no_solution(&err);
                 }
@@ -294,45 +294,44 @@ pub(crate) fn dependencies_error(
 
 /// Render a [`uv_resolver::NoSolutionError`].
 pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError) {
-    let err = anyhow::Error::msg(format!("{err}")).context(err.header().to_string());
-    let _ = write_error_chain(
+    let (report, hints) = err.report_and_hints();
+    let err = anyhow::Error::msg(report).context(err.header().to_string());
+    let _ = write_error_chain_with_hints(
         err.as_ref(),
         Stderr::Enabled,
         "error",
         owo_colors::AnsiColors::Red,
+        &hints,
     );
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with dedicated context.
 pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &'static str) {
-    let err = anyhow::Error::msg(format!("{err}"))
-        .context(err.header().with_context(context).to_string());
-    let _ = write_error_chain(
+    let (report, hints) = err.report_and_hints();
+    let err = anyhow::Error::msg(report).context(err.header().with_context(context).to_string());
+    let _ = write_error_chain_with_hints(
         err.as_ref(),
         Stderr::Enabled,
         "error",
         owo_colors::AnsiColors::Red,
+        &hints,
     );
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: &str) {
-    #[derive(Debug, Error)]
-    #[error("{header}")]
-    struct HeaderError {
-        /// The header to render in the error message.
-        header: uv_resolver::NoSolutionHeader,
-
-        /// The underlying error.
-        #[source]
-        err: Box<uv_resolver::NoSolutionError>,
-    }
-
+pub(crate) fn no_solution_hint(err: &uv_resolver::NoSolutionError, help: &str) {
+    let (report, hints) = err.report_and_hints();
     let header = err.header();
-    let err = HeaderError { header, err };
-    show_error(&err, Some(help));
+    let err = anyhow::Error::msg(report).context(header.to_string());
+    let _ = write_error_chain_with_hints(
+        err.as_ref(),
+        Stderr::Enabled,
+        "error",
+        owo_colors::AnsiColors::Red,
+        &hints,
+    );
+    // Write the additional help message at top level
+    let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
 }
 
 /// Render an SSL error with a hint about native TLS.

@@ -85,9 +85,32 @@ macro_rules! warn_user_once {
 /// ```
 pub fn write_error_chain(
     err: &dyn Error,
+    stream: impl std::fmt::Write,
+    level: impl AsRef<str>,
+    color: impl DynColor + Copy,
+) -> std::fmt::Result {
+    write_error_chain_with_hints(err, stream, level, color, std::iter::empty::<&str>())
+}
+
+/// Format an error chain with hints appended at the end.
+///
+/// Hints are displayed after the error chain at the top level (no indentation).
+/// Each hint should already include its own "hint:" prefix.
+///
+/// # Example
+///
+/// ```text
+/// error: No solution found when resolving dependencies:
+///   Caused by: Because iniconfig was not found...
+///
+/// hint: Packages were unavailable because the network was disabled.
+/// ```
+pub fn write_error_chain_with_hints<'a>(
+    err: &dyn Error,
     mut stream: impl std::fmt::Write,
     level: impl AsRef<str>,
     color: impl DynColor + Copy,
+    hints: impl IntoIterator<Item = impl std::fmt::Display + 'a>,
 ) -> std::fmt::Result {
     writeln!(
         &mut stream,
@@ -121,12 +144,19 @@ pub fn write_error_chain(
             }
         }
     }
+
+    // Write hints at top-level (no indentation)
+    for hint in hints {
+        writeln!(&mut stream)?;
+        writeln!(&mut stream, "{hint}")?;
+    }
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::write_error_chain;
+    use crate::{write_error_chain, write_error_chain_with_hints};
     use anyhow::anyhow;
     use indoc::indoc;
     use insta::assert_snapshot;
@@ -153,6 +183,31 @@ mod tests {
 
                      For downloads, please refer to https://example.com/download/python3.13.tar.zst
           Caused by: Caused By: HTTP Error 400
+        ");
+    }
+
+    #[test]
+    fn format_error_with_hints() {
+        let err = anyhow!("Because iniconfig was not found in the package registry")
+            .context("No solution found when resolving dependencies:");
+
+        let hints = vec![
+            "hint: Packages were unavailable because the network was disabled.",
+            "hint: Try running without --offline.",
+        ];
+
+        let mut rendered = String::new();
+        write_error_chain_with_hints(err.as_ref(), &mut rendered, "error", AnsiColors::Red, hints)
+            .unwrap();
+        let rendered = anstream::adapter::strip_str(&rendered);
+
+        assert_snapshot!(rendered, @r"
+        error: No solution found when resolving dependencies:
+          Caused by: Because iniconfig was not found in the package registry
+
+        hint: Packages were unavailable because the network was disabled.
+
+        hint: Try running without --offline.
         ");
     }
 }
