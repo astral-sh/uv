@@ -46,6 +46,16 @@ if hasattr(sys, "implementation"):
             r"\1.\2",
             sys.implementation.cache_tag,
         )
+    elif implementation_name == "pyston":
+        # Pyston reports the CPython version as sys.implementation.version,
+        # so we need to discover the Pyston version from the cache_tag
+        import re
+
+        implementation_version = re.sub(
+            r"pyston-(\d)(\d+)",
+            r"\1.\2",
+            sys.implementation.cache_tag,
+        )
     else:
         implementation_version = format_full_version(sys.implementation.version)
 else:
@@ -511,6 +521,15 @@ def get_operating_system_and_architecture():
             "name": "macos",
             "major": int(version[0]),
             "minor": int(version[1]),
+        }
+    elif operating_system == "ios":
+        ios_ver = platform.ios_ver()
+        version = ios_ver.release.split(".")
+        operating_system = {
+            "name": "ios",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+            "simulator": ios_ver.is_simulator,
         }
     elif operating_system == "emscripten":
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")

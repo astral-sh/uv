@@ -26,7 +26,7 @@ use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -34,7 +34,7 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::Tags;
+use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -1109,7 +1109,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(name, range, url, python_requirement)
+                    self.choose_version_url(id, name, range, url, env, python_requirement, pubgrub)
                 } else {
                     self.choose_version_registry(
                         package,
@@ -1134,10 +1134,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// that version if it is in range and `None` otherwise.
     fn choose_version_url(
         &self,
+        id: Id<PubGrubPackage>,
         name: &PackageName,
         range: &Range<Version>,
         url: &VerbatimParsedUrl,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -1178,8 +1181,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // The version is incompatible due to its Python requirement.
+        // If the URL points to a pre-built wheel, and the wheel's supported Python versions don't
+        // match our `Requires-Python`, mark it as incompatible.
+        let dist = Dist::from_url(name.clone(), url.clone())?;
+        if let Dist::Built(dist) = dist {
+            let filename = match &dist {
+                BuiltDist::Registry(dist) => &dist.best_wheel().filename,
+                BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::Path(dist) => &dist.filename,
+            };
+
+            // If the wheel does _not_ cover a required platform, it's incompatible.
+            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            {
+                let wheel_marker = implied_markers(filename);
+                // If the user explicitly marked a platform as required, ensure it has coverage.
+                for environment_marker in self.options.required_environments.iter().copied() {
+                    // If the platform is part of the current environment...
+                    if env.included_by_marker(environment_marker)
+                        && !find_environments(id, pubgrub).is_disjoint(environment_marker)
+                    {
+                        // ...but the wheel doesn't support it, it's incompatible.
+                        if wheel_marker.is_disjoint(environment_marker) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::MissingPlatform(environment_marker),
+                                )),
+                            )));
+                        }
+                    }
+                }
+            }
+
+            // If the wheel's Python tag doesn't match the target Python, it's incompatible.
+            if !python_requirement.target().matches_wheel_tag(filename) {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    filename.version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                    )),
+                )));
+            }
+        }
+
+        // The version is incompatible due to its `Requires-Python` requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
+            // TODO(charlie): We only care about this for source distributions.
             if !python_requirement
                 .installed()
                 .is_contained_by(requires_python)
@@ -1206,6 +1254,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         }
+
+        // If this is a wheel, and the implied Python version doesn't overlap, raise an error.
 
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }

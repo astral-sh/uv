@@ -8,6 +8,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use tokio::sync::Semaphore;
+use tracing::debug;
 use unicode_width::UnicodeWidthStr;
 
 use uv_cache::{Cache, Refresh};
@@ -25,7 +26,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference};
+use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -51,6 +52,8 @@ pub(crate) async fn pip_list(
     exclude_newer: ExcludeNewer,
     python: Option<&str>,
     system: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -68,6 +71,23 @@ pub(crate) async fn pip_list(
         cache,
         preview,
     )?;
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
 
     report_target_environment(&environment, cache, printer)?;
 
@@ -113,7 +133,7 @@ pub(crate) async fn pip_list(
             prerelease,
             exclude_newer: &exclude_newer,
             tags: Some(tags),
-            requires_python: &requires_python,
+            requires_python: Some(&requires_python),
         };
 
         let reporter = LatestVersionReporter::from(printer).with_length(results.len() as u64);

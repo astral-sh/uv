@@ -59,7 +59,10 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
         .build()
         .unwrap();
 
-    let cache = Cache::from_path("../../.cache").init().unwrap();
+    let cache = Cache::from_path("../../.cache")
+        .init_no_wait()
+        .expect("No cache contention when running benchmarks")
+        .unwrap();
     let interpreter = PythonEnvironment::from_root("../../.venv", &cache)
         .unwrap()
         .into_interpreter();
@@ -85,7 +88,7 @@ mod resolver {
 
     use uv_cache::Cache;
     use uv_client::RegistryClient;
-    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, SourceStrategy};
+    use uv_configuration::{BuildOptions, Concurrency, Constraints, IndexStrategy, NoSources};
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
@@ -131,7 +134,7 @@ mod resolver {
     );
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
-        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false).unwrap()
+        Tags::from_env(&PLATFORM, (3, 11), "cpython", (3, 11), false, false, false).unwrap()
     });
 
     pub(crate) async fn resolve(
@@ -165,7 +168,7 @@ mod resolver {
         let options = OptionsBuilder::new()
             .exclude_newer(exclude_newer.clone())
             .build();
-        let sources = SourceStrategy::default();
+        let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
         let workspace_cache = WorkspaceCache::default();

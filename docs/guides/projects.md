@@ -198,8 +198,14 @@ version.
 
 Prior to every `uv run` invocation, uv will verify that the lockfile is up-to-date with the
 `pyproject.toml`, and that the environment is up-to-date with the lockfile, keeping your project
-in-sync without the need for manual intervention. `uv run` guarantees that your command is run in a
-consistent, locked environment.
+in-sync without the need for manual intervention. `uv run` guarantees that your command is run in an
+environment with all required dependencies at their locked versions.
+
+!!! note
+
+    `uv run` does not remove extraneous packages (those not in the lockfile) from the environment
+    by default. See [handling of extraneous packages](../concepts/projects/sync.md#handling-of-extraneous-packages)
+    for details.
 
 For example, to use `flask`:
 
@@ -272,4 +278,5 @@ To learn more about working on projects with uv, see the
 [projects concept](../concepts/projects/index.md) page and the
 [command reference](../reference/cli.md#uv).
 
-Or, read on to learn how to [build and publish your project to a package index](./package.md).
+Or, read on to learn how to
+[export a uv lockfile to different formats](../concepts/projects/export.md).

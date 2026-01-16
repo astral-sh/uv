@@ -28,15 +28,15 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache_key::cache_digest;
-use uv_configuration::{BuildKind, BuildOutput, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
     Resolution,
 };
-use uv_fs::LockedFile;
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -282,7 +282,7 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         version_id: Option<&str>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: NoSources,
         workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
@@ -292,6 +292,7 @@ impl SourceBuild {
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
         concurrent_builds: usize,
+        credentials_cache: &CredentialsCache,
         preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
@@ -302,16 +303,15 @@ impl SourceBuild {
             source.to_path_buf()
         };
 
-        let default_backend: Pep517Backend = DEFAULT_BACKEND.clone();
         // Check if we have a PEP 517 build backend.
         let (pep517_backend, project) = Self::extract_pep517_backend(
             &source_tree,
             install_path,
             fallback_package_name,
             locations,
-            source_strategy,
+            &no_sources,
             workspace_cache,
-            &default_backend,
+            credentials_cache,
         )
         .await
         .map_err(|err| *err)?;
@@ -383,7 +383,6 @@ impl SourceBuild {
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
                 source_build_context,
-                &default_backend,
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
@@ -446,7 +445,7 @@ impl SourceBuild {
                 package_version.as_ref(),
                 version_id,
                 locations,
-                source_strategy,
+                no_sources,
                 workspace_cache,
                 build_stack,
                 build_kind,
@@ -455,6 +454,7 @@ impl SourceBuild {
                 &environment_variables,
                 &modified_path,
                 &temp_dir,
+                credentials_cache,
             )
             .await?;
         }
@@ -493,12 +493,16 @@ impl SourceBuild {
                 "uv-setuptools-{}.lock",
                 cache_digest(&canonical_source_path)
             ));
-            source_tree_lock = LockedFile::acquire(lock_path, self.source_tree.to_string_lossy())
-                .await
-                .inspect_err(|err| {
-                    warn!("Failed to acquire build lock: {err}");
-                })
-                .ok();
+            source_tree_lock = LockedFile::acquire(
+                lock_path,
+                LockedFileMode::Exclusive,
+                self.source_tree.to_string_lossy(),
+            )
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire build lock: {err}");
+            })
+            .ok();
         }
         Ok(source_tree_lock)
     }
@@ -506,13 +510,12 @@ impl SourceBuild {
     async fn get_resolved_requirements(
         build_context: &impl BuildContext,
         source_build_context: SourceBuildContext,
-        default_backend: &Pep517Backend,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
-            if pep517_backend.requirements == default_backend.requirements
+            if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
@@ -520,7 +523,7 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&default_backend.requirements, build_stack)
+                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -558,9 +561,9 @@ impl SourceBuild {
         install_path: &Path,
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: &NoSources,
         workspace_cache: &WorkspaceCache,
-        default_backend: &Pep517Backend,
+        credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
             Ok(toml) => {
@@ -571,41 +574,35 @@ impl SourceBuild {
 
                 let backend = if let Some(build_system) = pyproject_toml.build_system {
                     // If necessary, lower the requirements.
-                    let requirements = match source_strategy {
-                        SourceStrategy::Enabled => {
-                            if let Some(name) = pyproject_toml
-                                .project
-                                .as_ref()
-                                .map(|project| &project.name)
-                                .or(package_name)
-                            {
-                                let build_requires = uv_pypi_types::BuildRequires {
-                                    name: Some(name.clone()),
-                                    requires_dist: build_system.requires,
-                                };
-                                let build_requires = BuildRequires::from_project_maybe_workspace(
-                                    build_requires,
-                                    install_path,
-                                    locations,
-                                    source_strategy,
-                                    workspace_cache,
-                                )
-                                .await
-                                .map_err(Error::Lowering)?;
-                                build_requires.requires_dist
-                            } else {
-                                build_system
-                                    .requires
-                                    .into_iter()
-                                    .map(Requirement::from)
-                                    .collect()
-                            }
-                        }
-                        SourceStrategy::Disabled => build_system
+                    let requirements = if let Some(name) = pyproject_toml
+                        .project
+                        .as_ref()
+                        .map(|project| &project.name)
+                        .or(package_name)
+                        // If sources are disabled, there's nothing to do here
+                        .filter(|_| !no_sources.all())
+                    {
+                        let build_requires = uv_pypi_types::BuildRequires {
+                            name: Some(name.clone()),
+                            requires_dist: build_system.requires,
+                        };
+                        let build_requires = BuildRequires::from_project_maybe_workspace(
+                            build_requires,
+                            install_path,
+                            locations,
+                            no_sources,
+                            workspace_cache,
+                            credentials_cache,
+                        )
+                        .await
+                        .map_err(Error::Lowering)?;
+                        build_requires.requires_dist
+                    } else {
+                        build_system
                             .requires
                             .into_iter()
                             .map(Requirement::from)
-                            .collect(),
+                            .collect()
                     };
 
                     Pep517Backend {
@@ -658,7 +655,7 @@ impl SourceBuild {
                         }
                     }
 
-                    default_backend.clone()
+                    DEFAULT_BACKEND.clone()
                 };
                 Ok((backend, pyproject_toml.project))
             }
@@ -672,9 +669,9 @@ impl SourceBuild {
 
                 // If no `pyproject.toml` is present, by default, proceed with a PEP 517 build using
                 // the default backend, to match `build`. `pip` uses `setup.py` directly in this
-                // case,  but plans to make PEP 517 builds the default in the future.
+                // case, but plans to make PEP 517 builds the default in the future.
                 // See: https://github.com/pypa/pip/issues/9175.
-                Ok((default_backend.clone(), None))
+                Ok((DEFAULT_BACKEND.clone(), None))
             }
             Err(err) => Err(Box::new(err.into())),
         }
@@ -952,7 +949,7 @@ async fn create_pep517_build_environment(
     package_version: Option<&Version>,
     version_id: Option<&str>,
     locations: &IndexLocations,
-    source_strategy: SourceStrategy,
+    no_sources: NoSources,
     workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
@@ -961,6 +958,7 @@ async fn create_pep517_build_environment(
     environment_variables: &FxHashMap<OsString, OsString>,
     modified_path: &OsString,
     temp_dir: &TempDir,
+    credentials_cache: &CredentialsCache,
 ) -> Result<(), Error> {
     // Write the hook output to a file so that we can read it back reliably.
     let outfile = temp_dir
@@ -1043,24 +1041,24 @@ async fn create_pep517_build_environment(
     };
 
     // If necessary, lower the requirements.
-    let extra_requires = match source_strategy {
-        SourceStrategy::Enabled => {
-            let build_requires = uv_pypi_types::BuildRequires {
-                name: package_name.cloned(),
-                requires_dist: extra_requires,
-            };
-            let build_requires = BuildRequires::from_project_maybe_workspace(
-                build_requires,
-                install_path,
-                locations,
-                source_strategy,
-                workspace_cache,
-            )
-            .await
-            .map_err(Error::Lowering)?;
-            build_requires.requires_dist
-        }
-        SourceStrategy::Disabled => extra_requires.into_iter().map(Requirement::from).collect(),
+    let extra_requires = if no_sources.all() {
+        extra_requires.into_iter().map(Requirement::from).collect()
+    } else {
+        let build_requires = uv_pypi_types::BuildRequires {
+            name: package_name.cloned(),
+            requires_dist: extra_requires,
+        };
+        let build_requires = BuildRequires::from_project_maybe_workspace(
+            build_requires,
+            install_path,
+            locations,
+            &no_sources,
+            workspace_cache,
+            credentials_cache,
+        )
+        .await
+        .map_err(Error::Lowering)?;
+        build_requires.requires_dist
     };
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of

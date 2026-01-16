@@ -5,6 +5,7 @@ use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
+use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
@@ -15,19 +16,23 @@ use uv_cli::{
     PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
     PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
     ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
-    VersionBump, VersionFormat,
+    VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
     ResolverInstallerArgs, ToolUpgradeArgs,
-    options::{flag, resolver_installer_options, resolver_options},
+    options::{
+        Flag, FlagSource, check_conflicts, flag, resolve_flag, resolver_installer_options,
+        resolver_options,
+    },
 };
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExportFormat, ExtrasSpecification, HashCheckingMode, IndexStrategy, InstallOptions,
-    KeyringProviderType, NoBinary, NoBuild, ProjectBuildBackend, Reinstall, RequiredVersion,
-    SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
+    InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, PipCompileFormat,
+    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -85,7 +90,7 @@ impl GlobalSettings {
         environment: &EnvironmentOptions,
     ) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace, environment);
-        let python_preference = resolve_python_preference(args, workspace);
+        let python_preference = resolve_python_preference(args, workspace, environment);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -138,9 +143,7 @@ impl GlobalSettings {
             },
             show_settings: args.show_settings,
             preview: Preview::from_args(
-                flag(args.preview, args.no_preview, "preview")
-                    .combine(workspace.and_then(|workspace| workspace.globals.preview))
-                    .unwrap_or(false),
+                resolve_preview(args, workspace, environment),
                 args.no_preview,
                 &args.preview_features,
             ),
@@ -156,8 +159,15 @@ impl GlobalSettings {
             .unwrap_or_default(),
             // Disable the progress bar with `RUST_LOG` to avoid progress fragments interleaving
             // with log messages.
-            no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
-            installer_metadata: !args.no_installer_metadata,
+            no_progress: resolve_flag(args.no_progress, "no-progress", environment.no_progress)
+                .is_enabled()
+                || std::env::var_os(EnvVars::RUST_LOG).is_some(),
+            installer_metadata: !resolve_flag(
+                args.no_installer_metadata,
+                "no-installer-metadata",
+                environment.no_installer_metadata,
+            )
+            .is_enabled(),
         }
     }
 }
@@ -165,10 +175,33 @@ impl GlobalSettings {
 fn resolve_python_preference(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
 ) -> PythonPreference {
-    if args.managed_python {
+    // Resolve flags from CLI and environment variables.
+    let managed_python = resolve_flag(
+        args.managed_python,
+        "managed-python",
+        environment.managed_python,
+    );
+    let no_managed_python = resolve_flag(
+        args.no_managed_python,
+        "no-managed-python",
+        environment.no_managed_python,
+    );
+
+    // Check for conflicts between managed_python and python_preference.
+    if managed_python.is_enabled() && args.python_preference.is_some() {
+        check_conflicts(managed_python, Flag::from_cli("python-preference"));
+    }
+
+    // Check for conflicts between no_managed_python and python_preference.
+    if no_managed_python.is_enabled() && args.python_preference.is_some() {
+        check_conflicts(no_managed_python, Flag::from_cli("python-preference"));
+    }
+
+    if managed_python.is_enabled() {
         PythonPreference::OnlyManaged
-    } else if args.no_managed_python {
+    } else if no_managed_python.is_enabled() {
         PythonPreference::OnlySystem
     } else {
         args.python_preference
@@ -177,11 +210,38 @@ fn resolve_python_preference(
     }
 }
 
+/// Resolve the preview setting from CLI, environment, and workspace config.
+fn resolve_preview(
+    args: &GlobalArgs,
+    workspace: Option<&FilesystemOptions>,
+    environment: &EnvironmentOptions,
+) -> bool {
+    // CLI takes precedence
+    match flag(args.preview, args.no_preview, "preview") {
+        Some(value) => value,
+        None => {
+            // Check environment variable
+            if environment.preview.value == Some(true) {
+                true
+            } else {
+                // Fall back to workspace config
+                workspace
+                    .and_then(|workspace| workspace.globals.preview)
+                    .unwrap_or(false)
+            }
+        }
+    }
+}
+
 /// The resolved network settings to use for any invocation of the CLI.
 #[derive(Debug, Clone)]
 pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
+    pub(crate) offline: Flag,
     pub(crate) native_tls: bool,
+    pub(crate) http_proxy: Option<ProxyUrl>,
+    pub(crate) https_proxy: Option<ProxyUrl>,
+    pub(crate) no_proxy: Option<Vec<String>>,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
     pub(crate) timeout: Duration,
     pub(crate) retries: u32,
@@ -193,17 +253,45 @@ impl NetworkSettings {
         workspace: Option<&FilesystemOptions>,
         environment: &EnvironmentOptions,
     ) -> Self {
-        let connectivity = if flag(args.offline, args.no_offline, "offline")
-            .combine(workspace.and_then(|workspace| workspace.globals.offline))
-            .unwrap_or(false)
-        {
+        // Resolve offline flag from CLI, environment variable, and workspace config.
+        // Precedence: CLI > Env var > Workspace config > default (false).
+        let offline = match flag(args.offline, args.no_offline, "offline") {
+            Some(true) => Flag::from_cli("offline"),
+            Some(false) => Flag::disabled(),
+            None => {
+                // CLI didn't provide a value, check environment variable.
+                let env_flag = resolve_flag(false, "offline", environment.offline);
+                if env_flag.is_enabled() {
+                    env_flag
+                } else if workspace
+                    .and_then(|workspace| workspace.globals.offline)
+                    .unwrap_or(false)
+                {
+                    // Workspace config enabled offline mode.
+                    Flag::from_config("offline")
+                } else {
+                    Flag::disabled()
+                }
+            }
+        };
+
+        let connectivity = if offline.is_enabled() {
             Connectivity::Offline
         } else {
             Connectivity::Online
         };
-        let native_tls = flag(args.native_tls, args.no_native_tls, "native-tls")
-            .combine(workspace.and_then(|workspace| workspace.globals.native_tls))
-            .unwrap_or(false);
+        let native_tls = match flag(args.native_tls, args.no_native_tls, "native-tls") {
+            Some(value) => value,
+            None => {
+                if environment.native_tls.value == Some(true) {
+                    true
+                } else {
+                    workspace
+                        .and_then(|workspace| workspace.globals.native_tls)
+                        .unwrap_or(false)
+                }
+            }
+        };
         let allow_insecure_host = args
             .allow_insecure_host
             .as_ref()
@@ -221,12 +309,33 @@ impl NetworkSettings {
                     .flatten(),
             )
             .collect();
+        let http_proxy = workspace.and_then(|workspace| workspace.globals.http_proxy.clone());
+        let https_proxy = workspace.and_then(|workspace| workspace.globals.https_proxy.clone());
+        let no_proxy = workspace.and_then(|workspace| workspace.globals.no_proxy.clone());
+
         Self {
             connectivity,
+            offline,
             native_tls,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             timeout: environment.http_timeout,
             retries: environment.http_retries,
+        }
+    }
+
+    /// Check if offline mode conflicts with a refresh request.
+    ///
+    /// This should be called when a command uses refresh functionality to ensure
+    /// offline mode and refresh are not both enabled.
+    pub(crate) fn check_refresh_conflict(&self, refresh: &Refresh) {
+        if !matches!(refresh, Refresh::None(_)) {
+            // TODO(charlie): `Refresh` isn't a `Flag`, so we create a synthetic one here
+            // (which matches Clap's representation). Consider a dedicated helper for
+            // conflicts with CLI-only arguments.
+            check_conflicts(self.offline, Flag::from_cli("refresh"));
         }
     }
 }
@@ -335,7 +444,7 @@ impl InitSettings {
             no_description,
             vcs: vcs.or(bare.then_some(VersionControlSystem::None)),
             build_backend,
-            no_readme: no_readme || bare,
+            no_readme,
             author_from,
             pin_python: flag(pin_python, no_pin_python, "pin-python").unwrap_or(!bare),
             no_workspace,
@@ -351,7 +460,11 @@ impl InitSettings {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LockCheckSource {
     /// The user invoked `uv <command> --locked`
-    Locked,
+    LockedCli,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
     /// The user invoked `uv <command> --check`
     Check,
 }
@@ -359,7 +472,9 @@ pub(crate) enum LockCheckSource {
 impl std::fmt::Display for LockCheckSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Locked => write!(f, "--locked"),
+            Self::LockedCli => write!(f, "--locked"),
+            Self::LockedEnv => write!(f, "UV_LOCKED=1"),
+            Self::LockedConfiguration => write!(f, "locked (workspace configuration)"),
             Self::Check => write!(f, "--check"),
         }
     }
@@ -374,11 +489,48 @@ pub(crate) enum LockCheck {
     Disabled,
 }
 
+/// The source of the frozen flag.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FrozenSource {
+    /// The `--frozen` flag was provided on CLI.
+    Cli,
+    /// The `UV_FROZEN` environment variable was set.
+    Env,
+    /// The `frozen` option was set via workspace configuration.
+    Configuration,
+}
+
+/// Convert a resolved flag to an optional frozen source.
+fn resolve_frozen(flag: Flag) -> Option<FrozenSource> {
+    if flag.is_enabled() {
+        Some(match flag.source() {
+            Some(FlagSource::Cli) | None => FrozenSource::Cli,
+            Some(FlagSource::Env(_)) => FrozenSource::Env,
+            Some(FlagSource::Config) => FrozenSource::Configuration,
+        })
+    } else {
+        None
+    }
+}
+
+/// Convert a resolved flag to a lock check.
+fn resolve_lock_check(flag: Flag) -> LockCheck {
+    if flag.is_enabled() {
+        LockCheck::Enabled(match flag.source() {
+            Some(FlagSource::Cli) | None => LockCheckSource::LockedCli,
+            Some(FlagSource::Env(_)) => LockCheckSource::LockedEnv,
+            Some(FlagSource::Config) => LockCheckSource::LockedConfiguration,
+        })
+    } else {
+        LockCheck::Disabled
+    }
+}
+
 /// The resolved settings to use for a `run` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct RunSettings {
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) editable: Option<EditableMode>,
@@ -465,13 +617,25 @@ impl RunSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
+        let isolated = isolated || environment.isolated.value == Some(true);
+        let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
+        let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
+
         Self {
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -514,7 +678,7 @@ impl RunSettings {
             all_packages,
             package,
             no_project,
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             active: flag(active, no_active, "active"),
             python: python.and_then(Maybe::into_option),
             python_platform,
@@ -545,6 +709,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -580,8 +745,10 @@ impl ToolRunSettings {
             installer,
             build,
             refresh,
+            lfs,
             python,
             python_platform,
+            torch_backend,
             generate_shell_completion: _,
         } = args;
 
@@ -611,21 +778,30 @@ impl ToolRunSettings {
             }
         }
 
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
+
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
+
+        // Resolve flags from CLI and environment variables.
+        let isolated = isolated || environment.isolated.value == Some(true);
+        let show_resolution = show_resolution || environment.show_resolution.value == Some(true);
+        let no_env_file = no_env_file || environment.no_env_file.value == Some(true);
 
         Self {
             command,
@@ -656,6 +832,7 @@ impl ToolRunSettings {
                 .collect(),
             isolated,
             show_resolution,
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             refresh: Refresh::from(refresh),
@@ -683,6 +860,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) refresh: Refresh,
@@ -713,29 +891,35 @@ impl ToolInstallSettings {
             overrides,
             excludes,
             build_constraints,
+            lfs,
             installer,
             force,
             build,
             refresh,
             python,
             python_platform,
+            torch_backend,
         } = args;
+
+        let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options =
             resolver_installer_options(installer, build).combine(ResolverInstallerOptions::from(
-                filesystem
-                    .clone()
-                    .map(FilesystemOptions::into_options)
-                    .map(|options| options.top_level)
+                filesystem_options
+                    .as_ref()
+                    .map(|options| options.top_level.clone())
                     .unwrap_or_default(),
             ));
 
-        let filesystem_install_mirrors = filesystem
-            .map(FilesystemOptions::into_options)
-            .map(|options| options.install_mirrors)
+        let filesystem_install_mirrors = filesystem_options
+            .map(|options| options.install_mirrors.clone())
             .unwrap_or_default();
 
-        let settings = ResolverInstallerSettings::from(options.clone());
+        let mut settings = ResolverInstallerSettings::from(options.clone());
+        if torch_backend.is_some() {
+            settings.resolver.torch_backend = torch_backend;
+        }
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
 
         Self {
             package,
@@ -772,6 +956,7 @@ impl ToolInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            lfs,
             python: python.and_then(Maybe::into_option),
             python_platform,
             force,
@@ -831,6 +1016,7 @@ impl ToolUpgradeSettings {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
             exclude_newer_package,
             build,
         } = args;
@@ -868,6 +1054,7 @@ impl ToolUpgradeSettings {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
         };
 
         let args = resolver_installer_options(installer, build);
@@ -985,6 +1172,8 @@ pub(crate) struct PythonListSettings {
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
     pub(crate) python_downloads_json_url: Option<String>,
+    pub(crate) python_install_mirror: Option<String>,
+    pub(crate) pypy_install_mirror: Option<String>,
 }
 
 impl PythonListSettings {
@@ -1008,14 +1197,37 @@ impl PythonListSettings {
         } = args;
 
         let options = filesystem.map(FilesystemOptions::into_options);
-        let python_downloads_json_url_option = match options {
-            Some(options) => options.install_mirrors.python_downloads_json_url,
-            None => None,
+        let (
+            python_downloads_json_url_option,
+            python_install_mirror_option,
+            pypy_install_mirror_option,
+        ) = match &options {
+            Some(options) => (
+                options.install_mirrors.python_downloads_json_url.clone(),
+                options.install_mirrors.python_install_mirror.clone(),
+                options.install_mirrors.pypy_install_mirror.clone(),
+            ),
+            None => (None, None, None),
         };
 
         let python_downloads_json_url = python_downloads_json_url_arg
-            .or(environment.install_mirrors.python_downloads_json_url)
+            .or(environment
+                .install_mirrors
+                .python_downloads_json_url
+                .clone())
             .or(python_downloads_json_url_option);
+
+        let python_install_mirror = environment
+            .install_mirrors
+            .python_install_mirror
+            .clone()
+            .or(python_install_mirror_option);
+
+        let pypy_install_mirror = environment
+            .install_mirrors
+            .pypy_install_mirror
+            .clone()
+            .or(pypy_install_mirror_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -1034,6 +1246,8 @@ impl PythonListSettings {
             show_urls,
             output_format,
             python_downloads_json_url,
+            python_install_mirror,
+            pypy_install_mirror,
         }
     }
 }
@@ -1061,12 +1275,14 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) targets: Vec<String>,
     pub(crate) reinstall: bool,
     pub(crate) force: bool,
+    pub(crate) upgrade: PythonUpgrade,
     pub(crate) bin: Option<bool>,
     pub(crate) registry: Option<bool>,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonInstallSettings {
@@ -1101,10 +1317,12 @@ impl PythonInstallSettings {
             registry,
             no_registry,
             force,
+            upgrade,
             mirror: _,
             pypy_mirror: _,
             python_downloads_json_url: _,
             default,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1112,6 +1330,11 @@ impl PythonInstallSettings {
             targets,
             reinstall,
             force,
+            upgrade: if upgrade {
+                PythonUpgrade::Enabled(PythonUpgradeSource::Install)
+            } else {
+                PythonUpgrade::Disabled
+            },
             bin: flag(bin, no_bin, "bin").or(environment.python_install_bin),
             registry: flag(registry, no_registry, "registry")
                 .or(environment.python_install_registry),
@@ -1119,6 +1342,12 @@ impl PythonInstallSettings {
             pypy_install_mirror,
             python_downloads_json_url,
             default,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
@@ -1137,6 +1366,7 @@ pub(crate) struct PythonUpgradeSettings {
     pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
     pub(crate) bin: Option<bool>,
+    pub(crate) compile_bytecode: bool,
 }
 
 impl PythonUpgradeSettings {
@@ -1174,6 +1404,7 @@ impl PythonUpgradeSettings {
             pypy_mirror: _,
             reinstall,
             python_downloads_json_url: _,
+            compile_bytecode,
         } = args;
 
         Self {
@@ -1187,6 +1418,12 @@ impl PythonUpgradeSettings {
             python_downloads_json_url,
             default,
             bin,
+            compile_bytecode: flag(
+                compile_bytecode.compile_bytecode,
+                compile_bytecode.no_compile_bytecode,
+                "compile-bytecode",
+            )
+            .unwrap_or_default(),
         }
     }
 }
@@ -1227,12 +1464,17 @@ pub(crate) struct PythonFindSettings {
     pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
+    pub(crate) python_downloads_json_url: Option<String>,
 }
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: PythonFindArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let PythonFindArgs {
             request,
             show_version,
@@ -1240,13 +1482,32 @@ impl PythonFindSettings {
             system,
             no_system,
             script: _,
+            python_downloads_json_url,
         } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_downloads_json_url,
+            ..Default::default()
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror: _,
+            pypy_install_mirror: _,
+            python_downloads_json_url,
+        } = install_mirrors;
 
         Self {
             request,
             show_version,
             no_project,
             system: flag(system, no_system, "system").unwrap_or_default(),
+            python_downloads_json_url,
         }
     }
 }
@@ -1301,7 +1562,7 @@ impl PythonPinSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
@@ -1346,9 +1607,13 @@ impl SyncSettings {
             inexact,
             exact,
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
             no_install_package,
+            only_install_package,
             locked,
             frozen,
             active,
@@ -1382,16 +1647,22 @@ impl SyncSettings {
         } else {
             DryRun::from_args(dry_run)
         };
-        let lock_check = if locked {
-            LockCheck::Enabled(LockCheckSource::Locked)
-        } else {
-            LockCheck::Disabled
-        };
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
 
         Self {
             output_format,
-            lock_check,
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             dry_run,
             script,
             active: flag(active, no_active, "active"),
@@ -1417,9 +1688,13 @@ impl SyncSettings {
             editable: flag(editable, no_editable, "editable").map(EditableMode::from),
             install_options: InstallOptions::new(
                 no_install_project,
+                only_install_project,
                 no_install_workspace,
+                only_install_workspace,
                 no_install_local,
+                only_install_local,
                 no_install_package,
+                only_install_package,
             ),
             modifications: if flag(exact, inexact, "inexact").unwrap_or(true) {
                 Modifications::Exact
@@ -1444,7 +1719,7 @@ impl SyncSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1478,17 +1753,22 @@ impl LockSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(check_exists, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
         let lock_check = if check {
             LockCheck::Enabled(LockCheckSource::Check)
-        } else if locked {
-            LockCheck::Enabled(LockCheckSource::Locked)
         } else {
-            LockCheck::Disabled
+            resolve_lock_check(locked)
         };
 
         Self {
             lock_check,
-            frozen: check_exists,
+            frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
             script,
             python: python.and_then(Maybe::into_option),
@@ -1506,7 +1786,7 @@ impl LockSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
@@ -1521,13 +1801,19 @@ pub(crate) struct AddSettings {
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
+    pub(crate) lfs: GitLfsSetting,
     pub(crate) package: Option<PackageName>,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) workspace: Option<bool>,
     pub(crate) no_install_project: bool,
+    pub(crate) only_install_project: bool,
     pub(crate) no_install_workspace: bool,
+    pub(crate) only_install_workspace: bool,
     pub(crate) no_install_local: bool,
+    pub(crate) only_install_local: bool,
+    pub(crate) no_install_package: Vec<PackageName>,
+    pub(crate) only_install_package: Vec<PackageName>,
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) indexes: Vec<Index>,
@@ -1558,6 +1844,7 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             no_sync,
             locked,
             frozen,
@@ -1572,9 +1859,18 @@ impl AddSettings {
             workspace,
             no_workspace,
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
+            no_install_package,
+            only_install_package,
         } = args;
+
+        // Resolve flags from CLI and environment variables.
+        let dev = dev || environment.dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
 
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
@@ -1652,16 +1948,24 @@ impl AddSettings {
             .unwrap_or_default();
 
         let bounds = bounds.or(filesystem.as_ref().and_then(|fs| fs.add.add_bounds));
+        let lfs = GitLfsSetting::new(lfs.then_some(true), environment.lfs);
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        // Check for conflicts between no_sync and frozen.
+        check_conflicts(no_sync, frozen);
 
         Self {
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             active: flag(active, no_active, "active"),
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             packages,
             requirements,
             constraints: constraints
@@ -1675,13 +1979,19 @@ impl AddSettings {
             rev,
             tag,
             branch,
+            lfs,
             package,
             script,
             python: python.and_then(Maybe::into_option),
             workspace: flag(workspace, no_workspace, "workspace"),
             no_install_project,
+            only_install_project,
             no_install_workspace,
+            only_install_workspace,
             no_install_local,
+            only_install_local,
+            no_install_package,
+            only_install_package,
             editable: flag(editable, no_editable, "editable"),
             extras: extra.unwrap_or_default(),
             refresh: Refresh::from(refresh),
@@ -1702,7 +2012,7 @@ impl AddSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<PackageName>,
@@ -1741,6 +2051,9 @@ impl RemoveSettings {
             python,
         } = args;
 
+        // Resolve flags from CLI and environment variables.
+        let dev = dev || environment.dev.value == Some(true);
+
         let dependency_type = if let Some(extra) = optional {
             DependencyType::Optional(extra)
         } else if let Some(group) = group {
@@ -1761,15 +2074,22 @@ impl RemoveSettings {
             .map(|requirement| requirement.name)
             .collect();
 
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        // Check for conflicts between no_sync and frozen.
+        check_conflicts(no_sync, frozen);
+
         Self {
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             active: flag(active, no_active, "active"),
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             packages,
             dependency_type,
             package,
@@ -1792,12 +2112,12 @@ impl RemoveSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct VersionSettings {
     pub(crate) value: Option<String>,
-    pub(crate) bump: Vec<VersionBump>,
+    pub(crate) bump: Vec<VersionBumpSpec>,
     pub(crate) short: bool,
     pub(crate) output_format: VersionFormat,
     pub(crate) dry_run: bool,
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) active: Option<bool>,
     pub(crate) no_sync: bool,
     pub(crate) package: Option<PackageName>,
@@ -1838,20 +2158,27 @@ impl VersionSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        // Check for conflicts between no_sync and frozen.
+        check_conflicts(no_sync, frozen);
+
         Self {
             value,
             bump,
             short,
             output_format,
             dry_run,
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             active: flag(active, no_active, "active"),
-            no_sync,
+            no_sync: no_sync.is_enabled(),
             package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
@@ -1871,7 +2198,7 @@ impl VersionSettings {
 pub(crate) struct TreeSettings {
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) universal: bool,
     pub(crate) depth: u8,
     pub(crate) prune: Vec<PackageName>,
@@ -1922,6 +2249,16 @@ impl TreeSettings {
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
 
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
         Self {
             groups: DependencyGroups::from_args(
                 dev,
@@ -1933,12 +2270,8 @@ impl TreeSettings {
                 only_group,
                 all_groups,
             ),
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             universal,
             depth: tree.depth,
             prune: tree.prune,
@@ -1974,7 +2307,7 @@ pub(crate) struct ExportSettings {
     pub(crate) install_options: InstallOptions,
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
-    pub(crate) frozen: bool,
+    pub(crate) frozen: Option<FrozenSource>,
     pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
     pub(crate) script: Option<PathBuf>,
@@ -2019,11 +2352,15 @@ impl ExportSettings {
             no_hashes,
             output_file,
             no_emit_project,
+            only_emit_project,
             no_emit_workspace,
-            no_emit_package,
+            only_emit_workspace,
             no_emit_local,
+            only_emit_local,
+            no_emit_package,
+            only_emit_package,
             locked,
-            frozen,
+            frozen: frozen_cli,
             resolver,
             build,
             refresh,
@@ -2034,6 +2371,17 @@ impl ExportSettings {
             .clone()
             .map(|fs| fs.install_mirrors.clone())
             .unwrap_or_default();
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen_cli, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+        let no_editable = no_editable || environment.no_editable.value == Some(true);
 
         Self {
             format,
@@ -2063,17 +2411,17 @@ impl ExportSettings {
             hashes: flag(hashes, no_hashes, "hashes").unwrap_or(true),
             install_options: InstallOptions::new(
                 no_emit_project,
+                only_emit_project,
                 no_emit_workspace,
+                only_emit_workspace,
                 no_emit_local,
+                only_emit_local,
                 no_emit_package,
+                only_emit_package,
             ),
             output_file,
-            lock_check: if locked {
-                LockCheck::Enabled(LockCheckSource::Locked)
-            } else {
-                LockCheck::Disabled
-            },
-            frozen,
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
             include_annotations: flag(annotate, no_annotate, "annotate").unwrap_or(true),
             include_header: flag(header, no_header, "header").unwrap_or(true),
             script,
@@ -2121,7 +2469,7 @@ impl FormatSettings {
 /// The resolved settings to use for a `pip compile` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
-    pub(crate) format: Option<ExportFormat>,
+    pub(crate) format: Option<PipCompileFormat>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -2129,7 +2477,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    pub(crate) excludes_from_workspace: Vec<PackageName>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
@@ -2445,7 +2793,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
-    pub(crate) excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    pub(crate) excludes_from_workspace: Vec<PackageName>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
@@ -2695,6 +3043,8 @@ impl PipFreezeSettings {
             paths,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2706,6 +3056,8 @@ impl PipFreezeSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -2745,6 +3097,8 @@ impl PipListSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2758,6 +3112,8 @@ impl PipListSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::from(fetch)
                 },
                 filesystem,
@@ -2790,6 +3146,8 @@ impl PipShowSettings {
             python,
             system,
             no_system,
+            target,
+            prefix,
             compat_args: _,
         } = args;
 
@@ -2801,6 +3159,8 @@ impl PipShowSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system, "system"),
                     strict: flag(strict, no_strict, "strict"),
+                    target,
+                    prefix,
                     ..PipOptions::default()
                 },
                 filesystem,
@@ -3036,6 +3396,10 @@ impl VenvSettings {
             exclude_newer_package,
         } = args;
 
+        // Resolve flags from CLI and environment variables.
+        let seed = seed || environment.venv_seed.value == Some(true);
+        let clear = clear || environment.venv_clear.value == Some(true);
+
         Self {
             seed,
             allow_existing,
@@ -3086,7 +3450,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -3110,7 +3474,8 @@ pub(crate) struct ResolverSettings {
     pub(crate) extra_build_variables: ExtraBuildVariables,
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
+    pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) upgrade: Upgrade,
 }
 
@@ -3165,7 +3530,11 @@ impl From<ResolverOptions> for ResolverSettings {
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
-            sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+            torch_backend: value.torch_backend,
+            sources: NoSources::from_args(
+                value.no_sources,
+                value.no_sources_package.unwrap_or_default(),
+            ),
             upgrade: value.upgrade.unwrap_or_default(),
             build_options: BuildOptions::new(
                 NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
@@ -3255,7 +3624,11 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
                 prerelease: value.prerelease.unwrap_or_default(),
                 resolution: value.resolution.unwrap_or_default(),
-                sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+                sources: NoSources::from_args(
+                    value.no_sources,
+                    value.no_sources_package.unwrap_or_default(),
+                ),
+                torch_backend: value.torch_backend,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
@@ -3315,7 +3688,7 @@ pub(crate) struct PipSettings {
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
-    pub(crate) sources: SourceStrategy,
+    pub(crate) sources: NoSources,
     pub(crate) hash_checking: Option<HashCheckingMode>,
     pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
@@ -3394,6 +3767,7 @@ impl PipSettings {
             require_hashes,
             verify_hashes,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -3423,6 +3797,7 @@ impl PipSettings {
             link_mode: top_level_link_mode,
             compile_bytecode: top_level_compile_bytecode,
             no_sources: top_level_no_sources,
+            no_sources_package: top_level_no_sources_package,
             upgrade: top_level_upgrade,
             upgrade_package: top_level_upgrade_package,
             reinstall: top_level_reinstall,
@@ -3432,6 +3807,7 @@ impl PipSettings {
             no_binary: top_level_no_binary,
             no_binary_package: top_level_no_binary_package,
             exclude_newer_package: top_level_exclude_newer_package,
+            torch_backend: top_level_torch_backend,
         } = top_level;
 
         // Merge the top-level options (`tool.uv`) with the pip-specific options (`tool.uv.pip`),
@@ -3470,10 +3846,12 @@ impl PipSettings {
         let link_mode = link_mode.combine(top_level_link_mode);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
         let no_sources = no_sources.combine(top_level_no_sources);
+        let no_sources_package = no_sources_package.combine(top_level_no_sources_package);
         let upgrade = upgrade.combine(top_level_upgrade);
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
+        let torch_backend = torch_backend.combine(top_level_torch_backend);
 
         Self {
             index_locations: IndexLocations::new(
@@ -3627,8 +4005,11 @@ impl PipSettings {
                 .compile_bytecode
                 .combine(compile_bytecode)
                 .unwrap_or_default(),
-            sources: SourceStrategy::from_args(
-                args.no_sources.combine(no_sources).unwrap_or_default(),
+            sources: NoSources::from_args(
+                args.no_sources.combine(no_sources),
+                args.no_sources_package
+                    .combine(no_sources_package)
+                    .unwrap_or_default(),
             ),
             strict: args.strict.combine(strict).unwrap_or_default(),
             upgrade: Upgrade::from_args(
@@ -3696,7 +4077,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,
-            sources: settings.resolver.sources,
+            sources: settings.resolver.sources.clone(),
         }
     }
 }
@@ -3710,6 +4091,8 @@ pub(crate) struct PublishSettings {
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
     pub(crate) dry_run: bool,
+    pub(crate) no_attestations: bool,
+    pub(crate) direct: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -3755,6 +4138,8 @@ impl PublishSettings {
             username,
             password,
             dry_run: args.dry_run,
+            no_attestations: args.no_attestations,
+            direct: args.direct,
             publish_url: args
                 .publish_url
                 .combine(publish_url)
@@ -3787,23 +4172,14 @@ impl PublishSettings {
 pub(crate) struct AuthLogoutSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLogoutSettings {
     /// Resolve the [`AuthLogoutSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLogoutArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLogoutArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3813,23 +4189,14 @@ impl AuthLogoutSettings {
 pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthTokenSettings {
     /// Resolve the [`AuthTokenSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthTokenArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthTokenArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }
@@ -3841,25 +4208,16 @@ pub(crate) struct AuthLoginSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) token: Option<String>,
-
-    // Both CLI and configuration.
-    pub(crate) network_settings: NetworkSettings,
 }
 
 impl AuthLoginSettings {
     /// Resolve the [`AuthLoginSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(
-        args: AuthLoginArgs,
-        global_args: &GlobalArgs,
-        filesystem: Option<&FilesystemOptions>,
-        environment: &EnvironmentOptions,
-    ) -> Self {
+    pub(crate) fn resolve(args: AuthLoginArgs) -> Self {
         Self {
             service: args.service,
             username: args.username,
             password: args.password,
             token: args.token,
-            network_settings: NetworkSettings::resolve(global_args, filesystem, environment),
         }
     }
 }

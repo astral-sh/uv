@@ -3,15 +3,14 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
   labels: ["internal"],
-  schedule: ["before 4am on Monday"],
+  schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
-  prHourlyLimit: 10,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
@@ -107,6 +106,11 @@
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["maturin"],
+      commitMessageTopic: "maturin",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
@@ -118,6 +122,15 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Maturin version used in maturin-action
+    {
+      customType: "regex",
+      managerFilePatterns: ["/.github/workflows/build-binaries\\.yml$/"],
+      matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
     },
     // Minimum supported Rust toolchain version
     {

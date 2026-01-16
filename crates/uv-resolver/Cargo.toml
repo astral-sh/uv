@@ -1,10 +1,10 @@
 [package]
 name = "uv-resolver"
-version = "0.0.1"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -33,6 +33,7 @@ uv-once-map = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-redacted = { workspace = true }
@@ -41,11 +42,13 @@ uv-small-str = { workspace = true }
 uv-static = { workspace = true }
 uv-torch = { workspace = true }
 uv-types = { workspace = true }
+uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
+cyclonedx-bom = { workspace = true }
 dashmap = { workspace = true }
 either = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -55,6 +58,7 @@ indexmap = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 owo-colors = { workspace = true }
+percent-encoding = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
 rkyv = { workspace = true }

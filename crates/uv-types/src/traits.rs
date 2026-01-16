@@ -7,7 +7,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{BuildKind, BuildOptions, BuildOutput, SourceStrategy};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
@@ -97,7 +97,7 @@ pub trait BuildContext {
     fn config_settings_package(&self) -> &PackageConfigSettings;
 
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
-    fn sources(&self) -> SourceStrategy;
+    fn sources(&self) -> &NoSources;
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
@@ -141,7 +141,7 @@ pub trait BuildContext {
         install_path: &'a Path,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
-        sources: SourceStrategy,
+        sources: &'a NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
         build_stack: BuildStack,
@@ -158,6 +158,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         output_dir: &'a Path,
+        sources: NoSources,
         build_kind: BuildKind,
         version_id: Option<&'a str>,
     ) -> impl Future<Output = Result<Option<DistFilename>, impl IsBuildBackendError>> + 'a;

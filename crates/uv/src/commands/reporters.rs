@@ -265,13 +265,7 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
-                    match direction {
-                        Direction::Download => "Downloading",
-                        Direction::Upload => "Uploading",
-                        Direction::Extract => "Extracting",
-                    }
-                    .bold()
-                    .cyan(),
+                    direction.as_str().bold().cyan(),
                     name,
                     format!("({bytes:.1}{unit})").dimmed()
                 );
@@ -303,7 +297,13 @@ impl ProgressReporter {
             return;
         };
 
-        state.lock().unwrap().bars[&id].inc(bytes);
+        // Avoid panics due to reads on failed requests.
+        // https://github.com/astral-sh/uv/issues/17090
+        // TODO(konsti): Add a debug assert once https://github.com/seanmonstar/reqwest/issues/2884
+        // is fixed
+        if let Some(bar) = state.lock().unwrap().bars.get(&id) {
+            bar.inc(bytes);
+        }
     }
 
     fn on_request_complete(&self, direction: Direction, id: usize) {
@@ -324,7 +324,13 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     " {} {}",
-                    direction.as_str().bold().green(),
+                    match direction {
+                        Direction::Download => "Downloaded",
+                        Direction::Upload => "Uploaded",
+                        Direction::Extract => "Extracted",
+                    }
+                    .bold()
+                    .cyan(),
                     progress.message()
                 );
             }

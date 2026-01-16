@@ -48,7 +48,7 @@ impl UnnamedRequirementUrl for VerbatimUrl {
     }
 
     fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(given)?)
+        Self::parse_url(given)
     }
 
     fn with_given(self, given: impl AsRef<str>) -> Self {

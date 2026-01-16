@@ -676,7 +676,7 @@ impl Version {
         let full = self.make_full();
 
         match bump {
-            BumpCommand::BumpRelease { index } => {
+            BumpCommand::BumpRelease { index, value } => {
                 // Clear all sub-release items
                 full.pre = None;
                 full.post = None;
@@ -690,7 +690,9 @@ impl Version {
                         // Everything before the bumped value is preserved (or is an implicit 0)
                         Ordering::Less => old_parts.get(i).copied().unwrap_or(0),
                         // This is the value to bump (could be implicit 0)
-                        Ordering::Equal => old_parts.get(i).copied().unwrap_or(0) + 1,
+                        Ordering::Equal => {
+                            value.unwrap_or_else(|| old_parts.get(i).copied().unwrap_or(0) + 1)
+                        }
                         // Everything after the bumped value becomes 0
                         Ordering::Greater => 0,
                     })
@@ -703,37 +705,50 @@ impl Version {
                 full.post = None;
                 full.dev = None;
             }
-            BumpCommand::BumpPrerelease { kind } => {
+            BumpCommand::BumpPrerelease { kind, value } => {
                 // Clear all sub-prerelease items
                 full.post = None;
                 full.dev = None;
-
-                // Either bump the matching kind or set to 1
-                if let Some(prerelease) = &mut full.pre {
-                    if prerelease.kind == kind {
-                        prerelease.number += 1;
-                        return;
+                if let Some(value) = value {
+                    full.pre = Some(Prerelease {
+                        kind,
+                        number: value,
+                    });
+                } else {
+                    // Either bump the matching kind or set to 1
+                    if let Some(prerelease) = &mut full.pre {
+                        if prerelease.kind == kind {
+                            prerelease.number += 1;
+                            return;
+                        }
                     }
+                    full.pre = Some(Prerelease { kind, number: 1 });
                 }
-                full.pre = Some(Prerelease { kind, number: 1 });
             }
-            BumpCommand::BumpPost => {
+            BumpCommand::BumpPost { value } => {
                 // Clear sub-post items
                 full.dev = None;
-
-                // Either bump or set to 1
-                if let Some(post) = &mut full.post {
-                    *post += 1;
+                if let Some(value) = value {
+                    full.post = Some(value);
                 } else {
-                    full.post = Some(1);
+                    // Either bump or set to 1
+                    if let Some(post) = &mut full.post {
+                        *post += 1;
+                    } else {
+                        full.post = Some(1);
+                    }
                 }
             }
-            BumpCommand::BumpDev => {
-                // Either bump or set to 1
-                if let Some(dev) = &mut full.dev {
-                    *dev += 1;
+            BumpCommand::BumpDev { value } => {
+                if let Some(value) = value {
+                    full.dev = Some(value);
                 } else {
-                    full.dev = Some(1);
+                    // Either bump or set to 1
+                    if let Some(dev) = &mut full.dev {
+                        *dev += 1;
+                    } else {
+                        full.dev = Some(1);
+                    }
                 }
             }
         }
@@ -1018,22 +1033,32 @@ impl FromStr for Version {
 /// Various ways to "bump" a version
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BumpCommand {
-    /// Bump the release component
+    /// Bump or set the release component
     BumpRelease {
         /// The release component to bump (0 is major, 1 is minor, 2 is patch)
         index: usize,
+        /// Explicit value to set; when absent the component is incremented
+        value: Option<u64>,
     },
-    /// Bump the prerelease component
+    /// Bump or set the prerelease component
     BumpPrerelease {
         /// prerelease component to bump
         kind: PrereleaseKind,
+        /// Explicit value to set; when absent the component is incremented
+        value: Option<u64>,
     },
     /// Bump to the associated stable release
     MakeStable,
-    /// Bump the post component
-    BumpPost,
-    /// Bump the dev component
-    BumpDev,
+    /// Bump or set the post component
+    BumpPost {
+        /// Explicit value to set; when absent the component is incremented
+        value: Option<u64>,
+    },
+    /// Bump or set the dev component
+    BumpDev {
+        /// Explicit value to set; when absent the component is incremented
+        value: Option<u64>,
+    },
 }
 
 /// A small representation of a version.
@@ -4239,36 +4264,57 @@ mod tests {
     fn bump_major() {
         // one digit
         let mut version = "0".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1");
 
         // two digit
         let mut version = "1.5".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "2.0");
 
         // three digit (zero major)
         let mut version = "0.1.2".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1.0.0");
 
         // three digit (non-zero major)
         let mut version = "1.2.3".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "2.0.0");
 
         // four digit
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "2.0.0.0");
 
         // All the version junk
         let mut version = "5!1.7.3.5b2.post345.dev456+local"
             .parse::<Version>()
             .unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!2.0.0.0+local");
-        version.bump(BumpCommand::BumpRelease { index: 0 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 0,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!3.0.0.0+local");
     }
 
@@ -4278,31 +4324,49 @@ mod tests {
     fn bump_minor() {
         // one digit
         let mut version = "0".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "0.1");
 
         // two digit
         let mut version = "1.5".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1.6");
 
         // three digit (non-zero major)
         let mut version = "5.3.6".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5.4.0");
 
         // four digit
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1.3.0.0");
 
         // All the version junk
         let mut version = "5!1.7.3.5b2.post345.dev456+local"
             .parse::<Version>()
             .unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!1.8.0.0+local");
-        version.bump(BumpCommand::BumpRelease { index: 1 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 1,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!1.9.0.0+local");
     }
 
@@ -4312,31 +4376,49 @@ mod tests {
     fn bump_patch() {
         // one digit
         let mut version = "0".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "0.0.1");
 
         // two digit
         let mut version = "1.5".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1.5.1");
 
         // three digit
         let mut version = "5.3.6".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5.3.7");
 
         // four digit
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "1.2.4.0");
 
         // All the version junk
         let mut version = "5!1.7.3.5b2.post345.dev456+local"
             .parse::<Version>()
             .unwrap();
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!1.7.4.0+local");
-        version.bump(BumpCommand::BumpRelease { index: 2 });
+        version.bump(BumpCommand::BumpRelease {
+            index: 2,
+            value: None,
+        });
         assert_eq!(version.to_string().as_str(), "5!1.7.5.0+local");
     }
 
@@ -4348,6 +4430,7 @@ mod tests {
         let mut version = "0".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "0a1");
 
@@ -4355,6 +4438,7 @@ mod tests {
         let mut version = "1.5".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.5a1");
 
@@ -4362,6 +4446,7 @@ mod tests {
         let mut version = "5.3.6".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5.3.6a1");
 
@@ -4369,6 +4454,7 @@ mod tests {
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.2.3.4a1");
 
@@ -4378,10 +4464,12 @@ mod tests {
             .unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5a1+local");
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Alpha,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5a2+local");
     }
@@ -4394,6 +4482,7 @@ mod tests {
         let mut version = "0".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "0b1");
 
@@ -4401,6 +4490,7 @@ mod tests {
         let mut version = "1.5".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.5b1");
 
@@ -4408,6 +4498,7 @@ mod tests {
         let mut version = "5.3.6".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5.3.6b1");
 
@@ -4415,6 +4506,7 @@ mod tests {
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.2.3.4b1");
 
@@ -4424,10 +4516,12 @@ mod tests {
             .unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5b1+local");
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Beta,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2+local");
     }
@@ -4440,6 +4534,7 @@ mod tests {
         let mut version = "0".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "0rc1");
 
@@ -4447,6 +4542,7 @@ mod tests {
         let mut version = "1.5".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.5rc1");
 
@@ -4454,6 +4550,7 @@ mod tests {
         let mut version = "5.3.6".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5.3.6rc1");
 
@@ -4461,6 +4558,7 @@ mod tests {
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "1.2.3.4rc1");
 
@@ -4470,10 +4568,12 @@ mod tests {
             .unwrap();
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc1+local");
         version.bump(BumpCommand::BumpPrerelease {
             kind: PrereleaseKind::Rc,
+            value: None,
         });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc2+local");
     }
@@ -4484,29 +4584,29 @@ mod tests {
     fn bump_post() {
         // one digit
         let mut version = "0".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "0.post1");
 
         // two digit
         let mut version = "1.5".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "1.5.post1");
 
         // three digit
         let mut version = "5.3.6".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "5.3.6.post1");
 
         // four digit
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "1.2.3.4.post1");
 
         // All the version junk
         let mut version = "5!1.7.3.5b2.dev123+local".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post1+local");
-        version.bump(BumpCommand::BumpPost);
+        version.bump(BumpCommand::BumpPost { value: None });
         assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post2+local");
     }
 
@@ -4516,32 +4616,32 @@ mod tests {
     fn bump_dev() {
         // one digit
         let mut version = "0".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(version.to_string().as_str(), "0.dev1");
 
         // two digit
         let mut version = "1.5".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(version.to_string().as_str(), "1.5.dev1");
 
         // three digit
         let mut version = "5.3.6".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(version.to_string().as_str(), "5.3.6.dev1");
 
         // four digit
         let mut version = "1.2.3.4".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(version.to_string().as_str(), "1.2.3.4.dev1");
 
         // All the version junk
         let mut version = "5!1.7.3.5b2.post345+local".parse::<Version>().unwrap();
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(
             version.to_string().as_str(),
             "5!1.7.3.5b2.post345.dev1+local"
         );
-        version.bump(BumpCommand::BumpDev);
+        version.bump(BumpCommand::BumpDev { value: None });
         assert_eq!(
             version.to_string().as_str(),
             "5!1.7.3.5b2.post345.dev2+local"

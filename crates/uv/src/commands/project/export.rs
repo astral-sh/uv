@@ -1,8 +1,10 @@
 use std::env;
 use std::ffi::OsStr;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
@@ -15,7 +17,7 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{PylockToml, RequirementsTxtExport};
+use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -30,7 +32,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -66,7 +68,7 @@ pub(crate) async fn export(
     groups: DependencyGroups,
     editable: Option<EditableMode>,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     include_annotations: bool,
     include_header: bool,
     script: Option<Pep723Script>,
@@ -88,7 +90,7 @@ pub(crate) async fn export(
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
@@ -140,7 +142,7 @@ pub(crate) async fn export(
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
-    let interpreter = if frozen {
+    let interpreter = if frozen.is_some() {
         None
     } else {
         Some(match &target {
@@ -182,8 +184,8 @@ pub(crate) async fn export(
     };
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))
@@ -199,19 +201,21 @@ pub(crate) async fn export(
     let state = UniversalState::default();
 
     // Lock the project.
-    let lock = match LockOperation::new(
-        mode,
-        &settings,
-        &client_builder,
-        &state,
-        Box::new(DefaultResolveLogger),
-        concurrency,
-        cache,
-        &workspace_cache,
-        printer,
-        preview,
+    let lock = match Box::pin(
+        LockOperation::new(
+            mode,
+            &settings,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            concurrency,
+            cache,
+            &workspace_cache,
+            printer,
+            preview,
+        )
+        .execute((&target).into()),
     )
-    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -284,12 +288,25 @@ pub(crate) async fn export(
         },
     };
 
-    // Validate that the set of requested extras and development groups are compatible.
-    detect_conflicts(&target, &extras, &groups)?;
-
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
+
+    if output_file
+        .as_deref()
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
+            "uv export".green(),
+            ExportFormat::value_variants()
+                .iter()
+                .filter_map(clap::ValueEnum::to_possible_value)
+                .map(|value| value.get_name().to_string())
+                .join(", ")
+        ));
+    }
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
@@ -313,6 +330,11 @@ pub(crate) async fn export(
             ExportFormat::RequirementsTxt
         }
     });
+
+    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
+    if !matches!(format, ExportFormat::CycloneDX1_5) {
+        detect_conflicts(&target, &extras, &groups)?;
+    }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
     if matches!(format, ExportFormat::PylockToml) {
@@ -373,6 +395,20 @@ pub(crate) async fn export(
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
             write!(writer, "{}", export.to_toml()?)?;
+        }
+        ExportFormat::CycloneDX1_5 => {
+            let export = cyclonedx_json::from_lock(
+                &target,
+                &prune,
+                &extras,
+                &groups,
+                include_annotations,
+                &install_options,
+                preview,
+                all_packages,
+            )?;
+
+            export.output_as_json_v1_5(&mut writer)?;
         }
     }
 

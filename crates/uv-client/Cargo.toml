@@ -1,10 +1,10 @@
 [package]
 name = "uv-client"
-version = "0.0.1"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -38,6 +38,7 @@ uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
+astral-tl = { workspace = true }
 async-trait = { workspace = true }
 async_http_range_reader = { workspace = true }
 async_zip = { workspace = true }
@@ -60,7 +61,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
 thiserror = { workspace = true }
-tl = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
@@ -72,6 +72,9 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 insta = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 wiremock = { workspace = true }
 tempfile = { workspace = true }

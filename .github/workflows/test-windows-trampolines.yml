@@ -1,0 +1,117 @@
+on:
+  workflow_call:
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  # Separate jobs for the nightly crate
+  windows-trampoline-check:
+    timeout-minutes: 15
+    runs-on: windows-latest
+    name: "check on ${{ matrix.target-arch }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        target-arch: ["x86_64", "i686", "aarch64"]
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+
+      - name: "Install cargo-bloat"
+        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        with:
+          tool: cargo-bloat
+
+      - name: "rustfmt"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: cargo fmt --check
+
+      - name: "Clippy"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+
+      - name: "Bloat Check"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: |
+          $output = cargo bloat --release --target x86_64-pc-windows-msvc
+          $filteredOutput = $output | Select-String -Pattern 'core::fmt::write|core::fmt::getcount' -NotMatch
+          $containsPatterns = $filteredOutput | Select-String -Pattern 'core::fmt|std::panicking|std::backtrace_rs'
+
+          if ($containsPatterns) {
+              Exit 1
+          } else {
+              Exit 0
+          }
+
+  # Separate jobs for the nightly crate
+  windows-trampoline-test:
+    timeout-minutes: 10
+    runs-on: ${{ matrix.runner }}
+    name: "test on ${{ matrix.target-arch }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, target-arch: "x86_64" }
+          - { runner: windows-latest, target-arch: "i686" }
+          - { runner: windows-11-arm, target-arch: "aarch64" }
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+      - name: "Install Rust toolchain"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
+      - name: "Test committed binaries"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          rustup target add ${{ matrix.target-arch }}-pc-windows-msvc
+          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc
+      # Build and copy the new binaries
+      - name: "Build"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: |
+          cargo build --target ${{ matrix.target-arch }}-pc-windows-msvc
+          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-console.exe ../uv-trampoline-builder/trampolines/uv-trampoline-${{ matrix.target-arch }}-console.exe
+          cp target/${{ matrix.target-arch }}-pc-windows-msvc/debug/uv-trampoline-gui.exe ../uv-trampoline-builder/trampolines/uv-trampoline-${{ matrix.target-arch }}-gui.exe
+      - name: "Test new binaries"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          # We turn off the default "production" test feature since these are debug binaries
+          cargo test -p uv-trampoline-builder --target ${{ matrix.target-arch }}-pc-windows-msvc --no-default-features

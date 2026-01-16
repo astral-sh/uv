@@ -597,41 +597,41 @@ class PyodideFinder(Finder):
         releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
 
-        maj_minor_seen = set()
-        results = []
+        results = {}
         for release in releases:
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
                 continue
 
-            maj_min = pyodide_version.rpartition(".")[0]
-            # Only keep latest
-            if maj_min in maj_minor_seen:
-                continue
-            maj_minor_seen.add(maj_min)
-
             python_version = Version.from_str(meta["python_version"])
+
             # Find xbuildenv asset
             for asset in release["assets"]:
                 if asset["name"].startswith("xbuildenv"):
                     break
+            else:
+                # not found: should not happen but just in case
+                continue
 
             url = asset["browser_download_url"]
-            results.append(
-                PythonDownload(
-                    release=0,
-                    version=python_version,
-                    triple=self.TRIPLE,
-                    flavor=pyodide_version,
-                    implementation=self.implementation,
-                    filename=asset["name"],
-                    url=url,
-                    build=pyodide_version,
-                )
+            download = PythonDownload(
+                release=0,
+                version=python_version,
+                triple=self.TRIPLE,
+                flavor=pyodide_version,
+                implementation=self.implementation,
+                filename=asset["name"],
+                url=url,
+                build=pyodide_version,
             )
 
-        return results
+            # Only keep latest Pyodide version of each Python version
+            # arch/platform are all the same for Pyodide (wasm32, emscripten)
+            if python_version not in results:
+                results[python_version] = download
+
+        return list(results.values())
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         for idx, batch in enumerate(batched(downloads, n)):
@@ -835,7 +835,7 @@ def render(downloads: list[PythonDownload]) -> None:
 
     VERSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Make newlines consistent across platforms
-    VERSIONS_FILE.write_text(json.dumps(results, indent=2), newline="\n")
+    VERSIONS_FILE.write_text(json.dumps(results, indent=2) + "\n", newline="\n")
 
 
 async def find() -> None:

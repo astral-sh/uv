@@ -178,7 +178,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         }
 
-        let Ok(url) = Url::from_directory_path(path).map(DisplaySafeUrl::from) else {
+        let Ok(url) = Url::from_directory_path(path).map(DisplaySafeUrl::from_url) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {

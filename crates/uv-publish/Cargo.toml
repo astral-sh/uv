@@ -1,10 +1,10 @@
 [package]
 name = "uv-publish"
-version = "0.1.0"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -46,9 +46,12 @@ tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tracing = { workspace = true }
 url = { workspace = true }
+wiremock = { workspace = true }
 
 [dev-dependencies]
+anstream = { workspace = true }
 insta = { workspace = true }
+fastrand = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

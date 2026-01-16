@@ -1,10 +1,11 @@
-use std::fmt::{Display, Formatter};
-use std::ops::Deref;
-
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use serde::Deserialize;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
+use std::path::PathBuf;
 
+use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
@@ -122,6 +123,11 @@ impl Error {
         &self.kind
     }
 
+    pub(crate) fn with_retries(mut self, retries: u32) -> Self {
+        self.retries = retries;
+        self
+    }
+
     /// Create a new error from a JSON parsing error.
     pub(crate) fn from_json_err(err: serde_json::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
@@ -135,6 +141,31 @@ impl Error {
     /// Create a new error from a `MessagePack` parsing error.
     pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadMessagePack { source: err, url }.into()
+    }
+
+    /// Create an [`Error`] from a [`reqwest_middleware::Error`].
+    pub(crate) fn from_reqwest_middleware(
+        url: DisplaySafeUrl,
+        err: reqwest_middleware::Error,
+    ) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
+            if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
+                return ErrorKind::Offline(offline_err.url().to_string()).into();
+            }
+            if let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+                underlying.downcast_ref::<reqwest_retry::RetryError>()
+            {
+                let retries = *retries;
+                return Self::new(
+                    ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
+                    retries,
+                );
+            }
+        }
+        Self::from(ErrorKind::WrappedReqwestError(
+            url,
+            WrappedReqwestError::from(err),
+        ))
     }
 
     /// Returns `true` if this error corresponds to an offline error.
@@ -272,11 +303,15 @@ pub enum ErrorKind {
     /// Make sure the package name is spelled correctly and that you've
     /// configured the right registry to fetch it from.
     #[error("Package `{0}` was not found in the registry")]
-    PackageNotFound(String),
+    RemotePackageNotFound(PackageName),
 
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]
-    FileNotFound(String),
+    LocalPackageNotFound(PackageName),
+
+    /// The root was not found in the local (file-based) index.
+    #[error("Local index not found at: `{}`", _0.display())]
+    LocalIndexNotFound(PathBuf),
 
     /// The metadata file could not be parsed.
     #[error("Couldn't parse metadata of {0} from {1}")]
@@ -286,20 +321,9 @@ pub enum ErrorKind {
         #[source] Box<uv_pypi_types::MetadataError>,
     ),
 
-    /// The metadata file was not found in the wheel.
-    #[error("Metadata file `{0}` was not found in {1}")]
-    MetadataNotFound(WheelFilename, String),
-
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
-
-    /// Add the number of failed retries to the error.
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
-    RequestWithRetries {
-        source: Box<ErrorKind>,
-        retries: u32,
-    },
 
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {
@@ -336,6 +360,9 @@ pub enum ErrorKind {
 
     #[error("Failed to write to the client cache")]
     CacheWrite(#[source] std::io::Error),
+
+    #[error("Failed to acquire lock on the client cache")]
+    CacheLock(#[source] CacheError),
 
     #[error(transparent)]
     Io(std::io::Error),
@@ -376,20 +403,6 @@ impl ErrorKind {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
 
-    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
-    pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
-        err: reqwest_middleware::Error,
-    ) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
-            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return Self::Offline(err.url().to_string());
-            }
-        }
-
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(err))
-    }
-
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
     pub(crate) fn from_reqwest_with_problem_details(
         url: DisplaySafeUrl,
@@ -421,13 +434,33 @@ impl WrappedReqwestError {
         problem_details: Option<ProblemDetails>,
     ) -> Self {
         Self {
-            error,
+            error: Self::filter_retries_from_error(error),
             problem_details: problem_details.map(Box::new),
         }
     }
 
+    /// Drop `RetryError::WithRetries` to avoid reporting the number of retries twice.
+    ///
+    /// We attach the number of errors outside by adding the retry counts from the retry middleware
+    /// and from uv's outer retry loop for streaming bodies. Stripping the inner count from the
+    /// error context avoids showing two numbers.
+    fn filter_retries_from_error(error: reqwest_middleware::Error) -> reqwest_middleware::Error {
+        match error {
+            reqwest_middleware::Error::Middleware(error) => {
+                match error.downcast::<reqwest_retry::RetryError>() {
+                    Ok(
+                        reqwest_retry::RetryError::WithRetries { err, .. }
+                        | reqwest_retry::RetryError::Error(err),
+                    ) => err,
+                    Err(error) => reqwest_middleware::Error::Middleware(error),
+                }
+            }
+            error @ reqwest_middleware::Error::Reqwest(_) => error,
+        }
+    }
+
     /// Return the inner [`reqwest::Error`] from the error chain, if it exists.
-    fn inner(&self) -> Option<&reqwest::Error> {
+    pub fn inner(&self) -> Option<&reqwest::Error> {
         match &self.error {
             reqwest_middleware::Error::Reqwest(err) => Some(err),
             reqwest_middleware::Error::Middleware(err) => err.chain().find_map(|err| {
@@ -491,6 +524,7 @@ impl WrappedReqwestError {
 impl From<reqwest::Error> for WrappedReqwestError {
     fn from(error: reqwest::Error) -> Self {
         Self {
+            // No need to filter retries as this error does not have retries.
             error: error.into(),
             problem_details: None,
         }
@@ -500,7 +534,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
 impl From<reqwest_middleware::Error> for WrappedReqwestError {
     fn from(error: reqwest_middleware::Error) -> Self {
         Self {
-            error,
+            error: Self::filter_retries_from_error(error),
             problem_details: None,
         }
     }

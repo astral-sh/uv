@@ -1,5 +1,7 @@
 use itertools::{Either, Itertools};
+use owo_colors::AnsiColors;
 use regex::Regex;
+use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
@@ -10,6 +12,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
+use uv_client::BaseClient;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -18,10 +21,11 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
+use uv_warnings::anstream;
 use uv_warnings::warn_user_once;
 use which::{which, which_all};
 
-use crate::downloads::{PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
@@ -74,7 +78,7 @@ impl<'a> serde::Deserialize<'a> for PythonRequest {
     where
         D: serde::Deserializer<'a>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Ok(Self::parse(&s))
     }
 }
@@ -1443,34 +1447,31 @@ pub(crate) fn find_python_installation(
 /// without comparing the patch version number. If that cannot be found, we fall back to
 /// the first available version.
 ///
+/// At all points, if the specified version cannot be found, we will attempt to
+/// download it if downloads are enabled.
+///
 /// See [`find_python_installation`] for more details on installation discovery.
 #[instrument(skip_all, fields(request))]
-pub(crate) fn find_best_python_installation(
+pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    downloads_enabled: bool,
+    download_list: &ManagedPythonDownloadList,
+    client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
+    reporter: Option<&dyn crate::downloads::Reporter>,
+    python_install_mirror: Option<&str>,
+    pypy_install_mirror: Option<&str>,
     preview: Preview,
-) -> Result<FindPythonResult, Error> {
-    debug!("Starting Python discovery for {}", request);
+) -> Result<PythonInstallation, crate::Error> {
+    debug!("Starting Python discovery for {request}");
+    let original_request = request;
 
-    // First, check for an exact match (or the first available version if no Python version was provided)
-    debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache, preview);
-    match result {
-        Ok(Ok(installation)) => {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(Ok(installation));
-        }
-        // Continue if we can't find a matching Python and ignore non-critical discovery errors
-        Ok(Err(_)) => {}
-        Err(ref err) if !err.is_critical() => {}
-        _ => return result,
-    }
+    let mut previous_fetch_failed = false;
 
-    // If that fails, and a specific patch version was requested try again allowing a
-    // different patch version
-    if let Some(request) = match request {
+    let request_without_patch = match request {
         PythonRequest::Version(version) => {
             if version.has_patch() {
                 Some(PythonRequest::Version(version.clone().without_patch()))
@@ -1482,36 +1483,119 @@ pub(crate) fn find_best_python_installation(
             PythonRequest::ImplementationVersion(*implementation, version.clone().without_patch()),
         ),
         _ => None,
-    } {
-        debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache, preview);
-        match result {
+    };
+
+    for (attempt, request) in iter::once(original_request)
+        .chain(request_without_patch.iter())
+        .chain(iter::once(&PythonRequest::Default))
+        .enumerate()
+    {
+        debug!(
+            "Looking for {request}{}",
+            if request != original_request {
+                format!(" attempt {attempt} (fallback after failing to find: {original_request})")
+            } else {
+                String::new()
+            }
+        );
+        let result = find_python_installation(request, environments, preference, cache, preview);
+        let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
-                return Ok(Ok(installation));
+                return Ok(installation);
             }
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
-            Ok(Err(_)) => {}
-            Err(ref err) if !err.is_critical() => {}
-            _ => return result,
-        }
-    }
+            Ok(Err(error)) => error.into(),
+            Err(error) if !error.is_critical() => error.into(),
+            Err(error) => return Err(error.into()),
+        };
 
-    // If a Python version was requested but cannot be fulfilled, just take any version
-    debug!("Looking for a default Python installation");
-    let request = PythonRequest::Default;
-    Ok(
-        find_python_installation(&request, environments, preference, cache, preview)?.map_err(
-            |err| {
-                // Use a more general error in this case since we looked for multiple versions
-                PythonNotFound {
-                    request,
+        // Attempt to download the version if downloads are enabled
+        if downloads_enabled
+            && !previous_fetch_failed
+            && let Some(download_request) = PythonDownloadRequest::from_request(request)
+        {
+            let download = download_request
+                .clone()
+                .fill()
+                .map(|request| download_list.find(&request));
+
+            let result = match download {
+                Ok(Ok(download)) => PythonInstallation::fetch(
+                    download,
+                    client,
+                    retry_policy,
+                    cache,
+                    reporter,
+                    python_install_mirror,
+                    pypy_install_mirror,
+                    preview,
+                )
+                .await
+                .map(Some),
+                Ok(Err(crate::downloads::Error::NoDownloadFound(_))) => Ok(None),
+                Ok(Err(error)) => Err(error.into()),
+                Err(error) => Err(error.into()),
+            };
+            if let Ok(Some(installation)) = result {
+                return Ok(installation);
+            }
+            // Emit a warning instead of failing since we may find a suitable
+            // interpreter on the system after relaxing the request further.
+            // Additionally, uv did not previously attempt downloads in this
+            // code path and we want to minimize the fatal cases for
+            // backwards compatibility.
+            // Errors encountered here are either network errors or quirky
+            // configuration problems.
+            if let Err(error) = result {
+                // This is a hack to get `write_error_chain` to format things the way we want.
+                #[derive(Debug, thiserror::Error)]
+                #[error(
+                    "A managed Python download is available for {0}, but an error occurred when attempting to download it."
+                )]
+                struct WrappedError<'a>(&'a PythonRequest, #[source] crate::Error);
+
+                // If the request was for the default or any version, propagate
+                // the error as nothing else we are about to do will help the
+                // situation.
+                if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    return Err(error);
+                }
+
+                let mut error_chain = String::new();
+                // Writing to a string can't fail with errors (panics on allocation failure)
+                uv_warnings::write_error_chain(
+                    &WrappedError(request, error),
+                    &mut error_chain,
+                    "warning",
+                    AnsiColors::Yellow,
+                )
+                .unwrap();
+                anstream::eprint!("{}", error_chain);
+                previous_fetch_failed = true;
+            }
+        }
+
+        // If this was a request for the Default or Any version, this means that
+        // either that's what we were called with, or we're on the last
+        // iteration.
+        //
+        // The most recent find error therefore becomes a fatal one.
+        if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+            return Err(match error {
+                crate::Error::MissingPython(err, _) => PythonNotFound {
+                    // Use a more general error in this case since we looked for multiple versions
+                    request: original_request.clone(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
-            },
-        ),
-    )
+                .into(),
+                other => other,
+            });
+        }
+    }
+
+    unreachable!("The loop should have terminated when it reached PythonRequest::Default");
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.

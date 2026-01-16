@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use std::{fmt::Display, fmt::Write, process::ExitCode};
+use std::{fmt::Write, process::ExitCode};
 
 use anstream::AutoStream;
 use anyhow::Context;
@@ -10,6 +10,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 pub(crate) use auth::dir::dir as auth_dir;
+pub(crate) use auth::helper::helper as auth_helper;
 pub(crate) use auth::login::login as auth_login;
 pub(crate) use auth::logout::logout as auth_logout;
 pub(crate) use auth::token::token as auth_token;
@@ -43,6 +44,7 @@ pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
 pub(crate) use python::find::find_script as python_find_script;
 pub(crate) use python::install::install as python_install;
+pub(crate) use python::install::{PythonUpgrade, PythonUpgradeSource};
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
 pub(crate) use python::uninstall::uninstall as python_uninstall;
@@ -60,14 +62,16 @@ pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
-use uv_distribution_types::InstalledMetadata;
 use uv_fs::{CWD, Simplified};
 use uv_installer::compile_tree;
-use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
+pub(crate) use workspace::dir::dir;
+pub(crate) use workspace::list::list;
+pub(crate) use workspace::metadata::metadata;
 
+use crate::commands::pip::operations::ChangedDist;
 use crate::printer::Printer;
 
 mod auth;
@@ -88,6 +92,7 @@ pub(crate) mod reporters;
 mod self_update;
 mod tool;
 mod venv;
+mod workspace;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
@@ -142,15 +147,8 @@ pub(super) enum ChangeEventKind {
 }
 
 #[derive(Debug)]
-pub(super) struct ChangeEvent<'a, T: InstalledMetadata> {
-    dist: &'a T,
-    kind: ChangeEventKind,
-}
-
-#[derive(Debug)]
-pub(super) struct DryRunEvent<T: Display> {
-    name: PackageName,
-    version: T,
+pub(super) struct ChangeEvent<'a> {
+    dist: &'a ChangedDist,
     kind: ChangeEventKind,
 }
 
@@ -223,23 +221,6 @@ impl<'a> OutputWriter<'a> {
         }
     }
 
-    /// Write the given arguments to both standard output and the output buffer, if present.
-    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
-        use std::io::Write;
-
-        // Write to the buffer.
-        if self.output_file.is_some() {
-            self.buffer.write_fmt(args)?;
-        }
-
-        // Write to standard output.
-        if let Some(stdout) = &mut self.stdout {
-            write!(stdout, "{args}")?;
-        }
-
-        Ok(())
-    }
-
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
@@ -253,6 +234,30 @@ impl<'a> OutputWriter<'a> {
                 .unwrap_or(Cow::Borrowed(output_file));
             let stream = anstream::adapter::strip_bytes(&self.buffer).into_vec();
             uv_fs::write_atomic(output_file, &stream).await?;
+        }
+        Ok(())
+    }
+}
+
+impl std::io::Write for OutputWriter<'_> {
+    /// Write to both standard output and the output buffer, if present.
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Write to the buffer.
+        if self.output_file.is_some() {
+            self.buffer.write_all(buf)?;
+        }
+
+        // Write to standard output.
+        if let Some(stdout) = &mut self.stdout {
+            stdout.write_all(buf)?;
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        if let Some(stdout) = &mut self.stdout {
+            stdout.flush()?;
         }
         Ok(())
     }

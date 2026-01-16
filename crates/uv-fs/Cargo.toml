@@ -1,10 +1,10 @@
 [package]
 name = "uv-fs"
-version = "0.0.1"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-static = { workspace = true }
+
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
@@ -26,6 +28,7 @@ same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
 

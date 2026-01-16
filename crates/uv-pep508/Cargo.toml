@@ -1,14 +1,13 @@
 [package]
 name = "uv-pep508"
-version = "0.6.0"
-description = "A library for python dependency specifiers, better known as PEP 508"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]
 license = "Apache-2.0 OR BSD-2-Clause"
 
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 

@@ -1,14 +1,12 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.4"
-publish = false
-description = "virtualenv creation implemented in rust"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 keywords = ["virtualenv", "venv", "python"]
 
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }

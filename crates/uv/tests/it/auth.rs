@@ -407,17 +407,22 @@ fn token_native_auth_realm() -> Result<()> {
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
+    context
+        .auth_logout()
+        .arg("pypi-proxy.fly.dev")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
 
     // Without persisted credentials
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
     // Without persisted credentials (with a username in the request)
@@ -479,28 +484,28 @@ fn token_native_auth_realm() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Without the username
+    // Without the username (defaults to __token__ which wasn't stored)
     uv_snapshot!(context.auth_token()
         .arg("pypi-proxy.fly.dev")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/
     ");
 
-    // Without the username
+    // Without the username (defaults to __token__ which wasn't stored)
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    heron
 
     ----- stderr -----
+    error: Failed to fetch credentials for https://pypi-proxy.fly.dev/basic-auth/simple
     ");
 
     // With a mismatched username
@@ -701,6 +706,11 @@ fn logout_native_auth() -> Result<()> {
         .arg("public")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
         .status()?;
+    context
+        .auth_logout()
+        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth")
+        .status()?;
 
     // Without a service name
     uv_snapshot!(context.auth_logout(), @r"
@@ -721,12 +731,13 @@ fn logout_native_auth() -> Result<()> {
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Removed credentials for https://pypi-proxy.fly.dev/basic-auth
+    error: Unable to remove credentials for https://pypi-proxy.fly.dev/basic-auth
+      Caused by: No matching entry found in secure storage
     ");
 
     // Logout before logging in (with a username)
@@ -1071,7 +1082,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("public")
         .arg("--password")
-        .arg("heron"), @r"
+        .arg("heron"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1085,7 +1096,7 @@ fn login_text_store() {
     uv_snapshot!(context.auth_login()
         .arg("https://example.com/simple")
         .arg("--token")
-        .arg("test-token"), @r"
+        .arg("test-token"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1101,7 +1112,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1117,7 +1128,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1133,7 +1144,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1150,7 +1161,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1167,7 +1178,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1182,7 +1193,7 @@ fn login_text_store() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1208,7 +1219,7 @@ fn login_password_stdin() -> Result<()> {
         .arg("testuser")
         .arg("--password")
         .arg("-")
-        .stdin(std::fs::File::open(password_file)?), @r"
+        .stdin(std::fs::File::open(password_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1222,7 +1233,7 @@ fn login_password_stdin() -> Result<()> {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1249,7 +1260,7 @@ fn login_token_stdin() -> Result<()> {
         .arg("https://example.com/simple")
         .arg("--token")
         .arg("-")
-        .stdin(std::fs::File::open(token_file)?), @r"
+        .stdin(std::fs::File::open(token_file)?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1261,7 +1272,7 @@ fn login_token_stdin() -> Result<()> {
 
     // Verify the credentials work by retrieving the token
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1293,7 +1304,7 @@ fn token_text_store() {
     uv_snapshot!(context.auth_token()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1314,7 +1325,7 @@ fn token_text_store() {
 
     // Retrieve token without username
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1328,7 +1339,7 @@ fn token_text_store() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1358,7 +1369,7 @@ fn logout_text_store() {
     uv_snapshot!(context.auth_logout()
         .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
         .arg("--username")
-        .arg("public"), @r"
+        .arg("public"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1378,7 +1389,7 @@ fn logout_text_store() {
         .success();
 
     uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1392,7 +1403,7 @@ fn logout_text_store() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg(""), @r"
+        .arg(""), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1415,7 +1426,7 @@ fn auth_disabled_provider_uses_text_store() {
         .arg("--password")
         .arg("heron")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1431,7 +1442,7 @@ fn auth_disabled_provider_uses_text_store() {
         .arg("--username")
         .arg("public")
         .arg("--keyring-provider")
-        .arg("disabled"), @r"
+        .arg("disabled"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1452,7 +1463,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("testuser")
         .arg("--password")
-        .arg("testpass"), @r"
+        .arg("testpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1468,7 +1479,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("devpiuser")
         .arg("--password")
-        .arg("devpipass"), @r"
+        .arg("devpipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1484,7 +1495,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("caseuser")
         .arg("--password")
-        .arg("casepass"), @r"
+        .arg("casepass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1500,7 +1511,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("apiuser")
         .arg("--password")
-        .arg("apipass"), @r"
+        .arg("apipass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1516,7 +1527,7 @@ fn login_text_store_strips_simple_suffix() {
         .arg("--username")
         .arg("slashuser")
         .arg("--password")
-        .arg("slashpass"), @r"
+        .arg("slashpass"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1546,7 +1557,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1571,7 +1582,7 @@ fn logout_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_logout()
         .arg("https://devpi.example.com/root/+simple")
         .arg("--username")
-        .arg("devpiuser"), @r"
+        .arg("devpiuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1601,7 +1612,7 @@ fn token_text_store_strips_simple_suffix() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1622,7 +1633,7 @@ fn token_text_store_strips_simple_suffix() {
 
     // Retrieve token using URL with `/simple` - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1652,7 +1663,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("testuser"), @r"
+        .arg("testuser"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1664,7 +1675,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username
     uv_snapshot!(context.auth_token()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1678,7 +1689,7 @@ fn token_text_store_username() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("wronguser"), @r"
+        .arg("wronguser"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1699,7 +1710,7 @@ fn token_text_store_username() {
 
     // Retrieve token without specifying username - should work
     uv_snapshot!(context.auth_token()
-        .arg("https://token.example.com/simple"), @r"
+        .arg("https://token.example.com/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1722,7 +1733,7 @@ fn token_text_store_username() {
 
     // Retrieve token without username should fail
     uv_snapshot!(context.auth_token()
-        .arg("https://userexample.com/simple"), @r"
+        .arg("https://userexample.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1762,7 +1773,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_logout()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1776,7 +1787,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user1"), @r"
+        .arg("user1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1789,7 +1800,7 @@ fn logout_text_store_multiple_usernames() {
     uv_snapshot!(context.auth_token()
         .arg("https://example.com/simple")
         .arg("--username")
-        .arg("user2"), @r"
+        .arg("user2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1801,7 +1812,7 @@ fn logout_text_store_multiple_usernames() {
 
     // Try to logout without specifying username (defaults to `__token__`)
     uv_snapshot!(context.auth_logout()
-        .arg("https://example.com/simple"), @r"
+        .arg("https://example.com/simple"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1924,4 +1935,206 @@ fn native_auth_host_fallback() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Test credential helper with basic auth credentials
+#[test]
+fn bazel_helper_basic_auth() {
+    let context = TestContext::new("3.12");
+
+    // Store credentials
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("testuser")
+        .arg("--password").arg("testpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for testuser@https://test.example.com/
+    ");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic dGVzdHVzZXI6dGVzdHBhc3M="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with token credentials
+#[test]
+fn bazel_helper_token() {
+    let context = TestContext::new("3.12");
+
+    // Store token
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://api.example.com")
+        .arg("--token").arg("mytoken123"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for https://api.example.com/
+    ");
+
+    // Test credential helper - tokens are stored as Basic auth with __token__ username
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://api.example.com/v1/endpoint"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic X190b2tlbl9fOm15dG9rZW4xMjM="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with no credentials found
+#[test]
+fn bazel_helper_no_credentials() {
+    let context = TestContext::new("3.12");
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://unknown.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with invalid JSON input
+#[test]
+fn bazel_helper_invalid_json() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input="not json",
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    error: Failed to parse credential request as JSON
+      Caused by: expected ident at line 1 column 2
+    "
+    );
+}
+
+/// Test credential helper with invalid URI
+#[test]
+fn bazel_helper_invalid_uri() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"not a url"}"#,
+        @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    error: Failed to parse credential request as JSON
+      Caused by: relative URL without a base: "not a url" at line 1 column 18
+    "#
+    );
+}
+
+/// Test credential helper with username in URI
+#[test]
+fn bazel_helper_username_in_uri() {
+    let context = TestContext::new("3.12");
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    ");
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://specificuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{"Authorization":["Basic c3BlY2lmaWN1c2VyOnNwZWNpZmljcGFzcw=="]}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
+}
+
+/// Test credential helper with unknown username in URI
+#[test]
+fn bazel_helper_unknown_username_in_uri() {
+    let context = TestContext::new("3.12");
+
+    // Store credentials with specific username
+    uv_snapshot!(context.filters(), context.auth_login()
+        .arg("https://test.example.com")
+        .arg("--username").arg("specificuser")
+        .arg("--password").arg("specificpass"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Stored credentials for specificuser@https://test.example.com/
+    ");
+
+    // Test with username in URI
+    uv_snapshot!(context.filters(), context.auth_helper()
+        .arg("--protocol=bazel")
+        .arg("get"),
+        input=r#"{"uri":"https://differentuser@test.example.com/path"}"#,
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {"headers":{}}
+
+    ----- stderr -----
+    warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
+    "#
+    );
 }

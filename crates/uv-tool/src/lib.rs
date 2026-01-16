@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
-use uv_fs::{LockedFile, Simplified};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -65,6 +65,8 @@ impl ToolEnvironment {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
@@ -87,6 +89,27 @@ pub enum Error {
     MissingToolPackage(PackageName),
     #[error("Tool `{0}` environment not found at `{1}`")]
     ToolEnvironmentNotFound(PackageName, PathBuf),
+}
+
+impl Error {
+    pub fn as_io_error(&self) -> Option<&io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::VirtualEnvError(uv_virtualenv::Error::Io(err)) => Some(err),
+            Self::ReceiptWrite(_, _)
+            | Self::ReceiptRead(_, _)
+            | Self::VirtualEnvError(_)
+            | Self::EntrypointRead(_)
+            | Self::NoExecutableDirectory
+            | Self::ToolName(_)
+            | Self::EnvironmentError(_)
+            | Self::MissingToolReceipt(_, _)
+            | Self::EnvironmentRead(_, _)
+            | Self::MissingToolPackage(_)
+            | Self::ToolEnvironmentNotFound(_, _) => None,
+        }
+    }
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -179,7 +202,12 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Add a receipt for a tool.

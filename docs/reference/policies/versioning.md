@@ -1,16 +1,31 @@
 # Versioning
 
+uv is widely used in production and is stable software.
+
 uv uses a custom versioning scheme in which the minor version number is bumped for breaking changes,
 and the patch version number is bumped for bug fixes, enhancements, and other non-breaking changes.
 
-uv is widely used in production. However, we value the ability to iterate on new features quickly
-and gather changes that _could_ be breaking into clearly marked releases.
-
-Once uv v1.0.0 is released, the versioning scheme will adhere to
-[Semantic Versioning](https://semver.org/). There is not a particular goal that must be achieved for
-uv to reach this milestone.
+The care we take in backwards-incompatible changes is proportional to the expected real-world
+impact, not a function of arbitrary version numbering policies. We value the ability to iterate on
+new features quickly and gather changes that _could_ be breaking into clearly marked releases.
 
 uv's changelog can be [viewed on GitHub](https://github.com/astral-sh/uv/blob/main/CHANGELOG.md).
+
+## Crate versioning
+
+uv's crates are published to [crates.io](https://crates.io). The following crates follow the normal
+uv versioning policy:
+
+- `uv`
+- `uv-build`
+- `uv-version`
+
+The `uv` and `uv-build` crates are versioned by the binary command-line interface. The Rust
+interface of these crates does not follow semantic versioning.
+
+The remainder of uv's crates provide **no stability guarantees**. The Rust interface is considered
+internal and unstable. Consequently, they are versioned as `0.0.x`. The patch version is incremented
+on every uv release, regardless of changes to the crate.
 
 ## Cache versioning
 

@@ -1,16 +1,15 @@
 [package]
 name = "uv-trampoline-builder"
-version = "0.0.1"
-publish = false
-description = "Builds launchers for `uv-trampoline`"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
+include = ["src/**/*", "trampolines/*.exe", "Cargo.toml", "README.md"]
 
 [features]
 default = ["production"]
@@ -23,14 +22,18 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
-
 fs-err = {workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+rcgen = { workspace = true }
 which = { workspace = true }

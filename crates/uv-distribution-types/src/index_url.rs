@@ -8,7 +8,6 @@ use std::sync::{Arc, LazyLock, RwLock};
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use tracing::trace;
 use url::{ParseError, Url};
 use uv_auth::RealmRef;
 use uv_cache_key::CanonicalUrl;
@@ -437,26 +436,6 @@ impl<'a> IndexLocations {
                     .chain(self.flat_index.iter().rev())
                     .chain(self.indexes.iter().rev()),
             )
-        }
-    }
-
-    /// Add all authenticated sources to the cache.
-    pub fn cache_index_credentials(&self) {
-        for index in self.known_indexes() {
-            if let Some(credentials) = index.credentials() {
-                trace!(
-                    "Read credentials for index {}",
-                    index
-                        .name
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| index.url.to_string())
-                );
-                if let Some(root_url) = index.root_url() {
-                    uv_auth::store_credentials(&root_url, credentials.clone());
-                }
-                uv_auth::store_credentials(index.raw_url(), credentials);
-            }
         }
     }
 
@@ -894,6 +873,45 @@ mod tests {
         assert_eq!(
             index_locations.artifact_cache_control_for(&pytorch_url),
             Some("max-age=3600")
+        );
+    }
+
+    #[test]
+    fn test_nvidia_default_cache_control() {
+        // Test that NVIDIA indexes get default cache control from the getter methods
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("nvidia").unwrap()),
+            url: IndexUrl::from_str("https://pypi.nvidia.com").unwrap(),
+            cache_control: None, // No explicit cache control
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
+
+        // IndexUrls should return the default for NVIDIA
+        assert_eq!(index_urls.simple_api_cache_control_for(&nvidia_url), None);
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&nvidia_url),
+            Some("max-age=365000000, immutable, public")
+        );
+
+        // IndexLocations should also return the default for NVIDIA
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&nvidia_url),
+            None
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&nvidia_url),
+            Some("max-age=365000000, immutable, public")
         );
     }
 }

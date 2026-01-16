@@ -15,7 +15,7 @@ fn python_upgrade() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -26,7 +26,7 @@ fn python_upgrade() {
     ");
 
     // Don't accept patch version as argument to upgrade command
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10.17"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -36,7 +36,7 @@ fn python_upgrade() {
     ");
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -47,7 +47,7 @@ fn python_upgrade() {
     ");
 
     // Should be a no-op when already upgraded
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -57,7 +57,7 @@ fn python_upgrade() {
     ");
 
     // Should reinstall on `--reinstall`
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10").arg("--reinstall"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10").arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -68,7 +68,7 @@ fn python_upgrade() {
     ");
 
     // Install an earlier pre-release version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0rc2"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0rc2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -79,15 +79,15 @@ fn python_upgrade() {
     ");
 
     // Upgrade the pre-release version
-    uv_snapshot!(context.filters(), context.python_upgrade(), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    Installed Python 3.14.0 in [TIME]
-     + cpython-3.14.0-[PLATFORM] (python3.14)
+    Installed Python 3.14.2 in [TIME]
+     + cpython-3.14.2-[PLATFORM] (python3.14)
     ");
 }
 
@@ -100,7 +100,7 @@ fn python_upgrade_without_version() {
         .with_managed_python_dirs();
 
     // Should be a no-op when no versions have been installed
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -110,7 +110,7 @@ fn python_upgrade_without_version() {
     ");
 
     // Install earlier patch versions for different minor versions
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.11.8").arg("3.12.8").arg("3.13.1"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.11.8").arg("3.12.8").arg("3.13.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -126,7 +126,7 @@ fn python_upgrade_without_version() {
     filters.push((r"3.13.\d+", "3.13.[X]"));
 
     // Upgrade one patch version
-    uv_snapshot!(filters, context.python_upgrade().arg("--preview").arg("3.13"), @r"
+    uv_snapshot!(filters, context.python_upgrade().arg("--preview").arg("3.13"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -138,7 +138,7 @@ fn python_upgrade_without_version() {
 
     // Providing no minor version to `uv python upgrade` should upgrade the rest
     // of the patch versions
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -150,7 +150,7 @@ fn python_upgrade_without_version() {
     ");
 
     // Should be a no-op when every version is already upgraded
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +169,7 @@ fn python_upgrade_transparent_from_venv() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,7 +180,7 @@ fn python_upgrade_transparent_from_venv() {
     ");
 
     // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -191,7 +191,7 @@ fn python_upgrade_transparent_from_venv() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -204,7 +204,7 @@ fn python_upgrade_transparent_from_venv() {
     let second_venv = ".venv2";
 
     // Create a second virtual environment with minor version request
-    uv_snapshot!(context.filters(), context.venv().arg(second_venv).arg("-p").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg(second_venv).arg("-p").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -216,7 +216,7 @@ fn python_upgrade_transparent_from_venv() {
     ");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -227,7 +227,7 @@ fn python_upgrade_transparent_from_venv() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -238,7 +238,7 @@ fn python_upgrade_transparent_from_venv() {
     ");
 
     // First virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -250,7 +250,7 @@ fn python_upgrade_transparent_from_venv() {
 
     // Second virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -272,7 +272,7 @@ fn python_upgrade_transparent_from_venv_preview() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version using `--preview`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17").arg("--preview"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17").arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -283,7 +283,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     ");
 
     // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -294,7 +294,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -305,7 +305,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -316,7 +316,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     ");
 
     // Virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -336,7 +336,7 @@ fn python_upgrade_ignored_with_python_pin() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -347,7 +347,7 @@ fn python_upgrade_ignored_with_python_pin() {
     ");
 
     // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -359,7 +359,7 @@ fn python_upgrade_ignored_with_python_pin() {
     ");
 
     // Pin to older patch version
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -369,7 +369,7 @@ fn python_upgrade_ignored_with_python_pin() {
     ");
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -380,7 +380,7 @@ fn python_upgrade_ignored_with_python_pin() {
     ");
 
     // Virtual environment should continue to respect pinned patch version
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -402,7 +402,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -413,7 +413,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     ");
 
     // Create a virtual environment with a patch version
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -424,7 +424,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -435,7 +435,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -446,7 +446,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     ");
 
     // The virtual environment Python version remains the same.
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -469,7 +469,7 @@ fn python_transparent_upgrade_venv_venv() {
         .with_managed_python_dirs();
 
     // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -480,7 +480,7 @@ fn python_transparent_upgrade_venv_venv() {
     ");
 
     // Create an initial virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -502,7 +502,7 @@ fn python_transparent_upgrade_venv_venv() {
     // Create a new virtual environment from within a virtual environment
     uv_snapshot!(context.filters(), context.venv()
         .arg(second_venv)
-        .arg("-p").arg(venv_python.as_os_str()), @r"
+        .arg("-p").arg(venv_python.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -516,7 +516,7 @@ fn python_transparent_upgrade_venv_venv() {
     // Check version from within second virtual environment
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -527,7 +527,7 @@ fn python_transparent_upgrade_venv_venv() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -540,7 +540,7 @@ fn python_transparent_upgrade_venv_venv() {
     // Should have transparently upgraded in second virtual environment
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("--version")
-        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -565,7 +565,7 @@ fn python_upgrade_transparent_from_venv_module() {
     let bin_dir = context.temp_dir.child("bin");
 
     // Install earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.9"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -577,7 +577,7 @@ fn python_upgrade_transparent_from_venv_module() {
 
     // Create a virtual environment using venv module
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-m").arg("venv").arg(context.venv.as_os_str()).arg("--without-pip")
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -585,7 +585,7 @@ fn python_upgrade_transparent_from_venv_module() {
     ----- stderr -----
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -596,7 +596,7 @@ fn python_upgrade_transparent_from_venv_module() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -608,7 +608,7 @@ fn python_upgrade_transparent_from_venv_module() {
     );
 
     // Virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -633,7 +633,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     let bin_dir = context.temp_dir.child("bin");
 
     // Install earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -644,7 +644,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     ");
 
     // Create first virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -660,7 +660,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     // Create a virtual environment using `venv`` module from within the first virtual environment.
     uv_snapshot!(context.filters(), context.run()
         .arg("python").arg("-m").arg("venv").arg(second_venv).arg("--without-pip")
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -671,7 +671,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     // Check version within second virtual environment
     uv_snapshot!(context.filters(), context.run()
         .env(EnvVars::VIRTUAL_ENV, second_venv)
-        .arg("python").arg("--version"), @r"
+        .arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -682,7 +682,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     );
 
     // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -696,7 +696,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     // Second virtual environment should reflect upgraded patch.
     uv_snapshot!(context.filters(), context.run()
         .env(EnvVars::VIRTUAL_ENV, second_venv)
-        .arg("python").arg("--version"), @r"
+        .arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -724,7 +724,7 @@ fn python_upgrade_force_install() -> Result<()> {
         .touch()?;
 
     // Try to upgrade with a non-managed interpreter installed in `bin`.
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -736,7 +736,7 @@ fn python_upgrade_force_install() -> Result<()> {
     ");
 
     // Force the `bin` install.
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--force").arg("--preview").arg("3.12"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12").arg("--force").arg("--preview").arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -762,7 +762,7 @@ fn python_upgrade_implementation() {
     context.python_install().arg("pypy@3.11").assert().success();
 
     // Run the upgrade, we should not install cpython
-    uv_snapshot!(context.filters(), context.python_upgrade(), @r"
+    uv_snapshot!(context.filters(), context.python_upgrade(), @"
     success: true
     exit_code: 0
     ----- stdout -----

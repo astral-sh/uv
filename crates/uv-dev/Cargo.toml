@@ -1,13 +1,12 @@
 [package]
 name = "uv-dev"
-version = "0.0.1"
-description = "Build wheels from source distributions"
+version = "0.0.15"
+description = "This is an internal component crate of uv"
 publish = false
 
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -80,4 +79,4 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
 
 [package.metadata.cargo-shear]
-ignored = ["flate2", "uv-extract", "uv-performance-memory-allocator"]
+ignored = ["uv-performance-memory-allocator"]

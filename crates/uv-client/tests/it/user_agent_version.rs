@@ -1,16 +1,9 @@
-use anyhow::Result;
-use futures::future;
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::header::USER_AGENT;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
-use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use std::str::FromStr;
-use tokio::net::TcpListener;
+
+use anyhow::Result;
+use insta::{assert_json_snapshot, assert_snapshot, with_settings};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_client::{BaseClientBuilder, LineHaul};
@@ -19,39 +12,15 @@ use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
+use crate::http_util::start_http_user_agent_server;
+
 #[tokio::test]
 async fn test_user_agent_has_version() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // Send request to our dummy server
@@ -70,45 +39,102 @@ async fn test_user_agent_has_version() -> Result<()> {
     // Check User Agent
     let body = res.text().await?;
 
-    // Verify body matches regex
-    assert_eq!(body, format!("uv/{}", version()));
+    let (uv_version, uv_linehaul) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header");
+
+    // Deserializing Linehaul
+    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+
+    // Assert linehaul user agent
+    let filters = vec![(version(), "[VERSION]")];
+    with_settings!({
+        filters => filters
+    }, {
+        // Assert uv version
+        assert_snapshot!(uv_version, @"uv/[VERSION]");
+        // Assert linehaul json
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]",
+          "subcommand": null
+        }
+        "#);
+    });
 
     // Wait for the server task to complete, to be a good citizen.
-    server_task.await?;
+    let _ = server_task.await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_user_agent_has_subcommand() -> Result<()> {
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
+
+    // Initialize uv-client
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().subcommand(vec!["foo".to_owned(), "bar".to_owned()]),
+        cache,
+    )
+    .build();
+
+    // Send request to our dummy server
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await?;
+
+    // Check the HTTP status
+    assert!(res.status().is_success());
+
+    // Check User Agent
+    let body = res.text().await?;
+
+    let (uv_version, uv_linehaul) = body
+        .split_once(' ')
+        .expect("Failed to split User-Agent header");
+
+    // Deserializing Linehaul
+    let linehaul: LineHaul = serde_json::from_str(uv_linehaul)?;
+
+    // Assert linehaul user agent
+    let filters = vec![(version(), "[VERSION]")];
+    with_settings!({
+        filters => filters
+    }, {
+        // Assert uv version
+        assert_snapshot!(uv_version, @"uv/[VERSION]");
+        // Assert linehaul json
+        assert_json_snapshot!(&linehaul.installer, @r#"
+        {
+          "name": "uv",
+          "version": "[VERSION]",
+          "subcommand": [
+            "foo",
+            "bar"
+          ]
+        }
+        "#);
+    });
+
+    // Wait for the server task to complete, to be a good citizen.
+    let _ = server_task.await?;
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_user_agent_has_linehaul() -> Result<()> {
-    // Set up the TCP listener on a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-
-    // Spawn the server loop in a background task
-    let server_task = tokio::spawn(async move {
-        let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
-            // Get User Agent Header and send it back in the response
-            let user_agent = req
-                .headers()
-                .get(USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(ToString::to_string)
-                .unwrap_or_default(); // Empty Default
-            future::ok::<_, hyper::Error>(Response::new(Full::new(Bytes::from(user_agent))))
-        });
-        // Start Server (not wrapped in loop {} since we want a single response server)
-        // If you want server to accept multiple connections, wrap it in loop {}
-        let (socket, _) = listener.accept().await.unwrap();
-        let socket = TokioIo::new(socket);
-        tokio::task::spawn(async move {
-            http1::Builder::new()
-                .serve_connection(socket, svc)
-                .with_upgrades()
-                .await
-                .expect("Server Started");
-        });
-    });
+    // Initialize dummy http server
+    let (server_task, addr) = start_http_user_agent_server().await?;
 
     // Add some representative markers for an Ubuntu CI runner
     let markers = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -123,11 +149,10 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         python_full_version: "3.12.2",
         python_version: "3.12",
         sys_platform: "linux",
-    })
-    .unwrap();
+    })?;
 
     // Initialize uv-client
-    let cache = Cache::temp()?.init()?;
+    let cache = Cache::temp()?.init().await?;
     let mut builder =
         RegistryClientBuilder::new(BaseClientBuilder::default(), cache).markers(&markers);
 
@@ -169,7 +194,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let body = res.text().await?;
 
     // Wait for the server task to complete, to be a good citizen.
-    server_task.await?;
+    let _ = server_task.await?;
 
     // Unpack User-Agent with linehaul
     let (uv_version, uv_linehaul) = body
@@ -190,11 +215,12 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         assert_json_snapshot!(&linehaul, {
             ".distro" => "[distro]",
             ".ci" => "[ci]"
-        }, @r###"
+        }, @r#"
         {
           "installer": {
             "name": "uv",
-            "version": "[VERSION]"
+            "version": "[VERSION]",
+            "subcommand": null
           },
           "python": "3.12.2",
           "implementation": {
@@ -212,7 +238,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
           "rustc_version": null,
           "ci": "[ci]"
         }
-        "###);
+        "#);
     });
 
     // Assert distro
@@ -224,16 +250,17 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
             ".name" => "[distro.name]",
             ".version" => "[distro.version]"
             // We mock the libc version already
-        }, @r###"
-            {
-              "name": "[distro.name]",
-              "version": "[distro.version]",
-              "id": "[distro.id]",
-              "libc": {
-                "lib": "glibc",
-                "version": "2.38"
-              }
-            }"###
+        }, @r#"
+        {
+          "name": "[distro.name]",
+          "version": "[distro.version]",
+          "id": "[distro.id]",
+          "libc": {
+            "lib": "glibc",
+            "version": "2.38"
+          }
+        }
+        "#
         );
         // Check dynamic values
         let distro_info = linehaul

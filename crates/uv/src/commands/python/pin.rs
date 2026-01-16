@@ -5,6 +5,7 @@ use std::str::FromStr;
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -96,10 +97,17 @@ pub(crate) async fn pin(
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
+                    let client = client_builder.clone().retries(0).build();
+                    let download_list = ManagedPythonDownloadList::new(
+                        &client,
+                        install_mirrors.python_downloads_json_url.as_deref(),
+                    )
+                    .await?;
                     warn_if_existing_pin_incompatible_with_project(
                         pin,
                         virtual_project,
                         python_preference,
+                        &download_list,
                         cache,
                         preview,
                     );
@@ -264,6 +272,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
+    downloads_list: &ManagedPythonDownloadList,
     cache: &Cache,
     preview: Preview,
 ) {
@@ -289,6 +298,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
+        downloads_list,
         cache,
         preview,
     ) {

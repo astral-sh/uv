@@ -10,12 +10,12 @@ fn python_dir() {
 
     let python_dir = context.temp_dir.child("python");
     uv_snapshot!(context.filters(), context.python_dir()
-    .env(EnvVars::UV_PYTHON_INSTALL_DIR, python_dir.as_os_str()), @r###"
+    .env(EnvVars::UV_PYTHON_INSTALL_DIR, python_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/python
 
     ----- stderr -----
-    "###);
+    ");
 }

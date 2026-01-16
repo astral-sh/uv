@@ -25,10 +25,10 @@ pub fn user_executable_directory(override_variable: Option<&'static str>) -> Opt
     override_variable
         .and_then(std::env::var_os)
         .and_then(parse_path)
-        .or_else(|| std::env::var_os(EnvVars::XDG_BIN_HOME).and_then(parse_path))
+        .or_else(|| std::env::var_os(EnvVars::XDG_BIN_HOME).and_then(parse_xdg_path))
         .or_else(|| {
             std::env::var_os(EnvVars::XDG_DATA_HOME)
-                .and_then(parse_path)
+                .and_then(parse_xdg_path)
                 .map(|path| path.join("../bin"))
         })
         .or_else(|| {
@@ -83,8 +83,28 @@ pub fn legacy_user_state_dir() -> Option<PathBuf> {
         .map(|dir| if cfg!(windows) { dir.join("data") } else { dir })
 }
 
-/// Return a [`PathBuf`] if the given [`OsString`] is an absolute path.
+/// Return a [`PathBuf`] from the given [`OsString`], if non-empty.
+///
+/// Unlike [`parse_xdg_path`], this function accepts both relative and absolute paths,
+/// for use with uv-specific override variables that are not subject to the XDG specification.
 fn parse_path(path: OsString) -> Option<PathBuf> {
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
+}
+
+/// Return a [`PathBuf`] if the given [`OsString`] is an absolute path.
+///
+/// Relative paths are considered invalid per the [XDG Base Directory Specification]:
+///
+/// > All paths set in these environment variables must be absolute. If an implementation
+/// > encounters a relative path in any of these variables it should consider the path invalid
+/// > and ignore it.
+///
+/// [XDG Base Directory Specification]: https://specifications.freedesktop.org/basedir-spec/latest/
+fn parse_xdg_path(path: OsString) -> Option<PathBuf> {
     let path = PathBuf::from(path);
     if path.is_absolute() { Some(path) } else { None }
 }

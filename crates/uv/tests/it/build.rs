@@ -44,7 +44,7 @@ fn build_basic() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("project"), @r###"
+    uv_snapshot!(&filters, context.build().arg("project"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -54,7 +54,7 @@ fn build_basic() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -68,7 +68,7 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Build the current working directory.
-    uv_snapshot!(&filters, context.build().current_dir(project.path()), @r###"
+    uv_snapshot!(&filters, context.build().current_dir(project.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -78,7 +78,7 @@ fn build_basic() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -92,7 +92,7 @@ fn build_basic() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Error if there's nothing to build.
-    uv_snapshot!(&filters, context.build(), @r###"
+    uv_snapshot!(&filters, context.build(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -101,10 +101,10 @@ fn build_basic() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/`
       ╰─▶ [TEMP_DIR]/ does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory
-    "###);
+    ");
 
     // Build to a specified path.
-    uv_snapshot!(&filters, context.build().arg("--out-dir").arg("out").current_dir(project.path()), @r###"
+    uv_snapshot!(&filters, context.build().arg("--out-dir").arg("out").current_dir(project.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -114,7 +114,7 @@ fn build_basic() -> Result<()> {
     Building wheel from source distribution...
     Successfully built out/project-0.1.0.tar.gz
     Successfully built out/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("out")
@@ -162,7 +162,7 @@ fn build_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -170,7 +170,7 @@ fn build_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Successfully built dist/project-0.1.0.tar.gz
-    "###);
+    ");
 
     project
         .child("dist")
@@ -218,7 +218,7 @@ fn build_wheel() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--wheel").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--wheel").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -226,7 +226,7 @@ fn build_wheel() -> Result<()> {
     ----- stderr -----
     Building wheel...
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -274,7 +274,7 @@ fn build_sdist_wheel() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--sdist").arg("--wheel").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -284,7 +284,7 @@ fn build_sdist_wheel() -> Result<()> {
     Building wheel...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -332,7 +332,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the sdist.
-    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--sdist").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -340,7 +340,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     ----- stderr -----
     Building source distribution...
     Successfully built dist/project-0.1.0.tar.gz
-    "###);
+    ");
 
     project
         .child("dist")
@@ -352,7 +352,7 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Error if `--wheel` is not specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -360,10 +360,10 @@ fn build_wheel_from_sdist() -> Result<()> {
     ----- stderr -----
       × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
       ╰─▶ Pass `--wheel` explicitly to build a wheel from a source distribution
-    "###);
+    ");
 
     // Error if `--sdist` is specified.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--sdist").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -371,10 +371,10 @@ fn build_wheel_from_sdist() -> Result<()> {
     ----- stderr -----
       × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0.tar.gz`
       ╰─▶ Building an `--sdist` from a source distribution is not supported
-    "###);
+    ");
 
     // Build the wheel from the sdist.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0.tar.gz").arg("--wheel").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -382,7 +382,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     ----- stderr -----
     Building wheel from source distribution...
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -394,7 +394,7 @@ fn build_wheel_from_sdist() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Passing a wheel is an error.
-    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("./dist/project-0.1.0-py3-none-any.whl").arg("--wheel").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -402,7 +402,7 @@ fn build_wheel_from_sdist() -> Result<()> {
     ----- stderr -----
       × Failed to build `[TEMP_DIR]/project/dist/project-0.1.0-py3-none-any.whl`
       ╰─▶ `dist/project-0.1.0-py3-none-any.whl` is not a valid build source. Expected to receive a source directory, or a source distribution ending in one of: `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`.
-    "###);
+    ");
 
     Ok(())
 }
@@ -454,7 +454,7 @@ fn build_fail() -> Result<()> {
     )?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("project"), @r###"
+    uv_snapshot!(&filters, context.build().arg("project"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -477,7 +477,7 @@ fn build_fail() -> Result<()> {
       ├─▶ The build backend returned an error
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
           hint: This usually indicates a problem with the package or the build environment.
-    "###);
+    "#);
 
     Ok(())
 }
@@ -567,7 +567,7 @@ fn build_workspace() -> Result<()> {
     r#virtual.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -577,7 +577,7 @@ fn build_workspace() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/member-0.1.0.tar.gz
     Successfully built dist/member-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -589,7 +589,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build all packages.
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -603,7 +603,7 @@ fn build_workspace() -> Result<()> {
     Successfully built dist/member-0.1.0-py3-none-any.whl
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -623,7 +623,7 @@ fn build_workspace() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @r###"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--package").arg("member"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -633,10 +633,10 @@ fn build_workspace() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/member-0.1.0.tar.gz
     Successfully built project/dist/member-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     // If a source is provided, discover the workspace from the source.
-    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&filters, context.build().arg("./project").arg("--all").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -650,10 +650,10 @@ fn build_workspace() -> Result<()> {
     Successfully built project/dist/member-0.1.0-py3-none-any.whl
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     // Fail when `--package` is provided without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @r###"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -661,10 +661,10 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     error: `--package` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
-    "###);
+    ");
 
     // Fail when `--all` is provided without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--all"), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -672,17 +672,17 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
-    "###);
+    ");
 
     // Fail when `--package` is a non-existent member without a workspace.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("fail").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("fail").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Package `fail` not found in workspace
-    "###);
+    ");
 
     Ok(())
 }
@@ -790,7 +790,7 @@ fn build_all_with_failure() -> Result<()> {
     )?;
 
     // Build all the packages
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -809,7 +809,7 @@ fn build_all_with_failure() -> Result<()> {
           hint: This usually indicates a problem with the package or the build environment.
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     // project and member_a should be built, regardless of member_b build failure
     project
@@ -869,7 +869,7 @@ fn build_constraints() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -880,7 +880,7 @@ fn build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires`
       ├─▶ No solution found when resolving: `hatchling>=1.0`
       ╰─▶ Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     project
         .child("dist")
@@ -955,7 +955,7 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -973,7 +973,7 @@ fn build_sha() -> Result<()> {
 
           Computed:
             sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-    "###);
+    ");
 
     project
         .child("dist")
@@ -987,7 +987,7 @@ fn build_sha() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Reject a missing hash with `--requires-hashes`.
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1005,7 +1005,7 @@ fn build_sha() -> Result<()> {
 
           Computed:
             sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
-    "###);
+    ");
 
     project
         .child("dist")
@@ -1022,7 +1022,7 @@ fn build_sha() -> Result<()> {
     let constraints = project.child("constraints.txt");
     constraints.write_str("hatchling==1.22.4")?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").arg("--require-hashes").current_dir(&project), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1033,7 +1033,7 @@ fn build_sha() -> Result<()> {
       ├─▶ Failed to resolve requirements from `build-system.requires`
       ├─▶ No solution found when resolving: `hatchling`
       ╰─▶ In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `hatchling`
-    "###);
+    ");
 
     project
         .child("dist")
@@ -1074,7 +1074,7 @@ fn build_sha() -> Result<()> {
             # via hatchling
     "})?;
 
-    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--build-constraint").arg("constraints.txt").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1084,7 +1084,7 @@ fn build_sha() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -1126,13 +1126,13 @@ fn build_quiet() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("-q"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("-q"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -1165,7 +1165,7 @@ fn build_no_build_logs() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1175,7 +1175,103 @@ fn build_no_build_logs() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
+
+    Ok(())
+}
+
+/// Test that `UV_HIDE_BUILD_OUTPUT` suppresses build output.
+#[test]
+fn build_hide_build_output_env_var() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    uv_snapshot!(&context.filters(), context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Test that `UV_HIDE_BUILD_OUTPUT` hides build output even on failure.
+#[test]
+fn build_hide_build_output_on_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    // Create a `setup.py` that prints an environment variable before failing.
+    project.child("setup.py").write_str(indoc! {r#"
+        import os
+        import sys
+        print("FOO=" + os.environ.get("FOO", "not-set"), file=sys.stderr)
+        sys.stderr.flush()
+        raise Exception("Build failed intentionally!")
+        "#})?;
+
+    // With `UV_HIDE_BUILD_OUTPUT`, the output is hidden even on failure.
+    uv_snapshot!(&filters, context.build().arg("project").env(EnvVars::UV_HIDE_BUILD_OUTPUT, "1").env("FOO", "bar"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+      × Failed to build `[TEMP_DIR]/project`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
+          hint: This usually indicates a problem with the package or the build environment.
+    ");
 
     Ok(())
 }
@@ -1251,7 +1347,7 @@ fn build_tool_uv_sources() -> Result<()> {
         .touch()?;
     project.child("README").touch()?;
 
-    uv_snapshot!(filters, context.build().current_dir(project.path()), @r###"
+    uv_snapshot!(filters, context.build().current_dir(project.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1261,7 +1357,7 @@ fn build_tool_uv_sources() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -1300,7 +1396,7 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(&context.filters(), context.build().current_dir(project.path()), @r###"
+    uv_snapshot!(&context.filters(), context.build().current_dir(project.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1310,7 +1406,7 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/demo-0.1.0.tar.gz
     Successfully built dist/demo-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     // Check that the source file is included
     let reader = File::open(project.join("dist/demo-0.1.0-py3-none-any.whl"))?;
@@ -1319,12 +1415,12 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
         .map(ToString::to_string)
         .collect();
     files.sort();
-    assert_snapshot!(files.join("\n"), @r###"
+    assert_snapshot!(files.join("\n"), @"
     demo-0.1.0.dist-info/METADATA
     demo-0.1.0.dist-info/RECORD
     demo-0.1.0.dist-info/WHEEL
     demo/__init__.py
-    "###);
+    ");
 
     Ok(())
 }
@@ -1378,7 +1474,7 @@ fn build_non_package() -> Result<()> {
     member.child("README").touch()?;
 
     // Build the member.
-    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--package").arg("member").current_dir(&project), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1390,7 +1486,7 @@ fn build_non_package() -> Result<()> {
     requires = ["setuptools"]
     build-backend = "setuptools.build_meta"
     ```
-    "###);
+    "#);
 
     project
         .child("dist")
@@ -1402,7 +1498,7 @@ fn build_non_package() -> Result<()> {
         .assert(predicate::path::missing());
 
     // Build all packages.
-    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r###"
+    uv_snapshot!(&filters, context.build().arg("--all").arg("--no-build-logs").current_dir(&project), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1414,7 +1510,7 @@ fn build_non_package() -> Result<()> {
     requires = ["setuptools"]
     build-backend = "setuptools.build_meta"
     ```
-    "###);
+    "#);
 
     project
         .child("dist")
@@ -1437,12 +1533,12 @@ fn build_non_package() -> Result<()> {
 fn build_fast_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     uv_snapshot!(context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
-        .arg(context.temp_dir.join("output1")), @r"
+        .arg(context.temp_dir.join("output1")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1468,7 +1564,7 @@ fn build_fast_path() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
-        .arg("--sdist"), @r###"
+        .arg("--sdist"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1476,7 +1572,7 @@ fn build_fast_path() -> Result<()> {
     ----- stderr -----
     Building source distribution (uv build backend)...
     Successfully built output2/built_by_uv-0.1.0.tar.gz
-    "###);
+    ");
     context
         .temp_dir
         .child("output2")
@@ -1487,7 +1583,7 @@ fn build_fast_path() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output3"))
-        .arg("--wheel"), @r"
+        .arg("--wheel"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1507,7 +1603,7 @@ fn build_fast_path() -> Result<()> {
         .arg("--out-dir")
         .arg(context.temp_dir.join("output4"))
         .arg("--sdist")
-        .arg("--wheel"), @r"
+        .arg("--wheel"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1537,7 +1633,7 @@ fn build_fast_path() -> Result<()> {
 fn build_list_files() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     // By default, we build the wheel from the source dist, which we need to do even for the list
     // task.
@@ -1545,7 +1641,7 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @r"
+        .arg("--list"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1602,7 +1698,7 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @r"
+        .arg("--wheel"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1659,7 +1755,7 @@ fn build_list_files() -> Result<()> {
 fn build_list_files_errors() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    let built_by_uv = current_dir()?.join("../../scripts/packages/built-by-uv");
+    let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
     let mut filters = context.filters();
     // In CI, we run with link mode settings.
@@ -1669,7 +1765,7 @@ fn build_list_files_errors() -> Result<()> {
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
         .arg("--list")
-        .arg("--force-pep517"), @r###"
+        .arg("--force-pep517"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1680,10 +1776,10 @@ fn build_list_files_errors() -> Result<()> {
     Usage: uv build --cache-dir [CACHE_DIR] --out-dir <OUT_DIR> --exclude-newer <EXCLUDE_NEWER> <SRC>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // Not a uv build backend package, we can't list it.
-    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     let mut filters = context.filters();
     // Windows normalization
     filters.push(("/crates/uv/../../", "/"));
@@ -1691,22 +1787,22 @@ fn build_list_files_errors() -> Result<()> {
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))
-        .arg("--list"), @r###"
+        .arg("--list"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `[WORKSPACE]/scripts/packages/anyio_local`
+      × Failed to build `[WORKSPACE]/test/packages/anyio_local`
       ╰─▶ Can only use `--list` with the uv backend
-    "###);
+    ");
     Ok(())
 }
 
 #[test]
 fn build_version_mismatch() -> Result<()> {
     let context = TestContext::new("3.12");
-    let anyio_local = current_dir()?.join("../../scripts/packages/anyio_local");
+    let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     context
         .build()
         .arg("--sdist")
@@ -1724,7 +1820,7 @@ fn build_version_mismatch() -> Result<()> {
         .arg(wrong_source_dist.path())
         .arg("--wheel")
         .arg("--out-dir")
-        .arg(context.temp_dir.path()), @r###"
+        .arg(context.temp_dir.path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1733,7 +1829,7 @@ fn build_version_mismatch() -> Result<()> {
     Building wheel from source distribution...
       × Failed to build `[TEMP_DIR]/anyio-1.2.3.tar.gz`
       ╰─▶ The source distribution declares version 1.2.3, but the wheel declares version 4.3.0+foo
-    "###);
+    ");
     Ok(())
 }
 
@@ -1763,7 +1859,7 @@ fn build_with_symlink() -> Result<()> {
         .child("src/softlinked/__init__.py")
         .touch()?;
     fs_err::remove_dir_all(&context.venv)?;
-    uv_snapshot!(context.filters(), context.build(), @r###"
+    uv_snapshot!(context.filters(), context.build(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1773,7 +1869,7 @@ fn build_with_symlink() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/softlinked-0.1.0.tar.gz
     Successfully built dist/softlinked-0.1.0-py3-none-any.whl
-    "###);
+    ");
     Ok(())
 }
 
@@ -1802,7 +1898,7 @@ fn build_with_hardlink() -> Result<()> {
         .child("src/hardlinked/__init__.py")
         .touch()?;
     fs_err::remove_dir_all(&context.venv)?;
-    uv_snapshot!(context.filters(), context.build(), @r###"
+    uv_snapshot!(context.filters(), context.build(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1812,7 +1908,7 @@ fn build_with_hardlink() -> Result<()> {
     Building wheel from source distribution...
     Successfully built dist/hardlinked-0.1.0.tar.gz
     Successfully built dist/hardlinked-0.1.0-py3-none-any.whl
-    "###);
+    ");
     Ok(())
 }
 
@@ -1836,7 +1932,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
 
     // This is not technically a `uv build` test, we use it to contrast this passing case with the
     // failing cases later.
-    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1846,16 +1942,16 @@ fn build_unconfigured_setuptools() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + greet==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @r###"
+    uv_snapshot!(context.filters(), context.python_command().arg("-c").arg("import greet"), @"
     success: true
     exit_code: 0
     ----- stdout -----
     Greetings!
 
     ----- stderr -----
-    "###);
+    ");
     Ok(())
 }
 
@@ -1872,7 +1968,7 @@ fn build_workspace_virtual_root() -> Result<()> {
             members = ["packages/*"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1901,7 +1997,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
             line-length = 88
     "})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1950,7 +2046,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
     project.child("README").touch()?;
 
     // Build the specified path.
-    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @r"
+    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1998,7 +2094,7 @@ fn force_pep517() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @r"
+    uv_snapshot!(context.filters(), context.build().env(EnvVars::RUST_BACKTRACE, "0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2009,7 +2105,7 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Expected a Python module at: src/does_not_exist/__init__.py
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("--force-pep517").env(EnvVars::RUST_BACKTRACE, "0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2068,7 +2164,7 @@ fn venv_included_in_sdist() -> Result<()> {
     context.venv().assert().success();
 
     // context.filters()
-    uv_snapshot!(context.filters(), context.build(), @r"
+    uv_snapshot!(context.filters(), context.build(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2096,7 +2192,7 @@ fn test_workspace_trailing_slash() {
     context.init().arg("--lib").assert().success();
     context.init().arg("--lib").arg("child").assert().success();
 
-    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2109,7 +2205,7 @@ fn test_workspace_trailing_slash() {
     ");
 
     // Check that workspace discovery still works.
-    uv_snapshot!(context.filters(), context.build().arg("child/"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("child/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2122,7 +2218,7 @@ fn test_workspace_trailing_slash() {
     ");
 
     // Check general normalization too.
-    uv_snapshot!(context.filters(), context.build().arg("./child/"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("./child/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2134,7 +2230,7 @@ fn test_workspace_trailing_slash() {
     Successfully built dist/child-0.1.0-py3-none-any.whl
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @r"
+    uv_snapshot!(context.filters(), context.build().arg("./child/../child/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2157,7 +2253,7 @@ fn build_clear() -> Result<()> {
     context.init().arg(project.path()).assert().success();
 
     // Regular build
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2167,7 +2263,7 @@ fn build_clear() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -2186,7 +2282,7 @@ fn build_clear() -> Result<()> {
         .assert(predicate::path::is_file());
 
     // Build with `--clear` to remove the marker file
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--clear").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2196,7 +2292,7 @@ fn build_clear() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -2224,7 +2320,7 @@ fn build_no_gitignore() -> Result<()> {
     context.init().arg(project.path()).assert().success();
 
     // Default build with `.gitignore`
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2234,7 +2330,7 @@ fn build_no_gitignore() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")
@@ -2244,7 +2340,7 @@ fn build_no_gitignore() -> Result<()> {
     fs_err::remove_dir_all(project.child("dist"))?;
 
     // Build with `--no-create-gitignore` that does not create `.gitignore`
-    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @r###"
+    uv_snapshot!(&context.filters(), context.build().arg("project").arg("--no-create-gitignore").arg("--no-build-logs"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2254,7 +2350,7 @@ fn build_no_gitignore() -> Result<()> {
     Building wheel from source distribution...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
-    "###);
+    ");
 
     project
         .child("dist")

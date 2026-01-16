@@ -2354,16 +2354,18 @@ mod test {
         assert_snapshot!(
             parse_err(r#"python_version == "3.8".* and python_version >= "3.8""#),
             @r#"
-            Unexpected character '.', expected 'and', 'or' or end of input
-            python_version == "3.8".* and python_version >= "3.8"
-                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"#
+        Unexpected character '.', expected 'and', 'or' or end of input
+        python_version == "3.8".* and python_version >= "3.8"
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "#
         );
         assert_snapshot!(
             parse_err(r#"python_version == "3.8".*"#),
             @r#"
-            Unexpected character '.', expected 'and', 'or' or end of input
-            python_version == "3.8".*
-                                   ^"#
+        Unexpected character '.', expected 'and', 'or' or end of input
+        python_version == "3.8".*
+                               ^
+        "#
         );
     }
 
@@ -2403,9 +2405,10 @@ mod test {
         assert_snapshot!(
             err,
             @r#"
-            Unexpected character 'a', expected end of input
-            os_name == "nt" and python_version >= "3.8"
-                            ^^^^^^^^^^^^^^^^^^^^^^^^^^"#
+        Unexpected character 'a', expected end of input
+        os_name == "nt" and python_version >= "3.8"
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "#
         );
     }
 

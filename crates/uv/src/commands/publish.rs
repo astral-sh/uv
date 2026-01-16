@@ -8,12 +8,15 @@ use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_cache::Cache;
-use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{
+    AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
-    files_for_publishing, upload,
+    group_files_for_publishing, upload, upload_two_phase,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
@@ -36,11 +39,22 @@ pub(crate) async fn publish(
     index: Option<String>,
     index_locations: IndexLocations,
     dry_run: bool,
+    no_attestations: bool,
+    direct: bool,
+    preview: Preview,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
     if client_builder.is_offline() {
         bail!("Unable to publish files in offline mode");
+    }
+
+    if direct && !preview.is_enabled(PreviewFeatures::DIRECT_PUBLISH) {
+        warn_user_once!(
+            "The `--direct` option is experimental and may change without warning. \
+            Pass `--preview-features {}` to disable this warning.",
+            PreviewFeatures::DIRECT_PUBLISH
+        );
     }
 
     let token_store = PyxTokenStore::from_settings()?;
@@ -87,8 +101,8 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let files = files_for_publishing(paths)?;
-    match files.len() {
+    let groups = group_files_for_publishing(paths, no_attestations)?;
+    match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
             if dry_run {
@@ -122,12 +136,24 @@ pub(crate) async fn publish(
         .keyring(keyring_provider)
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
+        // Disable automatic redirect, as the streaming publish request is not cloneable.
+        // Rely on custom redirect logic instead.
+        .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
         .build();
+    // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
+    // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .wrap_existing(&upload_client);
+        .build();
+    // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
+    let s3_client = client_builder
+        .clone()
+        .retries(0)
+        .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .timeout(environment.upload_http_timeout)
+        .build();
 
     let retry_policy = client_builder.retry_policy();
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
@@ -166,71 +192,112 @@ pub(crate) async fn publish(
         None
     };
 
-    for (file, raw_filename, filename) in files {
+    for group in groups {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(check_url_client, &file, &filename, &download_concurrency)
-                .await?
+            if uv_publish::check_url(
+                check_url_client,
+                &group.file,
+                &group.filename,
+                &download_concurrency,
+            )
+            .await?
             {
-                writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
+                writeln!(
+                    printer.stderr(),
+                    "File {} already exists, skipping",
+                    group.filename
+                )?;
                 continue;
             }
         }
 
-        let size = fs_err::metadata(&file)?.len();
+        let size = fs_err::metadata(&group.file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
         if dry_run {
             writeln!(
                 printer.stderr(),
-                "{} {filename} {}",
+                "{} {} {}",
                 "Checking".bold().cyan(),
+                group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{} {filename} {}",
+                "{} {} {}",
                 "Uploading".bold().green(),
+                group.filename,
                 format!("({bytes:.1}{unit})").dimmed()
             )?;
         }
 
         // Collect the metadata for the file.
-        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
             .await
-            .map_err(|err| PublishError::PublishPrepare(file.clone(), Box::new(err)))?;
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
-        // Run validation checks on the file, but don't upload it (if possible).
-        uv_publish::validate(
-            &file,
-            &form_metadata,
-            &raw_filename,
-            &publish_url,
-            &token_store,
-            &upload_client,
-            &credentials,
-        )
-        .await?;
+        let uploaded = if direct {
+            if dry_run {
+                // For dry run, call validate since we won't call reserve.
+                uv_publish::validate(
+                    &group.file,
+                    &form_metadata,
+                    &group.raw_filename,
+                    &publish_url,
+                    &token_store,
+                    &upload_client,
+                    &credentials,
+                )
+                .await?;
+                continue;
+            }
 
-        if dry_run {
-            continue;
-        }
+            debug!("Using two-phase upload (direct mode)");
+            let reporter = PublishReporter::single(printer);
+            upload_two_phase(
+                &group,
+                &form_metadata,
+                &publish_url,
+                &upload_client,
+                &s3_client,
+                retry_policy,
+                &credentials,
+                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                Arc::new(reporter),
+            )
+            .await?
+        } else {
+            // Run validation checks on the file, but don't upload it (if possible).
+            uv_publish::validate(
+                &group.file,
+                &form_metadata,
+                &group.raw_filename,
+                &publish_url,
+                &token_store,
+                &upload_client,
+                &credentials,
+            )
+            .await?;
 
-        let reporter = PublishReporter::single(printer);
-        let uploaded = upload(
-            &file,
-            &form_metadata,
-            &raw_filename,
-            &filename,
-            &publish_url,
-            &upload_client,
-            retry_policy,
-            &credentials,
-            check_url_client.as_ref(),
-            &download_concurrency,
-            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-            Arc::new(reporter),
-        )
-        .await?; // Filename and/or URL are already attached, if applicable.
+            if dry_run {
+                continue;
+            }
+
+            let reporter = PublishReporter::single(printer);
+            upload(
+                &group,
+                &form_metadata,
+                &publish_url,
+                &upload_client,
+                retry_policy,
+                &credentials,
+                check_url_client.as_ref(),
+                &download_concurrency,
+                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                Arc::new(reporter),
+            )
+            .await? // Filename and/or URL are already attached, if applicable.
+        };
         info!("Upload succeeded");
 
         if !uploaded {

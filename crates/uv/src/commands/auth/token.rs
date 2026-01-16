@@ -11,13 +11,12 @@ use uv_preview::Preview;
 use crate::commands::ExitStatus;
 use crate::commands::auth::login;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Show the token that will be used for a service.
 pub(crate) async fn token(
     service: Service,
     username: Option<String>,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -26,22 +25,15 @@ pub(crate) async fn token(
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
-        let client = BaseClientBuilder::new(
-            network_settings.connectivity,
-            network_settings.native_tls,
-            network_settings.allow_insecure_host.clone(),
-            preview,
-            network_settings.timeout,
-            network_settings.retries,
-        )
-        .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .build();
+        let client = client_builder
+            .auth_integration(AuthIntegration::NoAuthMiddleware)
+            .build();
 
         pyx_refresh(&pyx_store, &client, printer).await?;
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
     let url = service.url();
 
     // Extract credentials from URL if present
@@ -97,6 +89,7 @@ pub(crate) async fn token(
 /// Refresh the authentication tokens in the [`PyxTokenStore`], prompting for login if necessary.
 async fn pyx_refresh(store: &PyxTokenStore, client: &BaseClient, printer: Printer) -> Result<()> {
     // Retrieve the token store.
+    // Use zero tolerance to force a refresh.
     let token = match store
         .access_token(client.for_host(store.api()).raw_client(), 0)
         .await

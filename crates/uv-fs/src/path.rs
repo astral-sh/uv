@@ -430,11 +430,11 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         if s == "." {
             Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s).into_boxed_path()))
+            Ok(Self(PathBuf::from(s.as_ref()).into_boxed_path()))
         }
     }
 }

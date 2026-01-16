@@ -28,7 +28,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeatures};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -73,7 +73,7 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -84,7 +84,7 @@ pub(crate) async fn run(
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     isolated: bool,
@@ -140,7 +140,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv run`");
             }
-            RequirementsSource::RequirementsTxt(path) => {
+            RequirementsSource::Extensionless(path) => {
                 if path == Path::new("-") {
                     requirements_from_stdin = true;
                 }
@@ -262,8 +262,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .ok();
 
             // Determine the lock mode.
-            let mode = if frozen {
-                LockMode::Frozen
+            let mode = if let Some(frozen_source) = frozen {
+                LockMode::Frozen(frozen_source.into())
             } else if let LockCheck::Enabled(lock_check) = lock_check {
                 LockMode::Locked(environment.interpreter(), lock_check)
             } else {
@@ -271,23 +271,25 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             };
 
             // Generate a lockfile.
-            let lock = match project::lock::LockOperation::new(
-                mode,
-                &settings.resolver,
-                &client_builder,
-                &lock_state,
-                if show_resolution {
-                    Box::new(DefaultResolveLogger)
-                } else {
-                    Box::new(SummaryResolveLogger)
-                },
-                concurrency,
-                &cache,
-                &workspace_cache,
-                printer,
-                preview,
+            let lock = match Box::pin(
+                project::lock::LockOperation::new(
+                    mode,
+                    &settings.resolver,
+                    &client_builder,
+                    &lock_state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    concurrency,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                    preview,
+                )
+                .execute(target),
             )
-            .execute(target)
             .await
             {
                 Ok(result) => result.into_lock(),
@@ -337,7 +339,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             )
             .await
             {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         client_builder.is_native_tls(),
@@ -362,7 +364,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     "uv lock --script".green(),
                 );
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!(
                     "No lockfile found for Python script (ignoring `--frozen`); run `{}` to generate a lockfile",
                     "uv lock --script".green(),
@@ -370,9 +372,17 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), &settings.resolver)? {
-                let script_extra_build_requires =
-                    script_extra_build_requires((&script).into(), &settings.resolver)?.into_inner();
+            if let Some(spec) = script_specification(
+                (&script).into(),
+                &settings.resolver,
+                client_builder.credentials_cache(),
+            )? {
+                let script_extra_build_requires = script_extra_build_requires(
+                    (&script).into(),
+                    &settings.resolver,
+                    client_builder.credentials_cache(),
+                )?
+                .into_inner();
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -536,18 +546,35 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         script_interpreter
     } else {
+        // When running a target with the preview flag enabled, discover the workspace starting
+        // from the target's directory rather than the current working directory.
+        let discovery_dir: Cow<'_, Path> =
+            if preview.is_enabled(PreviewFeatures::TARGET_WORKSPACE_DISCOVERY) {
+                if let Some(dir) = command.as_ref().and_then(RunCommand::script_dir) {
+                    Cow::Owned(std::path::absolute(dir)?)
+                } else {
+                    Cow::Borrowed(project_dir)
+                }
+            } else {
+                Cow::Borrowed(project_dir)
+            };
+
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(
+                    &discovery_dir,
+                    &DiscoveryOptions::default(),
+                    &workspace_cache,
+                )
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
             match VirtualProject::discover(
-                project_dir,
+                &discovery_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,
             )
@@ -591,7 +618,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if let LockCheck::Enabled(lock_check) = lock_check {
                 warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
             }
-            if frozen {
+            if frozen.is_some() {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
             if no_sync {
@@ -738,8 +765,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .ok();
 
                 // Determine the lock mode.
-                let mode = if frozen {
-                    LockMode::Frozen
+                let mode = if let Some(frozen_source) = frozen {
+                    LockMode::Frozen(frozen_source.into())
                 } else if let LockCheck::Enabled(lock_check) = lock_check {
                     LockMode::Locked(venv.interpreter(), lock_check)
                 } else if isolated {
@@ -748,23 +775,25 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Write(venv.interpreter())
                 };
 
-                let result = match project::lock::LockOperation::new(
-                    mode,
-                    &settings.resolver,
-                    &client_builder,
-                    &lock_state,
-                    if show_resolution {
-                        Box::new(DefaultResolveLogger)
-                    } else {
-                        Box::new(SummaryResolveLogger)
-                    },
-                    concurrency,
-                    &cache,
-                    &workspace_cache,
-                    printer,
-                    preview,
+                let result = match Box::pin(
+                    project::lock::LockOperation::new(
+                        mode,
+                        &settings.resolver,
+                        &client_builder,
+                        &lock_state,
+                        if show_resolution {
+                            Box::new(DefaultResolveLogger)
+                        } else {
+                            Box::new(SummaryResolveLogger)
+                        },
+                        concurrency,
+                        &cache,
+                        &workspace_cache,
+                        printer,
+                        preview,
+                    )
+                    .execute(project.workspace().into()),
                 )
-                .execute(project.workspace().into())
                 .await
                 {
                     Ok(result) => result,
@@ -855,7 +884,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await
                 {
-                    Ok(()) => {}
+                    Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::native_tls(
                             client_builder.is_native_tls(),
@@ -1577,6 +1606,23 @@ impl RunCommand {
             Self::Empty => Command::new(interpreter.sys_executable()),
         }
     }
+
+    /// Return the directory containing the script, if any.
+    fn script_dir(&self) -> Option<&Path> {
+        match self {
+            Self::PythonScript(target, _)
+            | Self::PythonGuiScript(target, _)
+            | Self::PythonZipapp(target, _) => target.parent(),
+            Self::PythonPackage(_, path, _) => path.parent(),
+            Self::Python(_)
+            | Self::PythonModule(..)
+            | Self::PythonStdin(..)
+            | Self::PythonGuiStdin(..)
+            | Self::PythonRemote(..)
+            | Self::External(..)
+            | Self::Empty => None,
+        }
+    }
 }
 
 impl std::fmt::Display for RunCommand {
@@ -1982,7 +2028,7 @@ fn copy_entrypoint(
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file)?;
+    launcher.write_to_file(&mut file, is_gui)?;
 
     trace!("Updated entrypoint at {}", target.user_display());
 

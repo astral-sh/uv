@@ -7,6 +7,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_preview::Preview;
+use uv_python::downloads::ManagedPythonDownloadList;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -31,6 +32,8 @@ pub(crate) async fn find(
     no_config: bool,
     system: bool,
     python_preference: PythonPreference,
+    python_downloads_json_url: Option<&str>,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -74,10 +77,14 @@ pub(crate) async fn find(
     )
     .await?;
 
+    let client = client_builder.clone().retries(0).build();
+    let download_list = ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+
     let python = PythonInstallation::find(
         &python_request.unwrap_or_default(),
         environment_preference,
         python_preference,
+        &download_list,
         cache,
         preview,
     )?;

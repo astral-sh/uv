@@ -23,7 +23,7 @@ fn username_password_no_longer_supported() {
         .arg("dummy")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r###"
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -31,9 +31,9 @@ fn username_password_no_longer_supported() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
-    "###
+    "
     );
 }
 
@@ -48,7 +48,7 @@ fn invalid_token() {
         .arg("dummy")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl"), @r###"
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -56,9 +56,9 @@ fn invalid_token() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Invalid or non-existent authentication information. See https://test.pypi.org/help/#invalid-auth for more information.
-    "###
+    "
     );
 }
 
@@ -76,9 +76,9 @@ fn mixed_credentials() {
         .arg("https://test.pypi.org/legacy/")
         .arg("--trusted-publishing")
         .arg("always")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true"), @r###"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -86,7 +86,7 @@ fn mixed_credentials() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/
     error: a username and a password are not allowed when using trusted publishing
-    "###
+    "
     );
 }
 
@@ -100,9 +100,9 @@ fn missing_trusted_publishing_permission() {
         .arg("https://test.pypi.org/legacy/")
         .arg("--trusted-publishing")
         .arg("always")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -126,9 +126,9 @@ fn no_credentials() {
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         // Emulate CI
-        .env(EnvVars::GITHUB_ACTIONS, "true"), @r"
+        .env(EnvVars::GITHUB_ACTIONS, "true"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -141,7 +141,7 @@ fn no_credentials() {
       Caused by: GitHub Actions detection error
       Caused by: insufficient permissions: missing ACTIONS_ID_TOKEN_REQUEST_URL
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/
       Caused by: Failed to send POST request
       Caused by: Missing credentials for https://test.pypi.org/legacy/
     "
@@ -156,14 +156,14 @@ fn skip_existing_redirect() {
     uv_snapshot!(context.filters(), context.publish()
         .arg("--skip-existing")
         .arg("--publish-url")
-        .arg("https://test.pypi.org/legacy/"), @r###"
+        .arg("https://test.pypi.org/legacy/"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: `uv publish` does not support `--skip-existing` because there is not a reliable way to identify when an upload fails due to an existing distribution. Instead, use `--check-url` to provide the URL to the simple API for your index. uv will check the index for existing distributions before attempting uploads.
-    "###
+    "
     );
 }
 
@@ -186,7 +186,7 @@ fn dubious_filenames() {
         .arg("dummy")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/")
-        .arg(context.temp_dir.join("*")), @r###"
+        .arg(context.temp_dir.join("*")), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -196,7 +196,7 @@ fn dubious_filenames() {
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
     error: No files found to publish
-    "###
+    "
     );
 }
 
@@ -211,7 +211,7 @@ fn check_keyring_behaviours() {
         .arg(
             context
                 .workspace_root
-                .join("scripts")
+                .join("test")
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
@@ -230,8 +230,8 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -239,9 +239,9 @@ fn check_keyring_behaviours() {
     ----- stderr -----
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
-    "###
+    "
     );
 
     // Warn: The keyring is unused.
@@ -254,8 +254,8 @@ fn check_keyring_behaviours() {
         .arg("subprocess")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @r###"
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)),  @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -264,9 +264,9 @@ fn check_keyring_behaviours() {
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     warning: Using `--keyring-provider` with a password or token and no check URL has no effect
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
-    "###
+    "
     );
 
     // Warn: There is no keyring entry for the user dummy.
@@ -280,8 +280,8 @@ fn check_keyring_behaviours() {
         .arg("https://test.pypi.org/simple/")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -294,7 +294,7 @@ fn check_keyring_behaviours() {
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Keyring request for dummy@test.pypi.org
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
@@ -308,9 +308,9 @@ fn check_keyring_behaviours() {
         .arg("subprocess")
         .arg("--publish-url")
         .arg("https://test.pypi.org/legacy/?ok")
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://test.pypi.org/legacy/?ok": {"dummy": "dummy"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -319,7 +319,7 @@ fn check_keyring_behaviours() {
     Publishing 1 file to https://test.pypi.org/legacy/?ok
     Keyring request for dummy@https://test.pypi.org/legacy/?ok
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
-    error: Failed to publish `../../scripts/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
+    error: Failed to publish `../../test/links/ok-1.0.0-py3-none-any.whl` to https://test.pypi.org/legacy/?ok
       Caused by: Upload failed with status code 403 Forbidden. Server says: 403 Username/Password authentication is no longer supported. Migrate to API Tokens or Trusted Publishers instead. See https://test.pypi.org/help/#apitoken and https://test.pypi.org/help/#trusted-publishers
     "
     );
@@ -351,7 +351,7 @@ fn invalid_index() {
 
     let ok_wheel = current_dir()
         .unwrap()
-        .join("../../scripts/links/ok-1.0.0-py3-none-any.whl");
+        .join("../../test/links/ok-1.0.0-py3-none-any.whl");
 
     // No such index
     uv_snapshot!(context.filters(), context.publish()
@@ -362,14 +362,14 @@ fn invalid_index() {
         .arg("--index")
         .arg("bar")
         .arg(&ok_wheel)
-        .current_dir(context.temp_dir.path()), @r###"
+        .current_dir(context.temp_dir.path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Index not found: `bar`. Found indexes: `foo`, `internal`
-    "###
+    "
     );
 
     // Index does not have a publish URL
@@ -381,14 +381,14 @@ fn invalid_index() {
         .arg("--index")
         .arg("foo")
         .arg(&ok_wheel)
-        .current_dir(context.temp_dir.path()), @r###"
+        .current_dir(context.temp_dir.path()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Index is missing a publish URL: `foo`
-    "###
+    "
     );
 }
 
@@ -464,7 +464,7 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg("private-index")
         .arg("--trusted-publishing")
         .arg("never"),
-        @r"
+        @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -483,11 +483,11 @@ async fn read_index_credential_env_vars_for_check_url() {
         .arg(&wheel)
         .arg("--index")
         .arg("private-index")
-        .env("UV_INDEX_PRIVATE_INDEX_USERNAME", "username")
-        .env("UV_INDEX_PRIVATE_INDEX_PASSWORD", "secret")
+        .env(EnvVars::index_username("PRIVATE_INDEX"), "username")
+        .env(EnvVars::index_password("PRIVATE_INDEX"), "secret")
         .arg("--trusted-publishing")
         .arg("never"),
-        @r"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -537,10 +537,10 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .arg("always")
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         .env(EnvVars::GITLAB_CI, "true")
         .env_remove(EnvVars::GITHUB_ACTIONS)
-        .env("PYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+        .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -591,11 +591,11 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .arg("always")
         .arg("--publish-url")
         .arg(format!("{}/upload", server.uri()))
-        .arg("../../scripts/links/ok-1.0.0-py3-none-any.whl")
+        .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
         .env_remove(EnvVars::GITHUB_ACTIONS)
-        .env("TESTPYPI_ID_TOKEN", "gitlab-oidc-jwt"), @r"
+        .env(EnvVars::TESTPYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
