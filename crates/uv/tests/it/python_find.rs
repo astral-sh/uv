@@ -619,17 +619,6 @@ fn python_find_venv() {
     ----- stderr -----
     ");
 
-    // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
-    #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
-    ");
-
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all().unwrap();
 
@@ -670,7 +659,7 @@ fn python_find_venv() {
 
     // We should find virtual environments from a child directory
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -689,7 +678,7 @@ fn python_find_venv() {
     ");
 
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir).env_remove(EnvVars::VIRTUAL_ENV), @"
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----

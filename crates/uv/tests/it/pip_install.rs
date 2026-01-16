@@ -2272,8 +2272,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env_remove(EnvVars::UV_HTTP_RETRIES), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
     exit_code: 0
     ----- stdout -----
