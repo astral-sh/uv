@@ -149,7 +149,7 @@ To run clippy for a Windows target from Linux or macOS, you can use
 
 ```shell
 # Install cargo-xwin
-cargo install cargo-xwin --version 0.18.0
+cargo install cargo-xwin --locked
 
 # Add the Windows target
 rustup target add x86_64-pc-windows-msvc
