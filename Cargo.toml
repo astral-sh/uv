@@ -76,7 +76,7 @@ uv-virtualenv = { version = "0.0.16", path = "crates/uv-virtualenv" }
 uv-warnings = { version = "0.0.16", path = "crates/uv-warnings" }
 uv-workspace = { version = "0.0.16", path = "crates/uv-workspace" }
 
-ambient-id = { version = "0.0.7", default-features = false, features = ["astral-reqwest-middleware"] }
+ambient-id = { version = "0.0.8", default-features = false, features = ["reqwest-middleware"] }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
@@ -85,7 +85,7 @@ astral-tokio-tar = { version = "0.5.6" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.9.1", package = "astral_async_http_range_reader" }
+async_http_range_reader = { version = "0.10.0", package = "astral_async_http_range_reader" }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
@@ -153,9 +153,9 @@ reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
 reqsign = { version = "0.18.1", features = ["aws", "google", "default-context"], default-features = false }
-reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
-reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = ["multipart"] }
-reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry" }
+reqwest = { version = "0.13.1", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls" ,"native-tls", "socks", "multipart", "http2", "blocking", "query", "form"] }
+reqwest-middleware = { version = "0.5.0", package = "astral-reqwest-middleware", features = ["multipart", "query"] }
+reqwest-retry = { version = "0.9.0", package = "astral-reqwest-retry" }
 rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
@@ -219,7 +219,7 @@ ignore = { version = "0.4.23" }
 insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
 predicates = { version = "3.1.2" }
 rcgen = { version = "0.14.5", features = ["crypto", "pem", "ring"], default-features = false }
-rustls = { version = "0.23.29", default-features = false }
+rustls = { version = "0.23.36", default-features = false }
 similar = { version = "2.6.0" }
 temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }
@@ -338,3 +338,9 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[patch.crates-io]
+astral-reqwest-middleware = { path = "../reqwest-middleware/reqwest-middleware" }
+astral-reqwest-retry = { path = "../reqwest-middleware/reqwest-retry" }
+astral_async_http_range_reader = { path = "../async_http_range_reader" }
+ambient-id = { path = "../ambient-id" }

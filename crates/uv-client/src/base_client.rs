@@ -535,7 +535,6 @@ impl<'a> BaseClientBuilder<'a> {
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(timeout)
-            .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
@@ -545,9 +544,9 @@ impl<'a> BaseClientBuilder<'a> {
         };
 
         let client_builder = if self.native_tls || ssl_cert_file_exists || ssl_cert_dir_exists {
-            client_builder.tls_built_in_native_certs(true)
+            client_builder.tls_backend_native()
         } else {
-            client_builder.tls_built_in_webpki_certs(true)
+            client_builder.tls_backend_rustls()
         };
 
         // Configure mTLS.
