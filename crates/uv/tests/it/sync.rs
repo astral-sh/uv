@@ -9296,6 +9296,66 @@ fn sync_all_extras() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_extra_short_form() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        async = ["anyio>3"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("-E").arg("types"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "#);
+
+    uv_snapshot!(context.filters(), context.sync().arg("-E").arg("types,async"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
 /// Sync all members in a workspace with dynamic extras.
 #[test]
 fn sync_all_extras_dynamic() -> Result<()> {
