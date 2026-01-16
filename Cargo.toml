@@ -104,7 +104,7 @@ async-compression = { version = "0.4.12", features = [
   "zstd",
 ] }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.9.1", package = "astral_async_http_range_reader" }
+async_http_range_reader = { version = "0.10.0", package = "astral_async_http_range_reader" }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = [
   "bzip2",
   "deflate",
@@ -325,7 +325,7 @@ rcgen = { version = "0.14.5", features = [
   "pem",
   "ring",
 ], default-features = false }
-rustls = { version = "0.23.29", default-features = false }
+rustls = { version = "0.23.36", default-features = false }
 similar = { version = "2.6.0" }
 temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }
@@ -446,6 +446,9 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[workspace.metadata.cargo-shear]
+ignored = ["uv-audit"]
 
 [workspace.metadata.cargo-shear]
 ignored = ["uv-audit"]
