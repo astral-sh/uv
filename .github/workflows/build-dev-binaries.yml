@@ -235,11 +235,11 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - uses: SebRollen/toml-action@b1b3628f55fc3a28208d4203ada8b737e9687876 # v1.2.0
+      - name: "Read MSRV from Cargo.toml"
         id: msrv
-        with:
-          file: "Cargo.toml"
-          field: "workspace.package.rust-version"
+        run: |
+          MSRV=$(grep -m1 'rust-version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')
+          echo "value=$MSRV" >> "$GITHUB_OUTPUT"
       - name: "Install Rust toolchain"
         run: rustup default ${MSRV}
         env:

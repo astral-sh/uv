@@ -56,15 +56,14 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
-      - uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        env:
-          # renovate: datasource=github-tags depName=koalaman/shellcheck
-          SHELLCHECK_VERSION: "v0.11.0"
-          SHELLCHECK_OPTS: --shell bash
-        with:
-          version: ${{ env.SHELLCHECK_VERSION }}
-          severity: style
-          check_together: "yes"
+      - name: "Install shellcheck"
+        run: |
+          # renovate: datasource=github-releases depName=koalaman/shellcheck
+          SHELLCHECK_VERSION="v0.11.0"
+          curl -sSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJf -
+          sudo mv "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/
+      - name: "Run shellcheck"
+        run: find . -name '*.sh' -type f | xargs shellcheck --shell bash --severity style
 
   validate-pyproject:
     timeout-minutes: 10
