@@ -1919,7 +1919,7 @@ pub struct PipSyncArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -2296,7 +2296,7 @@ pub struct PipInstallArgs {
     /// environment and only searches for a Python interpreter to use for package resolution.
     /// If a suitable Python interpreter cannot be found, uv will install one.
     /// To disable this, add `--no-python-downloads`.
-    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Install packages into `lib`, `bin`, and other top-level folders under the specified
@@ -2512,7 +2512,7 @@ pub struct PipUninstallArgs {
     pub no_break_system_packages: bool,
 
     /// Uninstall packages from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Uninstall packages from the specified `--prefix` directory.
@@ -2579,7 +2579,7 @@ pub struct PipFreezeArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(long, conflicts_with_all = ["prefix", "paths"], value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with_all = ["prefix", "paths"], value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
@@ -2663,7 +2663,7 @@ pub struct PipListArgs {
     pub no_system: bool,
 
     /// List packages from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// List packages from the specified `--prefix` directory.
@@ -2789,7 +2789,7 @@ pub struct PipShowArgs {
     pub no_system: bool,
 
     /// Show a package from the specified `--target` directory.
-    #[arg(long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
+    #[arg(short = 't', long, conflicts_with = "prefix", value_hint = ValueHint::DirPath)]
     pub target: Option<PathBuf>,
 
     /// Show a package from the specified `--prefix` directory.
