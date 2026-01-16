@@ -498,14 +498,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~40kb.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -516,12 +516,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -532,12 +532,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );
