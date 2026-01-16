@@ -39,18 +39,7 @@ debug = false
 [dependencies]
 uv-static = { path = "../uv-static" }
 
-windows = { version = "0.61.0", features = [
-  "std",
-  "Win32_Foundation",
-  "Win32_Security",
-  "Win32_System_Console",
-  "Win32_System_Environment",
-  "Win32_System_JobObjects",
-  "Win32_System_LibraryLoader",
-  "Win32_System_Threading",
-  "Win32_UI_WindowsAndMessaging",
-  "Win32_Storage_FileSystem",
-] }
+windows = { workspace = true }
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
 dunce = { version = "1.0.5" }
