@@ -11,8 +11,8 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::http_util::{
-    generate_self_signed_certs, generate_self_signed_certs_with_ca,
-    start_https_mtls_user_agent_server, start_https_user_agent_server, test_cert_dir, SelfSigned,
+    SelfSigned, generate_self_signed_certs, generate_self_signed_certs_with_ca,
+    start_https_mtls_user_agent_server, start_https_user_agent_server, test_cert_dir,
 };
 
 /// Test certificate paths and data returned by setup
@@ -48,7 +48,11 @@ fn setup_test_certificates() -> Result<TestCertificates> {
     fs_err::write(&ca_public_path, ca_cert.public.pem())?;
     fs_err::write(
         &client_combined_path,
-        format!("{}\n{}", client_cert.public.pem(), client_cert.private.serialize_pem()),
+        format!(
+            "{}\n{}",
+            client_cert.public.pem(),
+            client_cert.private.serialize_pem()
+        ),
     )?;
 
     Ok(TestCertificates {
@@ -122,13 +126,18 @@ async fn assert_server_no_cert_error(server_task: tokio::task::JoinHandle<Result
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_file_nonexistent() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
     // Set SSL_CERT_FILE to non-existent location
     unsafe {
-        std::env::set_var(EnvVars::SSL_CERT_FILE, certs.does_not_exist_path.as_os_str());
+        std::env::set_var(
+            EnvVars::SSL_CERT_FILE,
+            certs.does_not_exist_path.as_os_str(),
+        );
     }
 
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
@@ -144,7 +153,9 @@ async fn test_ssl_cert_file_nonexistent() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection failed
     assert_connection_error(&res);
@@ -157,13 +168,18 @@ async fn test_ssl_cert_file_nonexistent() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_file_valid() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
     // Set SSL_CERT_FILE to valid certificate
     unsafe {
-        std::env::set_var(EnvVars::SSL_CERT_FILE, certs.standalone_public_path.as_os_str());
+        std::env::set_var(
+            EnvVars::SSL_CERT_FILE,
+            certs.standalone_public_path.as_os_str(),
+        );
     }
 
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
@@ -179,7 +195,9 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded
     assert!(res.is_ok());
@@ -192,7 +210,9 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_dir_mixed_paths() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -210,7 +230,9 @@ async fn test_ssl_cert_dir_mixed_paths() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -220,7 +242,9 @@ async fn test_ssl_cert_dir_mixed_paths() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded (should warn about missing but use valid)
     assert!(res.is_ok());
@@ -233,7 +257,9 @@ async fn test_ssl_cert_dir_mixed_paths() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_dir_nonexistent() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -245,7 +271,9 @@ async fn test_ssl_cert_dir_nonexistent() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -255,7 +283,9 @@ async fn test_ssl_cert_dir_nonexistent() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection failed
     assert_connection_error(&res);
@@ -268,20 +298,28 @@ async fn test_ssl_cert_dir_nonexistent() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_mtls_with_client_cert() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
     // Set SSL_CERT_FILE to CA and SSL_CLIENT_CERT to client cert
     unsafe {
         std::env::set_var(EnvVars::SSL_CERT_FILE, certs.ca_public_path.as_os_str());
-        std::env::set_var(EnvVars::SSL_CLIENT_CERT, certs.client_combined_path.as_os_str());
+        std::env::set_var(
+            EnvVars::SSL_CLIENT_CERT,
+            certs.client_combined_path.as_os_str(),
+        );
     }
 
-    let (server_task, addr) = start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert).await?;
+    let (server_task, addr) =
+        start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -291,7 +329,9 @@ async fn test_mtls_with_client_cert() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded
     assert!(res.is_ok());
@@ -304,7 +344,9 @@ async fn test_mtls_with_client_cert() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_mtls_without_client_cert() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -313,10 +355,13 @@ async fn test_mtls_without_client_cert() -> Result<()> {
         std::env::set_var(EnvVars::SSL_CERT_FILE, certs.ca_public_path.as_os_str());
     }
 
-    let (server_task, addr) = start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert).await?;
+    let (server_task, addr) =
+        start_https_mtls_user_agent_server(&certs.ca_cert, &certs.server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -326,7 +371,9 @@ async fn test_mtls_without_client_cert() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection failed
     assert_connection_error(&res);
@@ -339,7 +386,9 @@ async fn test_mtls_without_client_cert() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_file_bundle() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -347,7 +396,11 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
     let bundle_path = certs._temp_dir.path().join("bundle.pem");
     fs_err::write(
         &bundle_path,
-        format!("{}\n{}", certs.ca_cert.public.pem(), certs.server_cert.public.pem()),
+        format!(
+            "{}\n{}",
+            certs.ca_cert.public.pem(),
+            certs.server_cert.public.pem()
+        ),
     )?;
 
     // Set SSL_CERT_FILE to the bundle
@@ -358,7 +411,9 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -368,7 +423,9 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded using bundle
     assert!(res.is_ok());
@@ -381,7 +438,9 @@ async fn test_ssl_cert_file_bundle() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_file_invalid() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -397,7 +456,9 @@ async fn test_ssl_cert_file_invalid() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -407,7 +468,9 @@ async fn test_ssl_cert_file_invalid() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection failed (invalid cert should be skipped with warning)
     assert_connection_error(&res);
@@ -420,7 +483,9 @@ async fn test_ssl_cert_file_invalid() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_dir_extensions() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -452,7 +517,9 @@ async fn test_ssl_cert_dir_extensions() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -462,7 +529,9 @@ async fn test_ssl_cert_dir_extensions() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded (.crt/.cer/.pem files loaded, others ignored)
     assert!(res.is_ok());
@@ -475,7 +544,9 @@ async fn test_ssl_cert_dir_extensions() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -487,7 +558,10 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
 
     // Set both SSL_CERT_FILE (standalone cert) and SSL_CERT_DIR (CA cert)
     unsafe {
-        std::env::set_var(EnvVars::SSL_CERT_FILE, certs.standalone_public_path.as_os_str());
+        std::env::set_var(
+            EnvVars::SSL_CERT_FILE,
+            certs.standalone_public_path.as_os_str(),
+        );
         std::env::set_var(EnvVars::SSL_CERT_DIR, second_cert_dir.as_os_str());
     }
 
@@ -495,7 +569,9 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -513,7 +589,9 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.server_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -523,7 +601,9 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded using CA from SSL_CERT_DIR
     assert!(res.is_ok());
@@ -536,7 +616,9 @@ async fn test_ssl_cert_file_and_dir_combined() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_empty_values() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -549,7 +631,9 @@ async fn test_ssl_cert_empty_values() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -559,7 +643,9 @@ async fn test_ssl_cert_empty_values() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection failed (empty env vars should be ignored, no custom certs loaded)
     assert_connection_error(&res);
@@ -572,7 +658,9 @@ async fn test_ssl_cert_empty_values() -> Result<()> {
 #[tokio::test]
 #[allow(unsafe_code)]
 async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     let certs = setup_test_certificates()?;
 
@@ -584,14 +672,22 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     let bundle1_path = bundle_dir.join("bundle1.pem");
     fs_err::write(
         &bundle1_path,
-        format!("{}\n{}", certs.standalone_cert.public.pem(), certs.ca_cert.public.pem()),
+        format!(
+            "{}\n{}",
+            certs.standalone_cert.public.pem(),
+            certs.ca_cert.public.pem()
+        ),
     )?;
 
     // Create another bundle
     let bundle2_path = bundle_dir.join("bundle2.pem");
     fs_err::write(
         &bundle2_path,
-        format!("{}\n{}", certs.server_cert.public.pem(), certs.standalone_cert.public.pem()),
+        format!(
+            "{}\n{}",
+            certs.server_cert.public.pem(),
+            certs.standalone_cert.public.pem()
+        ),
     )?;
 
     // Set SSL_CERT_DIR to the bundle directory
@@ -602,7 +698,9 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
     let (server_task, addr) = start_https_user_agent_server(&certs.standalone_cert).await?;
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
     let cache = Cache::temp()?.init().await?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache).build();
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().no_retry_delay(true), cache)
+            .build();
 
     let res = client
         .cached_client()
@@ -612,7 +710,9 @@ async fn test_ssl_cert_dir_bundle_files() -> Result<()> {
         .send()
         .await;
 
-    unsafe { clear_ssl_env_vars(); }
+    unsafe {
+        clear_ssl_env_vars();
+    }
 
     // Verify connection succeeded (bundles in directory loaded correctly)
     assert!(res.is_ok());
