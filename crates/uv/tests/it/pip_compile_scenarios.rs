@@ -5,7 +5,6 @@
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
-use std::env;
 use std::process::Command;
 
 use anyhow::Result;

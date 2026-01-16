@@ -168,6 +168,8 @@ enum BuildResult {
     Success,
 }
 
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 #[allow(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,

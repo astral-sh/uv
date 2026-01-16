@@ -13874,8 +13874,7 @@ fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
         .url
         .path_segments()
         .expect("path has segments")
-        .filter(|segment| !segment.is_empty())
-        .next_back()
+        .rfind(|segment| !segment.is_empty())
         .expect("path has a package segment");
     format!("{base}{last_path_segment}/")
 }

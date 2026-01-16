@@ -1,4 +1,4 @@
-use std::{env, io};
+use std::io;
 
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use http::StatusCode;
