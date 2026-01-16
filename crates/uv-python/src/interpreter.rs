@@ -9,9 +9,11 @@ use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use heck::ToTitleCase;
 use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
+use sysinfo::System;
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 
@@ -1110,10 +1112,11 @@ impl InterpreterInfo {
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
             // invalidate the cache (e.g.) on OS upgrades.
+            // std::env::consts::OS (e.g., "linux", "macos", "windows")
             cache_digest(&(
                 ARCH,
-                sys_info::os_type().unwrap_or_default(),
-                sys_info::os_release().unwrap_or_default(),
+                std::env::consts::OS.to_title_case(),
+                System::kernel_version().unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because

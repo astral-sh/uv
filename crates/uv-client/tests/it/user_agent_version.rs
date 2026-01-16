@@ -2,6 +2,9 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use insta::{assert_json_snapshot, assert_snapshot, with_settings};
+use std::io::Read;
+use std::str::FromStr;
+use tokio::net::TcpListener;
 use url::Url;
 
 use uv_cache::Cache;
@@ -12,6 +15,28 @@ use uv_platform_tags::{Arch, Os, Platform};
 use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
+// https://docs.rs/sys-info/latest/src/sys_info/lib.rs.html#473-515
+fn get_version_codename() -> Result<Option<String>, std::io::Error> {
+    if !cfg!(target_os = "linux") {
+        return Ok(None);
+    }
+
+    let mut s = String::new();
+    fs_err::File::open("/etc/os-release")?.read_to_string(&mut s)?;
+
+    for line in s.lines() {
+        let line = line.trim();
+        if line.starts_with("VERSION_CODENAME=") {
+            let value = line
+                .strip_prefix("VERSION_CODENAME=")
+                .unwrap()
+                .trim_matches('"');
+            return Ok(Some(value.to_string()));
+        }
+    }
+
+    Ok(None)
+}
 use crate::http_util::start_http_user_agent_server;
 
 #[tokio::test]
@@ -266,12 +291,13 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
         let distro_info = linehaul
             .distro
             .expect("got no distro, but expected one in linehaul");
-        // Gather distribution info from /etc/os-release.
-        let release_info = sys_info::linux_os_release()
-            .expect("got no os release info, but expected one in linux");
-        assert_eq!(distro_info.id, release_info.version_codename);
-        assert_eq!(distro_info.name, release_info.name);
-        assert_eq!(distro_info.version, release_info.version_id);
+        // Gather distribution info using sysinfo and custom parsing
+        let codename = get_version_codename().ok().flatten();
+        let name = sysinfo::System::name();
+        let version = sysinfo::System::os_version();
+        assert_eq!(distro_info.id, codename);
+        assert_eq!(distro_info.name, name);
+        assert_eq!(distro_info.version, version);
     } else if cfg!(target_os = "macos") {
         // We mock the macOS distro
         assert_json_snapshot!(&linehaul.distro, @r###"
