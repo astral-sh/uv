@@ -9297,7 +9297,7 @@ fn sync_all_extras() -> Result<()> {
 }
 
 #[test]
-fn sync_extra_short_form() -> Result<()> {
+fn sync_extra_comma_separated() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -9317,18 +9317,6 @@ fn sync_extra_short_form() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("-E").arg("types"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + typing-extensions==4.10.0
-    "#);
-
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @r#"
     success: true
     exit_code: 0
@@ -9336,21 +9324,12 @@ fn sync_extra_short_form() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "#);
-
-    uv_snapshot!(context.filters(), context.sync().arg("-E").arg("types,async"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Audited 4 packages in [TIME]
+     + typing-extensions==4.10.0
     "#);
 
     Ok(())

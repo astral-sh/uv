@@ -1432,7 +1432,7 @@ pub struct PipCompileArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(short = 'E', long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -1789,7 +1789,7 @@ pub struct PipSyncArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(short = 'E', long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -2158,7 +2158,7 @@ pub struct PipInstallArgs {
     /// Include optional dependencies from the specified extra name; may be provided more than once.
     ///
     /// Only applies to `pylock.toml`, `pyproject.toml`, `setup.py`, and `setup.cfg` sources.
-    #[arg(short = 'E', long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
@@ -3456,7 +3456,6 @@ pub struct RunArgs {
     ///
     /// This option is only available when running in a project.
     #[arg(
-        short = 'E',
         long,
         conflicts_with = "all_extras",
         conflicts_with = "only_group",
@@ -3785,7 +3784,6 @@ pub struct SyncArgs {
     /// Note that all optional dependencies are always included in the resolution; this option only
     /// affects the selection of packages to install.
     #[arg(
-        short = 'E',
         long,
         conflicts_with = "all_extras",
         conflicts_with = "only_group",
@@ -4797,7 +4795,7 @@ pub struct ExportArgs {
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
-    #[arg(short = 'E', long, value_delimiter = ',', conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
+    #[arg(long, value_delimiter = ',', conflicts_with = "all_extras", conflicts_with = "only_group", value_parser = extra_name_with_clap_error)]
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
