@@ -1,7 +1,7 @@
 # TLS certificates
 
-By default, uv uses the rustls TLS backend with platform-verifier, which loads certificates from
-the operating system's certificate store. This provides a balance of security, performance, and
+By default, uv uses the rustls TLS backend with platform-verifier, which loads certificates from the
+operating system's certificate store. This provides a balance of security, performance, and
 compatibility with corporate environments that use custom root certificates.
 
 ## System certificates
@@ -13,13 +13,13 @@ command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
 
 ## Custom certificates
 
-To use custom CA certificates, you can set the `SSL_CERT_FILE` environment variable to the path of
-a certificate bundle (PEM format), or set `SSL_CERT_DIR` to a directory containing certificate
-files (`.pem`, `.crt`, or `.cer` extensions).
+To use custom CA certificates, you can set the `SSL_CERT_FILE` environment variable to the path of a
+certificate bundle (PEM format), or set `SSL_CERT_DIR` to a directory containing certificate files
+(`.pem`, `.crt`, or `.cer` extensions).
 
 When using the default TLS backend (rustls), these custom certificates are merged with the
-platform's certificate store loaded via `rustls-platform-verifier`. When using `--native-tls`,
-the custom certificates are used alongside the certificates loaded from the platform's native
+platform's certificate store loaded via `rustls-platform-verifier`. When using `--native-tls`, the
+custom certificates are used alongside the certificates loaded from the platform's native
 certificate store.
 
 The `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
