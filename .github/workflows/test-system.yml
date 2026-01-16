@@ -523,24 +523,35 @@ jobs:
     timeout-minutes: 10
     name: "python3.9 via chocolatey"
     runs-on: windows-latest
+    env:
+      TEST_PYTHON_VERSION: "3.9.13"
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
 
       - name: "Install Python"
-        run: choco install python3 --verbose --version=3.9.13
+        run: choco install python3 --verbose --version=$env:TEST_PYTHON_VERSION
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
-      - name: "Print Python path"
-        run: echo $(which python3)
+      - name: "Verify system Python"
+        run: |
+          $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          echo $(which python)
+          $version = python --version
+          if ($version -ne "Python $env:TEST_PYTHON_VERSION") {
+            echo "Expected Python $env:TEST_PYTHON_VERSION, got $version"
+            exit 1
+          }
 
       - name: "Validate global Python install"
-        run: py -3.9 ./scripts/check_system_python.py --uv ./uv.exe
+        run: |
+          $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          python ./scripts/check_system_python.py --uv ./uv.exe
 
   system-test-pyenv:
     timeout-minutes: 10
