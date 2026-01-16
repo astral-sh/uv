@@ -6,7 +6,6 @@ use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
-use std::env;
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
@@ -997,26 +996,26 @@ fn error_on_relative_module_root_outside_project_root() -> Result<()> {
 
     context.temp_dir.child("__init__.py").touch()?;
 
-    uv_snapshot!(context.filters(), context.build(), @"
+    uv_snapshot!(context.filters(), context.build(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Module root must be inside the project: ..
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Module root must be inside the project: ..
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building wheel (uv build backend)...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Module root must be inside the project: ..
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Module root must be inside the project: ..
     ");
 
     Ok(())
@@ -1052,26 +1051,26 @@ fn error_on_relative_data_dir_outside_project_root() -> Result<()> {
 
     context.temp_dir.child("headers").create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.build().arg("project"), @"
+    uv_snapshot!(context.filters(), context.build().arg("project"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-      × Failed to build `[TEMP_DIR]/project`
-      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The path for the data directory headers must be inside the project: ../header
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @"
+    uv_snapshot!(context.filters(), context.build().arg("project").arg("--wheel"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building wheel (uv build backend)...
-      × Failed to build `[TEMP_DIR]/project`
-      ╰─▶ The path for the data directory headers must be inside the project: ../header
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The path for the data directory headers must be inside the project: ../header
     ");
 
     Ok(())
@@ -1096,26 +1095,26 @@ fn venv_in_source_tree() {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.build(), @"
+    uv_snapshot!(context.filters(), context.build(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 
-    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building wheel (uv build backend)...
-      × Failed to build `[TEMP_DIR]/`
-      ╰─▶ Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Virtual environments must not be added to source distributions or wheels, remove the directory or exclude it from the build: src/foo/.venv
     ");
 }
 
@@ -1205,25 +1204,26 @@ fn invalid_pyproject_toml() -> Result<()> {
         build-backend = "uv_build"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("child"), @"
+    uv_snapshot!(context.filters(), context.build().arg("child"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Building source distribution (uv build backend)...
-      × Failed to build `[TEMP_DIR]/child`
-      ├─▶ Invalid metadata format in: child/pyproject.toml
-      ╰─▶ TOML parse error at line 2, column 8
-            |
-          2 | name = 1
-            |        ^
-          invalid type: integer `1`, expected a string
+    error: Failed to build `[TEMP_DIR]/child`
+      Caused by: Invalid metadata format in: child/pyproject.toml
+      Caused by: TOML parse error at line 2, column 8
+                   |
+                 2 | name = 1
+                   |        ^
+                 invalid type: integer `1`, expected a string
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "pypi")]
 #[test]
 fn build_with_all_metadata() -> Result<()> {
     let context = TestContext::new("3.12");

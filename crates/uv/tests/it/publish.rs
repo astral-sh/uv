@@ -5,7 +5,6 @@ use fs_err::OpenOptions;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::env;
 use std::env::current_dir;
 use std::io::Write;
 use uv_static::EnvVars;
@@ -539,7 +538,6 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
         .arg(format!("{}/upload", server.uri()))
         .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         .env(EnvVars::GITLAB_CI, "true")
-        .env_remove(EnvVars::GITHUB_ACTIONS)
         .env(EnvVars::PYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     success: true
     exit_code: 0
@@ -594,7 +592,6 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
         .arg("../../test/links/ok-1.0.0-py3-none-any.whl")
         // Emulate GitLab CI with TESTPYPI_ID_TOKEN present
         .env(EnvVars::GITLAB_CI, "true")
-        .env_remove(EnvVars::GITHUB_ACTIONS)
         .env(EnvVars::TESTPYPI_ID_TOKEN, "gitlab-oidc-jwt"), @"
     success: true
     exit_code: 0

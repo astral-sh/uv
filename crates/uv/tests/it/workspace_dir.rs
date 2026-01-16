@@ -1,5 +1,3 @@
-use std::env;
-
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;

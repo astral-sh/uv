@@ -1005,15 +1005,15 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--exclude-newer")
-        .arg("2006-12-02T02:07:43"), @"
+        .arg("2006-12-02T02:07:43"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Ignoring existing lockfile due to removal of exclude newer span
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context

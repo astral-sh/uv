@@ -201,8 +201,8 @@ fn python_list_venv() {
     ----- stderr -----
     ");
 
-    // Same if the `VIRTUAL_ENV` is not set (the test context includes it by default)
-    uv_snapshot!(context.filters(), context.python_list().env_remove(EnvVars::VIRTUAL_ENV), @"
+    // Same if the `VIRTUAL_ENV` is not set
+    uv_snapshot!(context.filters(), context.python_list(), @"
     success: true
     exit_code: 0
     ----- stdout -----

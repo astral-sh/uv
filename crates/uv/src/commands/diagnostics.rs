@@ -1,8 +1,10 @@
+use std::fmt::Write;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use thiserror::Error;
 use version_ranges::Ranges;
 
 use uv_distribution_types::{
@@ -11,8 +13,10 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
+use uv_warnings::write_error_chain;
 
 use crate::commands::pip;
+use crate::printer::Stderr;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -77,7 +81,7 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     no_solution_context(&err, context);
                 } else if let Some(hint) = self.hint {
-                    no_solution_hint(err, hint);
+                    no_solution_hint(err, &hint);
                 } else {
                     no_solution(&err);
                 }
@@ -122,9 +126,14 @@ impl OperationDiagnostic {
             }
             pip::operations::Error::Requirements(err) => {
                 if let Some(context) = self.context {
-                    let err = miette::Report::msg(format!("{err}"))
+                    let err = anyhow::Error::from(err)
                         .context(format!("Failed to resolve {context} requirement"));
-                    anstream::eprint!("{err:?}");
+                    let _ = write_error_chain(
+                        err.as_ref(),
+                        Stderr::Enabled,
+                        "error",
+                        owo_colors::AnsiColors::Red,
+                    );
                     None
                 } else {
                     Some(pip::operations::Error::Requirements(err))
@@ -133,7 +142,7 @@ impl OperationDiagnostic {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
                 if !self.native_tls && err.is_ssl() =>
             {
-                native_tls_hint(err);
+                native_tls_hint(&err);
                 None
             }
             pip::operations::Error::OutdatedEnvironment => {
@@ -145,6 +154,14 @@ impl OperationDiagnostic {
     }
 }
 
+/// Display an error with an optional help message.
+pub(crate) fn show_error(err: &dyn std::error::Error, help: Option<&str>) {
+    let _ = write_error_chain(err, Stderr::Enabled, "error", owo_colors::AnsiColors::Red);
+    if let Some(help) = help {
+        let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
+    }
+}
+
 /// Render a distribution failure (read, download or build) with a help message.
 pub(crate) fn dist_error(
     kind: DistErrorKind,
@@ -153,16 +170,13 @@ pub(crate) fn dist_error(
     cause: Arc<uv_distribution::Error>,
     help: Option<String>,
 ) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[derive(Debug, Error)]
     #[error("{kind} `{dist}`")]
-    #[diagnostic()]
     struct Diagnostic {
         kind: DistErrorKind,
         dist: Box<Dist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        #[help]
-        help: Option<String>,
     }
 
     let help = help.or_else(|| {
@@ -184,13 +198,8 @@ pub(crate) fn dist_error(
                 }
             })
     });
-    let report = miette::Report::new(Diagnostic {
-        kind,
-        dist,
-        cause,
-        help,
-    });
-    anstream::eprint!("{report:?}");
+    let err = Diagnostic { kind, dist, cause };
+    show_error(&err, help.as_deref());
 }
 
 /// Render a requested distribution failure (read, download or build) with a help message.
@@ -201,16 +210,13 @@ pub(crate) fn requested_dist_error(
     cause: Arc<uv_distribution::Error>,
     help: Option<String>,
 ) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[derive(Debug, Error)]
     #[error("{kind} `{dist}`")]
-    #[diagnostic()]
     struct Diagnostic {
         kind: DistErrorKind,
         dist: Box<RequestedDist>,
         #[source]
         cause: Arc<uv_distribution::Error>,
-        #[help]
-        help: Option<String>,
     }
 
     let help = help.or_else(|| {
@@ -232,13 +238,8 @@ pub(crate) fn requested_dist_error(
                 }
             })
     });
-    let report = miette::Report::new(Diagnostic {
-        kind,
-        dist,
-        cause,
-        help,
-    });
-    anstream::eprint!("{report:?}");
+    let err = Diagnostic { kind, dist, cause };
+    show_error(&err, help.as_deref());
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -249,16 +250,13 @@ pub(crate) fn dependencies_error(
     chain: &DerivationChain,
     help: Option<String>,
 ) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
-    #[diagnostic()]
+    #[derive(Debug, Error)]
+    #[error("Failed to resolve dependencies for `{name}` (v{version})")]
     struct Diagnostic {
         name: PackageName,
         version: Version,
         #[source]
         cause: Box<uv_resolver::ResolveError>,
-        #[help]
-        help: Option<String>,
     }
 
     let help = help.or_else(|| {
@@ -280,83 +278,62 @@ pub(crate) fn dependencies_error(
                 }
             })
     });
-    let report = miette::Report::new(Diagnostic {
+    let err = Diagnostic {
         name: name.clone(),
         version: version.clone(),
         cause: error,
-        help,
-    });
-    anstream::eprint!("{report:?}");
+    };
+    show_error(&err, help.as_deref());
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
 pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError) {
-    let report = miette::Report::msg(format!("{err}")).context(err.header());
-    anstream::eprint!("{report:?}");
+    let err = anyhow::Error::msg(format!("{err}")).context(err.header().to_string());
+    let _ = write_error_chain(
+        err.as_ref(),
+        Stderr::Enabled,
+        "error",
+        owo_colors::AnsiColors::Red,
+    );
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with dedicated context.
 pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &'static str) {
-    let report = miette::Report::msg(format!("{err}")).context(err.header().with_context(context));
-    anstream::eprint!("{report:?}");
+    let err = anyhow::Error::msg(format!("{err}"))
+        .context(err.header().with_context(context).to_string());
+    let _ = write_error_chain(
+        err.as_ref(),
+        Stderr::Enabled,
+        "error",
+        owo_colors::AnsiColors::Red,
+    );
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
-pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: String) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: &str) {
+    #[derive(Debug, Error)]
     #[error("{header}")]
-    #[diagnostic()]
-    struct Error {
+    struct HeaderError {
         /// The header to render in the error message.
         header: uv_resolver::NoSolutionHeader,
 
         /// The underlying error.
         #[source]
         err: Box<uv_resolver::NoSolutionError>,
-
-        /// The help message to display.
-        #[help]
-        help: String,
     }
 
     let header = err.header();
-    let report = miette::Report::new(Error { header, err, help });
-    anstream::eprint!("{report:?}");
+    let err = HeaderError { header, err };
+    show_error(&err, Some(help));
 }
 
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-pub(crate) fn native_tls_hint(err: uv_client::Error) {
-    #[derive(Debug, miette::Diagnostic)]
-    #[diagnostic()]
-    struct Error {
-        /// The underlying error.
-        err: uv_client::Error,
-
-        /// The help message to display.
-        #[help]
-        help: String,
-    }
-
-    impl std::fmt::Display for Error {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.err)
-        }
-    }
-
-    impl std::error::Error for Error {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.err.source()
-        }
-    }
-
-    let report = miette::Report::new(Error {
-        err,
-        help: format!(
-            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--native-tls".green()
-        ),
-    });
-    anstream::eprint!("{report:?}");
+/// Render an SSL error with a hint about native TLS.
+pub(crate) fn native_tls_hint(err: &uv_client::Error) {
+    let hint = format!(
+        "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+        "--native-tls".green()
+    );
+    show_error(err, Some(&hint));
 }
 
 /// Format a [`DerivationChain`] as a human-readable error message.
