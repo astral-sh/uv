@@ -15,7 +15,7 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     }
     #[cfg(windows)]
     {
-        uv::windows_spawn::spawn_child(cmd, false)
+        uv_windows::spawn_child(cmd, false)
     }
 }
 
