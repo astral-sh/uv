@@ -171,11 +171,11 @@ pub(crate) struct DiscoveryPreferences {
 pub enum PythonVariant {
     #[default]
     Default,
+    Gil,
+    GilDebug,
     Debug,
     Freethreaded,
     FreethreadedDebug,
-    Gil,
-    GilDebug,
 }
 
 /// A Python discovery version request.
@@ -1753,27 +1753,47 @@ fn is_windows_store_shim(_path: &Path) -> bool {
 }
 
 impl PythonVariant {
-    fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+    /// Derive the variant from an interpreter's properties.
+    pub fn from_interpreter(interpreter: &Interpreter) -> Self {
+        match (interpreter.gil_disabled(), interpreter.debug_enabled()) {
+            (true, true) => Self::FreethreadedDebug,
+            (true, false) => Self::Freethreaded,
+            (false, true) => Self::GilDebug,
+            (false, false) => Self::Gil,
+        }
+    }
+
+    /// Check if this variant (as a request) matches another variant, given a Python version.
+    pub fn matches(self, other: Self, major: u8, minor: u8) -> bool {
         match self {
             Self::Default => {
                 // TODO(zanieb): Right now, we allow debug interpreters to be selected by default for
                 // backwards compatibility, but we may want to change this in the future.
-                if (interpreter.python_major(), interpreter.python_minor()) >= (3, 14) {
+                if (major, minor) >= (3, 14) {
                     // For Python 3.14+, the free-threaded build is not considered experimental
                     // and can satisfy the default variant without opt-in
                     true
                 } else {
                     // In Python 3.13 and earlier, the free-threaded build is considered
                     // experimental and requires explicit opt-in
-                    !interpreter.gil_disabled()
+                    !other.is_freethreaded()
                 }
             }
-            Self::Debug => interpreter.debug_enabled(),
-            Self::Freethreaded => interpreter.gil_disabled(),
-            Self::FreethreadedDebug => interpreter.gil_disabled() && interpreter.debug_enabled(),
-            Self::Gil => !interpreter.gil_disabled(),
-            Self::GilDebug => !interpreter.gil_disabled() && interpreter.debug_enabled(),
+            Self::Debug => other.is_debug() && !other.is_freethreaded(),
+            Self::Freethreaded => other.is_freethreaded() && !other.is_debug(),
+            Self::FreethreadedDebug => other.is_freethreaded() && other.is_debug(),
+            Self::Gil => !other.is_freethreaded() && !other.is_debug(),
+            Self::GilDebug => !other.is_freethreaded() && other.is_debug(),
         }
+    }
+
+    fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+        let other = Self::from_interpreter(interpreter);
+        self.matches(
+            other,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+        )
     }
 
     /// Return the executable suffix for the variant, e.g., `t` for `python3.13t`.
@@ -1790,8 +1810,25 @@ impl PythonVariant {
         }
     }
 
-    /// Return the suffix for display purposes, e.g., `+gil`.
+    /// Return the suffix for display purposes, e.g., `+freethreaded`.
+    ///
+    /// This is used when displaying found/resolved interpreters. It returns an empty
+    /// string for `Gil` since GIL-enabled Python is the default and shouldn't be
+    /// explicitly shown.
     pub fn display_suffix(self) -> &'static str {
+        match self {
+            Self::Default | Self::Gil => "",
+            Self::Debug | Self::GilDebug => "+debug",
+            Self::Freethreaded => "+freethreaded",
+            Self::FreethreadedDebug => "+freethreaded+debug",
+        }
+    }
+
+    /// Return the suffix for displaying user requests, e.g., `+freethreaded` or `+gil`.
+    ///
+    /// Unlike `display_suffix()`, this shows `+gil` when the user explicitly requested
+    /// the GIL variant. Used in error messages and user-facing request display.
+    pub fn request_suffix(self) -> &'static str {
         match self {
             Self::Default => "",
             Self::Debug => "+debug",
@@ -3215,15 +3252,15 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
-            Self::Major(major, variant) => write!(f, "{major}{}", variant.display_suffix()),
+            Self::Major(major, variant) => write!(f, "{major}{}", variant.request_suffix()),
             Self::MajorMinor(major, minor, variant) => {
-                write!(f, "{major}.{minor}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}{}", variant.request_suffix())
             }
             Self::MajorMinorPatch(major, minor, patch, variant) => {
-                write!(f, "{major}.{minor}.{patch}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}.{patch}{}", variant.request_suffix())
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
-                write!(f, "{major}.{minor}{prerelease}{}", variant.display_suffix())
+                write!(f, "{major}.{minor}{prerelease}{}", variant.request_suffix())
             }
             Self::Range(specifiers, _) => write!(f, "{specifiers}"),
         }
@@ -4118,5 +4155,36 @@ mod tests {
         );
         // @ is not allowed if the prefix is empty.
         assert!(PythonRequest::try_split_prefix_and_version("", "@3").is_err());
+    }
+
+    #[test]
+    fn python_variant_matches() {
+        // For Python 3.14+, Default matches all variants
+        assert!(PythonVariant::Default.matches(PythonVariant::Gil, 3, 14));
+        assert!(PythonVariant::Default.matches(PythonVariant::Freethreaded, 3, 14));
+        assert!(PythonVariant::Default.matches(PythonVariant::GilDebug, 3, 14));
+        assert!(PythonVariant::Default.matches(PythonVariant::FreethreadedDebug, 3, 14));
+
+        // For Python <3.14, Default only matches GIL variants
+        assert!(PythonVariant::Default.matches(PythonVariant::Gil, 3, 13));
+        assert!(PythonVariant::Default.matches(PythonVariant::GilDebug, 3, 13));
+        assert!(!PythonVariant::Default.matches(PythonVariant::Freethreaded, 3, 13));
+        assert!(!PythonVariant::Default.matches(PythonVariant::FreethreadedDebug, 3, 13));
+
+        // Gil request matches Gil variant
+        assert!(PythonVariant::Gil.matches(PythonVariant::Gil, 3, 14));
+        assert!(!PythonVariant::Gil.matches(PythonVariant::Freethreaded, 3, 14));
+        assert!(!PythonVariant::Gil.matches(PythonVariant::GilDebug, 3, 14));
+
+        // Freethreaded request matches Freethreaded variant
+        assert!(PythonVariant::Freethreaded.matches(PythonVariant::Freethreaded, 3, 14));
+        assert!(!PythonVariant::Freethreaded.matches(PythonVariant::Gil, 3, 14));
+        assert!(!PythonVariant::Freethreaded.matches(PythonVariant::FreethreadedDebug, 3, 14));
+
+        // Debug variants
+        assert!(PythonVariant::GilDebug.matches(PythonVariant::GilDebug, 3, 14));
+        assert!(!PythonVariant::GilDebug.matches(PythonVariant::Gil, 3, 14));
+        assert!(PythonVariant::FreethreadedDebug.matches(PythonVariant::FreethreadedDebug, 3, 14));
+        assert!(!PythonVariant::FreethreadedDebug.matches(PythonVariant::Freethreaded, 3, 14));
     }
 }

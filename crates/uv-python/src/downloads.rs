@@ -521,7 +521,7 @@ impl PythonDownloadRequest {
                 return false;
             }
             if let Some(variant) = version.variant() {
-                if variant != key.variant {
+                if !variant.matches(key.variant, key.major, key.minor) {
                     return false;
                 }
             }
@@ -1539,7 +1539,7 @@ fn parse_json_downloads(
                 .transpose()
             {
                 Ok(Some(variant)) => variant,
-                Ok(None) => PythonVariant::default(),
+                Ok(None) => PythonVariant::Gil,
                 Err(()) => {
                     debug!(
                         "Skipping entry {key}: Unknown python variant - {}",

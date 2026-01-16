@@ -615,8 +615,12 @@ impl PythonInstallationKey {
 
 impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Only show variant suffix for non-default variants.
+        // Gil is the default, so it shouldn't be shown.
+        // GilDebug shows as +debug (not +gil+debug).
         let variant = match self.variant {
-            PythonVariant::Default => String::new(),
+            PythonVariant::Default | PythonVariant::Gil => String::new(),
+            PythonVariant::GilDebug => "+debug".to_string(),
             _ => format!("+{}", self.variant),
         };
         write!(
@@ -668,7 +672,7 @@ impl FromStr for PythonInstallationKey {
                 })?;
                 (version, variant)
             }
-            None => (*version_str, PythonVariant::Default),
+            None => (*version_str, PythonVariant::Gil),
         };
 
         let version = PythonVersion::from_str(version).map_err(|err| {
@@ -754,16 +758,15 @@ impl PythonInstallationMinorVersionKey {
 
 impl fmt::Display for PythonInstallationMinorVersionKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Display every field on the wrapped key except the patch
-        // and prerelease (with special formatting for the variant).
-        let variant = match self.0.variant {
-            PythonVariant::Default => String::new(),
-            _ => format!("+{}", self.0.variant),
-        };
+        // Display every field on the wrapped key except the patch and prerelease.
         write!(
             f,
             "{}-{}.{}{}-{}",
-            self.0.implementation, self.0.major, self.0.minor, variant, self.0.platform,
+            self.0.implementation,
+            self.0.major,
+            self.0.minor,
+            self.0.variant.display_suffix(),
+            self.0.platform,
         )
     }
 }
