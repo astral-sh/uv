@@ -195,7 +195,11 @@ impl<'a> FlatIndexClient<'a> {
                     .text()
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(&text, &url)
+                let SimpleDetailHTML {
+                    project_status: _,
+                    base,
+                    files,
+                } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
                 // Convert to a reference-counted string.
@@ -246,7 +250,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(CachedClientError::Client { err, .. }) if err.is_offline() => {
+            Err(CachedClientError::Client(err)) if err.is_offline() => {
                 Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),

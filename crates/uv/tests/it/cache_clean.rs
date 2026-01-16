@@ -22,7 +22,7 @@ fn clean_all() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @r"
+    uv_snapshot!(context.with_filtered_counts().filters(), context.clean().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -53,7 +53,7 @@ async fn clean_force() -> Result<()> {
         .success();
 
     // When unlocked, `--force` should still take a lock
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @r"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -77,7 +77,7 @@ async fn clean_force() -> Result<()> {
     let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
         .await;
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @r"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -133,7 +133,7 @@ fn clean_package_pypi() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r"
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -153,7 +153,7 @@ fn clean_package_pypi() -> Result<()> {
     );
 
     // Running `uv cache prune` should have no effect.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -212,7 +212,7 @@ fn clean_package_index() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @r"
+    uv_snapshot!(&filters, context.clean().arg("--verbose").arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -243,7 +243,7 @@ async fn cache_timeout() {
         .with_exclusive_lock()
         .await;
 
-    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @r"
+    uv_snapshot!(context.filters(), context.clean().env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----

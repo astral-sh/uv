@@ -8,8 +8,8 @@ function cleanupClipboardText(targetSelector) {
     .filter(
       (node) =>
         !excludedClasses.some((className) =>
-          node?.classList?.contains(className)
-        )
+          node?.classList?.contains(className),
+        ),
     )
     .map((node) => node.textContent)
     .filter((s) => s != "");
@@ -23,7 +23,7 @@ function setCopyText() {
   const attr = "clipboardText";
   // all "copy" buttons whose target selector is a <code> element
   const elements = document.querySelectorAll(
-    'button[data-clipboard-target$="code"]'
+    'button[data-clipboard-target$="code"]',
   );
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
@@ -33,7 +33,7 @@ function setCopyText() {
         entry.target.dataset[attr] === undefined
       ) {
         entry.target.dataset[attr] = cleanupClipboardText(
-          entry.target.dataset.clipboardTarget
+          entry.target.dataset.clipboardTarget,
         );
       }
     });
@@ -88,6 +88,8 @@ document$.subscribe(function () {
       "concepts/projects/run/#legacy-scripts-on-windows",
     "concepts/projects/sync/#checking-if-the-lockfile-is-up-to-date":
       "concepts/projects/sync/#checking-the-lockfile",
+    "concepts/projects/sync/#retaining-extraneous-packages":
+      "concepts/projects/sync/#handling-of-extraneous-packages",
     "concepts/authentication/#git-authentication":
       "concepts/authentication/git/",
     "concepts/authentication/#git-credential-helpers":

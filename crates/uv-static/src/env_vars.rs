@@ -268,6 +268,11 @@ impl EnvVars {
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
+    /// Equivalent to the `--no-sources-package` command line argument. If set, uv will
+    /// ignore the `tool.uv.sources` table for the given space-delimited list of packages.
+    #[attr_added_in("0.9.26")]
+    pub const UV_NO_SOURCES_PACKAGE: &'static str = "UV_NO_SOURCES_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     #[attr_added_in("0.4.16")]
@@ -1085,6 +1090,12 @@ impl EnvVars {
     #[attr_added_in("0.5.29")]
     pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
 
+    /// Used to mock the current timestamp for relative `--exclude-newer` times in tests.
+    /// Should be set to an RFC 3339 timestamp (e.g., `2025-11-21T12:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.9.8")]
+    pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
@@ -1197,6 +1208,12 @@ impl EnvVars {
     /// `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
     #[attr_added_in("0.8.21")]
     pub const UV_S3_ENDPOINT_URL: &'static str = "UV_S3_ENDPOINT_URL";
+
+    /// The URL to treat as a GCS-compatible storage endpoint. Requests to this endpoint
+    /// will be signed using Google Cloud authentication based on the `GOOGLE_APPLICATION_CREDENTIALS`
+    /// environment variable or Application Default Credentials.
+    #[attr_added_in("0.9.26")]
+    pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
 
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]

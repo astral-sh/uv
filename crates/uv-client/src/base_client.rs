@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
@@ -16,12 +16,12 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipart};
+use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
-    default_on_request_error,
+    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
+    default_on_request_success,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -29,7 +29,8 @@ use url::ParseError;
 use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
-use uv_configuration::{KeyringProviderType, TrustedHost};
+use uv_configuration::ProxyUrlKind;
+use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -50,7 +51,7 @@ pub const DEFAULT_RETRIES: u32 = 3;
 /// Maximum number of redirects to follow before giving up.
 ///
 /// This is the default used by [`reqwest`].
-const DEFAULT_MAX_REDIRECTS: u32 = 10;
+pub const DEFAULT_MAX_REDIRECTS: u32 = 10;
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -84,6 +85,9 @@ pub struct BaseClientBuilder<'a> {
     timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     redirect_policy: RedirectPolicy,
     /// Whether credentials should be propagated during cross-origin redirects.
     ///
@@ -104,6 +108,8 @@ pub enum RedirectPolicy {
     BypassMiddleware,
     /// Handle redirects manually, re-triggering our custom middleware for each request.
     RetriggerMiddleware,
+    /// No redirect for non-cloneable (e.g., streaming) requests with custom redirect logic.
+    NoRedirect,
 }
 
 impl RedirectPolicy {
@@ -111,6 +117,7 @@ impl RedirectPolicy {
         match self {
             Self::BypassMiddleware => reqwest::redirect::Policy::default(),
             Self::RetriggerMiddleware => reqwest::redirect::Policy::none(),
+            Self::NoRedirect => reqwest::redirect::Policy::none(),
         }
     }
 }
@@ -145,6 +152,9 @@ impl Default for BaseClientBuilder<'_> {
             timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
@@ -259,6 +269,24 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn proxy(mut self, proxy: Proxy) -> Self {
         self.proxies.push(proxy);
+        self
+    }
+
+    #[must_use]
+    pub fn http_proxy(mut self, http_proxy: Option<ProxyUrl>) -> Self {
+        self.http_proxy = http_proxy;
+        self
+    }
+
+    #[must_use]
+    pub fn https_proxy(mut self, https_proxy: Option<ProxyUrl>) -> Self {
+        self.https_proxy = https_proxy;
+        self
+    }
+
+    #[must_use]
+    pub fn no_proxy(mut self, no_proxy: Option<Vec<String>>) -> Self {
+        self.no_proxy = no_proxy;
         self
     }
 
@@ -393,14 +421,31 @@ impl<'a> BaseClientBuilder<'a> {
         // Certificate loading support is delegated to `rustls-native-certs`.
         // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
         let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-            let path_exists = Path::new(&path).exists();
-            if !path_exists {
-                warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                    path.simplified_display().cyan()
-                );
+            let path = Path::new(&path);
+            match path.metadata() {
+                Ok(metadata) if metadata.is_file() => true,
+                Ok(_) => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path is not a file: {}.",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path does not exist: {}.",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
+                Err(err) => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}).",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
             }
-            path_exists
         });
 
         // Checks for the presence of `SSL_CERT_DIR`.
@@ -523,6 +568,24 @@ impl<'a> BaseClientBuilder<'a> {
         for p in &self.proxies {
             client_builder = client_builder.proxy(p.clone());
         }
+
+        let no_proxy = self
+            .no_proxy
+            .as_ref()
+            .and_then(|no_proxy| NoProxy::from_string(&no_proxy.join(",")));
+
+        if let Some(http_proxy) = &self.http_proxy {
+            let proxy = http_proxy
+                .as_proxy(ProxyUrlKind::Http)
+                .no_proxy(no_proxy.clone());
+            client_builder = client_builder.proxy(proxy);
+        }
+
+        if let Some(https_proxy) = &self.https_proxy {
+            let proxy = https_proxy.as_proxy(ProxyUrlKind::Https).no_proxy(no_proxy);
+            client_builder = client_builder.proxy(proxy);
+        }
+
         let client_builder = client_builder;
 
         client_builder
@@ -729,6 +792,7 @@ impl RedirectClientWithMiddleware {
         match self.redirect_policy {
             RedirectPolicy::BypassMiddleware => self.client.execute(req).await,
             RedirectPolicy::RetriggerMiddleware => self.execute_with_redirect_handling(req).await,
+            RedirectPolicy::NoRedirect => self.client.execute(req).await,
         }
     }
 
@@ -1015,21 +1079,15 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
-/// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.
+/// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
+/// adds additional retry cases.
 pub struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {
-        // Use the default strategy and check for additional transient error cases.
-        let retryable = match DefaultRetryableStrategy.handle(res) {
-            None | Some(Retryable::Fatal)
-                if res
-                    .as_ref()
-                    .is_err_and(|err| is_transient_network_error(err)) =>
-            {
-                Some(Retryable::Transient)
-            }
-            default => default,
+        let retryable = match res {
+            Ok(success) => default_on_request_success(success),
+            Err(err) => retryable_on_request_failure(err),
         };
 
         // Log on transient errors
@@ -1055,16 +1113,21 @@ impl RetryableStrategy for UvRetryableStrategy {
 
 /// Whether the error looks like a network error that should be retried.
 ///
-/// There are two cases that the default retry strategy is missing:
+/// This is an extension over [`reqwest_middleware::default_on_request_failure`], which is missing
+/// a number of cases:
 /// * Inside the reqwest or reqwest-middleware error is an `io::Error` such as a broken pipe
 /// * When streaming a response, a reqwest error may be hidden several layers behind errors
-///   of different crates processing the stream, including `io::Error` layers.
-pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
+///   of different crates processing the stream, including `io::Error` layers
+/// * Any `h2` error
+fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable> {
     // First, try to show a nice trace log
     if let Some((Some(status), Some(url))) = find_source::<WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
-        trace!("Considering retry of response HTTP {status} for {url}");
+        trace!(
+            "Considering retry of response HTTP {status} for {url}",
+            url = DisplaySafeUrl::from_url(url.clone())
+        );
     } else {
         trace!("Considering retry of error: {err:?}");
     }
@@ -1074,29 +1137,32 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     // crates
     let mut current_source = Some(err);
     while let Some(source) = current_source {
-        if let Some(reqwest_err) = source.downcast_ref::<WrappedReqwestError>() {
-            has_known_error = true;
-            if let reqwest_middleware::Error::Reqwest(reqwest_err) = &**reqwest_err {
-                if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
-                    trace!("Retrying nested reqwest middleware error");
-                    return true;
-                }
-                if is_retryable_status_error(reqwest_err) {
-                    trace!("Retrying nested reqwest middleware status code error");
-                    return true;
-                }
-            }
+        // Handle different kinds of reqwest error nesting not accessible by downcast.
+        let reqwest_err = if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+            Some(reqwest_err)
+        } else if let Some(reqwest_err) = source
+            .downcast_ref::<WrappedReqwestError>()
+            .and_then(|err| err.inner())
+        {
+            Some(reqwest_err)
+        } else if let Some(reqwest_middleware::Error::Reqwest(reqwest_err)) =
+            source.downcast_ref::<reqwest_middleware::Error>()
+        {
+            Some(reqwest_err)
+        } else {
+            None
+        };
 
-            trace!("Cannot retry nested reqwest middleware error");
-        } else if let Some(reqwest_err) = source.downcast_ref::<reqwest::Error>() {
+        if let Some(reqwest_err) = reqwest_err {
             has_known_error = true;
+            // Ignore the default retry strategy returning fatal.
             if default_on_request_error(reqwest_err) == Some(Retryable::Transient) {
                 trace!("Retrying nested reqwest error");
-                return true;
+                return Some(Retryable::Transient);
             }
             if is_retryable_status_error(reqwest_err) {
                 trace!("Retrying nested reqwest status code error");
-                return true;
+                return Some(Retryable::Transient);
             }
 
             trace!("Cannot retry nested reqwest error");
@@ -1104,7 +1170,7 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             // All h2 errors look like errors that should be retried
             // https://github.com/astral-sh/uv/issues/15916
             trace!("Retrying nested h2 error");
-            return true;
+            return Some(Retryable::Transient);
         } else if let Some(io_err) = source.downcast_ref::<io::Error>() {
             has_known_error = true;
             let retryable_io_err_kinds = [
@@ -1121,7 +1187,7 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
             ];
             if retryable_io_err_kinds.contains(&io_err.kind()) {
                 trace!("Retrying error: `{}`", io_err.kind());
-                return true;
+                return Some(Retryable::Transient);
             }
 
             trace!(
@@ -1136,7 +1202,81 @@ pub fn is_transient_network_error(err: &(dyn Error + 'static)) -> bool {
     if !has_known_error {
         trace!("Cannot retry error: Neither an IO error nor a reqwest error");
     }
-    false
+
+    None
+}
+
+/// Per-request retry state and policy.
+pub struct RetryState {
+    retry_policy: ExponentialBackoff,
+    start_time: SystemTime,
+    total_retries: u32,
+    url: DisplaySafeUrl,
+}
+
+impl RetryState {
+    /// Initialize the [`RetryState`] and start the backoff timer.
+    pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
+        Self {
+            retry_policy,
+            start_time: SystemTime::now(),
+            total_retries: 0,
+            url: url.into(),
+        }
+    }
+
+    /// The number of retries across all requests.
+    ///
+    /// After a failed retryable request, this equals the maximum number of retries.
+    pub fn total_retries(&self) -> u32 {
+        self.total_retries
+    }
+
+    /// Determines whether request should be retried.
+    ///
+    /// Takes the number of retries from nested layers associated with the specific `err` type as
+    /// `error_retries`.
+    ///
+    /// Returns the backoff duration if the request should be retried.
+    #[must_use]
+    pub fn should_retry(
+        &mut self,
+        err: &(dyn Error + 'static),
+        error_retries: u32,
+    ) -> Option<Duration> {
+        // If the middleware performed any retries, consider them in our budget.
+        self.total_retries += error_retries;
+        match retryable_on_request_failure(err) {
+            Some(Retryable::Transient) => {
+                let retry_decision = self
+                    .retry_policy
+                    .should_retry(self.start_time, self.total_retries);
+                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+                    let duration = execute_after
+                        .duration_since(SystemTime::now())
+                        .unwrap_or_else(|_| Duration::default());
+
+                    self.total_retries += 1;
+                    return Some(duration);
+                }
+
+                None
+            }
+            Some(Retryable::Fatal) | None => None,
+        }
+    }
+
+    /// Wait before retrying the request.
+    pub async fn sleep_backoff(&self, duration: Duration) {
+        debug!(
+            "Transient failure while handling response from {}; retrying after {:.1}s...",
+            self.url,
+            duration.as_secs_f32(),
+        );
+        // TODO(konsti): Should we show a spinner plus a message in the CLI while
+        // waiting?
+        tokio::time::sleep(duration).await;
+    }
 }
 
 /// Whether the error is a status code error that is retryable.
@@ -1381,7 +1521,7 @@ mod tests {
         let middleware_client = ClientWithMiddleware::default();
         let mut retried = Vec::new();
         for status in 100..599 {
-            // Test all standard status codes and and example for a non-RFC code used in the wild.
+            // Test all standard status codes and an example for a non-RFC code used in the wild.
             if StatusCode::from_u16(status)?.canonical_reason().is_none() && status != 420 {
                 continue;
             }
@@ -1397,7 +1537,7 @@ mod tests {
                 .await;
 
             let middleware_retry =
-                DefaultRetryableStrategy.handle(&response) == Some(Retryable::Transient);
+                UvRetryableStrategy.handle(&response) == Some(Retryable::Transient);
 
             let response = client
                 .get(format!("{}/{}", server.uri(), status))
@@ -1406,7 +1546,7 @@ mod tests {
 
             let uv_retry = match response.error_for_status() {
                 Ok(_) => false,
-                Err(err) => is_transient_network_error(&err),
+                Err(err) => retryable_on_request_failure(&err) == Some(Retryable::Transient),
             };
 
             // Ensure we're retrying the same status code as the reqwest_retry crate. We may choose
@@ -1417,7 +1557,7 @@ mod tests {
             }
         }
 
-        assert_debug_snapshot!(retried, @r"
+        assert_debug_snapshot!(retried, @"
         [
             100,
             102,

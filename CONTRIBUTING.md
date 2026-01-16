@@ -102,6 +102,71 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+## Formatting
+
+```shell
+# Rust
+cargo fmt --all
+
+# Python
+uvx ruff format .
+
+# Markdown, YAML, and other files (requires Node.js)
+npx prettier --write .
+# or in Docker
+docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write .
+```
+
+## Linting
+
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately.
+
+```shell
+# Rust
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+# Python
+uvx ruff check .
+
+# Python type checking
+uvx ty check python/uv
+
+# Shell scripts
+shellcheck <script>
+
+# Spell checking
+uvx typos
+
+# Unused Rust dependencies
+cargo shear
+```
+
+### Compiling for Windows from Unix
+
+To run clippy for a Windows target from Linux or macOS, you can use
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+
+```shell
+# Install cargo-xwin
+cargo install cargo-xwin --locked
+
+# Add the Windows target
+rustup target add x86_64-pc-windows-msvc
+
+# Run clippy for Windows
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+```
+
+## Crate structure
+
+Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
+[cargo-depgraph](https://github.com/jplatte/cargo-depgraph) and graphviz, then run:
+
+```shell
+cargo depgraph --dedup-transitive-deps --workspace-only | dot -Tpng > graph.png
+```
+
 ## Running inside a Docker container
 
 Source distributions can run arbitrary code on build and can make unwanted modifications to your
@@ -127,7 +192,7 @@ Please refer to Ruff's
 it applies to uv, too.
 
 We provide diverse sets of requirements for testing and benchmarking the resolver in
-`scripts/requirements` and for the installer in `scripts/requirements/compiled`.
+`test/requirements` and for the installer in `test/requirements/compiled`.
 
 You can use `scripts/benchmark` to benchmark predefined workloads between uv versions and with other
 tools, e.g., from the `scripts/benchmark` directory:
@@ -138,7 +203,7 @@ uv run resolver \
     --poetry \
     --benchmark \
     resolve-cold \
-    ../scripts/requirements/trio.in
+    ../test/requirements/trio.in
 ```
 
 ### Analyzing concurrency
@@ -148,7 +213,7 @@ visualize parallel requests and find any spots where uv is CPU-bound. Example us
 `uv-dev` respectively:
 
 ```shell
-RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile scripts/requirements/jupyter.in
+RUST_LOG=uv=info TRACING_DURATIONS_FILE=target/traces/jupyter.ndjson cargo run --features tracing-durations-export --profile profiling -- pip compile test/requirements/jupyter.in
 ```
 
 ```shell
@@ -174,40 +239,23 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   # For contributors.
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
-
-   # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-   uvx --with-requirements docs/requirements-insiders.txt -- mkdocs serve -f mkdocs.insiders.yml
+   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
 
-To update the documentation dependencies, edit `docs/requirements.in` and
-`docs/requirements-insiders.in`, then run:
+To update the documentation dependencies, edit `docs/requirements.in`, then run:
 
 ```shell
 uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
-uv pip compile docs/requirements-insiders.in -o docs/requirements-insiders.txt --universal -p 3.12
 ```
 
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
 Cloudflare Pages.
 
-After making changes to the documentation, format the markdown files with:
-
-```shell
-npx prettier --prose-wrap always --write "**/*.md"
-```
-
-Note that the command above requires Node.js and npm to be installed on your system. As an
-alternative, you can run this command using Docker:
-
-```console
-$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --prose-wrap always --write "**/*.md"
-```
+After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
 
 ## Releases
 

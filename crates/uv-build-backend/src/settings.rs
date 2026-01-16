@@ -70,6 +70,9 @@ pub struct BuildBackendSettings {
     pub default_excludes: bool,
 
     /// Glob expressions which files and directories to exclude from the source distribution.
+    ///
+    /// These exclusions are also applied to wheels to ensure that a wheel built from a source tree
+    /// is consistent with a wheel built from a source distribution.
     #[option(
         default = r#"[]"#,
         value_type = "list[str]",

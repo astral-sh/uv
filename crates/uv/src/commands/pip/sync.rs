@@ -9,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -85,7 +85,7 @@ pub(crate) async fn pip_sync(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
-    sources: SourceStrategy,
+    sources: NoSources,
     python_preference: PythonPreference,
     concurrency: Concurrency,
     cache: Cache,
@@ -400,7 +400,7 @@ pub(crate) async fn pip_sync(
         &build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         WorkspaceCache::default(),
         concurrency,
         preview,

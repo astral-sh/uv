@@ -16,21 +16,21 @@ An extremely fast Python package and project manager, written in Rust.
 
 ## Highlights
 
-- 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
-  and more.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🗂️ Provides [comprehensive project management](#projects), with a
+- A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`, and
+  more.
+- [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
+- Provides [comprehensive project management](#projects), with a
   [universal lockfile](./concepts/projects/layout.md#the-lockfile).
-- ❇️ [Runs scripts](#scripts), with support for
+- [Runs scripts](#scripts), with support for
   [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🐍 [Installs and manages](#python-versions) Python versions.
-- 🛠️ [Runs and installs](#tools) tools published as Python packages.
-- 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
-  familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](./concepts/projects/workspaces.md) for scalable projects.
-- 💾 Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
-- ⏬ Installable without Rust or Python via `curl` or `pip`.
-- 🖥️ Supports macOS, Linux, and Windows.
+- [Installs and manages](#python-versions) Python versions.
+- [Runs and installs](#tools) tools published as Python packages.
+- Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a familiar
+  CLI.
+- Supports Cargo-style [workspaces](./concepts/projects/workspaces.md) for scalable projects.
+- Disk-space efficient, with a [global cache](./concepts/cache.md) for dependency deduplication.
+- Installable without Rust or Python via `curl` or `pip`.
+- Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of
 [Ruff](https://github.com/astral-sh/ruff).

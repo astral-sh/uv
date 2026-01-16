@@ -9,7 +9,6 @@ use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
 use regex::Regex;
 use thiserror::Error;
-use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
 use uv_fs::Simplified;
@@ -513,7 +512,7 @@ mod test {
             .to_string()
             .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
         [stdout]
@@ -535,7 +534,7 @@ mod test {
         error: command '/usr/bin/gcc' failed with exit code 1
 
         hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
-        "###);
+        "#);
     }
 
     #[test]
@@ -571,7 +570,7 @@ mod test {
             .to_string()
             .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -582,7 +581,7 @@ mod test {
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
 
         hint: This error likely indicates that you need to install the library that provides a shared library for `ncurses` for `pygraphviz-1.11` (e.g., `libncurses-dev`)
-        "###);
+        ");
     }
 
     #[test]
@@ -670,7 +669,7 @@ mod test {
             .to_string()
             .replace("exit status: ", "exit code: ");
         let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -678,6 +677,6 @@ mod test {
         ModuleNotFoundError: No module named 'distutils'
 
         hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of `pygraphviz` that depends on `distutils`.
-        "###);
+        ");
     }
 }

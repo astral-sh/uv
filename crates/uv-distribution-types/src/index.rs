@@ -32,15 +32,18 @@ impl IndexCacheControl {
 
     /// Return the default files cache control headers for the given index URL, if applicable.
     pub fn artifact_cache_control(url: &Url) -> Option<&'static str> {
-        if url
-            .host_str()
-            .is_some_and(|host| host.ends_with("pytorch.org"))
-        {
+        let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("download.pytorch.org")
+                || host.eq_ignore_ascii_case("pypi.nvidia.com")
+        });
+        if dominated_by_pytorch_or_nvidia {
             // Some wheels in the PyTorch registry were accidentally uploaded with `no-cache,no-store,must-revalidate`.
             // The PyTorch team plans to correct this in the future, but in the meantime we override
             // the cache control headers to allow caching of static files.
             //
             // See: https://github.com/pytorch/pytorch/pull/149218
+            //
+            // The same issue applies to files hosted on `pypi.nvidia.com`.
             Some("max-age=365000000, immutable, public")
         } else {
             None

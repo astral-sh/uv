@@ -23,26 +23,26 @@ An extremely fast Python package and project manager, written in Rust.
 
 ## Highlights
 
-- 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
-  and more.
-- ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🗂️ Provides [comprehensive project management](#projects), with a
+- A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`, and
+  more.
+- [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
+- Provides [comprehensive project management](#projects), with a
   [universal lockfile](https://docs.astral.sh/uv/concepts/projects/layout#the-lockfile).
-- ❇️ [Runs scripts](#scripts), with support for
+- [Runs scripts](#scripts), with support for
   [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies).
-- 🐍 [Installs and manages](#python-versions) Python versions.
-- 🛠️ [Runs and installs](#tools) tools published as Python packages.
-- 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
-  familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces) for
+- [Installs and manages](#python-versions) Python versions.
+- [Runs and installs](#tools) tools published as Python packages.
+- Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a familiar
+  CLI.
+- Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces) for
   scalable projects.
-- 💾 Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache) for
+- Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache) for
   dependency deduplication.
-- ⏬ Installable without Rust or Python via `curl` or `pip`.
-- 🖥️ Supports macOS, Linux, and Windows.
+- Installable without Rust or Python via `curl` or `pip`.
+- Supports macOS, Linux, and Windows.
 
 uv is backed by [Astral](https://astral.sh), the creators of
-[Ruff](https://github.com/astral-sh/ruff).
+[Ruff](https://github.com/astral-sh/ruff) and [ty](https://github.com/astral-sh/ty).
 
 ## Installation
 
@@ -192,14 +192,12 @@ uv installs Python and allows quickly switching between versions.
 Install multiple Python versions:
 
 ```console
-$ uv python install 3.10 3.11 3.12
-Searching for Python versions matching: Python 3.10
-Searching for Python versions matching: Python 3.11
-Searching for Python versions matching: Python 3.12
-Installed 3 versions in 3.42s
- + cpython-3.10.14-macos-aarch64-none
- + cpython-3.11.9-macos-aarch64-none
- + cpython-3.12.4-macos-aarch64-none
+$ uv python install 3.12 3.13 3.14
+Installed 3 versions in 972ms
+ + cpython-3.12.12-macos-aarch64-none (python3.12)
+ + cpython-3.13.9-macos-aarch64-none (python3.13)
+ + cpython-3.14.0-macos-aarch64-none (python3.14)
+
 ```
 
 Download Python versions as needed:
@@ -270,19 +268,12 @@ Installed 43 packages in 208ms
 
 See the [pip interface documentation](https://docs.astral.sh/uv/pip/index/) to get started.
 
-## Platform support
-
-See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
-
-## Versioning policy
-
-See uv's [versioning policy](https://docs.astral.sh/uv/reference/versioning/) document.
-
 ## Contributing
 
 We are passionate about supporting contributors of all levels of experience and would love to see
 you get involved in the project. See the
-[contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
+[contributing guide](https://github.com/astral-sh/uv?tab=contributing-ov-file#contributing) to get
+started.
 
 ## FAQ
 
@@ -293,6 +284,15 @@ It's pronounced as "you - vee" ([`/juː viː/`](https://en.wikipedia.org/wiki/He
 #### How should I stylize uv?
 
 Just "uv", please. See the [style guide](./STYLE.md#styling-uv) for details.
+
+#### What platforms does uv support?
+
+See uv's [platform support](https://docs.astral.sh/uv/reference/platforms/) document.
+
+#### Is uv ready for production?
+
+Yes, uv is stable and widely used in production. See uv's
+[versioning policy](https://docs.astral.sh/uv/reference/versioning/) document for details.
 
 ## Acknowledgements
 

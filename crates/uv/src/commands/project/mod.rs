@@ -12,8 +12,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -43,12 +43,12 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
+use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -58,7 +58,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -75,6 +76,60 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
 
+/// The source of a missing lockfile error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MissingLockfileSource {
+    /// The `--frozen` flag was provided.
+    Frozen,
+    /// The `UV_FROZEN` environment variable was set.
+    FrozenEnv,
+    /// The `frozen` option was set via workspace configuration.
+    FrozenConfiguration,
+    /// The `--locked` flag was provided.
+    Locked,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
+    /// The `--check` flag was provided.
+    Check,
+}
+
+impl std::fmt::Display for MissingLockfileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frozen => write!(f, "`--frozen`"),
+            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
+            Self::Locked => write!(f, "`--locked`"),
+            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
+            Self::Check => write!(f, "`--check`"),
+        }
+    }
+}
+
+impl From<LockCheckSource> for MissingLockfileSource {
+    fn from(source: LockCheckSource) -> Self {
+        match source {
+            LockCheckSource::LockedCli => Self::Locked,
+            LockCheckSource::LockedEnv => Self::LockedEnv,
+            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
+            LockCheckSource::Check => Self::Check,
+        }
+    }
+}
+
+impl From<FrozenSource> for MissingLockfileSource {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Env => Self::FrozenEnv,
+            FrozenSource::Configuration => Self::FrozenConfiguration,
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
@@ -83,9 +138,9 @@ pub(crate) enum ProjectError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile,
+    MissingLockfile(MissingLockfileSource),
 
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
@@ -220,6 +275,9 @@ pub(crate) enum ProjectError {
     DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
+    Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
     Python(#[from] uv_python::Error),
 
     #[error(transparent)]
@@ -275,6 +333,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
+    Accelerator(#[from] uv_torch::AcceleratorError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -1682,14 +1743,14 @@ pub(crate) async fn resolve_names(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
-    lfs: Option<bool>,
+    lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
     let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
         .into_iter()
         .map(|spec| {
             spec.requirement
-                .augment_requirement(None, None, None, lfs, None)
+                .augment_requirement(None, None, None, lfs.into(), None)
         })
         .partition_map(|requirement| match requirement {
             UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
@@ -1721,6 +1782,7 @@ pub(crate) async fn resolve_names(
                 prerelease: _,
                 resolution: _,
                 sources,
+                torch_backend,
                 upgrade: _,
             },
         compile_bytecode: _,
@@ -1729,10 +1791,27 @@ pub(crate) async fn resolve_names(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+        })
+        .transpose()
+        .ok()
+        .flatten();
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1783,7 +1862,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -1878,6 +1957,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        torch_backend,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1898,10 +1978,33 @@ pub(crate) async fn resolve_environment(
     let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1995,7 +2098,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2230,6 +2333,7 @@ pub(crate) async fn update_environment(
                 prerelease,
                 resolution,
                 sources,
+                torch_backend,
                 upgrade,
             },
         compile_bytecode,
@@ -2300,10 +2404,33 @@ pub(crate) async fn update_environment(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2366,7 +2493,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2580,8 +2707,8 @@ pub(crate) fn script_specification(
     };
 
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     let requirements = dependencies
         .iter()
@@ -2656,8 +2783,8 @@ pub(crate) fn script_extra_build_requires(
     credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();

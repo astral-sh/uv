@@ -121,7 +121,7 @@ pub(crate) async fn upgrade(
     let mut errors = Vec::new();
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
-        let result = upgrade_tool(
+        let result = Box::pin(upgrade_tool(
             name,
             constraints,
             interpreter.as_ref(),
@@ -135,7 +135,7 @@ pub(crate) async fn upgrade(
             installer_metadata,
             concurrency,
             preview,
-        )
+        ))
         .await;
 
         match result {

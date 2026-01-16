@@ -6,7 +6,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Credentials, PyxTokenStore};
+use uv_auth::{AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_redacted::DisplaySafeUrl;
@@ -89,7 +89,10 @@ async fn credentials_for_url(
             .auth_integration(uv_client::AuthIntegration::NoAuthMiddleware)
             .build();
         let token = pyx_store
-            .access_token(client.for_host(pyx_store.api()).raw_client(), 0)
+            .access_token(
+                client.for_host(pyx_store.api()).raw_client(),
+                DEFAULT_TOLERANCE_SECS,
+            )
             .await
             .context("Authentication failure")?
             .context("No access token found")?;

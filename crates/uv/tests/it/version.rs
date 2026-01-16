@@ -22,7 +22,7 @@ fn version_get() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.version(), @r"
+    uv_snapshot!(context.filters(), context.version(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -35,6 +35,7 @@ fn version_get() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -77,6 +78,7 @@ fn version_get_json() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -102,7 +104,7 @@ fn version_get_short() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--short"), @r"
+        .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -115,6 +117,7 @@ fn version_get_short() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -141,7 +144,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("1.1.1"), @r"
+        .arg("1.1.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -155,12 +158,13 @@ requires-python = ">=3.12"
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
         pyproject,
-    @r###"
+    @r#"
+
     [project]
     name = "myproject"
     version = "1.1.1"
     requires-python = ">=3.12"
-    "###
+    "#
     );
 
     Ok(())
@@ -183,7 +187,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("1.1.1")
-        .arg("--short"), @r"
+        .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -197,12 +201,13 @@ requires-python = ">=3.12"
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
         pyproject,
-    @r###"
+    @r#"
+
     [project]
     name = "myproject"
     version = "1.1.1"
     requires-python = ">=3.12"
-    "###
+    "#
     );
 
     Ok(())
@@ -224,7 +229,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -239,6 +244,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.32"
@@ -263,7 +269,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch=40"), @r"
+        .arg("--bump").arg("patch=40"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -278,6 +284,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.40"
@@ -302,7 +309,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("minor=10"), @r"
+        .arg("--bump").arg("minor=10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -317,6 +324,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.0"
@@ -341,7 +349,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major=7"), @r"
+        .arg("--bump").arg("major=7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -356,6 +364,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "7.0.0"
@@ -382,7 +391,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("patch")
-        .arg("--short"), @r"
+        .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -397,6 +406,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.32"
@@ -421,7 +431,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch=11"), @r"
+        .arg("--bump").arg("patch=11"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -434,6 +444,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.0.12"
@@ -474,14 +485,15 @@ fn version_bump_preserves_preceding_comments() -> Result<()> {
     assert_snapshot!(
         pyproject,
         @r#"
-        [project]
-        name = "hello-world"
-        # pre-1: stays above version
-        # pre-2: stays below pre-1
-        version = "0.1.1" # eol: stays on same line
-        # after-version: remains after version
-        description = "Add your description here"
-        "#
+
+    [project]
+    name = "hello-world"
+    # pre-1: stays above version
+    # pre-2: stays below pre-1
+    version = "0.1.1" # eol: stays on same line
+    # after-version: remains after version
+    description = "Add your description here"
+    "#
     );
 
     Ok(())
@@ -503,7 +515,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("minor"), @r"
+        .arg("--bump").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -518,6 +530,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.11.0"
@@ -543,7 +556,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -558,6 +571,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "2.0.0"
@@ -583,7 +597,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -598,6 +612,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.1.1"
@@ -623,7 +638,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("minor"), @r"
+        .arg("--bump").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -638,6 +653,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.2"
@@ -663,7 +679,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -678,6 +694,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.0"
@@ -703,7 +720,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -718,6 +735,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "2.0.0"
@@ -743,7 +761,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -758,6 +776,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1!3+deadbeef6"
@@ -793,7 +812,7 @@ requires-python = ">=3.12"
         .arg("--bump").arg("dev")
         .arg("--bump").arg("minor")
         .arg("--bump").arg("post")
-        .arg("--bump").arg("post"), @r"
+        .arg("--bump").arg("post"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -806,6 +825,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4a5.post6.dev7+deadbeef6"
@@ -831,7 +851,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("stable"), @r"
+        .arg("--bump").arg("stable"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -846,6 +866,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4+deadbeef6"
@@ -871,7 +892,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -886,6 +907,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4a6+deadbeef6"
@@ -911,7 +933,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("beta"), @r"
+        .arg("--bump").arg("beta"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -926,6 +948,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4b1+deadbeef6"
@@ -950,7 +973,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("beta=42"), @r"
+        .arg("--bump").arg("beta=42"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -965,6 +988,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.2.3b42"
@@ -990,7 +1014,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("beta=5")
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1005,6 +1029,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.2.4b5"
@@ -1030,7 +1055,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("rc"), @r"
+        .arg("--bump").arg("rc"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1045,6 +1070,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4rc1+deadbeef6"
@@ -1070,7 +1096,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("post"), @r"
+        .arg("--bump").arg("post"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1085,6 +1111,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4a5.post7+deadbeef6"
@@ -1109,7 +1136,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("post=10"), @r"
+        .arg("--bump").arg("post=10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1124,6 +1151,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.2.3.post10"
@@ -1149,7 +1177,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("dev"), @r"
+        .arg("--bump").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1164,6 +1192,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "9!2.3.4a5.post6.dev8+deadbeef6"
@@ -1188,7 +1217,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("dev=42"), @r"
+        .arg("--bump").arg("dev=42"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1203,6 +1232,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.1.0.dev42"
@@ -1228,7 +1258,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("patch")
-        .arg("--bump").arg("dev=66463664"), @r"
+        .arg("--bump").arg("dev=66463664"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1243,6 +1273,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.0.2.dev66463664"
@@ -1268,7 +1299,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("dev=0")
-        .arg("--bump").arg("patch=10"), @r"
+        .arg("--bump").arg("patch=10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1283,6 +1314,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "0.1.10.dev0"
@@ -1308,7 +1340,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1323,6 +1355,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "2.0.0"
@@ -1347,7 +1380,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("stable=1"), @r"
+        .arg("--bump").arg("stable=1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1373,7 +1406,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch="), @r"
+        .arg("--bump").arg("patch="), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1399,7 +1432,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("dev=foo"), @r"
+        .arg("--bump").arg("dev=foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1426,7 +1459,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("stable"), @r"
+        .arg("--bump").arg("stable"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1453,7 +1486,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1480,7 +1513,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1508,7 +1541,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1536,7 +1569,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("alpha")
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1564,7 +1597,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("stable")
-        .arg("--bump").arg("major"), @r"
+        .arg("--bump").arg("major"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1592,7 +1625,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1622,7 +1655,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("alpha"), @r"
+        .arg("--bump").arg("alpha"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1652,7 +1685,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("alpha")
-        .arg("--bump").arg("dev"), @r"
+        .arg("--bump").arg("dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1680,7 +1713,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("dev"), @r"
+        .arg("--bump").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1710,7 +1743,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--bump").arg("post"), @r"
+        .arg("--bump").arg("post"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1738,7 +1771,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("1.2.3")
-        .arg("--dry-run"), @r"
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1751,6 +1784,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -1777,7 +1811,7 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("major")
-        .arg("--dry-run"), @r"
+        .arg("--dry-run"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1790,6 +1824,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -1815,7 +1850,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("abcd"), @r"
+        .arg("abcd"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1828,6 +1863,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -1853,7 +1889,7 @@ requires-python = ">=3.12"
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("minor"), @r"
+        .arg("minor"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1866,6 +1902,7 @@ requires-python = ">=3.12"
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     version = "1.10.31"
@@ -1890,7 +1927,7 @@ fn version_get_dynamic() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.version(), @r"
+    uv_snapshot!(context.filters(), context.version(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1903,6 +1940,7 @@ fn version_get_dynamic() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     dynamic = ["version"]
@@ -1928,7 +1966,7 @@ fn version_set_dynamic() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("0.1.2"), @r"
+        .arg("0.1.2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1941,6 +1979,7 @@ fn version_set_dynamic() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myproject"
     dynamic = ["version"]
@@ -1968,7 +2007,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.version(), @r"
+    uv_snapshot!(context.filters(), context.version(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1981,6 +2020,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2018,7 +2058,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
         )])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.version()
-        .arg("--short"), @r"
+        .arg("--short"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2031,6 +2071,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2077,7 +2118,7 @@ fn version_get_fallback_unmanaged_strict() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--project").arg("."), @r"
+        .arg("--project").arg("."), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2090,6 +2131,7 @@ fn version_get_fallback_unmanaged_strict() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2108,7 +2150,7 @@ fn version_get_fallback_missing_strict() -> Result<()> {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--project").arg("."), @r"
+        .arg("--project").arg("."), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2125,7 +2167,7 @@ fn version_get_fallback_missing_strict() -> Result<()> {
 fn version_get_missing_with_hint() -> Result<()> {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.version(), @r"
+    uv_snapshot!(context.filters(), context.version(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2154,7 +2196,7 @@ fn self_version() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.self_version(), @r"
+    uv_snapshot!(context.filters(), context.self_version(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2167,6 +2209,7 @@ fn self_version() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2199,7 +2242,7 @@ fn self_version_short() -> Result<()> {
         )])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.self_version()
-        .arg("--short"), @r"
+        .arg("--short"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2212,6 +2255,7 @@ fn self_version_short() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2260,23 +2304,23 @@ fn self_version_json() -> Result<()> {
     if git_version_info_expected() {
         uv_snapshot!(filters, context.self_version()
           .arg("--output-format").arg("json"), @r#"
-      success: true
-      exit_code: 0
-      ----- stdout -----
-      {
-        "package_name": "uv",
-        "version": "[VERSION]",
-        "commit_info": {
-          "short_commit_hash": "[LONGHASH]",
-          "commit_hash": "[LONGHASH]",
-          "commit_date": "[DATE]",
-          "last_tag": "[TAG]",
-          "commits_since_last_tag": [COUNT]
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        {
+          "package_name": "uv",
+          "version": "[VERSION]",
+          "commit_info": {
+            "short_commit_hash": "[LONGHASH]",
+            "commit_hash": "[LONGHASH]",
+            "commit_date": "[DATE]",
+            "last_tag": "[TAG]",
+            "commits_since_last_tag": [COUNT]
+          }
         }
-      }
 
-      ----- stderr -----
-      "#);
+        ----- stderr -----
+        "#);
     } else {
         uv_snapshot!(filters, context.self_version()
           .arg("--output-format").arg("json"), @r#"
@@ -2297,6 +2341,7 @@ fn self_version_json() -> Result<()> {
     assert_snapshot!(
         pyproject,
     @r#"
+
     [project]
     name = "myapp"
     version = "0.1.2"
@@ -2327,7 +2372,7 @@ fn version_get_workspace() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @r"
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2336,7 +2381,7 @@ fn version_get_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
-    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.join("workspace-member")), @r"
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.join("workspace-member")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2346,7 +2391,7 @@ fn version_get_workspace() -> Result<()> {
     ");
 
     // Check that --directory also works
-    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.as_ref()), @r"
+    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.as_ref()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2355,7 +2400,7 @@ fn version_get_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
-    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.join("workspace-member")), @r"
+    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.join("workspace-member")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2374,7 +2419,7 @@ fn version_get_workspace() -> Result<()> {
     // A virtual project root has a no version.
     // TODO(konsti): Show a dedicated error message for virtual workspace roots (generally, not
     // only for `uv version`)
-    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @r"
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2453,7 +2498,7 @@ fn version_set_workspace() -> Result<()> {
         .arg("1.1.1")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), version_cmd, @r"
+    uv_snapshot!(context.filters(), version_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2514,7 +2559,7 @@ fn version_set_workspace() -> Result<()> {
         .arg("1.2.3")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), version_cmd, @r"
+    uv_snapshot!(context.filters(), version_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2569,7 +2614,7 @@ fn version_set_workspace() -> Result<()> {
     // Confirm --locked get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child1")
-        .arg("--locked"), @r"
+        .arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2581,7 +2626,7 @@ fn version_set_workspace() -> Result<()> {
     // Confirm --frozen get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
-        .arg("--frozen"), @r"
+        .arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2593,7 +2638,7 @@ fn version_set_workspace() -> Result<()> {
     // Confirm --no-sync get works fine
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child1")
-        .arg("--no-sync"), @r"
+        .arg("--no-sync"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2606,7 +2651,7 @@ fn version_set_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
         .arg("--frozen")
-        .arg("2.0.0"), @r"
+        .arg("2.0.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2619,7 +2664,7 @@ fn version_set_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
         .arg("--frozen")
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2631,7 +2676,7 @@ fn version_set_workspace() -> Result<()> {
     // Confirm --frozen get doesn't see the --frozen set or bump
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
-        .arg("--frozen"), @r"
+        .arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2644,7 +2689,7 @@ fn version_set_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child1")
         .arg("--no-sync")
-        .arg("3.0.0"), @r"
+        .arg("3.0.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2697,7 +2742,7 @@ fn version_set_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child1")
         .arg("--locked")
-        .arg("3.0.0"), @r"
+        .arg("3.0.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2785,7 +2830,7 @@ fn version_set_evil_constraints() -> Result<()> {
         .touch()?;
 
     // sync all, creating the lock and initial sync
-    uv_snapshot!(context.filters(),  context.sync(), @r"
+    uv_snapshot!(context.filters(),  context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2871,7 +2916,7 @@ fn version_set_evil_constraints() -> Result<()> {
         .arg("2.0.0")
         .current_dir(&context.temp_dir);
 
-    uv_snapshot!(context.filters(), version_cmd, @r"
+    uv_snapshot!(context.filters(), version_cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2957,7 +3002,7 @@ fn version_set_evil_constraints() -> Result<()> {
     });
 
     // however once we explicitly sync the change will go into effect
-    uv_snapshot!(context.filters(),  context.sync(), @r"
+    uv_snapshot!(context.filters(),  context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2988,7 +3033,7 @@ fn virtual_empty() -> Result<()> {
 
     // Get version (doesn't make sense)
     uv_snapshot!(context.filters(), context.version()
-        .arg("sortedcontainers"), @r"
+        .arg("sortedcontainers"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3012,7 +3057,7 @@ fn virtual_empty() -> Result<()> {
 
     // Set version (can make sense, but we should still refuse?)
     uv_snapshot!(context.filters(), context.version()
-        .arg("1.0.0"), @r"
+        .arg("1.0.0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3053,7 +3098,7 @@ fn add_virtual_dependency_group() -> Result<()> {
     "#})?;
 
     // Get the version (doesn't make sense)
-    uv_snapshot!(context.filters(), context.version(), @r"
+    uv_snapshot!(context.filters(), context.version(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3079,7 +3124,7 @@ fn add_virtual_dependency_group() -> Result<()> {
 
     // Set the version (can make sense, we should refuse?)
     uv_snapshot!(context.filters(), context.version()
-        .arg("1.0.0"), @r"
+        .arg("1.0.0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3132,7 +3177,7 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
     )?;
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3147,7 +3192,7 @@ conflicts = [[{"extra" = "foo"}, {"extra" = "bar"}]]
     context.sync().arg("--extra").arg("foo").assert().success();
 
     uv_snapshot!(context.filters(), context.version()
-        .arg("--bump").arg("patch"), @r"
+        .arg("--bump").arg("patch"), @"
     success: true
     exit_code: 0
     ----- stdout -----

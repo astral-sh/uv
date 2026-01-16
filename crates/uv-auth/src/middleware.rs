@@ -14,7 +14,7 @@ use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
-use crate::providers::{HuggingFaceProvider, S3EndpointProvider};
+use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
@@ -129,6 +129,24 @@ enum TokenState {
     Initialized(Option<AccessToken>),
 }
 
+#[derive(Clone)]
+enum S3CredentialState {
+    /// The S3 credential state has not yet been initialized.
+    Uninitialized,
+    /// The S3 credential state has been initialized, with either a signer or `None` if
+    /// no S3 endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
+#[derive(Clone)]
+enum GcsCredentialState {
+    /// The GCS credential state has not yet been initialized.
+    Uninitialized,
+    /// The GCS credential state has been initialized, with either a signer or `None` if
+    /// no GCS endpoint is configured.
+    Initialized(Option<Arc<Authentication>>),
+}
+
 /// A middleware that adds basic authentication to requests.
 ///
 /// Uses a cache to propagate credentials from previously seen requests and
@@ -150,6 +168,10 @@ pub struct AuthMiddleware {
     pyx_token_store: Option<PyxTokenStore>,
     /// Tokens to use for persistent credentials.
     pyx_token_state: Mutex<TokenState>,
+    /// Cached S3 credentials to avoid running the credential helper multiple times.
+    s3_credential_state: Mutex<S3CredentialState>,
+    /// Cached GCS credentials to avoid running the credential helper multiple times.
+    gcs_credential_state: Mutex<GcsCredentialState>,
     preview: Preview,
 }
 
@@ -172,6 +194,8 @@ impl AuthMiddleware {
             base_client: None,
             pyx_token_store: None,
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
+            s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
+            gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             preview: Preview::default(),
         }
     }
@@ -678,13 +702,48 @@ impl AuthMiddleware {
             return Some(credentials);
         }
 
-        if let Some(credentials) = S3EndpointProvider::credentials_for(url, self.preview)
-            .map(Authentication::from)
-            .map(Arc::new)
-        {
-            debug!("Found S3 credentials for {url}");
-            self.cache().fetches.done(key, Some(credentials.clone()));
-            return Some(credentials);
+        if S3EndpointProvider::is_s3_endpoint(url, self.preview) {
+            let mut s3_state = self.s3_credential_state.lock().await;
+
+            // If the S3 credential state is uninitialized, initialize it.
+            let credentials = match &*s3_state {
+                S3CredentialState::Uninitialized => {
+                    trace!("Initializing S3 credentials for {url}");
+                    let signer = S3EndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *s3_state = S3CredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
+                }
+                S3CredentialState::Initialized(credentials) => credentials.clone(),
+            };
+
+            if let Some(credentials) = credentials {
+                debug!("Found S3 credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Some(credentials);
+            }
+        }
+
+        if GcsEndpointProvider::is_gcs_endpoint(url, self.preview) {
+            let mut gcs_state = self.gcs_credential_state.lock().await;
+
+            // If the GCS credential state is uninitialized, initialize it.
+            let credentials = match &*gcs_state {
+                GcsCredentialState::Uninitialized => {
+                    trace!("Initializing GCS credentials for {url}");
+                    let signer = GcsEndpointProvider::create_signer();
+                    let credentials = Arc::new(Authentication::from(signer));
+                    *gcs_state = GcsCredentialState::Initialized(Some(credentials.clone()));
+                    Some(credentials)
+                }
+                GcsCredentialState::Initialized(credentials) => credentials.clone(),
+            };
+
+            if let Some(credentials) = credentials {
+                debug!("Found GCS credentials for {url}");
+                self.cache().fetches.done(key, Some(credentials.clone()));
+                return Some(credentials);
+            }
         }
 
         // If this is a known URL, authenticate it via the token store.
@@ -744,7 +803,14 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store.get_credentials(url, credentials.as_ref().and_then(|credentials| credentials.username())).cloned()
+            text_store
+                .get_credentials(
+                    url,
+                    credentials
+                        .as_ref()
+                        .and_then(|credentials| credentials.username()),
+                )
+                .cloned()
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
@@ -760,10 +826,16 @@ impl AuthMiddleware {
                 if let Some(index) = index {
                     // N.B. The native store performs an exact look up right now, so we use the root
                     // URL of the index instead of relying on prefix-matching.
-                    debug!("Checking native store for credentials for index URL {}{}", display_username, index.root_url);
+                    debug!(
+                        "Checking native store for credentials for index URL {}{}",
+                        display_username, index.root_url
+                    );
                     native_store.fetch(&index.root_url, username).await
                 } else {
-                    debug!("Checking native store for credentials for URL {}{}", display_username, url);
+                    debug!(
+                        "Checking native store for credentials for URL {}{}",
+                        display_username, url
+                    );
                     native_store.fetch(url, username).await
                 }
                 // TODO(zanieb): We should have a realm fallback here too
@@ -784,10 +856,18 @@ impl AuthMiddleware {
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index) = index {
-                        debug!("Checking keyring for credentials for index URL {}@{}", username, index.url);
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username)).await
+                        debug!(
+                            "Checking keyring for credentials for index URL {}@{}",
+                            username, index.url
+                        );
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), Some(username))
+                            .await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {}@{}", username, url);
+                        debug!(
+                            "Checking keyring for credentials for full URL {}@{}",
+                            username, url
+                        );
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
@@ -796,12 +876,16 @@ impl AuthMiddleware {
                             "Checking keyring for credentials for index URL {} without username due to `authenticate = always`",
                             index.url
                         );
-                        keyring.fetch(DisplaySafeUrl::ref_cast(&index.url), None).await
+                        keyring
+                            .fetch(DisplaySafeUrl::ref_cast(&index.url), None)
+                            .await
                     } else {
                         None
                     }
                 } else {
-                    debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
+                    debug!(
+                        "Skipping keyring fetch for {url} without username; use `authenticate = always` to force"
+                    );
                     None
                 }
             }
@@ -811,9 +895,9 @@ impl AuthMiddleware {
             Some(credentials)
         } else {
             None
-        }
-        .map(Authentication::from)
-        .map(Arc::new);
+        };
+
+        let credentials = credentials.map(Authentication::from).map(Arc::new);
 
         // Register the fetch for this key
         self.cache().fetches.done(key, credentials.clone());
@@ -2525,5 +2609,62 @@ mod tests {
 
     fn create_request(url: &str) -> Request {
         Request::new(Method::GET, Url::parse(url).unwrap())
+    }
+
+    /// Test for <https://github.com/astral-sh/uv/issues/17343>
+    ///
+    /// URLs with an empty username but a password (e.g., `https://:token@example.com`)
+    /// should be recognized as having credentials and authenticate successfully.
+    #[test(tokio::test)]
+    async fn test_credentials_in_url_empty_username() -> Result<(), Error> {
+        let username = "";
+        let password = "token";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let client = test_client_builder()
+            .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
+            .build();
+
+        let base_url = Url::parse(&server.uri())?;
+
+        // Test with the URL format `:password@host` (empty username, password present)
+        let mut url = base_url.clone();
+        url.set_password(Some(password)).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            200,
+            "URL with empty username but password should authenticate successfully"
+        );
+
+        // Subsequent requests to the same realm should also succeed (credentials cached)
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Subsequent requests should use cached credentials"
+        );
+
+        assert_eq!(
+            client
+                .get(format!("{}/foo", server.uri()))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests to different paths in the same realm should succeed"
+        );
+
+        Ok(())
     }
 }

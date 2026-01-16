@@ -752,7 +752,9 @@ impl PubGrubReportFormatter<'_> {
                     })
                 }
             }
-            IncompatibleTag::Abi | IncompatibleTag::AbiPythonVersion => {
+            IncompatibleTag::Abi
+            | IncompatibleTag::FreethreadedAbi
+            | IncompatibleTag::AbiPythonVersion => {
                 let best = tags.and_then(Tags::abi_tag);
                 let tags = prioritized
                     .abi_tags()

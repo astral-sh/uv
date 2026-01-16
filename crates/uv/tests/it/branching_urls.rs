@@ -27,14 +27,14 @@ fn branching_urls_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -61,7 +61,7 @@ fn branching_urls_overlapping() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -129,7 +129,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -200,14 +200,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
@@ -397,14 +397,14 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
@@ -559,14 +559,14 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -646,14 +646,14 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -730,7 +730,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -777,14 +777,14 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     " };
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"

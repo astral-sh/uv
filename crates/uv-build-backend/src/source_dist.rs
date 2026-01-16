@@ -9,9 +9,10 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
-use std::io::{BufReader, Cursor};
+use std::io::{BufReader, Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
+use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
@@ -26,16 +27,25 @@ pub fn build_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
         extension: SourceDistExtension::TarGz,
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
-    let writer = TarGzWriter::new(&source_dist_path)?;
+
+    if source_dist_path.exists() {
+        fs_err::remove_file(&source_dist_path)?;
+    }
+
+    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    temp_file
+        .persist(&source_dist_path)
+        .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
+
     Ok(filename)
 }
 
@@ -45,8 +55,7 @@ pub fn list_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<(SourceDistFilename, FileList), Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
         name: pyproject_toml.name().clone(),
         version: pyproject_toml.version().clone(),
@@ -188,8 +197,7 @@ fn write_source_dist(
     uv_version: &str,
     show_warnings: bool,
 ) -> Result<SourceDistFilename, Error> {
-    let contents = fs_err::read_to_string(source_tree.join("pyproject.toml"))?;
-    let pyproject_toml = PyProjectToml::parse(&contents)?;
+    let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
         warn_user_once!("{warning}");
     }
@@ -284,24 +292,27 @@ fn write_source_dist(
     Ok(filename)
 }
 
-struct TarGzWriter {
+struct TarGzWriter<W: Write> {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<File>>,
+    tar: tar::Builder<GzEncoder<W>>,
 }
 
-impl TarGzWriter {
-    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+impl<W: Write> TarGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let file = File::create(&path)?;
-        let enc = GzEncoder::new(file, Compression::default());
+        let enc = GzEncoder::new(writer, Compression::default());
         let tar = tar::Builder::new(enc);
-        Ok(Self { path, tar })
+        Self { path, tar }
     }
 }
 
-impl DirectoryWriter for TarGzWriter {
+impl<W: Write> DirectoryWriter for TarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
+        // Work around bug in Python's std tar module
+        // https://github.com/python/cpython/issues/141707
+        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
+        header.set_entry_type(EntryType::Regular);
         header.set_size(bytes.len() as u64);
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
@@ -315,6 +326,10 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        // Work around bug in Python's std tar module
+        // https://github.com/python/cpython/issues/141707
+        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
+        header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
         let executable_bit = {

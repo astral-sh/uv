@@ -35,6 +35,19 @@ mod wheel;
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
 
+/// Error locking a cache entry or shard
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("Failed to initialize cache at `{}`", _0.user_display())]
+    Init(PathBuf, #[source] io::Error),
+    #[error("Could not make the path absolute")]
+    Absolute(#[source] io::Error),
+    #[error("Could not acquire lock")]
+    Acquire(#[from] LockedFileError),
+}
+
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
 pub struct CacheEntry(PathBuf);
@@ -80,14 +93,14 @@ impl CacheEntry {
     }
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
         fs_err::create_dir_all(self.dir())?;
-        LockedFile::acquire(
+        Ok(LockedFile::acquire(
             self.path(),
             LockedFileMode::Exclusive,
             self.path().display(),
         )
-        .await
+        .await?)
     }
 }
 
@@ -114,14 +127,14 @@ impl CacheShard {
     }
 
     /// Acquire the cache entry as an exclusive lock.
-    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
+    pub async fn lock(&self) -> Result<LockedFile, Error> {
         fs_err::create_dir_all(self.as_ref())?;
-        LockedFile::acquire(
+        Ok(LockedFile::acquire(
             self.join(".lock"),
             LockedFileMode::Exclusive,
             self.display(),
         )
-        .await
+        .await?)
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
@@ -391,7 +404,7 @@ impl Cache {
     }
 
     /// Populate the cache scaffold.
-    fn create_base_files(root: &PathBuf) -> Result<(), io::Error> {
+    fn create_base_files(root: &PathBuf) -> io::Result<()> {
         // Create the cache directory, if it doesn't exist.
         fs_err::create_dir_all(root)?;
 
@@ -441,10 +454,10 @@ impl Cache {
     }
 
     /// Initialize the [`Cache`].
-    pub async fn init(self) -> Result<Self, LockedFileError> {
+    pub async fn init(self) -> Result<Self, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
@@ -466,21 +479,21 @@ impl Cache {
                 );
                 None
             }
-            Err(err) => return Err(err),
+            Err(err) => return Err(err.into()),
         };
 
         Ok(Self {
-            root: std::path::absolute(root)?,
+            root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file,
             ..self
         })
     }
 
     /// Initialize the [`Cache`], assuming that there are no other uv processes running.
-    pub fn init_no_wait(self) -> Result<Option<Self>, io::Error> {
+    pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
-        Self::create_base_files(root)?;
+        Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
         // Block cache removal operations from interfering.
         let Some(lock_file) = LockedFile::acquire_no_wait(
@@ -491,7 +504,7 @@ impl Cache {
             return Ok(None);
         };
         Ok(Some(Self {
-            root: std::path::absolute(root)?,
+            root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file: Some(Arc::new(lock_file)),
             ..self
         }))
@@ -531,7 +544,7 @@ impl Cache {
     /// Remove a package from the cache.
     ///
     /// Returns the number of entries removed from the cache.
-    pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
+    pub fn remove(&self, name: &PackageName) -> io::Result<Removal> {
         // Collect the set of referenced archives.
         let references = self.find_archive_references()?;
 

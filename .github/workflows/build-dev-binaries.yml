@@ -1,0 +1,302 @@
+on:
+  workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  build-binary-linux-libc:
+    name: "linux libc"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-x86_64-8
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+          path: |
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
+          retention-days: 1
+
+  build-binary-linux-aarch64:
+    name: "linux aarch64"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-aarch64-4
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-linux-aarch64-${{ github.sha }}
+          path: |
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
+          retention-days: 1
+
+  build-binary-linux-musl:
+    name: "linux musl"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-x86_64-8
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - name: "Setup musl"
+        run: |
+          sudo apt-get install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-linux-musl-${{ github.sha }}
+          path: |
+            ./target/x86_64-unknown-linux-musl/no-debug/uv
+            ./target/x86_64-unknown-linux-musl/no-debug/uvx
+          retention-days: 1
+
+  build-binary-macos-aarch64:
+    name: "macos aarch64"
+    timeout-minutes: 10
+    runs-on: macos-14 # github-macos-14-aarch64-3
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Build"
+        run: cargo build --profile no-debug --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-macos-aarch64-${{ github.sha }}
+          path: |
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
+          retention-days: 1
+
+  build-binary-macos-x86_64:
+    name: "macos x86_64"
+    timeout-minutes: 10
+    runs-on: macos-latest-large # github-macos-14-x86_64-12
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Build"
+        run: cargo build --profile no-debug --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-macos-x86_64-${{ github.sha }}
+          path: |
+            ./target/no-debug/uv
+            ./target/no-debug/uvx
+          retention-days: 1
+
+  build-binary-windows-x86_64:
+    name: "windows x86_64"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Dev Drive
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Build"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --profile no-debug --bin uv --bin uvx
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-windows-x86_64-${{ github.sha }}
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
+          retention-days: 1
+
+  build-binary-windows-aarch64:
+    name: "windows aarch64"
+    timeout-minutes: 25
+    runs-on:
+      labels: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create Dev Drive using ReFS
+        run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
+
+      # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
+      - name: Copy Git Repo to Dev Drive
+        run: |
+          Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          workspaces: ${{ env.UV_WORKSPACE }}
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install cross target"
+        run: rustup target add aarch64-pc-windows-msvc
+
+      - name: "Build"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: cargo build --profile no-debug --target aarch64-pc-windows-msvc
+
+      - name: "Upload binary"
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uv-windows-aarch64-${{ github.sha }}
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/aarch64-pc-windows-msvc/no-debug/uvx.exe
+          retention-days: 1
+
+  build-binary-msrv:
+    name: "msrv"
+    runs-on: github-ubuntu-24.04-x86_64-8
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: SebRollen/toml-action@b1b3628f55fc3a28208d4203ada8b737e9687876 # v1.2.0
+        id: msrv
+        with:
+          file: "Cargo.toml"
+          field: "workspace.package.rust-version"
+      - name: "Install Rust toolchain"
+        run: rustup default ${MSRV}
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - name: "Install mold"
+        uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - run: cargo +${MSRV} build --profile no-debug
+        env:
+          MSRV: ${{ steps.msrv.outputs.value }}
+      - run: ./target/no-debug/uv --version
+
+  build-binary-freebsd:
+    name: "freebsd"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Cross build"
+        run: |
+          # Install cross from `freebsd-firecracker`
+          wget -q -O cross https://github.com/acj/freebsd-firecracker/releases/download/v0.0.10/cross
+          chmod +x cross
+          mv cross /usr/local/bin/cross
+
+          cross build --target x86_64-unknown-freebsd --profile no-debug
+
+      - name: Test in Firecracker VM
+        uses: acj/freebsd-firecracker-action@a5a3fc1709c5b5368141a5699f10259aca3cd965 # v0.6.0
+        with:
+          verbose: false
+          checkout: false
+          pre-run: |
+            # The exclude `*` prevents examination of directories so we need to
+            # include each parent directory of the binary
+            include_path="$(mktemp)"
+            cat <<EOF > $include_path
+            target
+            target/x86_64-unknown-freebsd
+            target/x86_64-unknown-freebsd/no-debug
+            target/x86_64-unknown-freebsd/no-debug/uv
+            EOF
+
+            rsync -r -e "ssh" \
+              --relative \
+              --copy-links \
+              --include-from "$include_path" \
+              --exclude "*" \
+              . firecracker:
+          run-in-vm: |
+            mv target/x86_64-unknown-freebsd/no-debug/uv uv
+            chmod +x uv
+            ./uv --version

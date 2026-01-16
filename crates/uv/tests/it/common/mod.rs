@@ -39,6 +39,14 @@ static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 pub const PACKSE_VERSION: &str = "0.3.53";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
+// The expected latest patch version for each Python minor version.
+pub const LATEST_PYTHON_3_15: &str = "3.15.0a5";
+pub const LATEST_PYTHON_3_14: &str = "3.14.2";
+pub const LATEST_PYTHON_3_13: &str = "3.13.11";
+pub const LATEST_PYTHON_3_12: &str = "3.12.12";
+pub const LATEST_PYTHON_3_11: &str = "3.11.14";
+pub const LATEST_PYTHON_3_10: &str = "3.10.19";
+
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
 pub fn build_vendor_links_url() -> String {
@@ -468,6 +476,26 @@ impl TestContext {
         self
     }
 
+    /// Adds a filter that replaces the latest Python patch versions with `[LATEST]` placeholder.
+    pub fn with_filtered_latest_python_versions(mut self) -> Self {
+        // Filter the latest patch versions with [LATEST] placeholder
+        // The order matters - we want to match the full version first
+        for (minor, patch) in [
+            ("3.15", LATEST_PYTHON_3_15.strip_prefix("3.15.").unwrap()),
+            ("3.14", LATEST_PYTHON_3_14.strip_prefix("3.14.").unwrap()),
+            ("3.13", LATEST_PYTHON_3_13.strip_prefix("3.13.").unwrap()),
+            ("3.12", LATEST_PYTHON_3_12.strip_prefix("3.12.").unwrap()),
+            ("3.11", LATEST_PYTHON_3_11.strip_prefix("3.11.").unwrap()),
+            ("3.10", LATEST_PYTHON_3_10.strip_prefix("3.10.").unwrap()),
+        ] {
+            // Match the full version in various contexts (cpython-X.Y.Z, Python X.Y.Z, etc.)
+            let pattern = format!(r"(\b){minor}\.{patch}(\b)");
+            let replacement = format!("${{1}}{minor}.[LATEST]${{2}}");
+            self.filters.push((pattern, replacement));
+        }
+        self
+    }
+
     /// Add a filter that ignores temporary directory in path.
     pub fn with_filtered_windows_temp_dir(mut self) -> Self {
         let pattern = regex::escape(
@@ -478,6 +506,16 @@ impl TestContext {
                 .replace('/', "\\"),
         );
         self.filters.push((pattern, "[TEMP_DIR]".to_string()));
+        self
+    }
+
+    /// Add a filter for (bytecode) compilation file counts
+    #[must_use]
+    pub fn with_filtered_compiled_file_count(mut self) -> Self {
+        self.filters.push((
+            r"compiled \d+ files".to_string(),
+            "compiled [COUNT] files".to_string(),
+        ));
         self
     }
 
@@ -561,8 +599,8 @@ impl TestContext {
     }
 
     /// Add a custom filter to the `TestContext`.
-    pub fn with_filter(mut self, filter: (String, String)) -> Self {
-        self.filters.push(filter);
+    pub fn with_filter(mut self, filter: (impl Into<String>, impl Into<String>)) -> Self {
+        self.filters.push((filter.0.into(), filter.1.into()));
         self
     }
 
@@ -987,16 +1025,15 @@ impl TestContext {
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
             .env(EnvVars::UV_TEST_PYTHON_PATH, self.python_path())
+            // Lock to a point in time view of the world
             .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
+            .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, EXCLUDE_NEWER)
             // When installations are allowed, we don't want to write to global state, like the
             // Windows registry
             .env(EnvVars::UV_PYTHON_INSTALL_REGISTRY, "0")
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
-            .env_remove(EnvVars::UV_CACHE_DIR)
-            .env_remove(EnvVars::UV_TOOL_BIN_DIR)
-            .env_remove(EnvVars::XDG_CONFIG_HOME)
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
@@ -1118,7 +1155,6 @@ impl TestContext {
     pub fn help(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("help");
-        command.env_remove(EnvVars::UV_CACHE_DIR);
         command
     }
 
@@ -1404,6 +1440,9 @@ impl TestContext {
         command
     }
 
+    /// The path to the Python interpreter in the venv.
+    ///
+    /// Don't use this for `Command::new`, use `Self::python_command` instead.
     pub fn interpreter(&self) -> PathBuf {
         let venv = &self.venv;
         if cfg!(unix) {
@@ -1630,11 +1669,11 @@ impl TestContext {
     /// test context.
     ///
     /// The given name should correspond to the name of a sub-directory (not a
-    /// path to it) in the top-level `ecosystem` directory.
+    /// path to it) in the `test/ecosystem` directory.
     ///
     /// This panics (fails the current test) for any failure.
     pub fn copy_ecosystem_project(&self, name: &str) {
-        let project_dir = PathBuf::from(format!("../../ecosystem/{name}"));
+        let project_dir = PathBuf::from(format!("../../test/ecosystem/{name}"));
         self.temp_dir.copy_from(project_dir, &["*"]).unwrap();
         // If there is a (gitignore) lockfile, remove it.
         if let Err(err) = fs_err::remove_file(self.temp_dir.join("uv.lock")) {
@@ -1686,8 +1725,39 @@ impl TestContext {
 
     /// Creates a new `Command` that is intended to be suitable for use in
     /// all tests, but with the given binary.
+    ///
+    /// Clears environment variables defined in [`EnvVars`] to avoid reading
+    /// test host settings.
     fn new_command_with(bin: &Path) -> Command {
-        Command::new(bin)
+        let mut command = Command::new(bin);
+
+        let passthrough = [
+            // For debugging tests.
+            EnvVars::RUST_LOG,
+            EnvVars::RUST_BACKTRACE,
+            // Windows System configuration.
+            EnvVars::SYSTEMDRIVE,
+            // Work around small default stack sizes and large futures in debug builds.
+            EnvVars::RUST_MIN_STACK,
+            EnvVars::UV_STACK_SIZE,
+            // Allow running tests with custom network settings.
+            EnvVars::ALL_PROXY,
+            EnvVars::HTTPS_PROXY,
+            EnvVars::HTTP_PROXY,
+            EnvVars::NO_PROXY,
+            EnvVars::SSL_CERT_DIR,
+            EnvVars::SSL_CERT_FILE,
+            EnvVars::UV_NATIVE_TLS,
+        ];
+
+        for env_var in EnvVars::all_names()
+            .iter()
+            .filter(|name| !passthrough.contains(name))
+        {
+            command.env_remove(env_var);
+        }
+
+        command
     }
 }
 
@@ -1750,7 +1820,7 @@ pub fn get_python(version: &PythonVersion) -> PathBuf {
 
 /// Create a virtual environment at the given path.
 pub fn create_venv_from_executable<P: AsRef<Path>>(path: P, cache_dir: &ChildPath, python: &Path) {
-    assert_cmd::Command::new(get_bin())
+    TestContext::new_command_with(&get_bin())
         .arg("venv")
         .arg(path.as_ref().as_os_str())
         .arg("--clear")
@@ -2075,6 +2145,46 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         file.write_all(&chunk.unwrap()).await.unwrap();
     }
     file.sync_all().await.unwrap();
+}
+
+/// A guard that sets a directory to read-only and restores original permissions when dropped.
+///
+/// This is useful for tests that need to make a directory read-only and ensure
+/// the permissions are restored even if the test panics.
+#[cfg(unix)]
+pub struct ReadOnlyDirectoryGuard {
+    path: PathBuf,
+    original_mode: u32,
+}
+
+#[cfg(unix)]
+impl ReadOnlyDirectoryGuard {
+    /// Sets the directory to read-only (removes write permission) and returns a guard
+    /// that will restore the original permissions when dropped.
+    pub fn new(path: impl Into<PathBuf>) -> std::io::Result<Self> {
+        use std::os::unix::fs::PermissionsExt;
+        let path = path.into();
+        let metadata = fs_err::metadata(&path)?;
+        let original_mode = metadata.permissions().mode();
+        // Remove write permissions (keep read and execute)
+        let readonly_mode = original_mode & !0o222;
+        fs_err::set_permissions(&path, std::fs::Permissions::from_mode(readonly_mode))?;
+        Ok(Self {
+            path,
+            original_mode,
+        })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ReadOnlyDirectoryGuard {
+    fn drop(&mut self) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs_err::set_permissions(
+            &self.path,
+            std::fs::Permissions::from_mode(self.original_mode),
+        );
+    }
 }
 
 /// Utility macro to return the name of the current function.

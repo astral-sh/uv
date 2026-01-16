@@ -49,8 +49,16 @@ impl AbiTag {
         match self {
             Self::None => None,
             Self::Abi3 => None,
-            Self::CPython { python_version, .. } => {
-                Some(format!("CPython {}.{}", python_version.0, python_version.1))
+            Self::CPython {
+                gil_disabled,
+                python_version,
+            } => {
+                // https://peps.python.org/pep-0703/#build-configuration-changes
+                let prefix = if gil_disabled { "free-threaded " } else { "" };
+                Some(format!(
+                    "{}CPython {}.{}",
+                    prefix, python_version.0, python_version.1
+                ))
             }
             Self::PyPy {
                 implementation_version,
@@ -357,6 +365,7 @@ mod tests {
         };
         assert_eq!(AbiTag::from_str("cp39"), Ok(tag));
         assert_eq!(tag.to_string(), "cp39");
+        assert_eq!(tag.pretty(), Some("CPython 3.9".to_string()));
 
         let tag = AbiTag::CPython {
             gil_disabled: false,
@@ -364,6 +373,7 @@ mod tests {
         };
         assert_eq!(AbiTag::from_str("cp37m"), Ok(tag));
         assert_eq!(tag.to_string(), "cp37m");
+        assert_eq!(tag.pretty(), Some("CPython 3.7".to_string()));
 
         let tag = AbiTag::CPython {
             gil_disabled: true,
@@ -371,6 +381,7 @@ mod tests {
         };
         assert_eq!(AbiTag::from_str("cp313t"), Ok(tag));
         assert_eq!(tag.to_string(), "cp313t");
+        assert_eq!(tag.pretty(), Some("free-threaded CPython 3.13".to_string()));
 
         assert_eq!(
             AbiTag::from_str("cpXY"),

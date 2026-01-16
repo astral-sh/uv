@@ -152,7 +152,7 @@ mod tests {
     fn test_parse_simple_expanded_tag() {
         let tags = ExpandedTags::parse(vec!["py3-none-any"]).unwrap();
 
-        insta::assert_debug_snapshot!(tags, @r"
+        insta::assert_debug_snapshot!(tags, @"
         ExpandedTags(
             [
                 Small {
@@ -179,7 +179,7 @@ mod tests {
         ])
         .unwrap();
 
-        insta::assert_debug_snapshot!(tags, @r"
+        insta::assert_debug_snapshot!(tags, @"
         ExpandedTags(
             [
                 Small {
@@ -383,7 +383,7 @@ mod tests {
         assert!(result.is_ok());
         let tag = result.unwrap();
 
-        insta::assert_debug_snapshot!(tag, @r"
+        insta::assert_debug_snapshot!(tag, @"
         Small {
             small: WheelTagSmall {
                 python_tag: Python {

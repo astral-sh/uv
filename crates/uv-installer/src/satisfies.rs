@@ -15,6 +15,7 @@ use uv_distribution_types::{
 };
 use uv_git_types::{GitLfs, GitOid};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
@@ -36,6 +37,7 @@ impl RequirementSatisfaction {
         name: &PackageName,
         distribution: &InstalledDist,
         source: &RequirementSource,
+        version: Option<&Version>,
         installation: InstallationStrategy,
         tags: &Tags,
         config_settings: &ConfigSettings,
@@ -358,6 +360,21 @@ impl RequirementSatisfaction {
             }
         }
 
+        // If a resolved version is provided, check that it matches the installed version.
+        // This is needed for sources that don't include explicit version specifiers (e.g.,
+        // directory dependencies with dynamic versioning), where the resolver may have determined
+        // a new version should be installed.
+        if let Some(version) = version {
+            if distribution.version() != version {
+                debug!(
+                    "Installed version does not match resolved version for {name}: {} vs. {}",
+                    distribution.version(),
+                    version
+                );
+                return Self::OutOfDate;
+            }
+        }
+
         // Otherwise, assume the requirement is up-to-date.
         Self::Satisfied
     }
@@ -440,10 +457,28 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 ))
             }
         }
+        IncompatibleTag::FreethreadedAbi => {
+            let wheel_abi = wheel_tags
+                .abi_tags()
+                .map(|tag| format!("`{tag}`"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let message = if let Some(current) = tags.abi_tag() {
+                if let Some(pretty) = current.pretty() {
+                    format!("{pretty} (`{current}`)")
+                } else {
+                    format!("`{current}`")
+                }
+            } else {
+                "free-threaded Python".to_string()
+            };
+            Some(format!(
+                "The distribution uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
+            ))
+        }
         IncompatibleTag::Abi => {
             let wheel_tags = wheel_tags.abi_tags();
             let current_tag = tags.abi_tag();
-
             if let Some(current) = current_tag {
                 let message = if let Some(pretty) = current.pretty() {
                     format!("{pretty} (`{current}`)")

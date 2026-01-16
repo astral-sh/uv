@@ -283,26 +283,40 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
             option_type: OptionType::Configuration,
             ..
         } => {
-            output.push_str(&format_tab(
-                "pyproject.toml",
-                &format_header(
-                    field.scope,
+            // For uv_toml_only options, only show the uv.toml tab
+            if field.uv_toml_only {
+                output.push_str(&format_code(
+                    "uv.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::UvToml,
+                    ),
                     field.example,
-                    parents,
-                    ConfigurationFile::PyprojectToml,
-                ),
-                field.example,
-            ));
-            output.push_str(&format_tab(
-                "uv.toml",
-                &format_header(
-                    field.scope,
+                ));
+            } else {
+                output.push_str(&format_tab(
+                    "pyproject.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::PyprojectToml,
+                    ),
                     field.example,
-                    parents,
-                    ConfigurationFile::UvToml,
-                ),
-                field.example,
-            ));
+                ));
+                output.push_str(&format_tab(
+                    "uv.toml",
+                    &format_header(
+                        field.scope,
+                        field.example,
+                        parents,
+                        ConfigurationFile::UvToml,
+                    ),
+                    field.example,
+                ));
+            }
         }
         _ => {}
     }
@@ -385,33 +399,5 @@ impl Visit for CollectOptionsVisitor {
 
     fn record_field(&mut self, name: &str, field: OptionField) {
         self.fields.push((name.to_owned(), field));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::env;
-
-    use anyhow::Result;
-
-    use uv_static::EnvVars;
-
-    use crate::generate_all::Mode;
-
-    use super::{Args, main};
-
-    #[test]
-    fn test_generate_options_reference() -> Result<()> {
-        // Skip this test in CI to avoid redundancy with the dedicated CI job
-        if env::var_os(EnvVars::CI).is_some() {
-            return Ok(());
-        }
-
-        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-        main(&Args { mode })
     }
 }

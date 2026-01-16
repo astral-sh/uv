@@ -1,6 +1,6 @@
 [package]
 name = "uv-workspace"
-version = "0.0.5"
+version = "0.0.15"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -55,6 +55,3 @@ tempfile = { workspace = true }
 
 [features]
 schemars = ["dep:schemars", "uv-pypi-types/schemars", "uv-redacted/schemars"]
-
-[package.metadata.cargo-shear]
-ignored = ["uv-options-metadata"]

@@ -10,7 +10,7 @@ fn cache_size_empty_raw() {
     // Clean cache first to ensure truly empty state
     context.clean().assert().success();
 
-    uv_snapshot!(context.cache_size().arg("--preview"), @r"
+    uv_snapshot!(context.cache_size().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -29,7 +29,7 @@ fn cache_size_with_packages_raw() {
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size is now positive (raw bytes).
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview"), @r"
+    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -48,7 +48,7 @@ fn cache_size_with_packages_human() {
     context.pip_install().arg("iniconfig").assert().success();
 
     // Check cache size with --human flag
-    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--human"), @r"
+    uv_snapshot!(context.with_filtered_cache_size().filters(), context.cache_size().arg("--preview").arg("--human"), @"
     success: true
     exit_code: 0
     ----- stdout -----

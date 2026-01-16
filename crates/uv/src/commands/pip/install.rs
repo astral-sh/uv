@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::fmt::Write;
 
 use anyhow::Context;
 use itertools::Itertools;
@@ -10,7 +9,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, Reinstall, SourceStrategy, Upgrade,
+    HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -92,7 +91,7 @@ pub(crate) async fn pip_install(
     install_mirrors: PythonInstallMirrors,
     strict: bool,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
+    sources: NoSources,
     python: Option<String>,
     system: bool,
     break_system_packages: bool,
@@ -349,10 +348,7 @@ pub(crate) async fn pip_install(
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
-                DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
-                if dry_run.enabled() {
-                    writeln!(printer.stderr(), "Would make no changes")?;
-                }
+                DefaultInstallLogger.on_audit(requirements.len(), start, printer, dry_run)?;
 
                 return Ok(ExitStatus::Success);
             }
@@ -497,17 +493,35 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         WorkspaceCache::default(),
         concurrency,
         preview,
     );
 
     let (resolution, hasher) = if let Some(pylock) = pylock {
-        // Read the `pylock.toml` from disk, and deserialize it from TOML.
-        let install_path = std::path::absolute(&pylock)?;
-        let install_path = install_path.parent().unwrap();
-        let content = fs_err::tokio::read_to_string(&pylock).await?;
+        // Read the `pylock.toml` from disk or URL, and deserialize it from TOML.
+        let (install_path, content) =
+            if pylock.starts_with("http://") || pylock.starts_with("https://") {
+                // Fetch the `pylock.toml` over HTTP(S).
+                let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
+                let client = client_builder.build();
+                let response = client
+                    .for_host(&url)
+                    .get(url::Url::from(url.clone()))
+                    .send()
+                    .await?;
+                response.error_for_status_ref()?;
+                let content = response.text().await?;
+                // Use the current working directory as the install path for remote lock files.
+                let install_path = std::env::current_dir()?;
+                (install_path, content)
+            } else {
+                let install_path = std::path::absolute(&pylock)?;
+                let install_path = install_path.parent().unwrap().to_path_buf();
+                let content = fs_err::tokio::read_to_string(&pylock).await?;
+                (install_path, content)
+            };
         let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
             format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
         })?;
@@ -541,7 +555,7 @@ pub(crate) async fn pip_install(
             .collect::<Vec<_>>();
 
         let resolution = lock.to_resolution(
-            install_path,
+            &install_path,
             marker_env.markers(),
             &extras,
             &groups,

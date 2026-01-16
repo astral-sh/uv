@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.5"
+version = "0.0.15"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -79,4 +79,4 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
 
 [package.metadata.cargo-shear]
-ignored = ["flate2", "uv-extract", "uv-performance-memory-allocator"]
+ignored = ["uv-performance-memory-allocator"]

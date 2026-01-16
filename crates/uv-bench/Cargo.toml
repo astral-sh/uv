@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.5"
+version = "0.0.15"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -22,14 +22,14 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
-[dependencies]
+[dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-extract = { workspace = true, optional = true }
+uv-extract = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }

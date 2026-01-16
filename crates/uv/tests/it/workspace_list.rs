@@ -14,7 +14,7 @@ fn workspace_list_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -25,7 +25,7 @@ fn workspace_list_simple() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -46,11 +46,11 @@ fn workspace_list_root_workspace() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-root-workspace"),
+            .join("test/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -75,11 +75,11 @@ fn workspace_list_virtual_workspace() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-virtual-workspace"),
+            .join("test/workspaces/albatross-virtual-workspace"),
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -104,13 +104,13 @@ fn workspace_list_from_member() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-root-workspace"),
+            .join("test/workspaces/albatross-root-workspace"),
         &workspace,
     )?;
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -151,7 +151,7 @@ fn workspace_list_multiple_members() {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -164,7 +164,7 @@ fn workspace_list_multiple_members() {
     "
     );
 
-    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -187,7 +187,7 @@ fn workspace_list_single_project() {
 
     let project = context.temp_dir.child("my-project");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -208,11 +208,11 @@ fn workspace_list_with_excluded() -> Result<()> {
     copy_dir_ignore(
         context
             .workspace_root
-            .join("scripts/workspaces/albatross-project-in-excluded"),
+            .join("test/workspaces/albatross-project-in-excluded"),
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,7 +231,7 @@ fn workspace_list_with_excluded() -> Result<()> {
 fn workspace_list_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_list(), @r"
+    uv_snapshot!(context.filters(), context.workspace_list(), @"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -31,7 +31,7 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.9.15`
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.9.26`
 - `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.8` (the latest patch
   version)
 
@@ -95,7 +95,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.9.15-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.9.26-alpine`.
 
 In addition, starting with `0.8` each derived image also sets `UV_TOOL_BIN_DIR` to `/usr/local/bin`
 to allow `uv tool install` to work as expected with the default user.
@@ -136,7 +136,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.9.15 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -154,7 +154,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.15 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.9.15/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.9.26/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -164,6 +164,9 @@ If you're using uv to manage your project, you can copy it into the image and in
 ```dockerfile title="Dockerfile"
 # Copy the project into the image
 COPY . /app
+
+# Disable development dependencies
+ENV UV_NO_DEV=1
 
 # Sync the project into a new environment, asserting the lockfile is up to date
 WORKDIR /app
@@ -248,17 +251,6 @@ $ docker run -it $(docker build -q .) /bin/bash -c "cowsay -t hello"
     ENV UV_TOOL_BIN_DIR=/opt/uv-bin/
     ```
 
-### Installing Python in ARM musl images
-
-While uv will attempt to [install a compatible Python version](../install-python.md) if no such
-version is available in the image, uv does not yet support installing Python for musl Linux on ARM.
-For example, if you are using an Alpine Linux base image on an ARM machine, you may need to add it
-with the system package manager:
-
-```shell
-apk add --no-cache python3~=3.12
-```
-
 ## Developing in a container
 
 When developing, it's useful to mount the project directory into a container. With this setup,
@@ -334,11 +326,12 @@ See a complete example in the
 ### Compiling bytecode
 
 Compiling Python source files to bytecode is typically desirable for production images as it tends
-to improve startup time (at the cost of increased installation time).
+to improve startup time (at the cost of increased installation time and image size).
 
 To enable bytecode compilation, use the `--compile-bytecode` flag:
 
 ```dockerfile title="Dockerfile"
+RUN uv python install --compile-bytecode
 RUN uv sync --compile-bytecode
 ```
 
@@ -348,6 +341,13 @@ commands within the Dockerfile compile bytecode:
 ```dockerfile title="Dockerfile"
 ENV UV_COMPILE_BYTECODE=1
 ```
+
+!!! note
+
+     uv will only compile the standard library of _managed_ Python versions during
+    `uv python install`. The distributor of unmanaged Python versions decides if the
+    standard library is pre-compiled. For example, the official `python` image will not
+    have a compiled standard library.
 
 ### Caching
 
@@ -619,5 +619,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.9.15`, or (even better) the specific image digest,
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.9.26`, or (even better) the specific image digest,
     such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

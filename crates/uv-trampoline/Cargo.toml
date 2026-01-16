@@ -47,6 +47,7 @@ windows = { version = "0.61.0", features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
+  "Win32_Storage_FileSystem",
 ] }
 ufmt-write = "0.1.0"
 ufmt = { version = "0.2.0", features = ["std"] }
