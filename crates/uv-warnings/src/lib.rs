@@ -94,7 +94,7 @@ pub fn write_error_chain(
         "{}{} {}",
         level.as_ref().color(color).bold(),
         ":".bold(),
-        err.to_string().trim()
+        err.to_string().trim().bold()
     )?;
     for source in iter::successors(err.source(), |&err| err.source()) {
         let msg = source.to_string();
