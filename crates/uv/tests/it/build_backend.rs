@@ -1224,6 +1224,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "pypi")]
 #[test]
 fn build_with_all_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
