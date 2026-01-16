@@ -3,12 +3,13 @@ use std::sync::{Arc, LazyLock};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
+use thiserror::Error;
 use version_ranges::Ranges;
 
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
-use uv_errors::{Hint, Hints};
+use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
@@ -49,6 +50,128 @@ pub(crate) struct OperationDiagnostic {
     pub(crate) context: Option<&'static str>,
 }
 
+#[derive(Debug, Error)]
+enum OperationError {
+    #[error("{kind} `{dist}`")]
+    Dist {
+        kind: DistErrorKind,
+        dist: Box<Dist>,
+        chain: DerivationChain,
+        #[source]
+        cause: Arc<uv_distribution::Error>,
+        hint: Option<String>,
+    },
+    #[error("{kind} `{dist}`")]
+    RequestedDist {
+        kind: DistErrorKind,
+        dist: Box<RequestedDist>,
+        chain: DerivationChain,
+        #[source]
+        cause: Arc<uv_distribution::Error>,
+        hint: Option<String>,
+    },
+    #[error("Failed to resolve dependencies for `{name}` (v{version})")]
+    Dependencies {
+        name: PackageName,
+        version: Version,
+        chain: DerivationChain,
+        #[source]
+        cause: Box<uv_resolver::ResolveError>,
+        hint: Option<String>,
+    },
+    #[error("{header}")]
+    NoSolution {
+        header: uv_resolver::NoSolutionHeader,
+        #[source]
+        cause: Box<uv_resolver::NoSolutionError>,
+        hint: Option<String>,
+    },
+    #[error("Failed to resolve {context} requirement")]
+    Requirements {
+        context: &'static str,
+        #[source]
+        cause: uv_requirements::Error,
+        hint: Option<String>,
+    },
+}
+
+impl Hint for OperationError {
+    fn hints(&self) -> Hints<'_> {
+        let (mut hints, extra_hint) = match self {
+            Self::Dist {
+                dist,
+                chain,
+                cause,
+                hint,
+                ..
+            } => (
+                dist_hints(dist.name(), dist.version(), chain, cause.hints()),
+                hint,
+            ),
+            Self::RequestedDist {
+                dist,
+                chain,
+                cause,
+                hint,
+                ..
+            } => (
+                dist_hints(dist.name(), dist.version(), chain, cause.hints()),
+                hint,
+            ),
+            Self::Dependencies {
+                name,
+                version,
+                chain,
+                cause,
+                hint,
+            } => (dist_hints(name, Some(version), chain, cause.hints()), hint),
+            Self::NoSolution { cause, hint, .. } => (cause.hints().into_owned(), hint),
+            Self::Requirements { hint, .. } => (Hints::none(), hint),
+        };
+        if let Some(extra_hint) = extra_hint {
+            hints.push(extra_hint.clone());
+        }
+        hints
+    }
+}
+
+#[derive(Debug)]
+struct SystemCertsError {
+    cause: uv_client::Error,
+    hint: Option<String>,
+}
+
+impl std::fmt::Display for SystemCertsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.cause.fmt(f)
+    }
+}
+
+impl std::error::Error for SystemCertsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.source()
+    }
+}
+
+impl Hint for SystemCertsError {
+    fn hints(&self) -> Hints<'_> {
+        let mut hints = Hints::from(format!(
+            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+            "--system-certs".green()
+        ));
+        if let Some(hint) = &self.hint {
+            hints.push(hint.clone());
+        }
+        hints
+    }
+}
+
+fn render_handled_error(err: &anyhow::Error) {
+    let hints = hints_for_error(err);
+    write_error_chain_with_options(err.as_ref(), ErrorOptions::default().with_hints(hints))
+        .expect("writing to stderr should not fail");
+}
+
 impl OperationDiagnostic {
     /// Create an [`OperationDiagnostic`] with the given system certificates setting.
     #[must_use]
@@ -81,9 +204,23 @@ impl OperationDiagnostic {
     ///
     /// Returns `Some` if the error was not handled.
     pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
-        let result = match err {
+        let Self {
+            hint,
+            system_certs,
+            context,
+        } = self;
+        match err {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                no_solution(&err, self.context);
+                let header = if let Some(context) = context {
+                    err.header().with_context(context)
+                } else {
+                    err.header()
+                };
+                render_handled_error(&anyhow::Error::new(OperationError::NoSolution {
+                    header,
+                    cause: err,
+                    hint,
+                }));
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
@@ -92,7 +229,13 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err);
+                render_handled_error(&anyhow::Error::new(OperationError::RequestedDist {
+                    kind,
+                    dist,
+                    chain,
+                    cause: err,
+                    hint,
+                }));
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
@@ -101,11 +244,23 @@ impl OperationDiagnostic {
                 version,
                 chain,
             )) => {
-                dependencies_error(error, &name, &version, &chain);
+                render_handled_error(&anyhow::Error::new(OperationError::Dependencies {
+                    name,
+                    version,
+                    chain,
+                    cause: error,
+                    hint,
+                }));
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err));
+                render_handled_error(&anyhow::Error::new(OperationError::Dist {
+                    kind,
+                    dist,
+                    chain: DerivationChain::default(),
+                    cause: Arc::new(*err),
+                    hint,
+                }));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -114,171 +269,43 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(*err));
+                render_handled_error(&anyhow::Error::new(OperationError::Dist {
+                    kind,
+                    dist,
+                    chain,
+                    cause: Arc::new(*err),
+                    hint,
+                }));
                 None
             }
             pip::operations::Error::Requirements(err) => {
-                if let Some(context) = self.context {
-                    let err = miette::Report::msg(format!("{err}"))
-                        .context(format!("Failed to resolve {context} requirement"));
-                    anstream::eprint!("{err:?}");
+                if let Some(context) = context {
+                    render_handled_error(&anyhow::Error::new(OperationError::Requirements {
+                        context,
+                        cause: err,
+                        hint,
+                    }));
                     None
                 } else {
                     Some(pip::operations::Error::Requirements(err))
                 }
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.system_certs && err.is_ssl() =>
+                if !system_certs && err.is_ssl() =>
             {
-                system_certs_hint(err);
+                render_handled_error(&anyhow::Error::new(SystemCertsError { cause: err, hint }));
                 None
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
+                if let Some(hint) = hint {
+                    anstream::eprint!("{}", Hints::from(hint));
+                }
                 None
             }
             err => Some(err),
-        };
-
-        // Render the caller-provided hint after the error output.
-        if result.is_none() {
-            if let Some(hint) = &self.hint {
-                let hints = Hints::from(hint.as_str());
-                anstream::eprint!("{hints}");
-            }
-        }
-
-        result
-    }
-}
-
-/// Render a distribution failure (read, download or build) with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-pub(crate) fn dist_error(
-    kind: DistErrorKind,
-    dist: Box<Dist>,
-    chain: &DerivationChain,
-    cause: Arc<uv_distribution::Error>,
-) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{kind} `{dist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        kind: DistErrorKind,
-        dist: Box<Dist>,
-        #[source]
-        cause: Arc<uv_distribution::Error>,
-    }
-
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
-    let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
-}
-
-/// Render a requested distribution failure (read, download or build) with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn requested_dist_error(
-    kind: DistErrorKind,
-    dist: Box<RequestedDist>,
-    chain: &DerivationChain,
-    cause: Arc<uv_distribution::Error>,
-) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("{kind} `{dist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        kind: DistErrorKind,
-        dist: Box<RequestedDist>,
-        #[source]
-        cause: Arc<uv_distribution::Error>,
-    }
-
-    let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
-    let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
-}
-
-/// Render an error in fetching a package's dependencies.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn dependencies_error(
-    error: Box<uv_resolver::ResolveError>,
-    name: &PackageName,
-    version: &Version,
-    chain: &DerivationChain,
-) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
-    #[diagnostic()]
-    struct Diagnostic {
-        name: PackageName,
-        version: Version,
-        #[source]
-        cause: Box<uv_resolver::ResolveError>,
-    }
-
-    let hints = dist_hints(name, Some(version), chain, error.hints());
-    let report = miette::Report::new(Diagnostic {
-        name: name.clone(),
-        version: version.clone(),
-        cause: error,
-    });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
-}
-
-/// Render a [`uv_resolver::NoSolutionError`].
-pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
-    let header = if let Some(context) = context {
-        err.header().with_context(context)
-    } else {
-        err.header()
-    };
-    let report = miette::Report::msg(err.report().to_string()).context(header);
-    anstream::eprint!("{report:?}");
-    let hints = err.hints();
-    anstream::eprint!("{hints}");
-}
-
-/// Render a TLS error with a hint to enable native TLS.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn system_certs_hint(err: uv_client::Error) {
-    #[derive(Debug, miette::Diagnostic)]
-    #[diagnostic()]
-    struct Error {
-        /// The underlying error.
-        err: uv_client::Error,
-
-        /// The help message to display.
-        #[help]
-        help: String,
-    }
-
-    impl std::fmt::Display for Error {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.err)
         }
     }
-
-    impl std::error::Error for Error {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.err.source()
-        }
-    }
-
-    let report = miette::Report::new(Error {
-        err,
-        help: format!(
-            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--system-certs".green()
-        ),
-    });
-    anstream::eprint!("{report:?}");
 }
 
 /// Walk an error chain and collect hint strings from all known error types.
@@ -289,6 +316,8 @@ fn system_certs_hint(err: uv_client::Error) {
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
     for cause in err.chain() {
+        collect_hint::<OperationError>(cause, &mut hints);
+        collect_hint::<SystemCertsError>(cause, &mut hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
@@ -302,8 +331,10 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<NoExecutablesError>(cause, &mut hints);
         collect_hint::<ExternallyManagedError>(cause, &mut hints);
         collect_hint::<MissingProjectVersionError>(cause, &mut hints);
+        collect_hint::<crate::commands::build_frontend::Error>(cause, &mut hints);
         collect_hint::<uv_build_backend::Error>(cause, &mut hints);
         collect_hint::<uv_build_frontend::Error>(cause, &mut hints);
+        collect_hint::<uv_types::AnyErrorBuild>(cause, &mut hints);
         collect_hint::<uv_python::Error>(cause, &mut hints);
         collect_hint::<uv_installer::IncompatibleWheelError>(cause, &mut hints);
         collect_hint::<uv_distribution::Error>(cause, &mut hints);

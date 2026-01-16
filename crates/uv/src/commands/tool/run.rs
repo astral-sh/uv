@@ -4,7 +4,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anstream::eprint;
 use anyhow::{Context, bail};
 use console::Term;
 use itertools::Itertools;
@@ -23,6 +22,8 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
+use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -304,9 +305,10 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
-            eprint!("{err:?}");
+            let err = anyhow::Error::from(err).context("Failed to resolve `--with` requirement");
+            let hints = diagnostics::hints_for_error(&err);
+            write_error_chain_with_options(err.as_ref(), ErrorOptions::default().with_hints(hints))
+                .expect("writing to stderr should not fail");
             return Ok(ExitStatus::Failure);
         }
         Err(err) => return Err(err.into()),
