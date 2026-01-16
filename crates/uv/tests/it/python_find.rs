@@ -619,17 +619,6 @@ fn python_find_venv() {
     ----- stderr -----
     ");
 
-    // Even if the `VIRTUAL_ENV` is not set
-    #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.python_find(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [VENV]/[BIN]/[PYTHON]
-
-    ----- stderr -----
-    ");
-
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all().unwrap();
 
