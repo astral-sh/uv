@@ -142,6 +142,22 @@ uvx typos
 cargo shear
 ```
 
+### Compiling for Windows from Unix
+
+To run clippy for a Windows target from Linux or macOS, you can use
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+
+```shell
+# Install cargo-xwin
+cargo install cargo-xwin --version 0.18.0
+
+# Add the Windows target
+rustup target add x86_64-pc-windows-msvc
+
+# Run clippy for Windows
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
+```
+
 ## Crate structure
 
 Rust does not allow circular dependencies between crates. To visualize the crate hierarchy, install
