@@ -14002,7 +14002,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS), @"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14095,7 +14095,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14231,7 +14231,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should be primed with non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14289,7 +14289,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should hit non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----

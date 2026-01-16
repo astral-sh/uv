@@ -1034,9 +1034,6 @@ impl TestContext {
             // Since downloads, fetches and builds run in parallel, their message output order is
             // non-deterministic, so can't capture them in test output.
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
-            .env_remove(EnvVars::UV_CACHE_DIR)
-            .env_remove(EnvVars::UV_TOOL_BIN_DIR)
-            .env_remove(EnvVars::XDG_CONFIG_HOME)
             // I believe the intent of all tests is that they are run outside the
             // context of an existing git repository. And when they aren't, state
             // from the parent git repository can bleed into the behavior of `uv
@@ -1158,7 +1155,6 @@ impl TestContext {
     pub fn help(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("help");
-        command.env_remove(EnvVars::UV_CACHE_DIR);
         command
     }
 
