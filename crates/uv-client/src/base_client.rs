@@ -17,7 +17,9 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
+use reqwest::{
+    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
+};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -501,8 +503,7 @@ impl<'a> BaseClientBuilder<'a> {
         if let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) {
             if !cert_dirs.is_empty() {
                 let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
-                let (existing, missing): (Vec<_>, Vec<_>) =
-                    paths.iter().partition(|p| p.exists());
+                let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
 
                 if existing.is_empty() {
                     let end_note = if missing.len() == 1 {
