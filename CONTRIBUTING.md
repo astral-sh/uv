@@ -50,6 +50,24 @@ sudo dnf install gcc
 
 For running tests, we recommend [nextest](https://nexte.st/).
 
+To run a specific test by name:
+
+```shell
+cargo nextest run -E 'test(test_name)'
+```
+
+To run all tests and accept snapshot changes:
+
+```shell
+cargo insta test --accept --test-runner nextest
+```
+
+To update snapshots for a specific test:
+
+```shell
+cargo insta test --accept --test-runner nextest -- <test_name>
+```
+
 ### Python
 
 Testing uv requires multiple specific Python versions; they can be installed with:
