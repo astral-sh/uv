@@ -341,9 +341,3 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
-
-[patch.crates-io]
-astral-reqwest-middleware = { path = "../reqwest-middleware/reqwest-middleware" }
-astral-reqwest-retry = { path = "../reqwest-middleware/reqwest-retry" }
-astral_async_http_range_reader = { path = "../async_http_range_reader" }
-ambient-id = { path = "../ambient-id" }
