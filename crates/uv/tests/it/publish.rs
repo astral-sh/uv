@@ -5,7 +5,6 @@ use fs_err::OpenOptions;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::env;
 use std::env::current_dir;
 use std::io::Write;
 use uv_static::EnvVars;
