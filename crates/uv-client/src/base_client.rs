@@ -1190,6 +1190,17 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
                 return Some(Retryable::Transient);
             }
 
+            // Check for BufError from flate2 - this is a transient decompression error
+            // that can occur due to network issues causing corrupted data.
+            // https://github.com/astral-sh/uv/issues/8692
+            if io_err.kind() == io::ErrorKind::Other {
+                let err_str = io_err.to_string();
+                if err_str.contains("BufError") {
+                    trace!("Retrying BufError (transient decompression error)");
+                    return Some(Retryable::Transient);
+                }
+            }
+
             trace!(
                 "Cannot retry IO error `{}`, not a retryable IO error kind",
                 io_err.kind()

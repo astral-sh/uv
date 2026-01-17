@@ -20,6 +20,7 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_client::resumable_reader::ResponseExt;
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -1727,12 +1728,40 @@ async fn read_url(
             .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
 
         let size = response.content_length();
-        let stream = response
-            .bytes_stream()
-            .map_err(io::Error::other)
-            .into_async_read();
 
-        Ok((Either::Right(stream.compat()), size))
+        // Use resumable streaming if the server supports Range requests.
+        // This allows automatic recovery from transient network failures during
+        // large archive downloads.
+        let reader: Pin<Box<dyn AsyncRead + Send>> = if response.supports_range_requests() {
+            match response.resumable_stream(client.clone()) {
+                Ok(resumable) => Box::pin(resumable),
+                Err(_) => {
+                    // Fall back to non-resumable stream if resumable setup fails
+                    // (e.g., server advertises Range but doesn't actually support it)
+                    let response = client
+                        .for_host(url)
+                        .get(Url::from(url.clone()))
+                        .send()
+                        .await
+                        .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?
+                        .error_for_status()
+                        .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
+                    let stream = response
+                        .bytes_stream()
+                        .map_err(io::Error::other)
+                        .into_async_read();
+                    Box::pin(stream.compat())
+                }
+            }
+        } else {
+            let stream = response
+                .bytes_stream()
+                .map_err(io::Error::other)
+                .into_async_read();
+            Box::pin(stream.compat())
+        };
+
+        Ok((Either::Right(reader), size))
     }
 }
 

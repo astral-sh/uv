@@ -17,6 +17,7 @@ use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    resumable_reader::ResponseExt,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -84,21 +85,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             builder: self.builder.with_reporter(reporter.clone()),
             reporter: Some(reporter),
             ..self
-        }
-    }
-
-    /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
-    fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
-        if err.is_timeout() {
-            io::Error::new(
-                io::ErrorKind::TimedOut,
-                format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.client.unmanaged.timeout().as_secs()
-                ),
-            )
-        } else {
-            io::Error::other(err)
         }
     }
 
@@ -614,15 +600,33 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .as_ref()
                     .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
-                let reader = response
-                    .bytes_stream()
-                    .map_err(|err| self.handle_response_errors(err))
-                    .into_async_read();
+                // Use resumable streaming if the server supports Range requests.
+                // This allows automatic recovery from transient network failures during
+                // large wheel downloads.
+                let supports_range = response.supports_range_requests();
+                let reader: Pin<Box<dyn AsyncRead + Send>> = if supports_range {
+                    let base_client = self.client.unmanaged.cached_client().uncached().clone();
+                    match response.resumable_stream(base_client) {
+                        Ok(resumable) => Box::pin(resumable),
+                        Err(err) => {
+                            return Err(Error::CacheRead(io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Failed to setup resumable download: {err}"),
+                            )));
+                        }
+                    }
+                } else {
+                    let stream = response
+                        .bytes_stream()
+                        .map_err(io::Error::other)
+                        .into_async_read();
+                    Box::pin(stream.compat())
+                };
 
                 // Create a hasher for each hash algorithm.
                 let algorithms = hashes.algorithms();
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
+                let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
                 // Download and unzip the wheel to a temporary directory.
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
@@ -785,10 +789,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .as_ref()
                     .map(|reporter| (reporter, reporter.on_download_start(dist.name(), size)));
 
-                let reader = response
-                    .bytes_stream()
-                    .map_err(|err| self.handle_response_errors(err))
-                    .into_async_read();
+                // Use resumable streaming if the server supports Range requests.
+                // This allows automatic recovery from transient network failures during
+                // large wheel downloads.
+                let supports_range = response.supports_range_requests();
+                let mut reader: Pin<Box<dyn AsyncRead + Send>> = if supports_range {
+                    let base_client = self.client.unmanaged.cached_client().uncached().clone();
+                    match response.resumable_stream(base_client) {
+                        Ok(resumable) => Box::pin(resumable),
+                        Err(err) => {
+                            return Err(Error::CacheRead(io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Failed to setup resumable download: {err}"),
+                            )));
+                        }
+                    }
+                } else {
+                    let stream = response
+                        .bytes_stream()
+                        .map_err(io::Error::other)
+                        .into_async_read();
+                    Box::pin(stream.compat())
+                };
 
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
@@ -804,14 +826,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         // after the download is complete, even if we still have to unzip and hash
                         // part of the file.
                         let mut reader =
-                            ProgressReader::new(reader.compat(), progress, &**reporter);
+                            ProgressReader::new(reader, progress, &**reporter);
 
                         tokio::io::copy(&mut reader, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
                     None => {
-                        tokio::io::copy(&mut reader.compat(), &mut writer)
+                        tokio::io::copy(&mut reader, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
