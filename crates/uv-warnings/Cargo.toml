@@ -19,8 +19,12 @@ workspace = true
 anstream = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
+terminal_size = { workspace = true }
+textwrap = { workspace = true }
+uv-static = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
+thiserror = { workspace = true }

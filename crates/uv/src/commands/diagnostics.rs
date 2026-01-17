@@ -128,12 +128,7 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     let err = anyhow::Error::from(err)
                         .context(format!("Failed to resolve {context} requirement"));
-                    let _ = write_error_chain(
-                        err.as_ref(),
-                        Stderr::Enabled,
-                        "error",
-                        owo_colors::AnsiColors::Red,
-                    );
+                    let _ = write_error_chain(err.as_ref(), Stderr::Enabled);
                     None
                 } else {
                     Some(pip::operations::Error::Requirements(err))
@@ -156,7 +151,7 @@ impl OperationDiagnostic {
 
 /// Display an error with an optional help message.
 pub(crate) fn show_error(err: &dyn std::error::Error, help: Option<&str>) {
-    let _ = write_error_chain(err, Stderr::Enabled, "error", owo_colors::AnsiColors::Red);
+    let _ = write_error_chain(err, Stderr::Enabled);
     if let Some(help) = help {
         let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
     }
@@ -302,6 +297,7 @@ pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError) {
         "error",
         owo_colors::AnsiColors::Red,
         &hints,
+        None,
     );
 }
 
@@ -315,6 +311,7 @@ pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &
         "error",
         owo_colors::AnsiColors::Red,
         &hints,
+        None,
     );
 }
 
@@ -329,6 +326,7 @@ pub(crate) fn no_solution_hint(err: &uv_resolver::NoSolutionError, help: &str) {
         "error",
         owo_colors::AnsiColors::Red,
         &hints,
+        None,
     );
     // Write the additional help message at top level
     let _ = writeln!(Stderr::Enabled, "\n{}: {help}", "hint".bold().cyan());
