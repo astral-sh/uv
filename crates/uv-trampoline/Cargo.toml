@@ -1,3 +1,5 @@
+cargo-features = ["panic-immediate-abort"]
+
 [package]
 name = "uv-trampoline"
 version = "0.1.0"
@@ -12,7 +14,7 @@ doctest = false
 [profile.dev]
 lto = true
 opt-level = 1
-panic = "abort"
+panic = "immediate-abort"
 debug = true
 
 [profile.test]
@@ -27,7 +29,7 @@ codegen-units = 1
 # Optimize for size.
 opt-level = "z"
 # Abort on panic.
-panic = "abort"
+panic = "immediate-abort"
 # Automatically strip symbols from the binary.
 strip = true
 debug = false
