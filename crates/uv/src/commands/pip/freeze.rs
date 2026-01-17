@@ -1,10 +1,10 @@
-use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -23,7 +23,7 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
     exclude_editable: bool,
-    exclude: &HashSet<PackageName>,
+    exclude: &FxHashSet<PackageName>,
     strict: bool,
     python: Option<&str>,
     system: bool,
