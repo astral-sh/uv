@@ -1,10 +1,11 @@
-use std::collections::HashSet;
 use std::env::VarError;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
 use std::str::FromStr;
 use std::time::Duration;
+
+use rustc_hash::FxHashSet;
 
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
@@ -3025,7 +3026,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
-    pub(crate) exclude: HashSet<PackageName>,
+    pub(crate) exclude: FxHashSet<PackageName>,
     pub(crate) paths: Option<Vec<PathBuf>>,
     pub(crate) settings: PipSettings,
 }
@@ -3075,7 +3076,7 @@ impl PipFreezeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
     pub(crate) editable: Option<bool>,
-    pub(crate) exclude: Vec<PackageName>,
+    pub(crate) exclude: FxHashSet<PackageName>,
     pub(crate) format: ListFormat,
     pub(crate) outdated: bool,
     pub(crate) settings: PipSettings,
@@ -3108,7 +3109,7 @@ impl PipListSettings {
 
         Self {
             editable: flag(editable, exclude_editable, "exclude-editable"),
-            exclude,
+            exclude: exclude.into_iter().collect(),
             format,
             outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
             settings: PipSettings::combine(
