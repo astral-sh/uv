@@ -2533,6 +2533,10 @@ pub struct PipFreezeArgs {
     #[arg(long)]
     pub exclude_editable: bool,
 
+    /// Exclude the specified package(s) from the output.
+    #[arg(long)]
+    pub r#exclude: Vec<PackageName>,
+
     /// Validate the Python environment, to detect packages with missing dependencies and other
     /// issues.
     #[arg(long, overrides_with("no_strict"))]
