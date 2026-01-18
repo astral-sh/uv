@@ -43,6 +43,7 @@ uv-installer = { version = "0.0.15", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.15", path = "crates/uv-keyring" }
 uv-logging = { version = "0.0.15", path = "crates/uv-logging" }
 uv-macros = { version = "0.0.15", path = "crates/uv-macros" }
+uv-mdtest = { version = "0.0.15", path = "crates/uv-mdtest" }
 uv-metadata = { version = "0.0.15", path = "crates/uv-metadata" }
 uv-normalize = { version = "0.0.15", path = "crates/uv-normalize" }
 uv-once-map = { version = "0.0.15", path = "crates/uv-once-map" }
@@ -143,6 +144,7 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
+pulldown-cmark = { version = "0.13.0" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
 pubgrub = { version = "0.3.3" , package = "astral-pubgrub" }
@@ -209,6 +211,7 @@ zstd = { version = "0.13.3" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }
+datatest-stable = { version = "0.3.0" }
 assert_fs = { version = "1.1.2" }
 byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.25" }
