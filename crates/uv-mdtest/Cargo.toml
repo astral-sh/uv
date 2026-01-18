@@ -26,6 +26,3 @@ toml = { workspace = true }
 uv-platform = { workspace = true }
 uv-static = { workspace = true }
 
-[dev-dependencies]
-anyhow = { workspace = true }
-insta = { workspace = true }

@@ -212,7 +212,6 @@ zstd = { version = "0.13.3" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }
-datatest-stable = { version = "0.3.0" }
 assert_fs = { version = "1.1.2" }
 byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.25" }
@@ -269,6 +268,10 @@ use_self = "warn"
 
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
+
+[workspace.metadata.cargo-shear]
+# xz2 is used by uv-extract for its "static" feature, not for code imports
+ignored = ["xz2"]
 
 [profile.release]
 strip = true

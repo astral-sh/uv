@@ -503,21 +503,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "021e079a1bab0ecce6cf4b4b74c0c37afa4a697136eb3b127875c84a8f04a8c3"
 
 [[package]]
-name = "bit-set"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
-dependencies = [
- "bit-vec",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,18 +1188,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d7439c3735f405729d52c3fbbe4de140eaf938a1fe47d227c27f8254d4302a5"
 
 [[package]]
-name = "datatest-stable"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a867d7322eb69cf3a68a5426387a25b45cb3b9c5ee41023ee6cea92e2afadd82"
-dependencies = [
- "camino",
- "fancy-regex",
- "libtest-mimic",
- "walkdir",
-]
-
-[[package]]
 name = "deadpool"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1527,17 +1500,6 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
-]
-
-[[package]]
-name = "fancy-regex"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
-dependencies = [
- "bit-set",
- "regex-automata",
- "regex-syntax",
 ]
 
 [[package]]
@@ -5696,12 +5658,10 @@ dependencies = [
  "astral-version-ranges",
  "axoupdater",
  "backon",
- "base64 0.22.1",
  "byteorder",
  "clap",
  "console 0.16.1",
  "ctrlc",
- "datatest-stable",
  "diskus",
  "dotenvy",
  "dunce",
@@ -5711,7 +5671,6 @@ dependencies = [
  "fs-err",
  "futures",
  "http",
- "ignore",
  "indexmap",
  "indicatif",
  "indoc",
@@ -5732,7 +5691,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "similar",
  "tar",
  "tempfile",
  "textwrap",
@@ -6624,9 +6582,7 @@ dependencies = [
 name = "uv-mdtest"
 version = "0.0.15"
 dependencies = [
- "anyhow",
  "fs-err",
- "insta",
  "pulldown-cmark",
  "regex",
  "serde",

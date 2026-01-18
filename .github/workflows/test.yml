@@ -71,7 +71,8 @@ jobs:
             --cargo-profile fast-build \
             --features python-patch,native-auth,secret-service \
             --workspace \
-            --profile ci-linux
+            --profile ci-linux \
+            -E 'package(uv) & binary(mdtest)'
 
   cargo-test-macos:
     timeout-minutes: 20
@@ -116,7 +117,8 @@ jobs:
             --no-default-features \
             --features python,python-managed,pypi,git,git-lfs,performance,crates-io,native-auth,apple-native \
             --workspace \
-            --profile ci-macos
+            --profile ci-macos \
+            -E 'package(uv) & binary(mdtest)'
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -179,4 +181,5 @@ jobs:
             --features python,pypi,python-managed,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
-            --partition hash:${{ matrix.partition }}/3
+            --partition hash:${{ matrix.partition }}/3 \
+            -E 'package(uv) & binary(mdtest)'

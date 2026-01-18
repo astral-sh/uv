@@ -7,7 +7,7 @@ use axoupdater::{
 
 use uv_static::EnvVars;
 
-use uv_test::{TestContext, get_bin, uv_snapshot};
+use uv_test::{get_bin, uv_snapshot};
 
 #[test]
 fn check_self_update() {

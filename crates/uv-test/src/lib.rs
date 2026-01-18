@@ -164,6 +164,9 @@ pub struct TestContext {
     /// Extra environment variables to apply to all commands.
     extra_env: Vec<(OsString, OsString)>,
 
+    /// Environment variables to remove from all commands.
+    extra_env_remove: Vec<OsString>,
+
     #[allow(dead_code)]
     _root: tempfile::TempDir,
 }
@@ -661,6 +664,20 @@ impl TestContext {
         self
     }
 
+    /// Add custom environment variables to all commands in this context.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((key.into(), value.into()));
+        self
+    }
+
+    /// Remove an environment variable from all commands in this context.
+    #[must_use]
+    pub fn with_env_remove(mut self, key: impl Into<OsString>) -> Self {
+        self.extra_env_remove.push(key.into());
+        self
+    }
+
     // Unsets the git credential helper using temp home gitconfig
     #[must_use]
     pub fn with_unset_git_credential_helper(self) -> Self {
@@ -977,6 +994,7 @@ impl TestContext {
             uv_bin,
             filters,
             extra_env: vec![],
+            extra_env_remove: vec![],
             _root: root,
         }
     }
@@ -1113,6 +1131,10 @@ impl TestContext {
 
         for (key, value) in &self.extra_env {
             command.env(key, value);
+        }
+
+        for key in &self.extra_env_remove {
+            command.env_remove(key);
         }
 
         if activate_venv {

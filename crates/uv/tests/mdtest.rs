@@ -6,6 +6,8 @@
 //! Each section in a markdown file becomes a separate test, allowing full parallelism
 //! with nextest.
 
+#![expect(clippy::print_stderr)]
+
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
@@ -15,8 +17,17 @@ use libtest_mimic::{Arguments, Failed, Trial};
 use regex::Regex;
 use walkdir::WalkDir;
 
-use uv_mdtest::{MarkdownTestFile, SnapshotMode, SnapshotUpdater};
+use uv_mdtest::{MarkdownTestFile, PythonVersions, SnapshotMode, SnapshotUpdater};
 use uv_test::{TestContext, get_bin};
+
+/// Convert a test name to a URL-friendly slug (like markdown anchors).
+fn slugify(name: &str) -> String {
+    name.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
 
 fn main() {
     let args = Arguments::from_args();
@@ -40,21 +51,11 @@ fn main() {
         .filter(|e| e.path().extension().is_some_and(|ext| ext == "md"))
     {
         let path = entry.path().to_path_buf();
-        let source = match fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Failed to read {}: {}", path.display(), e);
-                continue;
-            }
-        };
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
 
-        let test_file = match MarkdownTestFile::parse(path.clone(), &source) {
-            Ok(tf) => tf,
-            Err(e) => {
-                eprintln!("Failed to parse {}: {}", path.display(), e);
-                continue;
-            }
-        };
+        let test_file = MarkdownTestFile::parse(path.clone(), &source)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
 
         // Get relative path for display
         let relative_path = path
@@ -63,16 +64,30 @@ fn main() {
             .to_string_lossy()
             .to_string();
 
+        // Get enabled features from environment variable (comma-separated)
+        // Example: UV_MDTEST_FEATURES=python-patch,other-feature
+        let enabled_features: Vec<String> = std::env::var("UV_MDTEST_FEATURES")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default();
+
         // Create one trial per test (section)
         for test in test_file.tests {
-            let test_name = format!("{}::{}", relative_path, test.name);
+            let test_name = format!("{}#{}", relative_path, slugify(&test.name));
             let path = path.clone();
+            let should_run = test.should_run(&enabled_features);
             let test = Arc::new(test);
             let updater = Arc::clone(&updater);
 
-            trials.push(Trial::test(test_name, move || {
+            let mut trial = Trial::test(test_name, move || {
                 run_single_test(&path, &test, snapshot_mode, &updater)
-            }));
+            });
+
+            // Skip tests that don't match the current platform (target-os, target-family)
+            if !should_run {
+                trial = trial.with_ignored_flag(true);
+            }
+
+            trials.push(trial);
         }
     }
 
@@ -84,9 +99,7 @@ fn main() {
         // In practice, all test closures should be done at this point
         match Arc::try_unwrap(updater) {
             Ok(updater) => match updater.commit() {
-                Ok(updated_files) =>
-                {
-                    #[expect(clippy::print_stderr)]
+                Ok(updated_files) => {
                     for file in updated_files {
                         eprintln!("Updated snapshots in: {}", file.display());
                     }
@@ -111,16 +124,23 @@ fn run_single_test(
     snapshot_mode: SnapshotMode,
     updater: &SnapshotUpdater,
 ) -> Result<(), Failed> {
-    // Get the Python version from test config, defaulting to "3.12"
-    let python_version = test
-        .config
-        .environment
-        .python_version
-        .as_deref()
-        .unwrap_or("3.12");
+    // Get the Python versions from test config
+    let python_versions: Vec<String> = match &test.config.environment.python_versions {
+        PythonVersions::Default => vec!["3.12".to_string()],
+        PythonVersions::None => vec![],
+        PythonVersions::Only(versions) => versions.clone(),
+    };
+    let version_strs: Vec<&str> = python_versions
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
 
     // Create a TestContext for this test - this handles all the proper setup
-    let mut context = TestContext::new_with_bin(python_version, get_bin!());
+    // Use new_with_versions_and_bin to avoid automatic venv creation, then conditionally create it
+    let mut context = TestContext::new_with_versions_and_bin(&version_strs, get_bin!());
+    if test.config.environment.create_venv.unwrap_or(true) {
+        context.reset_venv();
+    }
 
     // Apply environment options from test config
     if let Some(exclude_newer) = &test.config.environment.exclude_newer {
@@ -131,6 +151,16 @@ fn run_single_test(
     }
     if let Some(concurrent_installs) = &test.config.environment.concurrent_installs {
         context = context.with_concurrent_installs(concurrent_installs);
+    }
+
+    // Apply custom environment variables from test config
+    for (key, value) in &test.config.environment.env {
+        context = context.with_env(key, value);
+    }
+
+    // Remove environment variables from test config
+    for key in &test.config.environment.env_remove {
+        context = context.with_env_remove(key);
     }
 
     // Apply filter options from test config
@@ -193,28 +223,8 @@ fn run_single_test(
         }
     }
 
-    // Create files in the test context's temp directory
-    for file in &test.files {
-        let file_path = context.temp_dir.join(&file.path);
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                Failed::from(format!(
-                    "Failed to create directory {}: {}",
-                    parent.display(),
-                    e
-                ))
-            })?;
-        }
-        fs::write(&file_path, &file.content).map_err(|e| {
-            Failed::from(format!(
-                "Failed to write file {}: {}",
-                file_path.display(),
-                e
-            ))
-        })?;
-    }
-
     // Build a command builder that uses TestContext
+    // Note: File creation is now handled by the runner in document order
     let command_builder = |cmd_str: &str| -> Command {
         // Parse the command - first word is the command name
         let parts: Vec<&str> = cmd_str.split_whitespace().collect();

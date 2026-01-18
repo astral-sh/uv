@@ -76,6 +76,10 @@ impl SnapshotUpdater {
                 // File snapshots are just the content
                 mismatch.actual.clone()
             }
+            MismatchKind::ContentAssertion { .. } | MismatchKind::TreeSnapshot => {
+                // Content assertions and tree snapshots use actual content
+                mismatch.actual.clone()
+            }
         };
 
         let update = PendingUpdate {
@@ -192,10 +196,10 @@ impl Mismatch {
         })?;
 
         let new_content = match &self.kind {
-            MismatchKind::CommandOutput { .. } => {
-                update_code_block_content(&content, self.line, &self.actual)?
-            }
-            MismatchKind::FileSnapshot { .. } => {
+            MismatchKind::CommandOutput { .. }
+            | MismatchKind::FileSnapshot { .. }
+            | MismatchKind::ContentAssertion { .. }
+            | MismatchKind::TreeSnapshot => {
                 update_code_block_content(&content, self.line, &self.actual)?
             }
         };
@@ -220,6 +224,19 @@ impl Mismatch {
             }
             MismatchKind::FileSnapshot { path } => {
                 let _ = writeln!(output, "File snapshot mismatch for `{}`:", path.display());
+            }
+            MismatchKind::ContentAssertion { path, kind } => {
+                let kind_str = match kind {
+                    crate::types::AssertKind::Contains => "contains",
+                };
+                let _ = writeln!(
+                    output,
+                    "Content assertion `{kind_str}` failed for `{}`:",
+                    path.display()
+                );
+            }
+            MismatchKind::TreeSnapshot => {
+                let _ = writeln!(output, "Tree snapshot mismatch:");
             }
         }
 
@@ -309,6 +326,8 @@ fn update_code_block_content(
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
 
     #[test]
@@ -700,6 +719,48 @@ original
     }
 
     #[test]
+    fn test_snapshot_updater_tree_snapshot() {
+        // Test that tree snapshot updates work correctly
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.md");
+
+        let content = r"# Test
+
+```tree
+.
+├── old/
+└── structure/
+```
+";
+        fs::write(&file_path, content).unwrap();
+
+        let updater = SnapshotUpdater::new();
+        let mismatch = Mismatch {
+            kind: MismatchKind::TreeSnapshot,
+            expected: ".\n├── old/\n└── structure/".to_string(),
+            actual: ".\n├── new/\n│   └── nested/\n└── structure/".to_string(),
+            line: 3,
+        };
+
+        updater.add(&file_path, &mismatch);
+        let updated_files = updater.commit().unwrap();
+
+        assert_eq!(updated_files.len(), 1);
+
+        let result = fs::read_to_string(&file_path).unwrap();
+        assert!(result.contains("new/"), "New directory should be present");
+        assert!(
+            result.contains("nested/"),
+            "Nested directory should be present"
+        );
+        assert!(!result.contains("old/"), "Old directory should be replaced");
+        assert!(
+            result.contains("structure/"),
+            "Unchanged content should be preserved"
+        );
+    }
+
+    #[test]
     fn test_snapshot_updater_thread_safety() {
         // Test that the updater can be used from multiple threads
         use std::sync::Arc;
@@ -719,7 +780,7 @@ original
         // \n             (1 line)
         let mut content = String::from("# Test\n\n");
         for i in 0..10 {
-            content.push_str(&format!("## Section {i}\n\n```\n$ cmd{i}\nold{i}\n```\n\n"));
+            write!(content, "## Section {i}\n\n```\n$ cmd{i}\nold{i}\n```\n\n").unwrap();
         }
         fs::write(&file_path, &content).unwrap();
 
