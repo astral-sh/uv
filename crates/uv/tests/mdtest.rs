@@ -1,7 +1,7 @@
 //! Markdown-based integration tests for uv.
 //!
 //! This test runner uses the `uv-mdtest` crate to run tests defined in markdown files.
-//! Tests are located in `crates/uv/tests/mdtest/`.
+//! Tests are located in `test/uv/` at the workspace root.
 //!
 //! Each section in a markdown file becomes a separate test, allowing full parallelism
 //! with nextest.
@@ -26,7 +26,12 @@ fn main() {
     let updater = Arc::new(SnapshotUpdater::new());
 
     // Find all markdown test files
-    let test_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/mdtest");
+    // mdtest files live in the workspace root's test/uv/ directory
+    let test_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent() // crates/
+        .and_then(Path::parent) // workspace root
+        .expect("Failed to find workspace root")
+        .join("test/uv");
     let mut trials = Vec::new();
 
     for entry in WalkDir::new(&test_dir)
