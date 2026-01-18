@@ -6630,8 +6630,11 @@ dependencies = [
  "pulldown-cmark",
  "regex",
  "serde",
+ "tempfile",
  "thiserror 2.0.17",
  "toml",
+ "uv-platform",
+ "uv-static",
 ]
 
 [[package]]

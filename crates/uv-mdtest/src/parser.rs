@@ -24,23 +24,25 @@ pub enum ParseError {
     NoTests,
 }
 
-/// Parse a markdown file into a test file structure.
-///
-/// # Arguments
-///
-/// * `path` - The file path (for error reporting)
-/// * `source` - The markdown source content
-///
-/// # Returns
-///
-/// A `MarkdownTestFile` containing all tests extracted from the file.
-pub fn parse(path: PathBuf, source: &str) -> Result<MarkdownTestFile, ParseError> {
-    let mut parser_state = ParserState::new(path.clone(), source);
-    parser_state.parse()?;
+impl MarkdownTestFile {
+    /// Parse a markdown file into a test file structure.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The file path (for error reporting)
+    /// * `source` - The markdown source content
+    ///
+    /// # Returns
+    ///
+    /// A `MarkdownTestFile` containing all tests extracted from the file.
+    pub fn parse(path: PathBuf, source: &str) -> Result<Self, ParseError> {
+        let mut parser_state = ParserState::new(path.clone(), source);
+        parser_state.parse()?;
 
-    let tests = parser_state.finalize()?;
+        let tests = parser_state.finalize()?;
 
-    Ok(MarkdownTestFile { path, tests })
+        Ok(Self { path, tests })
+    }
 }
 
 /// Internal parser state.
@@ -352,7 +354,7 @@ Resolved 1 package in [TIME]
 ```
 "#;
 
-        let result = parse(PathBuf::from("test.md"), source).unwrap();
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
         assert_eq!(result.tests.len(), 1);
 
         let test = &result.tests[0];
@@ -409,7 +411,7 @@ Done
 ```
 "#;
 
-        let result = parse(PathBuf::from("test.md"), source).unwrap();
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
         assert_eq!(result.tests.len(), 2);
 
         // Both tests should have the file-level config
@@ -461,7 +463,7 @@ Done
 ```
 "#;
 
-        let result = parse(PathBuf::from("test.md"), source).unwrap();
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
         assert_eq!(result.tests.len(), 2);
 
         // Test A should only have a.toml
@@ -501,7 +503,7 @@ requires-python = ">=3.12"
 ```
 "#;
 
-        let result = parse(PathBuf::from("test.md"), source).unwrap();
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
         assert_eq!(result.tests.len(), 1);
 
         let test = &result.tests[0];

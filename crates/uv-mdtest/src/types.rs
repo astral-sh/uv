@@ -34,6 +34,17 @@ pub struct MarkdownTest {
     pub line_number: usize,
 }
 
+impl MarkdownTest {
+    /// Check if this test should run on the current platform.
+    ///
+    /// Returns `true` if both `target-os` and `target-family` match the current system.
+    #[must_use]
+    pub fn should_run(&self) -> bool {
+        self.config.environment.target_os.matches_current()
+            && self.config.environment.target_family.matches_current()
+    }
+}
+
 /// An embedded file to be written to the test directory.
 #[derive(Debug, Clone)]
 pub struct EmbeddedFile {
@@ -73,7 +84,7 @@ pub struct FileSnapshot {
 
 /// Test configuration from `mdtest.toml` blocks.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TestConfig {
     /// Environment configuration.
     #[serde(default)]
@@ -85,7 +96,7 @@ pub struct TestConfig {
 
 /// Environment configuration for tests.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct EnvironmentConfig {
     /// Python version to use (e.g., "3.12").
     pub python_version: Option<String>,
@@ -95,16 +106,177 @@ pub struct EnvironmentConfig {
     pub http_timeout: Option<String>,
     /// Number of concurrent installs.
     pub concurrent_installs: Option<String>,
+    /// Target OS(es) for this test, matching Rust's `target_os` cfg values.
+    /// If specified, the test only runs on matching operating systems.
+    /// Valid values: "linux", "macos", "windows", "freebsd", "netbsd", "openbsd", etc.
+    #[serde(default, rename = "target-os")]
+    pub target_os: TargetOs,
+    /// Target family for this test, matching Rust's `target_family` cfg values.
+    /// If specified, the test only runs on matching OS families.
+    /// Valid values: "unix", "windows"
+    #[serde(default, rename = "target-family")]
+    pub target_family: TargetFamily,
     /// Extra environment variables to set.
     #[serde(default)]
     pub env: HashMap<String, String>,
+}
+
+/// Target OS specification for tests, using `uv_platform::Os` for matching.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum TargetOs {
+    /// Run on all operating systems (default).
+    #[default]
+    All,
+    /// Run only on specific operating systems.
+    Only(Vec<uv_platform::Os>),
+}
+
+impl TargetOs {
+    /// Check if the test should run on the current OS.
+    #[must_use]
+    pub fn matches_current(&self) -> bool {
+        match self {
+            TargetOs::All => true,
+            TargetOs::Only(os_list) => {
+                let current = uv_platform::Os::from_env();
+                os_list.iter().any(|os| *os == current)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TargetOs {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+
+        struct TargetOsVisitor;
+
+        impl<'de> Visitor<'de> for TargetOsVisitor {
+            type Value = TargetOs;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "an OS string or array of OS strings (e.g., \"linux\", \"macos\", \"windows\")",
+                )
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let os = v
+                    .parse::<uv_platform::Os>()
+                    .map_err(|e| de::Error::custom(e.to_string()))?;
+                Ok(TargetOs::Only(vec![os]))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut os_list = Vec::new();
+                while let Some(s) = seq.next_element::<String>()? {
+                    let os = s
+                        .parse::<uv_platform::Os>()
+                        .map_err(|e| de::Error::custom(e.to_string()))?;
+                    os_list.push(os);
+                }
+                if os_list.is_empty() {
+                    Ok(TargetOs::All)
+                } else {
+                    Ok(TargetOs::Only(os_list))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(TargetOsVisitor)
+    }
+}
+
+/// Target family specification for tests, matching Rust's `target_family` cfg values.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum TargetFamily {
+    /// Run on all OS families (default).
+    #[default]
+    All,
+    /// Run only on specific OS families.
+    Only(Vec<String>),
+}
+
+impl TargetFamily {
+    /// Check if the test should run on the current OS family.
+    #[must_use]
+    pub fn matches_current(&self) -> bool {
+        match self {
+            TargetFamily::All => true,
+            TargetFamily::Only(families) => families.iter().any(|f| is_current_family(f)),
+        }
+    }
+}
+
+/// Check if the given family string matches the current OS family.
+fn is_current_family(family: &str) -> bool {
+    match family {
+        "unix" => cfg!(target_family = "unix"),
+        "windows" => cfg!(target_family = "windows"),
+        "wasm" => cfg!(target_family = "wasm"),
+        _ => false,
+    }
+}
+
+impl<'de> Deserialize<'de> for TargetFamily {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+
+        struct TargetFamilyVisitor;
+
+        impl<'de> Visitor<'de> for TargetFamilyVisitor {
+            type Value = TargetFamily;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(
+                    "a family string or array of family strings (\"unix\" or \"windows\")",
+                )
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(TargetFamily::Only(vec![v.to_string()]))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut families = Vec::new();
+                while let Some(s) = seq.next_element::<String>()? {
+                    families.push(s);
+                }
+                if families.is_empty() {
+                    Ok(TargetFamily::All)
+                } else {
+                    Ok(TargetFamily::Only(families))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(TargetFamilyVisitor)
+    }
 }
 
 /// Filter configuration for tests.
 ///
 /// These correspond to the `with_filtered_*` methods on `TestContext`.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FilterConfig {
     /// Filter package counts (e.g., "Resolved 5 packages" -> "Resolved [N] packages").
     #[serde(default)]
@@ -182,6 +354,14 @@ impl TestConfig {
                     .concurrent_installs
                     .clone()
                     .or_else(|| self.environment.concurrent_installs.clone()),
+                target_os: match &other.environment.target_os {
+                    TargetOs::All => self.environment.target_os.clone(),
+                    other_os => other_os.clone(),
+                },
+                target_family: match &other.environment.target_family {
+                    TargetFamily::All => self.environment.target_family.clone(),
+                    other_family => other_family.clone(),
+                },
                 env: {
                     let mut env = self.environment.env.clone();
                     env.extend(other.environment.env.clone());
@@ -339,6 +519,101 @@ mod tests {
         assert_eq!(
             merged.environment.env.get("BAZ").map(String::as_str),
             Some("qux")
+        );
+    }
+
+    #[test]
+    fn test_target_os_all_matches() {
+        let target = TargetOs::All;
+        assert!(target.matches_current());
+    }
+
+    #[test]
+    fn test_target_os_current_matches() {
+        let current_os = uv_platform::Os::from_env();
+        let target = TargetOs::Only(vec![current_os]);
+        assert!(target.matches_current());
+    }
+
+    #[test]
+    fn test_target_os_other_does_not_match() {
+        // Use an OS that's definitely not the current one
+        let current = uv_platform::Os::from_env();
+        let other_os: uv_platform::Os = if current.is_windows() {
+            "linux".parse().unwrap()
+        } else {
+            "windows".parse().unwrap()
+        };
+        let target = TargetOs::Only(vec![other_os]);
+        assert!(!target.matches_current());
+    }
+
+    #[test]
+    fn test_target_os_list_matches_if_any() {
+        let current_os = uv_platform::Os::from_env();
+        let freebsd: uv_platform::Os = "freebsd".parse().unwrap();
+        let target = TargetOs::Only(vec![freebsd, current_os]);
+        assert!(target.matches_current());
+    }
+
+    #[test]
+    fn test_target_family_all_matches() {
+        let target = TargetFamily::All;
+        assert!(target.matches_current());
+    }
+
+    #[test]
+    fn test_target_family_unix_matches_on_unix() {
+        let target = TargetFamily::Only(vec!["unix".to_string()]);
+        // This test will pass on Unix, fail on Windows
+        #[cfg(target_family = "unix")]
+        assert!(target.matches_current());
+        #[cfg(not(target_family = "unix"))]
+        assert!(!target.matches_current());
+    }
+
+    #[test]
+    fn test_target_family_windows_matches_on_windows() {
+        let target = TargetFamily::Only(vec!["windows".to_string()]);
+        // This test will pass on Windows, fail on Unix
+        #[cfg(target_family = "windows")]
+        assert!(target.matches_current());
+        #[cfg(not(target_family = "windows"))]
+        assert!(!target.matches_current());
+    }
+
+    #[test]
+    fn test_target_os_deserialize_string() {
+        let config: EnvironmentConfig = toml::from_str(r#"target-os = "linux""#).unwrap();
+        let linux: uv_platform::Os = "linux".parse().unwrap();
+        assert_eq!(config.target_os, TargetOs::Only(vec![linux]));
+    }
+
+    #[test]
+    fn test_target_os_deserialize_array() {
+        let config: EnvironmentConfig =
+            toml::from_str(r#"target-os = ["linux", "macos"]"#).unwrap();
+        let linux: uv_platform::Os = "linux".parse().unwrap();
+        let macos: uv_platform::Os = "macos".parse().unwrap();
+        assert_eq!(config.target_os, TargetOs::Only(vec![linux, macos]));
+    }
+
+    #[test]
+    fn test_target_family_deserialize_string() {
+        let config: EnvironmentConfig = toml::from_str(r#"target-family = "unix""#).unwrap();
+        assert_eq!(
+            config.target_family,
+            TargetFamily::Only(vec!["unix".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_target_family_deserialize_array() {
+        let config: EnvironmentConfig =
+            toml::from_str(r#"target-family = ["unix", "windows"]"#).unwrap();
+        assert_eq!(
+            config.target_family,
+            TargetFamily::Only(vec!["unix".to_string(), "windows".to_string()])
         );
     }
 }

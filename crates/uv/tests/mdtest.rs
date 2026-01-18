@@ -15,7 +15,7 @@ use libtest_mimic::{Arguments, Failed, Trial};
 use regex::Regex;
 use walkdir::WalkDir;
 
-use uv_mdtest::{SnapshotMode, format_mismatch, parse, run_test_with_command_builder};
+use uv_mdtest::{MarkdownTestFile, SnapshotMode, SnapshotUpdater};
 
 // Import the common module from the main integration tests
 #[path = "it/common/mod.rs"]
@@ -25,6 +25,10 @@ use common::TestContext;
 
 fn main() {
     let args = Arguments::from_args();
+    let snapshot_mode = SnapshotMode::from_env();
+
+    // Create a shared snapshot updater for batch updates
+    let updater = Arc::new(SnapshotUpdater::new());
 
     // Find all markdown test files
     let test_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/mdtest");
@@ -44,7 +48,7 @@ fn main() {
             }
         };
 
-        let test_file = match parse(path.clone(), &source) {
+        let test_file = match MarkdownTestFile::parse(path.clone(), &source) {
             Ok(tf) => tf,
             Err(e) => {
                 eprintln!("Failed to parse {}: {}", path.display(), e);
@@ -64,20 +68,49 @@ fn main() {
             let test_name = format!("{}::{}", relative_path, test.name);
             let path = path.clone();
             let test = Arc::new(test);
+            let updater = Arc::clone(&updater);
 
             trials.push(Trial::test(test_name, move || {
-                run_single_test(&path, &test)
+                run_single_test(&path, &test, snapshot_mode, &updater)
             }));
         }
     }
 
-    libtest_mimic::run(&args, trials).exit();
+    let conclusion = libtest_mimic::run(&args, trials);
+
+    // Commit all snapshot updates after tests complete
+    if snapshot_mode == SnapshotMode::Update {
+        // Try to unwrap the Arc - if there are still references, wait isn't possible
+        // In practice, all test closures should be done at this point
+        match Arc::try_unwrap(updater) {
+            Ok(updater) => match updater.commit() {
+                Ok(updated_files) =>
+                {
+                    #[expect(clippy::print_stderr)]
+                    for file in updated_files {
+                        eprintln!("Updated snapshots in: {}", file.display());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to commit snapshot updates: {e}");
+                }
+            },
+            Err(_) => {
+                eprintln!("Warning: Could not commit snapshots - updater still has references");
+            }
+        }
+    }
+
+    conclusion.exit();
 }
 
 /// Run a single markdown test section.
-fn run_single_test(path: &Path, test: &uv_mdtest::MarkdownTest) -> Result<(), Failed> {
-    let snapshot_mode = SnapshotMode::from_env();
-
+fn run_single_test(
+    path: &Path,
+    test: &uv_mdtest::MarkdownTest,
+    snapshot_mode: SnapshotMode,
+    updater: &SnapshotUpdater,
+) -> Result<(), Failed> {
     // Get the Python version from test config, defaulting to "3.12"
     let python_version = test
         .config
@@ -207,36 +240,29 @@ fn run_single_test(path: &Path, test: &uv_mdtest::MarkdownTest) -> Result<(), Fa
     };
 
     // Run the test using the command builder
-    let result =
-        run_test_with_command_builder(test, context.temp_dir.path(), &filters, command_builder)
-            .map_err(|e| {
-                Failed::from(format!(
-                    "Test execution failed at {}:{}: {}",
-                    path.display(),
-                    test.line_number,
-                    e
-                ))
-            })?;
+    let result = test
+        .run_with_command_builder(context.temp_dir.path(), &filters, command_builder)
+        .map_err(|e| {
+            Failed::from(format!(
+                "Test execution failed at {}:{}: {}",
+                path.display(),
+                test.line_number,
+                e
+            ))
+        })?;
 
     if !result.passed {
         if let Some(mismatch) = &result.mismatch {
             if snapshot_mode == SnapshotMode::Update {
-                // Update the snapshot in the source file
-                uv_mdtest::update_snapshot(path, mismatch)
-                    .map_err(|e| Failed::from(format!("Failed to update snapshot: {e}")))?;
-                // Print a message to indicate the snapshot was updated
-                #[expect(clippy::print_stderr)]
-                {
-                    eprintln!("Updated snapshot for test: {}", test.name);
-                }
+                // Queue the snapshot update (will be committed after all tests)
+                updater.add(path, mismatch);
             } else {
                 // Return the mismatch as a failure
-                let message = format_mismatch(mismatch);
                 return Err(Failed::from(format!(
                     "Test failed at {}:{}\n\n{}",
                     path.display(),
                     test.line_number,
-                    message
+                    mismatch.format()
                 )));
             }
         }

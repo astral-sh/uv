@@ -12,7 +12,8 @@ use std::process::{Command, Output};
 use regex::Regex;
 use thiserror::Error;
 
-use crate::types::{MarkdownTest, TestConfig};
+pub use crate::types::MarkdownTest;
+use crate::types::TestConfig;
 
 /// Errors that can occur during test execution.
 #[derive(Debug, Error)]
@@ -102,81 +103,84 @@ impl RunConfig {
     }
 }
 
-/// Run a single markdown test.
-pub fn run_test(test: &MarkdownTest, config: &RunConfig) -> Result<TestResult, RunError> {
-    // Create the test directory
-    let test_dir = &config.temp_dir;
-    fs::create_dir_all(test_dir).map_err(|e| RunError::CreateDir {
-        path: test_dir.clone(),
-        source: e,
-    })?;
+impl MarkdownTest {
+    /// Run this markdown test.
+    pub fn run(&self, config: &RunConfig) -> Result<TestResult, RunError> {
+        // Create the test directory
+        let test_dir = &config.temp_dir;
+        fs::create_dir_all(test_dir).map_err(|e| RunError::CreateDir {
+            path: test_dir.clone(),
+            source: e,
+        })?;
 
-    // Write embedded files
-    for file in &test.files {
-        let file_path = test_dir.join(&file.path);
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| RunError::CreateDir {
-                path: parent.to_path_buf(),
+        // Write embedded files
+        for file in &self.files {
+            let file_path = test_dir.join(&file.path);
+            if let Some(parent) = file_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| RunError::CreateDir {
+                    path: parent.to_path_buf(),
+                    source: e,
+                })?;
+            }
+            fs::write(&file_path, &file.content).map_err(|e| RunError::WriteFile {
+                path: file_path,
                 source: e,
             })?;
         }
-        fs::write(&file_path, &file.content).map_err(|e| RunError::WriteFile {
-            path: file_path,
-            source: e,
-        })?;
-    }
 
-    // Execute commands
-    for cmd in &test.commands {
-        let result = run_command(&cmd.command, config, test_dir, &test.config)?;
-        let filtered_output = config.apply_filters(result);
+        // Execute commands
+        for cmd in &self.commands {
+            let result = run_command(&cmd.command, config, test_dir, &self.config)?;
+            let filtered_output = config.apply_filters(result);
 
-        if filtered_output.trim() != cmd.expected_output.trim() {
-            return Ok(TestResult {
-                name: test.name.clone(),
-                passed: false,
-                mismatch: Some(Mismatch {
-                    kind: MismatchKind::CommandOutput {
-                        command: cmd.command.clone(),
-                    },
-                    expected: cmd.expected_output.clone(),
-                    actual: filtered_output,
-                    line: cmd.line_number,
-                }),
-            });
+            if filtered_output.trim() != cmd.expected_output.trim() {
+                return Ok(TestResult {
+                    name: self.name.clone(),
+                    passed: false,
+                    mismatch: Some(Mismatch {
+                        kind: MismatchKind::CommandOutput {
+                            command: cmd.command.clone(),
+                        },
+                        expected: cmd.expected_output.clone(),
+                        actual: filtered_output,
+                        line: cmd.line_number,
+                    }),
+                });
+            }
         }
-    }
 
-    // Check file snapshots
-    for snapshot in &test.file_snapshots {
-        let file_path = test_dir.join(&snapshot.path);
-        let actual_content = fs::read_to_string(&file_path).map_err(|e| RunError::ReadFile {
-            path: file_path.clone(),
-            source: e,
-        })?;
-        let filtered_content = config.apply_filters(actual_content);
+        // Check file snapshots
+        for snapshot in &self.file_snapshots {
+            let file_path = test_dir.join(&snapshot.path);
+            let actual_content =
+                fs::read_to_string(&file_path).map_err(|e| RunError::ReadFile {
+                    path: file_path.clone(),
+                    source: e,
+                })?;
+            let filtered_content = config.apply_filters(actual_content);
 
-        if filtered_content.trim() != snapshot.expected_content.trim() {
-            return Ok(TestResult {
-                name: test.name.clone(),
-                passed: false,
-                mismatch: Some(Mismatch {
-                    kind: MismatchKind::FileSnapshot {
-                        path: snapshot.path.clone(),
-                    },
-                    expected: snapshot.expected_content.clone(),
-                    actual: filtered_content,
-                    line: snapshot.line_number,
-                }),
-            });
+            if filtered_content.trim() != snapshot.expected_content.trim() {
+                return Ok(TestResult {
+                    name: self.name.clone(),
+                    passed: false,
+                    mismatch: Some(Mismatch {
+                        kind: MismatchKind::FileSnapshot {
+                            path: snapshot.path.clone(),
+                        },
+                        expected: snapshot.expected_content.clone(),
+                        actual: filtered_content,
+                        line: snapshot.line_number,
+                    }),
+                });
+            }
         }
-    }
 
-    Ok(TestResult {
-        name: test.name.clone(),
-        passed: true,
-        mismatch: None,
-    })
+        Ok(TestResult {
+            name: self.name.clone(),
+            passed: true,
+            mismatch: None,
+        })
+    }
 }
 
 /// Apply filters to output.
@@ -187,69 +191,72 @@ fn apply_filters(filters: &[(Regex, String)], mut output: String) -> String {
     output
 }
 
-/// Run a test using a custom command builder.
-///
-/// This allows integration with external test frameworks like `TestContext`.
-pub fn run_test_with_command_builder<F>(
-    test: &MarkdownTest,
-    test_dir: &Path,
-    filters: &[(Regex, String)],
-    command_builder: F,
-) -> Result<TestResult, RunError>
-where
-    F: Fn(&str) -> Command,
-{
-    // Execute commands
-    for cmd in &test.commands {
-        let result = run_command_with_builder(&cmd.command, test_dir, &command_builder)?;
-        let filtered_output = apply_filters(filters, result);
+impl MarkdownTest {
+    /// Run this test using a custom command builder.
+    ///
+    /// This allows integration with external test frameworks like `TestContext`.
+    pub fn run_with_command_builder<F>(
+        &self,
+        test_dir: &Path,
+        filters: &[(Regex, String)],
+        command_builder: F,
+    ) -> Result<TestResult, RunError>
+    where
+        F: Fn(&str) -> Command,
+    {
+        // Execute commands
+        for cmd in &self.commands {
+            let result = run_command_with_builder(&cmd.command, test_dir, &command_builder)?;
+            let filtered_output = apply_filters(filters, result);
 
-        if filtered_output.trim() != cmd.expected_output.trim() {
-            return Ok(TestResult {
-                name: test.name.clone(),
-                passed: false,
-                mismatch: Some(Mismatch {
-                    kind: MismatchKind::CommandOutput {
-                        command: cmd.command.clone(),
-                    },
-                    expected: cmd.expected_output.clone(),
-                    actual: filtered_output,
-                    line: cmd.line_number,
-                }),
-            });
+            if filtered_output.trim() != cmd.expected_output.trim() {
+                return Ok(TestResult {
+                    name: self.name.clone(),
+                    passed: false,
+                    mismatch: Some(Mismatch {
+                        kind: MismatchKind::CommandOutput {
+                            command: cmd.command.clone(),
+                        },
+                        expected: cmd.expected_output.clone(),
+                        actual: filtered_output,
+                        line: cmd.line_number,
+                    }),
+                });
+            }
         }
-    }
 
-    // Check file snapshots
-    for snapshot in &test.file_snapshots {
-        let file_path = test_dir.join(&snapshot.path);
-        let actual_content = fs::read_to_string(&file_path).map_err(|e| RunError::ReadFile {
-            path: file_path.clone(),
-            source: e,
-        })?;
-        let filtered_content = apply_filters(filters, actual_content);
+        // Check file snapshots
+        for snapshot in &self.file_snapshots {
+            let file_path = test_dir.join(&snapshot.path);
+            let actual_content =
+                fs::read_to_string(&file_path).map_err(|e| RunError::ReadFile {
+                    path: file_path.clone(),
+                    source: e,
+                })?;
+            let filtered_content = apply_filters(filters, actual_content);
 
-        if filtered_content.trim() != snapshot.expected_content.trim() {
-            return Ok(TestResult {
-                name: test.name.clone(),
-                passed: false,
-                mismatch: Some(Mismatch {
-                    kind: MismatchKind::FileSnapshot {
-                        path: snapshot.path.clone(),
-                    },
-                    expected: snapshot.expected_content.clone(),
-                    actual: filtered_content,
-                    line: snapshot.line_number,
-                }),
-            });
+            if filtered_content.trim() != snapshot.expected_content.trim() {
+                return Ok(TestResult {
+                    name: self.name.clone(),
+                    passed: false,
+                    mismatch: Some(Mismatch {
+                        kind: MismatchKind::FileSnapshot {
+                            path: snapshot.path.clone(),
+                        },
+                        expected: snapshot.expected_content.clone(),
+                        actual: filtered_content,
+                        line: snapshot.line_number,
+                    }),
+                });
+            }
         }
-    }
 
-    Ok(TestResult {
-        name: test.name.clone(),
-        passed: true,
-        mismatch: None,
-    })
+        Ok(TestResult {
+            name: self.name.clone(),
+            passed: true,
+            mismatch: None,
+        })
+    }
 }
 
 /// Run a command using a command builder and return the formatted output.
