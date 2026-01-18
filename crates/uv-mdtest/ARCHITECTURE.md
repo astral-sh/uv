@@ -399,41 +399,13 @@ expected output) is read when the test runs.
 
 ### Runtime and Concurrency
 
-| Configuration        | 9 files (~35 commands) | Notes                        |
-| -------------------- | ---------------------- | ---------------------------- |
-| Serial execution     | ~17s                   | `--test-threads=1`           |
-| Parallel execution   | ~6s                    | Default, ~3x speedup         |
-| Per-command overhead | ~0.5s                  | Process spawn + uv execution |
+| Configuration        | 31 sections | Notes                         |
+| -------------------- | ----------- | ----------------------------- |
+| Per-file (old)       | ~6s         | Sections run sequentially     |
+| Per-section (now)    | ~1.7s       | Full parallelism with nextest |
+| Per-command overhead | ~0.5s       | Process spawn + uv execution  |
 
-**Current concurrency model (one test per file)**:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    nextest (parallel across files)                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   Process 1             Process 2             Process 3             ...     │
-│   ┌─────────────┐      ┌─────────────┐      ┌─────────────┐                │
-│   │ lock.md     │      │ sync.md     │      │ add.md      │                │
-│   │             │      │             │      │             │                │
-│   │ Section 1 ──┼──    │ Section 1 ──┼──    │ Section 1 ──┼──              │
-│   │ Section 2 ──┼──    │ Section 2 ──┼──    │ Section 2 ──┼──  sequential  │
-│   │ Section 3 ──┼──    │ ...         │      │ ...         │                │
-│   └─────────────┘      └─────────────┘      └─────────────┘                │
-│                                                                             │
-│   Critical path: longest file (e.g., mdtest-features.md at 5.7s)           │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-With `datatest-stable`, each markdown file becomes one test. Nextest runs files in parallel
-processes, but sections within a file run sequentially. This limits parallelism when files have many
-sections.
-
-**Alternative: per-section parallelism with libtest-mimic**:
-
-For better scaling, we could use
-[libtest-mimic](https://docs.rs/libtest-mimic/latest/libtest_mimic/) directly instead of
-`datatest-stable`:
+**Concurrency model (per-section parallelism)**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -442,50 +414,63 @@ For better scaling, we could use
 │                                                                             │
 │   Process 1             Process 2             Process 3             ...     │
 │   ┌─────────────┐      ┌─────────────┐      ┌─────────────┐                │
-│   │lock.md      │      │lock.md      │      │sync.md      │                │
-│   │Section 1    │      │Section 2    │      │Section 1    │                │
+│   │lock.md::    │      │lock.md::    │      │sync.md::    │                │
+│   │Basic locking│      │With deps    │      │Basic sync   │                │
 │   └─────────────┘      └─────────────┘      └─────────────┘                │
 │                                                                             │
-│   Critical path: longest individual section (~1-2s)                        │
+│   Critical path: longest individual section (~1s)                          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Implementation would:
+We use [libtest-mimic](https://docs.rs/libtest-mimic/latest/libtest_mimic/) to generate one test per
+section. This allows nextest to parallelize fully across all sections, with each section running in
+its own process.
 
-1. At test startup, scan all `.md` files and parse them
-2. Generate one `Trial` per section: `Trial::test("lock.md::Basic locking", || ...)`
-3. Nextest sees each section as a separate test and parallelizes fully
+**Implementation**:
 
-**Tradeoffs**:
+1. At test startup, scan all `.md` files with `walkdir`
+2. Parse each file and extract all sections
+3. Generate one `Trial` per section: `Trial::test("lock.md::Basic locking", || ...)`
+4. Nextest runs each section in a separate process
 
-| Aspect             | Per-file (current)               | Per-section (alternative)        |
-| ------------------ | -------------------------------- | -------------------------------- |
-| Parallelism        | Limited by file count            | Full parallelism across sections |
-| Test startup       | Fast (parse one file)            | Slower (parse all files upfront) |
-| Test filtering     | `cargo nextest run lock.md`      | `cargo nextest run "lock.md::*"` |
-| Config inheritance | Natural (sections share context) | Must be handled explicitly       |
-| Implementation     | Simple (datatest-stable)         | More complex (custom harness)    |
+**Test naming**: Tests are named `<file>::<section hierarchy>`, for example:
 
-**Recommendation**: Start with per-file (current approach). If test suite grows large (100+
-sections) and parallelism becomes a bottleneck, migrate to per-section using libtest-mimic.
+- `lock.md::Lock - Basic locking`
+- `mdtest-features.md::MDTest Features - Section independence - First section`
 
-**Why per-file works for now**:
+**Filtering examples**:
 
-1. **Nextest parallelizes files**: With many small files, parallelism is good
-2. **Sections are fast**: Each section typically runs in <1s
-3. **Simple to understand**: One file = one test case in CI output
-4. **Easy migration path**: Can switch to per-section later without changing test format
+```bash
+# Run all tests in a file
+cargo nextest run -E 'test(/lock.md/)'
+
+# Run a specific section
+cargo nextest run -E 'test(/Basic locking/)'
+
+# Run all mdtest tests
+cargo nextest run -p uv --test mdtest
+```
+
+**Why per-section parallelism**:
+
+1. **Full parallelism**: Nextest runs each section in a separate process
+2. **Better scaling**: Adding sections doesn't increase critical path
+3. **Fine-grained filtering**: Can run specific sections by name
+4. **Consistent with uv's nextest usage**: Large test suites benefit from maximum parallelism
 
 ### Dependencies
 
 ```
-New dependencies:
-├── pulldown-cmark     (~0.4s compile time, markdown parsing)
-└── datatest-stable    (already in workspace for test discovery)
+Test harness:
+├── libtest-mimic      (custom test harness for per-section parallelism)
+└── walkdir            (file discovery)
 
-Reused from workspace:
+uv-mdtest library:
+├── pulldown-cmark     (~0.4s compile time, markdown parsing)
 ├── regex, serde, toml (configuration and filtering)
-├── fs-err, thiserror  (error handling)
+└── fs-err, thiserror  (error handling)
+
+Reused from test infrastructure:
 └── TestContext        (all filter and environment setup)
 ```
 
@@ -494,31 +479,20 @@ than building new filtering or environment management.
 
 ### Scaling Considerations
 
-As the test suite grows (assuming nextest with per-file granularity):
+With per-section parallelism, scaling is straightforward:
 
-| Sections | Files | Sections/file | Parallel time (est.) | Bottleneck                    |
-| -------- | ----- | ------------- | -------------------- | ----------------------------- |
-| 35       | 9     | ~4            | ~6s                  | Longest file (5.7s)           |
-| 350      | 50    | ~7            | ~15s                 | Longest file (~10s)           |
-| 350      | 100   | ~3.5          | ~8s                  | More files = better parallel  |
-| 3500     | 200   | ~17           | ~45s                 | Consider per-section approach |
+| Sections | Parallel time (est.) | Notes                                     |
+| -------- | -------------------- | ----------------------------------------- |
+| 31       | ~1.7s                | Current state                             |
+| 100      | ~2-3s                | Limited by longest section + overhead     |
+| 1000     | ~5-10s               | Nextest handles parallelism automatically |
 
-**Key insight**: With per-file parallelism, the critical path is the longest file. To optimize:
-
-1. **Keep files balanced**: Avoid putting too many sections in one file
-2. **Split large features**: Break `lock.md` into `lock_basic.md`, `lock_workspaces.md`, etc.
-3. **Target ~5-10 sections per file**: Balances organization vs parallelism
-
-**When to switch to per-section parallelism**:
-
-- Test suite has 100+ sections
-- Longest file takes >10s
-- CI time is dominated by mdtest
-- Need finer-grained test filtering
+**Key insight**: With per-section parallelism, the critical path is the longest individual section
+(~1s), not the longest file. Adding more sections has minimal impact on total runtime.
 
 **Recommendations for organizing tests**:
 
 1. **One file per feature area**: `lock.md`, `sync.md`, `add.md`
-2. **Split when files grow**: If a file has 20+ sections, split it
-3. **Use nextest filtering**: `cargo nextest run -E 'test(lock)'`
-4. **CI job splitting**: Nextest partitions can distribute files across jobs
+2. **Keep sections focused**: Each section should test one scenario
+3. **Use nextest filtering**: `cargo nextest run -E 'test(/lock/)'`
+4. **CI job splitting**: Nextest partitions can distribute sections across jobs

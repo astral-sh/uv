@@ -5717,6 +5717,7 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
+ "libtest-mimic",
  "miette",
  "nix",
  "open",

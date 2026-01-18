@@ -138,6 +138,7 @@ flate2 = { workspace = true, default-features = false }
 ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
+libtest-mimic = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
@@ -147,6 +148,7 @@ tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-util = { workspace = true }
 whoami = { workspace = true }
+walkdir = { workspace = true }
 which = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
