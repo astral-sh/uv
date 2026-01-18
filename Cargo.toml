@@ -66,6 +66,7 @@ uv-shell = { version = "0.0.15", path = "crates/uv-shell" }
 uv-small-str = { version = "0.0.15", path = "crates/uv-small-str" }
 uv-state = { version = "0.0.15", path = "crates/uv-state" }
 uv-static = { version = "0.0.15", path = "crates/uv-static" }
+uv-test = { path = "crates/uv-test" }
 uv-tool = { version = "0.0.15", path = "crates/uv-tool" }
 uv-torch = { version = "0.0.15", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.15", path = "crates/uv-trampoline-builder" }

@@ -9,11 +9,11 @@ use tempfile::tempdir_in;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
+use uv_test::{TestContext, download_to_disk, packse_index_url, uv_snapshot, venv_bin_path};
 
 #[test]
 fn sync() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -46,7 +46,7 @@ fn sync() -> Result<()> {
 
 #[test]
 fn locked() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -106,7 +106,7 @@ fn locked() -> Result<()> {
 
 #[test]
 fn frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -161,7 +161,7 @@ fn frozen() -> Result<()> {
 
 #[test]
 fn empty() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -203,7 +203,7 @@ fn empty() -> Result<()> {
 /// Sync an individual package within a workspace.
 #[test]
 fn package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -271,7 +271,7 @@ fn package() -> Result<()> {
 /// Sync multiple packages within a workspace.
 #[test]
 fn multiple_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -380,7 +380,7 @@ fn multiple_packages() -> Result<()> {
 /// Test json output
 #[test]
 fn sync_json() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin();
 
@@ -597,7 +597,7 @@ fn sync_json() -> Result<()> {
 /// Test --dry json output
 #[test]
 fn sync_dry_json() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin();
 
@@ -669,7 +669,7 @@ fn sync_dry_json() -> Result<()> {
 /// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
 #[test]
 fn mixed_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     // Create a workspace root with a minimum Python requirement of Python 3.12.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -756,7 +756,7 @@ fn mixed_requires_python() -> Result<()> {
 #[cfg(not(windows))]
 #[cfg(feature = "python-eol")]
 fn group_requires_python_useful_defaults() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.8", "3.9"]);
 
     // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -901,7 +901,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 #[cfg(not(windows))]
 #[cfg(feature = "python-eol")]
 fn group_requires_python_useful_non_defaults() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.8", "3.9"]);
 
     // Require 3.8 for our project, but have a dev-dependency on a version of sphinx that needs 3.9
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1044,7 +1044,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
 
 #[test]
 fn check() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1107,7 +1107,7 @@ fn check() -> Result<()> {
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1188,7 +1188,7 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
 /// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
 #[test]
 fn sync_legacy_non_project_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1256,7 +1256,7 @@ fn sync_legacy_non_project_frozen() -> Result<()> {
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1376,7 +1376,7 @@ fn sync_legacy_non_project_group() -> Result<()> {
 /// Modify the `pyproject.toml` after locking.
 #[test]
 fn sync_legacy_non_project_frozen_modification() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1431,7 +1431,7 @@ fn sync_legacy_non_project_frozen_modification() -> Result<()> {
 /// Use a `pip install` step to pre-install build dependencies for `--no-build-isolation`.
 #[test]
 fn sync_build_isolation() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1500,7 +1500,7 @@ fn sync_build_isolation() -> Result<()> {
 /// Use a `pip install` step to pre-install build dependencies for `--no-build-isolation-package`.
 #[test]
 fn sync_build_isolation_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1588,7 +1588,7 @@ fn sync_build_isolation_package() -> Result<()> {
 /// By default, isolated dependencies should be installed before non-isolated dependencies.
 #[test]
 fn sync_build_isolation_package_order() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1750,7 +1750,7 @@ fn sync_build_isolation_package_order() -> Result<()> {
 /// Use dedicated extra groups to install dependencies for `--no-build-isolation-package`.
 #[test]
 fn sync_build_isolation_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1873,7 +1873,7 @@ fn sync_build_isolation_extra() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that arbitrarily requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -2120,7 +2120,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that uses legacy setuptools (no pyproject.toml) and requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -2212,7 +2212,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_setuptools() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that uses setuptools with pyproject.toml and requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -2319,7 +2319,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_sources() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
@@ -2397,7 +2397,7 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_index() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that arbitrarily requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -2551,7 +2551,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
@@ -2634,7 +2634,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
 #[test]
 fn sync_build_dependencies_module_error_hints() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that arbitrarily requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -2812,7 +2812,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 /// project dependencies.
 #[test]
 fn sync_reset_state() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2871,7 +2871,7 @@ fn sync_reset_state() -> Result<()> {
 /// Test that relative wheel paths are correctly preserved.
 #[test]
 fn sync_relative_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements = r#"[project]
     name = "relative_wheel"
@@ -2972,7 +2972,7 @@ fn sync_relative_wheel() -> Result<()> {
 /// Syncing against an unstable environment should fail (but locking should succeed).
 #[test]
 fn sync_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3005,7 +3005,7 @@ fn sync_environment() -> Result<()> {
 
 #[test]
 fn sync_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3089,7 +3089,7 @@ fn sync_dev() -> Result<()> {
 
 #[test]
 fn sync_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3325,7 +3325,7 @@ fn sync_group() -> Result<()> {
 
 #[test]
 fn sync_include_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3464,7 +3464,7 @@ fn sync_include_group() -> Result<()> {
 
 #[test]
 fn sync_exclude_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3542,7 +3542,7 @@ fn sync_exclude_group() -> Result<()> {
 
 #[test]
 fn sync_exclude_group_with_environment_variable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3620,7 +3620,7 @@ fn sync_exclude_group_with_environment_variable() -> Result<()> {
 
 #[test]
 fn sync_dev_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3663,7 +3663,7 @@ fn sync_dev_group() -> Result<()> {
 
 #[test]
 fn sync_non_existent_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3772,7 +3772,7 @@ fn sync_non_existent_group() -> Result<()> {
 fn sync_corner_groups() -> Result<()> {
     // Testing a bunch of random corner cases of flags so their behaviour is tracked.
     // It's fine if we decide we want to support these later!
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3987,7 +3987,7 @@ fn sync_corner_groups() -> Result<()> {
 
 #[test]
 fn sync_non_existent_default_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4022,7 +4022,7 @@ fn sync_non_existent_default_group() -> Result<()> {
 
 #[test]
 fn sync_default_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4275,7 +4275,7 @@ fn sync_default_groups() -> Result<()> {
 /// default-groups = "all" sugar works
 #[test]
 fn sync_default_groups_all() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4404,7 +4404,7 @@ fn sync_default_groups_all() -> Result<()> {
 /// default-groups = "gibberish" error
 #[test]
 fn sync_default_groups_gibberish() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4444,7 +4444,7 @@ fn sync_default_groups_gibberish() -> Result<()> {
 
 #[test]
 fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4545,7 +4545,7 @@ fn sync_disable_default_groups_with_environment_variable() -> Result<()> {
 
 #[test]
 fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4613,7 +4613,7 @@ fn sync_disable_default_groups_all_with_environment_variable() -> Result<()> {
 /// Sync with `--only-group`, where the group includes a workspace member.
 #[test]
 fn sync_group_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4678,7 +4678,7 @@ fn sync_group_member() -> Result<()> {
 /// Sync with `--only-group`, where the group includes a legacy non-`[project]` workspace member.
 #[test]
 fn sync_group_legacy_non_project_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4801,7 +4801,7 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
 /// Sync with `--only-group`, where the group includes the project itself.
 #[test]
 fn sync_group_self() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4948,7 +4948,7 @@ fn sync_group_self() -> Result<()> {
 
 #[test]
 fn sync_non_existent_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4992,7 +4992,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
 #[test]
 fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5035,7 +5035,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 /// version of uv that predates when `provides-extras` feature was added.
 #[test]
 fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5093,7 +5093,7 @@ fn sync_ignore_extras_check_when_no_provides_extras() -> Result<()> {
 
 #[test]
 fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5188,7 +5188,7 @@ fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
 
 #[test]
 fn sync_non_existent_extra_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5260,7 +5260,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
 #[test]
 fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5350,7 +5350,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 /// sorting, changing the lockfile.
 #[test]
 fn read_metadata_statically_over_the_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5384,7 +5384,7 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
 /// Avoid syncing the project package when `--no-install-project` is provided.
 #[test]
 fn no_install_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5438,7 +5438,7 @@ fn no_install_project() -> Result<()> {
 /// include all dependencies.
 #[test]
 fn no_install_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5577,7 +5577,7 @@ fn no_install_workspace() -> Result<()> {
 /// Avoid syncing local packages when `--no-install-local` is provided.
 #[test]
 fn no_install_local() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5661,7 +5661,7 @@ fn no_install_local() -> Result<()> {
 /// Avoid syncing the target package when `--no-install-package` is provided.
 #[test]
 fn no_install_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5718,7 +5718,7 @@ fn no_install_package() -> Result<()> {
 /// Ensure that `--no-build` isn't enforced for projects that aren't installed in the first place.
 #[test]
 fn no_install_project_no_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5770,7 +5770,7 @@ fn no_install_project_no_build() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_script() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that arbitrarily requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -5872,7 +5872,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_script_sources() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let anyio_local = context.workspace_root.join("test/packages/anyio_local");
 
     // Write a test package that arbitrarily requires `anyio` at a specific _path_ at build time
@@ -5951,7 +5951,7 @@ fn sync_extra_build_dependencies_script_sources() -> Result<()> {
 
 #[test]
 fn virtual_no_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5991,7 +5991,7 @@ fn virtual_no_build() -> Result<()> {
 #[test]
 fn virtual_empty() -> Result<()> {
     // testing how `uv sync` reacts to a pyproject with no `[project]` and nothing useful to it
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6017,7 +6017,7 @@ fn virtual_empty() -> Result<()> {
 fn virtual_dependency_group() -> Result<()> {
     // testing basic `uv sync --group` functionality
     // when the pyproject.toml is fully virtual (no `[project]`)
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -6079,7 +6079,7 @@ fn virtual_dependency_group() -> Result<()> {
 
 #[test]
 fn virtual_no_build_dynamic_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6124,7 +6124,7 @@ fn virtual_no_build_dynamic_cached() -> Result<()> {
 
 #[test]
 fn virtual_no_build_dynamic_no_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6168,7 +6168,7 @@ fn virtual_no_build_dynamic_no_cache() -> Result<()> {
 /// Convert from a package to a virtual project.
 #[test]
 fn convert_to_virtual() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6302,7 +6302,7 @@ fn convert_to_virtual() -> Result<()> {
 /// Convert from a virtual project to a package.
 #[test]
 fn convert_to_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6435,7 +6435,7 @@ fn convert_to_package() -> Result<()> {
 
 #[test]
 fn sync_custom_environment_path() -> Result<()> {
-    let mut context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -6609,7 +6609,7 @@ fn sync_custom_environment_path() -> Result<()> {
 
 #[test]
 fn sync_active_project_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -6734,7 +6734,7 @@ fn sync_active_project_environment() -> Result<()> {
 
 #[test]
 fn sync_active_script_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -6831,7 +6831,7 @@ fn sync_active_script_environment() -> Result<()> {
 
 #[test]
 fn sync_active_script_environment_json() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
 
@@ -7049,7 +7049,7 @@ fn sync_active_script_environment_json() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7181,7 +7181,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
 #[test]
 fn sync_empty_virtual_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     // Create an empty directory
     context.temp_dir.child(".venv").create_dir_all()?;
@@ -7218,7 +7218,7 @@ fn sync_empty_virtual_environment() -> Result<()> {
 /// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
 #[test]
 fn sync_legacy_non_project_warning() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7359,7 +7359,7 @@ fn sync_legacy_non_project_warning() -> Result<()> {
 
 #[test]
 fn sync_update_project() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7418,7 +7418,7 @@ fn sync_update_project() -> Result<()> {
 
 #[test]
 fn sync_environment_prompt() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7456,7 +7456,7 @@ fn sync_environment_prompt() -> Result<()> {
 
 #[test]
 fn no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7540,7 +7540,7 @@ fn no_binary() -> Result<()> {
 
 #[test]
 fn no_binary_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7572,7 +7572,7 @@ fn no_binary_error() -> Result<()> {
 
 #[test]
 fn no_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7619,7 +7619,7 @@ fn no_build() -> Result<()> {
 
 #[test]
 fn no_build_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7692,7 +7692,7 @@ fn no_build_error() -> Result<()> {
 
 #[test]
 fn sync_wheel_url_source_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7733,7 +7733,7 @@ fn sync_wheel_url_source_error() -> Result<()> {
 
 #[test]
 fn sync_wheel_path_source_error() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download a wheel.
     let archive = context
@@ -7784,7 +7784,7 @@ fn sync_wheel_path_source_error() -> Result<()> {
 
 #[test]
 fn sync_override_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a dependency.
     let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
@@ -8039,7 +8039,7 @@ fn sync_override_package() -> Result<()> {
 /// Avoid installing dev dependencies of transitive dependencies.
 #[test]
 fn transitive_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8115,7 +8115,7 @@ fn transitive_dev() -> Result<()> {
 /// Avoid installing dev dependencies of transitive dependencies.
 #[test]
 fn sync_no_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8209,7 +8209,7 @@ fn sync_no_editable() -> Result<()> {
 /// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
 /// if no `build-system` section is defined.
 fn sync_scripts_without_build_system() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8251,7 +8251,7 @@ fn sync_scripts_without_build_system() -> Result<()> {
 /// Check warning message for <https://github.com/astral-sh/uv/issues/6998>
 /// if the project is marked as `package = false`.
 fn sync_scripts_project_not_packaged() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8298,7 +8298,7 @@ fn sync_scripts_project_not_packaged() -> Result<()> {
 
 #[test]
 fn sync_dynamic_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8413,7 +8413,7 @@ fn sync_dynamic_extra() -> Result<()> {
 
 #[test]
 fn build_system_requires_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let build = context.temp_dir.child("backend");
     build.child("pyproject.toml").write_str(
@@ -8496,7 +8496,7 @@ fn build_system_requires_workspace() -> Result<()> {
 
 #[test]
 fn build_system_requires_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let build = context.temp_dir.child("backend");
     build.child("pyproject.toml").write_str(
@@ -8576,7 +8576,7 @@ fn build_system_requires_path() -> Result<()> {
 
 #[test]
 fn sync_invalid_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -8736,7 +8736,7 @@ fn sync_invalid_environment() -> Result<()> {
 fn sync_partial_environment_delete() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]);
 
     context.init().arg("-p").arg("3.12").assert().success();
     uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.13"), @"
@@ -8803,7 +8803,7 @@ fn sync_partial_environment_delete() -> Result<()> {
 /// `./anyio` is missing, install `anyio` from the registry.
 #[test]
 fn sync_no_sources_missing_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8849,7 +8849,7 @@ fn sync_no_sources_missing_member() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_no_sources_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8897,7 +8897,7 @@ fn sync_no_sources_package() -> Result<()> {
 
 #[test]
 fn sync_python_version() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+    let context: TestContext = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {r#"
@@ -9019,7 +9019,7 @@ fn sync_python_version() -> Result<()> {
 
 #[test]
 fn sync_explicit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9077,7 +9077,7 @@ fn sync_explicit() -> Result<()> {
 /// Sync all members in a workspace.
 #[test]
 fn sync_all() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9154,7 +9154,7 @@ fn sync_all() -> Result<()> {
 /// Sync all members in a workspace with extras attached.
 #[test]
 fn sync_all_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9299,7 +9299,7 @@ fn sync_all_extras() -> Result<()> {
 /// Sync all members in a workspace with dynamic extras.
 #[test]
 fn sync_all_extras_dynamic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9413,7 +9413,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
 /// Sync all members in a workspace with dependency groups attached.
 #[test]
 fn sync_all_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9531,7 +9531,7 @@ fn sync_all_groups() -> Result<()> {
 
 #[test]
 fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9594,7 +9594,7 @@ fn sync_multiple_sources_index_disjoint_extras() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9656,7 +9656,7 @@ fn sync_derivation_chain() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9719,7 +9719,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
 #[test]
 fn sync_derivation_chain_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9786,7 +9786,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 #[test]
 #[cfg(all(feature = "slow-tests", feature = "git"))]
 fn sync_stale_egg_info() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9892,7 +9892,7 @@ fn sync_stale_egg_info() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_git_repeated_member_static_metadata() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9986,7 +9986,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10104,7 +10104,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_git_repeated_member_backwards_path() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10198,7 +10198,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
 /// is a package.
 #[test]
 fn mismatched_name_self_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10232,7 +10232,7 @@ fn mismatched_name_self_editable() -> Result<()> {
 /// A wheel is available in the cache, but was requested under the wrong name.
 #[test]
 fn mismatched_name_cached_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Cache the `iniconfig` wheel.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10287,7 +10287,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn sync_git_path_dependency() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10376,7 +10376,7 @@ fn sync_git_path_dependency() -> Result<()> {
 /// should choose the wheel with the highest build tag.
 #[test]
 fn sync_build_tag() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Populate the `--find-links` entries.
     fs_err::create_dir_all(context.temp_dir.join("links"))?;
@@ -10497,7 +10497,7 @@ fn sync_build_tag() -> Result<()> {
 
 #[test]
 fn url_hash_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10563,7 +10563,7 @@ fn url_hash_mismatch() -> Result<()> {
 
 #[test]
 fn path_hash_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Download the source.
     let archive = context.temp_dir.child("iniconfig-2.0.0.tar.gz");
@@ -10636,7 +10636,7 @@ fn path_hash_mismatch() -> Result<()> {
 
 #[test]
 fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10682,7 +10682,7 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 
 #[test]
 fn sync_dry_run() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10823,7 +10823,7 @@ fn sync_dry_run() -> Result<()> {
 
 #[test]
 fn sync_dry_run_and_locked() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10877,7 +10877,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
 
 #[test]
 fn sync_dry_run_and_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10924,7 +10924,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
 #[test]
 fn sync_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -11065,7 +11065,7 @@ fn sync_script() -> Result<()> {
 
 #[test]
 fn sync_locked_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -11309,7 +11309,7 @@ fn sync_locked_script() -> Result<()> {
 
 #[test]
 fn sync_script_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let test_script = context.temp_dir.child("script.py");
 
@@ -11353,7 +11353,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn sync_script_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let test_script = context.temp_dir.child("script.py");
 
@@ -11392,7 +11392,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
 
 #[test]
 fn unsupported_git_scheme() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11426,7 +11426,7 @@ fn unsupported_git_scheme() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11648>
 #[test]
 fn multiple_group_conflicts() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11520,7 +11520,7 @@ fn multiple_group_conflicts() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11232>
 #[test]
 fn transitive_group_conflicts_shallow() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11626,7 +11626,7 @@ fn transitive_group_conflicts_shallow() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11232>
 #[test]
 fn transitive_group_conflicts_deep() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11723,7 +11723,7 @@ fn transitive_group_conflicts_deep() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11232>
 #[test]
 fn transitive_group_conflicts_siblings() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11817,7 +11817,7 @@ fn transitive_group_conflicts_siblings() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11232>
 #[test]
 fn transitive_group_conflicts_cycle() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -11904,7 +11904,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11703>
 #[test]
 fn prune_cache_url_subdirectory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -11957,7 +11957,7 @@ fn prune_cache_url_subdirectory() -> Result<()> {
 /// See <https://github.com/astral-sh/uv/issues/12164>
 #[test]
 fn locked_version_coherence() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12053,7 +12053,7 @@ fn locked_version_coherence() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/12434>
 #[test]
 fn sync_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T19:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-03-24T19:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12182,7 +12182,7 @@ fn sync_build_constraints() -> Result<()> {
 // is incompatible with the interpreter version.
 #[test]
 fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12289,7 +12289,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
 /// Ensure that existing `uv.lock` files can use `upload_time` or `upload-time` interchangeably.
 #[test]
 fn sync_upload_time() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12396,7 +12396,7 @@ fn sync_upload_time() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13673#issuecomment-2912196406>
 #[test]
 fn repeated_dev_member_all_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12482,7 +12482,7 @@ fn repeated_dev_member_all_packages() -> Result<()> {
 /// Test that hash checking doesn't fail with dependency metadata.
 #[test]
 fn direct_url_dependency_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(r#"
         [project]
         name = "debug"
@@ -12518,7 +12518,7 @@ fn direct_url_dependency_metadata() -> Result<()> {
 
 #[test]
 fn sync_required_environment_hint() -> Result<()> {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -12572,7 +12572,7 @@ fn sync_required_environment_hint() -> Result<()> {
 
 #[test]
 fn sync_url_with_query_parameters() -> Result<()> {
-    let context = TestContext::new("3.13").with_exclude_newer("2025-03-24T19:00:00Z");
+    let context = uv_test::test_context!("3.13").with_exclude_newer("2025-03-24T19:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(r#"
@@ -12602,7 +12602,7 @@ fn sync_url_with_query_parameters() -> Result<()> {
 /// Test uv sync with --exclude-newer-package
 #[test]
 fn sync_exclude_newer_package() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12670,7 +12670,7 @@ dependencies = [
 /// Test exclude-newer-package in pyproject.toml configuration
 #[test]
 fn sync_exclude_newer_package_config() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12755,7 +12755,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
 fn read_only() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12803,7 +12803,7 @@ fn read_only() -> Result<()> {
 
 #[test]
 fn sync_python_platform() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -12844,7 +12844,7 @@ fn sync_python_platform() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn conflicting_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13010,7 +13010,7 @@ fn conflicting_editable() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn undeclared_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13174,7 +13174,7 @@ fn undeclared_editable() -> Result<()> {
 
 #[test]
 fn sync_python_preference() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13315,7 +13315,7 @@ fn sync_python_preference() -> Result<()> {
 
 #[test]
 fn sync_python_missing_download_hint() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_managed_python_dirs()
         .with_filtered_python_sources();
 
@@ -13346,7 +13346,7 @@ fn sync_python_missing_download_hint() -> Result<()> {
 
 #[test]
 fn sync_config_settings_package() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-07-25T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-07-25T00:00:00Z");
 
     // Create a child project that uses `setuptools`.
     let dependency = context.temp_dir.child("dependency");
@@ -13494,7 +13494,7 @@ fn sync_config_settings_package() -> Result<()> {
 fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let project_dir = context.temp_dir.child("project");
     fs_err::create_dir(&project_dir)?;
@@ -13536,7 +13536,7 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
 /// Test that build dependencies respect locked versions from the lockfile.
 #[test]
 fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Write a test package that arbitrarily requires `anyio` at build time
     let child = context.temp_dir.child("child");
@@ -13812,7 +13812,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
 #[test]
 fn sync_extra_build_variables() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Create a build backend that asserts that `EXPECTED_ANYIO_VERSION` matches the installed version of `anyio`.
     let build_backend = context.temp_dir.child("build_backend.py");
@@ -13950,7 +13950,7 @@ fn sync_extra_build_variables() -> Result<()> {
 
 #[test]
 fn reject_unmatched_runtime() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13985,7 +13985,7 @@ fn reject_unmatched_runtime() -> Result<()> {
 #[test]
 #[cfg(feature = "git-lfs")]
 fn sync_git_lfs() -> Result<()> {
-    let context = TestContext::new("3.13").with_git_lfs_config();
+    let context = uv_test::test_context!("3.13").with_git_lfs_config();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
     // Set `lfs = true` in the source
@@ -14415,7 +14415,7 @@ fn sync_git_lfs() -> Result<()> {
 
 #[test]
 fn match_runtime_optional() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14453,7 +14453,7 @@ fn match_runtime_optional() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a test package.
     context
@@ -14662,7 +14662,7 @@ async fn sync_zstd_wheel() -> Result<()> {
         matchers::{method, path},
     };
 
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
     let server = MockServer::start().await;
 
     // Copy the wheel files to serve them
@@ -14772,7 +14772,7 @@ async fn sync_zstd_wheel() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn toggle_workspace_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("child");
     let pyproject_toml = child.child("pyproject.toml");
@@ -14990,7 +14990,7 @@ fn toggle_workspace_editable() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn workspace_editable_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child1 = context.temp_dir.child("child1");
     let pyproject_toml = child1.child("pyproject.toml");
@@ -15265,7 +15265,7 @@ fn workspace_editable_conflict() -> Result<()> {
 
 #[test]
 fn only_group_and_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -15320,7 +15320,7 @@ fn only_group_and_extra_conflict() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/15190>
 #[test]
 fn sync_no_sources_editable_to_package_switch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local package that will be used as editable dependency.
     let local_dep = context.temp_dir.child("local_dep");
@@ -15417,7 +15417,7 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
 #[test]
 fn sync_fails_ambiguous_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -15464,7 +15464,7 @@ fn sync_fails_ambiguous_url() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/17370>
 #[test]
 fn sync_reinstalls_on_version_change() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace with a local directory dependency.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");

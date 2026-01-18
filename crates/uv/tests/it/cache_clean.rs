@@ -5,12 +5,12 @@ use assert_fs::prelude::*;
 use uv_cache::Cache;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// `cache clean` should remove all packages.
 #[test]
 fn clean_all() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -40,7 +40,7 @@ fn clean_all() -> Result<()> {
 
 #[tokio::test]
 async fn clean_force() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -96,7 +96,7 @@ async fn clean_force() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_pypi() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -172,7 +172,7 @@ fn clean_package_pypi() -> Result<()> {
 /// `cache clean iniconfig` should remove a single package (`iniconfig`).
 #[test]
 fn clean_package_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig")?;
@@ -236,7 +236,7 @@ fn clean_package_index() -> Result<()> {
 
 #[tokio::test]
 async fn cache_timeout() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
     let _cache = Cache::from_path(context.cache_dir.path())

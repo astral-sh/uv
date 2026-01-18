@@ -1,4 +1,3 @@
-use crate::common::{DEFAULT_PYTHON_VERSION, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -8,11 +7,12 @@ use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use std::env::current_dir;
 use uv_static::EnvVars;
+use uv_test::{DEFAULT_PYTHON_VERSION, uv_snapshot};
 use zip::ZipArchive;
 
 #[test]
 fn build_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -130,7 +130,7 @@ fn build_basic() -> Result<()> {
 
 #[test]
 fn build_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -186,7 +186,7 @@ fn build_sdist() -> Result<()> {
 
 #[test]
 fn build_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -242,7 +242,7 @@ fn build_wheel() -> Result<()> {
 
 #[test]
 fn build_sdist_wheel() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -300,7 +300,7 @@ fn build_sdist_wheel() -> Result<()> {
 
 #[test]
 fn build_wheel_from_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -409,7 +409,7 @@ fn build_wheel_from_sdist() -> Result<()> {
 
 #[test]
 fn build_fail() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -484,7 +484,7 @@ fn build_fail() -> Result<()> {
 
 #[test]
 fn build_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -689,7 +689,7 @@ fn build_workspace() -> Result<()> {
 
 #[test]
 fn build_all_with_failure() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -835,7 +835,7 @@ fn build_all_with_failure() -> Result<()> {
 
 #[test]
 fn build_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -896,7 +896,7 @@ fn build_constraints() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
     let filters = context
         .filters()
         .into_iter()
@@ -1100,7 +1100,7 @@ fn build_sha() -> Result<()> {
 
 #[test]
 fn build_quiet() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
 
@@ -1139,7 +1139,7 @@ fn build_quiet() -> Result<()> {
 
 #[test]
 fn build_no_build_logs() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
 
@@ -1183,7 +1183,7 @@ fn build_no_build_logs() -> Result<()> {
 /// Test that `UV_HIDE_BUILD_OUTPUT` suppresses build output.
 #[test]
 fn build_hide_build_output_env_var() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
 
@@ -1227,7 +1227,7 @@ fn build_hide_build_output_env_var() -> Result<()> {
 /// Test that `UV_HIDE_BUILD_OUTPUT` hides build output even on failure.
 #[test]
 fn build_hide_build_output_on_failure() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -1278,7 +1278,7 @@ fn build_hide_build_output_on_failure() -> Result<()> {
 
 #[test]
 fn build_tool_uv_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -1374,7 +1374,7 @@ fn build_tool_uv_sources() -> Result<()> {
 /// Check that we have a working git boundary for builds from source dist to wheel in `dist/`.
 #[test]
 fn build_git_boundary_in_dist_build() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("demo");
     project.child("pyproject.toml").write_str(
@@ -1427,7 +1427,7 @@ fn build_git_boundary_in_dist_build() -> Result<()> {
 
 #[test]
 fn build_non_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -1531,7 +1531,7 @@ fn build_non_package() -> Result<()> {
 /// * `--sdist --wheel`
 #[test]
 fn build_fast_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
@@ -1631,7 +1631,7 @@ fn build_fast_path() -> Result<()> {
 /// Test the `--list` option.
 #[test]
 fn build_list_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
@@ -1753,7 +1753,7 @@ fn build_list_files() -> Result<()> {
 /// Test `--list` option errors.
 #[test]
 fn build_list_files_errors() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
@@ -1801,7 +1801,7 @@ fn build_list_files_errors() -> Result<()> {
 
 #[test]
 fn build_version_mismatch() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
     context
         .build()
@@ -1836,7 +1836,7 @@ fn build_version_mismatch() -> Result<()> {
 #[cfg(unix)] // Symlinks aren't universally available on windows.
 #[test]
 fn build_with_symlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml.real")
@@ -1875,7 +1875,7 @@ fn build_with_symlink() -> Result<()> {
 
 #[test]
 fn build_with_hardlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml.real")
@@ -1916,7 +1916,7 @@ fn build_with_hardlink() -> Result<()> {
 /// PEP 517 build system not a setup.py, so we fallback to setuptools implicitly.
 #[test]
 fn build_unconfigured_setuptools() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1959,7 +1959,7 @@ fn build_unconfigured_setuptools() -> Result<()> {
 /// in the root.
 #[test]
 fn build_workspace_virtual_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -1987,7 +1987,7 @@ fn build_workspace_virtual_root() -> Result<()> {
 /// `setup.{py,cfg}`.
 #[test]
 fn build_pyproject_toml_not_a_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -2014,7 +2014,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
 
 #[test]
 fn build_with_nonnormalized_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let filters = context
         .filters()
         .into_iter()
@@ -2076,7 +2076,7 @@ fn build_with_nonnormalized_name() -> Result<()> {
 #[test]
 fn force_pep517() -> Result<()> {
     // We need to use a real `uv_build` package.
-    let context = TestContext::new("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
 
     context.init().assert().success();
 
@@ -2131,7 +2131,7 @@ fn force_pep517() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn venv_included_in_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .init()
@@ -2186,7 +2186,7 @@ fn venv_included_in_sdist() -> Result<()> {
 /// <https://github.com/astral-sh/uv/issues/13914>
 #[test]
 fn test_workspace_trailing_slash() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace with a root and a member.
     context.init().arg("--lib").assert().success();
@@ -2246,7 +2246,7 @@ fn test_workspace_trailing_slash() {
 /// Test `uv build --clear`.
 #[test]
 fn build_clear() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
 
@@ -2313,7 +2313,7 @@ fn build_clear() -> Result<()> {
 /// Test `uv build --no-create-gitignore`.
 #[test]
 fn build_no_gitignore() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let project = context.temp_dir.child("project");
 

@@ -5703,6 +5703,7 @@ dependencies = [
  "uv-settings",
  "uv-shell",
  "uv-static",
+ "uv-test",
  "uv-tool",
  "uv-torch",
  "uv-trampoline-builder",
@@ -7047,6 +7048,36 @@ version = "0.0.15"
 dependencies = [
  "thiserror 2.0.17",
  "uv-macros",
+]
+
+[[package]]
+name = "uv-test"
+version = "0.0.15"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "assert_fs",
+ "base64 0.22.1",
+ "fs-err",
+ "futures",
+ "ignore",
+ "indoc",
+ "insta",
+ "itertools 0.14.0",
+ "predicates",
+ "regex",
+ "reqwest",
+ "similar",
+ "tempfile",
+ "tokio",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-version",
 ]
 
 [[package]]
