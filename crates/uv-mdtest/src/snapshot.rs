@@ -288,6 +288,18 @@ fn update_code_block_content(
             let start_line = i;
             i += 1;
 
+            // Check for directive comment (# file: ...) and preserve it
+            let mut directive_lines: Vec<&str> = Vec::new();
+            if i < lines.len() && lines[i].starts_with("# file: ") {
+                directive_lines.push(lines[i]);
+                i += 1;
+                // Preserve optional blank line after directive
+                if i < lines.len() && lines[i].is_empty() {
+                    directive_lines.push(lines[i]);
+                    i += 1;
+                }
+            }
+
             // Skip to the closing ```
             while i < lines.len() && !lines[i].starts_with("```") {
                 i += 1;
@@ -299,6 +311,11 @@ fn update_code_block_content(
 
             // Add the opening ``` line
             result.push(lines[start_line].to_string());
+
+            // Preserve directive lines if present
+            for directive_line in &directive_lines {
+                result.push((*directive_line).to_string());
+            }
 
             // Add the new content
             for line in new_content.lines() {
@@ -347,6 +364,71 @@ More text.
         assert!(result.contains("new content"));
         assert!(!result.contains("old content"));
         assert!(result.contains("More text"));
+    }
+
+    #[test]
+    fn test_update_code_block_preserves_file_directive() {
+        let source = r#"# Test
+
+```toml
+# file: pyproject.toml
+
+[project]
+name = "old"
+```
+
+More text.
+"#;
+
+        let result = update_code_block_content(source, 3, "[project]\nname = \"new\"").unwrap();
+
+        // Directive should be preserved
+        assert!(
+            result.contains("# file: pyproject.toml"),
+            "Directive should be preserved"
+        );
+        // New content should be present
+        assert!(
+            result.contains("name = \"new\""),
+            "New content should be present"
+        );
+        // Old content should be gone
+        assert!(
+            !result.contains("name = \"old\""),
+            "Old content should be replaced"
+        );
+        // Blank line after directive should be preserved
+        assert!(
+            result.contains("# file: pyproject.toml\n\n[project]"),
+            "Blank line after directive should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_update_code_block_preserves_file_directive_no_blank_line() {
+        let source = r#"# Test
+
+```toml
+# file: pyproject.toml
+[project]
+name = "old"
+```
+"#;
+
+        let result = update_code_block_content(source, 3, "[project]\nname = \"new\"").unwrap();
+
+        // Directive should be preserved
+        assert!(
+            result.contains("# file: pyproject.toml"),
+            "Directive should be preserved"
+        );
+        // New content should be present
+        assert!(result.contains("name = \"new\""));
+        // Should NOT have blank line after directive since original didn't
+        assert!(
+            result.contains("# file: pyproject.toml\n[project]"),
+            "No blank line should be added if original didn't have one"
+        );
     }
 
     #[test]

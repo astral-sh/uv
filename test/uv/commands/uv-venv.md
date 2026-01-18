@@ -2,7 +2,9 @@
 
 Tests for creating and managing virtual environments with `uv venv`.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-version = "3.12"
 create-venv = false
@@ -90,13 +92,15 @@ Creating virtual environment at: .venv
 Activate with: source .venv/[BIN]/activate
 ```
 
-### Projects without a [project] section
+### Projects without a `[project]` section
 
 <!-- Derived from [`venv::virtual_empty`](https://github.com/astral-sh/uv/blob/c83066b8ee71432543ec3ff183bec4681beca2e7/crates/uv/tests/it/venv.rs#L213-L237) -->
 
 `uv venv` works with a pyproject.toml that has no `[project]` section.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [tool.mycooltool]
 wow = "someconfig"
 ```
@@ -119,7 +123,9 @@ Activate with: source .venv/[BIN]/activate
 
 `uv venv` works with a virtual project (no `[project]` but has `[dependency-groups]`).
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [dependency-groups]
 foo = ["sortedcontainers"]
 bar = ["iniconfig"]
@@ -144,7 +150,9 @@ Activate with: source .venv/[BIN]/activate
 
 `uv venv` works with Python 3.13.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-version = "3.13"
 ```
@@ -167,7 +175,9 @@ Activate with: source .venv/[BIN]/activate
 
 `uv venv` works with a specific Python patch version when the `python-patch` feature is enabled.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-versions = "3.12.9"
 required-features = "python-patch"
@@ -194,7 +204,9 @@ Activate with: source .venv/[BIN]/activate
 `VIRTUAL_ENV` pointing to a non-existent directory is ignored since venv creation requires a system
 interpreter.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { VIRTUAL_ENV = "does-not-exist" }
 ```
@@ -217,7 +229,9 @@ Activate with: source .venv/[BIN]/activate
 
 A pyproject.toml without a `[project]` section is ignored for Python version discovery.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [tool.no.project.here]
 ```
 
@@ -233,13 +247,15 @@ Creating virtual environment at: .venv
 Activate with: source .venv/[BIN]/activate
 ```
 
-### Invalid pyproject.toml produces a warning
+### Invalid `pyproject.toml` produces a warning
 
 <!-- Derived from [`venv::create_venv_warns_user_on_requires_python_discovery_error`](https://github.com/astral-sh/uv/blob/c83066b8ee71432543ec3ff183bec4681beca2e7/crates/uv/tests/it/venv.rs#L772-L808) -->
 
 An invalid pyproject.toml produces a warning but venv creation still succeeds.
 
-```text title="pyproject.toml"
+```text
+# file: pyproject.toml
+
 invalid toml
 ```
 
@@ -269,13 +285,15 @@ Creating virtual environment at: .venv
 Activate with: source .venv/[BIN]/activate
 ```
 
-### Respecting pyproject.toml requires-python
+### Respecting `pyproject.toml` `requires-python`
 
 <!-- Derived from [`venv::create_venv_respects_pyproject_requires_python`](https://github.com/astral-sh/uv/blob/c83066b8ee71432543ec3ff183bec4681beca2e7/crates/uv/tests/it/venv.rs#L14-L196) -->
 
 The `requires-python` setting in `pyproject.toml` is used to select an appropriate Python version.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-versions = ["3.11", "3.9", "3.10", "3.12"]
 ```
@@ -296,7 +314,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = "<3.11"`, we select the first compatible version (3.9):
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -318,7 +338,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = "==3.11.*"`, we select the exact version (3.11):
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -340,7 +362,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = ">=3.11,<3.12"`, we select 3.11 (only version in range):
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -362,7 +386,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = ">=3.11"`, we select the first compatible version (3.11):
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -384,7 +410,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = ">3.11"`, we select 3.11 (3.11.x satisfies >3.11.0):
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -406,7 +434,9 @@ Activate with: source .venv/[BIN]/activate
 
 With `requires-python = ">=3.12"`, we select 3.12:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -441,13 +471,15 @@ Creating virtual environment at: .venv
 Activate with: source .venv/[BIN]/activate
 ```
 
-### Respecting group requires-python
+### Respecting group `requires-python`
 
 <!-- Derived from [`venv::create_venv_respects_group_requires_python`](https://github.com/astral-sh/uv/blob/c83066b8ee71432543ec3ff183bec4681beca2e7/crates/uv/tests/it/venv.rs#L570-L807) -->
 
 The `dev` group's `requires-python` setting is respected when creating a virtual environment.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-versions = ["3.9", "3.10", "3.11", "3.12"]
 ```
@@ -469,7 +501,9 @@ Activate with: source .venv/[BIN]/activate
 With `requires-python = ">=3.10"` on the default group, Python 3.10 is selected. Note that
 non-default groups (like `other` with `>=3.12`) are NOT consulted:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -499,7 +533,9 @@ Activate with: source .venv/[BIN]/activate
 When the top-level `requires-python` and default group `requires-python` both apply, their
 intersection is used. Here the top-level (`>=3.11`) wins:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -530,7 +566,9 @@ Activate with: source .venv/[BIN]/activate
 When the group's constraint is stricter, the group wins. Here `>=3.11` from the group is stricter
 than `>=3.10` from the top-level:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -560,7 +598,9 @@ Activate with: source .venv/[BIN]/activate
 
 We warn if we receive an incompatible version via explicit `--python`:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -589,7 +629,9 @@ Activate with: source .venv/[BIN]/activate
 We error if there's no compatible version between top-level and group constraints. Note that
 non-default groups are NOT consulted here:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "foo"
 version = "1.0.0"
@@ -623,7 +665,9 @@ error: Found conflicting Python requirements:
 
 Requesting an unknown Python minor version produces an error.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env-remove = ["UV_TEST_PYTHON_PATH"]
 
@@ -647,7 +691,9 @@ error: No interpreter found for Python 3.100 in [PYTHON SOURCES]
 
 Requesting an unknown Python patch version produces an error.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env-remove = ["UV_TEST_PYTHON_PATH"]
 
@@ -673,7 +719,9 @@ error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
 
 Creating a venv where a file already exists fails.
 
-```text title=".venv"
+```text
+# file: .venv
+
 not a directory
 ```
 
@@ -719,7 +767,9 @@ Activate with: source .venv/[BIN]/activate
 
 Creating a venv in a non-empty directory fails without `--clear`.
 
-```text title=".venv/file"
+```text
+# file: .venv/file
+
 some content
 ```
 
@@ -758,7 +808,9 @@ Activate with: source .venv/[BIN]/activate
 
 Using `--allow-existing` allows creating a venv in a non-empty directory.
 
-```text title=".venv/file"
+```text
+# file: .venv/file
+
 some content
 ```
 
@@ -875,7 +927,9 @@ Activate with: source .venv/[BIN]/activate
 
 `--no-clear` overrides `--clear` when both are provided.
 
-```text title=".venv/file"
+```text
+# file: .venv/file
+
 some content
 ```
 
@@ -969,7 +1023,9 @@ relocatable = true
 When creating a virtual environment while `VIRTUAL_ENV` points to an existing venv, the new venv's
 `home` should point to the same Python installation (not the parent venv).
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { VIRTUAL_ENV = ".venv" }
 
@@ -1010,7 +1066,9 @@ Activate with: source .subvenv/[BIN]/activate
 Both `pyvenv.cfg` files should have the same `home` directory (pointing to the real Python, not the
 parent venv). The `pyvenv-cfg` filter normalizes the paths:
 
-```text title=".venv/pyvenv.cfg"
+```text
+# file: .venv/pyvenv.cfg
+
 home = [PYTHON-DIR]
 implementation = CPython
 uv = [UV-VERSION]
@@ -1018,7 +1076,9 @@ version_info = 3.12.[X]
 include-system-site-packages = false
 ```
 
-```text title=".subvenv/pyvenv.cfg"
+```text
+# file: .subvenv/pyvenv.cfg
+
 home = [PYTHON-DIR]
 implementation = CPython
 uv = [UV-VERSION]
@@ -1034,7 +1094,9 @@ include-system-site-packages = false
 
 The `--seed` flag installs seed packages (pip) into the virtual environment.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [filters]
 counts = true
 ```
@@ -1061,7 +1123,9 @@ Activate with: source .venv/[BIN]/activate
 On Unix, creating a virtual environment in the current working directory using `.` as the path
 should work.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 target-family = "unix"
 ```
@@ -1101,7 +1165,9 @@ Activate with: source [BIN]/activate
 On Windows, creating a virtual environment in the current working directory fails because you cannot
 delete the current working directory.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 target-family = "windows"
 ```

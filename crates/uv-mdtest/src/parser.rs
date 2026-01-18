@@ -267,7 +267,7 @@ impl<'a> ParserState<'a> {
 
         // Check if this is a content assertion
         if let Some(assert_kind) = attrs.assert {
-            if let Some(title) = attrs.title {
+            if let Some(ref title) = title {
                 self.current_steps
                     .push(TestStep::CheckContentAssertion(ContentAssertion {
                         path: PathBuf::from(title),
@@ -281,7 +281,7 @@ impl<'a> ParserState<'a> {
 
         // Check if this is a file snapshot
         if attrs.snapshot {
-            if let Some(title) = attrs.title {
+            if let Some(ref title) = title {
                 self.current_steps
                     .push(TestStep::CheckFileSnapshot(FileSnapshot {
                         path: PathBuf::from(title),
@@ -293,7 +293,7 @@ impl<'a> ParserState<'a> {
         }
 
         // Check if this is an embedded file
-        if let Some(title) = attrs.title {
+        if let Some(title) = title {
             self.current_steps.push(TestStep::WriteFile(EmbeddedFile {
                 path: PathBuf::from(title),
                 content,
@@ -848,5 +848,139 @@ requires-python = ">=3.12"
 
         let attrs = CodeBlockAttributes::parse("toml title=\"uv.lock\" snapshot=true");
         assert!(attrs.snapshot);
+    }
+
+    #[test]
+    fn test_extract_title_from_content() {
+        // No title
+        let (title, content) = extract_title_from_content("[project]\nname = \"test\"");
+        assert!(title.is_none());
+        assert_eq!(content, "[project]\nname = \"test\"");
+
+        // With title and blank line
+        let (title, content) =
+            extract_title_from_content("# file: pyproject.toml\n\n[project]\nname = \"test\"");
+        assert_eq!(title.as_deref(), Some("pyproject.toml"));
+        assert_eq!(content, "[project]\nname = \"test\"");
+
+        // With title, no blank line
+        let (title, content) =
+            extract_title_from_content("# file: pyproject.toml\n[project]\nname = \"test\"");
+        assert_eq!(title.as_deref(), Some("pyproject.toml"));
+        assert_eq!(content, "[project]\nname = \"test\"");
+
+        // Just the marker, no content
+        let (title, content) = extract_title_from_content("# file: foo.txt");
+        assert_eq!(title.as_deref(), Some("foo.txt"));
+        assert_eq!(content, "");
+    }
+
+    #[test]
+    fn test_extract_mdtest_content() {
+        // No marker
+        let result = extract_mdtest_content("[environment]\npython-version = \"3.12\"");
+        assert!(result.is_none());
+
+        // With marker and blank line
+        let result = extract_mdtest_content("# mdtest\n\n[environment]\npython-version = \"3.12\"");
+        assert_eq!(
+            result.as_deref(),
+            Some("[environment]\npython-version = \"3.12\"")
+        );
+
+        // With marker, no blank line
+        let result = extract_mdtest_content("# mdtest\n[environment]\npython-version = \"3.12\"");
+        assert_eq!(
+            result.as_deref(),
+            Some("[environment]\npython-version = \"3.12\"")
+        );
+    }
+
+    #[test]
+    fn test_parse_with_file_title_in_content() {
+        let source = r#"
+# Lock
+
+## Basic locking
+
+```toml
+# file: pyproject.toml
+
+[project]
+name = "test"
+version = "0.1.0"
+```
+
+```
+$ uv lock
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Resolved 1 package in [TIME]
+```
+"#;
+
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
+        assert_eq!(result.tests.len(), 1);
+
+        let test = &result.tests[0];
+        let files: Vec<_> = test
+            .steps
+            .iter()
+            .filter_map(|s| match s {
+                TestStep::WriteFile(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, PathBuf::from("pyproject.toml"));
+        // Content should not include the title line
+        assert!(!files[0].content.contains("# file:"));
+        assert!(files[0].content.contains("[project]"));
+    }
+
+    #[test]
+    fn test_parse_with_mdtest_marker() {
+        let source = r#"
+```toml
+# mdtest
+
+[environment]
+python-version = "3.12"
+```
+
+# Tests
+
+## Test one
+
+```toml
+# file: pyproject.toml
+
+[project]
+name = "test"
+```
+
+```
+$ uv lock
+success: true
+exit_code: 0
+----- stdout -----
+
+----- stderr -----
+Done
+```
+"#;
+
+        let result = MarkdownTestFile::parse(PathBuf::from("test.md"), source).unwrap();
+        assert_eq!(result.tests.len(), 1);
+
+        // Test should have the config from # mdtest block
+        assert_eq!(
+            result.tests[0].config.environment.python_versions,
+            crate::types::PythonVersions::Only(vec!["3.12".to_string()])
+        );
     }
 }

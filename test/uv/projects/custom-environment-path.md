@@ -3,7 +3,9 @@
 Tests for `UV_PROJECT_ENVIRONMENT`, which allows customizing where the project virtual environment
 is created.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-version = "3.12"
 create-venv = false
@@ -20,7 +22,9 @@ exclude = ["cache"]
 
 `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when not in a project.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { UV_PROJECT_ENVIRONMENT = "foo" }
 ```
@@ -50,12 +54,16 @@ The venv is created at `.venv`, not `foo`:
 
 In a project, `UV_PROJECT_ENVIRONMENT` is respected.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { UV_PROJECT_ENVIRONMENT = "foo" }
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "project"
 version = "0.1.0"
@@ -89,12 +97,16 @@ The venv is created at `foo`:
 
 An explicit path overrides `UV_PROJECT_ENVIRONMENT`.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { UV_PROJECT_ENVIRONMENT = "foo" }
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "project"
 version = "0.1.0"
@@ -122,18 +134,22 @@ The venv is created at `bar`, not `foo`:
 └── pyproject.toml
 ```
 
-### Using --no-workspace ignores environment variable
+### Using `--no-workspace` ignores environment variable
 
 <!-- Derived from [`venv::create_venv_project_environment`](https://github.com/astral-sh/uv/blob/c83066b8ee71432543ec3ff183bec4681beca2e7/crates/uv/tests/it/venv.rs#L95-L211) -->
 
 Using `--no-workspace` ignores `UV_PROJECT_ENVIRONMENT`.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 env = { UV_PROJECT_ENVIRONMENT = "foo" }
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "project"
 version = "0.1.0"

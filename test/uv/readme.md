@@ -2,7 +2,9 @@
 
 Tests to verify mdtest features are working correctly.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-versions = "3.12"
 ```
@@ -58,7 +60,9 @@ All filter options are booleans (default: false):
 
 Basic command execution should capture success/failure and output.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "test-project"
 version = "0.1.0"
@@ -80,7 +84,9 @@ Resolved 1 package in [TIME]
 
 Commands that fail should report the correct exit code.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "will-fail"
 version = "0.1.0"
@@ -103,7 +109,9 @@ exit_code: 1
 
 Multiple commands in the same section should run in sequence.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "multi-cmd"
 version = "0.1.0"
@@ -136,7 +144,9 @@ Audited in [TIME]
 
 Files can be created in nested directories.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "nested-files"
 version = "0.1.0"
@@ -147,7 +157,9 @@ dependencies = []
 members = ["packages/*"]
 ```
 
-```toml title="packages/alpha/pyproject.toml"
+```toml
+# file: packages/alpha/pyproject.toml
+
 [project]
 name = "alpha"
 version = "0.1.0"
@@ -169,7 +181,9 @@ Resolved 2 packages in [TIME]
 
 File snapshots verify that output files have expected content.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "snapshot-test"
 version = "0.1.0"
@@ -208,7 +222,9 @@ Each section is independent - files don't carry over from previous sections.
 
 ### First section
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "section-a"
 version = "0.1.0"
@@ -230,7 +246,9 @@ Resolved 1 package in [TIME]
 
 This section has its own pyproject.toml - it doesn't inherit from previous section.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "section-b"
 version = "0.1.0"
@@ -252,7 +270,9 @@ Resolved 2 packages in [TIME]
 
 The [TIME] filter is applied to timing output.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "time-filter"
 version = "0.1.0"
@@ -274,7 +294,9 @@ Resolved 2 packages in [TIME]
 
 Temporary directory paths should be filtered.
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "path-filter"
 version = "0.1.0"
@@ -297,12 +319,16 @@ Audited in [TIME]
 
 Python version can be overridden in a section-level mdtest.toml config.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-version = "3.11"
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "py-version"
 version = "0.1.0"
@@ -325,7 +351,9 @@ Resolved 1 package in [TIME]
 The `[filters]` section can enable additional output filters. With `counts = true`, package counts
 are replaced with `[N]`.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 python-version = "3.12"
 
@@ -333,7 +361,9 @@ python-version = "3.12"
 counts = true
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "filter-counts"
 version = "0.1.0"
@@ -363,12 +393,16 @@ Installed [N] packages in [TIME]
 The `assert=contains` attribute checks that a file contains specific content without requiring an
 exact match. This is useful for checking specific lines in configuration files.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 create-venv = false
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "assert-test"
 version = "0.1.0"
@@ -411,7 +445,9 @@ The `[tree]` configuration section allows excluding paths and toggling default f
 - `default-filters` - whether to apply cross-platform normalization (default: true)
   - Normalizes `bin`/`Scripts` to `[BIN]` inside virtual environments
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 create-venv = false
 
@@ -419,7 +455,9 @@ create-venv = false
 exclude = ["cache"]
 ```
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "tree-test"
 version = "0.1.0"
@@ -457,7 +495,9 @@ The directory should contain a .venv folder with the standard structure:
 Tree creation allows you to pre-create directory structures (including symlinks) before running
 commands. Use `create=true` on a tree block to create the structure instead of verifying it.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 create-venv = false
 
@@ -481,7 +521,9 @@ In tree creation blocks:
 
 This is useful for setting up complex directory structures before adding file content:
 
-```toml title="packages/alpha/pyproject.toml"
+```toml
+# file: packages/alpha/pyproject.toml
+
 [project]
 name = "alpha"
 version = "0.1.0"
@@ -519,7 +561,9 @@ where commands depend on the state of files created before them.
 In this example, we first run `uv venv` with only the mdtest.toml (no pyproject.toml), then add a
 pyproject.toml and run `uv venv --clear` to verify the behavior changes.
 
-```toml title="mdtest.toml"
+```toml
+# mdtest
+
 [environment]
 create-venv = false
 ```
@@ -540,7 +584,9 @@ Activate with: source .venv/[BIN]/activate
 
 Now create pyproject.toml with requires-python:
 
-```toml title="pyproject.toml"
+```toml
+# file: pyproject.toml
+
 [project]
 name = "order-test"
 version = "0.1.0"

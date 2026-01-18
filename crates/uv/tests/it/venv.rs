@@ -4,6 +4,8 @@ use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 
+#[cfg(any(windows, target_os = "linux"))]
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
