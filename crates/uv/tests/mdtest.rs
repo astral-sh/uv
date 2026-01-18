@@ -16,12 +16,7 @@ use regex::Regex;
 use walkdir::WalkDir;
 
 use uv_mdtest::{MarkdownTestFile, SnapshotMode, SnapshotUpdater};
-
-// Import the common module from the main integration tests
-#[path = "it/common/mod.rs"]
-mod common;
-
-use common::TestContext;
+use uv_test::{TestContext, get_bin};
 
 fn main() {
     let args = Arguments::from_args();
@@ -120,7 +115,7 @@ fn run_single_test(
         .unwrap_or("3.12");
 
     // Create a TestContext for this test - this handles all the proper setup
-    let mut context = TestContext::new(python_version);
+    let mut context = TestContext::new_with_bin(python_version, get_bin!());
 
     // Apply environment options from test config
     if let Some(exclude_newer) = &test.config.environment.exclude_newer {
