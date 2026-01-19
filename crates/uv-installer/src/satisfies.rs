@@ -16,7 +16,7 @@ use uv_distribution_types::{
 use uv_git_types::{GitLfs, GitOid};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 use crate::InstallationStrategy;
@@ -460,10 +460,25 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
         IncompatibleTag::FreethreadedAbi => {
             let wheel_abi = wheel_tags
                 .abi_tags()
-                .map(|tag| format!("`{tag}`"))
+                .map(|tag| match tag {
+                    AbiTag::CPython {
+                        gil_disabled: false,
+                        python_version: (major, minor),
+                    } => {
+                        format!("the CPython {major}.{minor} ABI (`{tag}`)")
+                    }
+                    AbiTag::Abi3 => format!("the stable ABI (`{tag}`)"),
+                    _ => {
+                        if let Some(pretty) = tag.pretty() {
+                            format!("the {pretty} ABI (`{tag}`)")
+                        } else {
+                            format!("`{tag}`")
+                        }
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
-            let message = if let Some(current) = tags.abi_tag() {
+            let current = if let Some(current) = tags.abi_tag() {
                 if let Some(pretty) = current.pretty() {
                     format!("{pretty} (`{current}`)")
                 } else {
@@ -473,7 +488,7 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 "free-threaded Python".to_string()
             };
             Some(format!(
-                "The distribution uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
+                "You're using {current}, but the distribution was built for {wheel_abi}, which requires a GIL-enabled interpreter"
             ))
         }
         IncompatibleTag::Abi => {
