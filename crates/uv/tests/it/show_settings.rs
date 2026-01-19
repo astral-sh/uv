@@ -8685,8 +8685,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
+    // `--no-upgrade` with `--upgrade-package` still allows the specified package to be upgraded.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile(), context.temp_dir.path())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
@@ -8852,7 +8851,30 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             hash_checking: Some(
                 Verify,
             ),
-            upgrade: None,
+            upgrade: Packages(
+                {
+                    PackageName(
+                        "sniffio",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "sniffio",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                },
+            ),
             reinstall: None,
         },
     }
@@ -9836,8 +9858,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         dependencies = ["anyio>3.0.0"]
     "#})?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
+    // `--no-upgrade` with `--upgrade-package` still allows the specified package to be upgraded.
     uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
@@ -9943,7 +9964,30 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             resolution: Highest,
             sources: None,
             torch_backend: None,
-            upgrade: None,
+            upgrade: Packages(
+                {
+                    PackageName(
+                        "sniffio",
+                    ): [
+                        Requirement {
+                            name: PackageName(
+                                "sniffio",
+                            ),
+                            extras: [],
+                            groups: [],
+                            marker: true,
+                            source: Registry {
+                                specifier: VersionSpecifiers(
+                                    [],
+                                ),
+                                index: None,
+                                conflict: None,
+                            },
+                            origin: None,
+                        },
+                    ],
+                },
+            ),
         },
     }
 
