@@ -154,7 +154,7 @@ jobs:
   docker-publish-extra:
     name: ${{ needs.docker-plan.outputs.action }} ${{ matrix.image-mapping }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     environment:
       name: ${{ needs.docker-plan.outputs.push == 'true' && 'release' || '' }}
     needs:
