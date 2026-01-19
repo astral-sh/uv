@@ -149,8 +149,7 @@ $ cargo install --locked uv
 
 ### Nix
 
-uv is available via
-[nix packages](https://search.nixos.org/packages?channel=25.11&show=uv&query=uv).
+uv is available via [nix packages](https://search.nixos.org/packages?channel=25.11&show=uv&query=uv).
 
 You add `uv` to your system packages in `/etc/nixos/configuration.nix`.
 
