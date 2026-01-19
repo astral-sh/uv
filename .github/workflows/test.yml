@@ -40,7 +40,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
         with:
-          version: "0.9.24"
+          version: "0.9.26"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -95,7 +95,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
         with:
-          version: "0.9.24"
+          version: "0.9.26"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -141,7 +141,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@681c641aba71e4a1c380be3ab5e12ad51f415867 # v7.1.6
         with:
-          version: "0.9.24"
+          version: "0.9.26"
 
       - name: "Install required Python versions"
         run: uv python install
