@@ -165,9 +165,7 @@ fn clone_wheel_files(
     // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
     let now = SystemTime::now();
 
-    // `File.set_modified` is not available in `fs_err` yet
-    #[allow(clippy::disallowed_types)]
-    match std::fs::File::open(site_packages.as_ref()) {
+    match fs::File::open(site_packages.as_ref()) {
         Ok(dir) => {
             if let Err(err) = dir.set_modified(now) {
                 debug!(
