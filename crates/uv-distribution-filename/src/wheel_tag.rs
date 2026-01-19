@@ -92,7 +92,7 @@ impl Display for WheelTag {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
+#[rkyv(derive(Debug), attr(allow(clippy::struct_field_names)))]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct WheelTagSmall {
     /// The Python tag, e.g., `py3` in `1.2.3-py3-none-any`.
@@ -125,7 +125,7 @@ impl Display for WheelTagSmall {
     rkyv::Deserialize,
     rkyv::Serialize,
 )]
-#[rkyv(derive(Debug))]
+#[rkyv(derive(Debug), attr(allow(clippy::struct_field_names)))]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct WheelTagLarge {
     /// The optional build tag, e.g., `73` in `1.2.3-73-py3-none-any`.
