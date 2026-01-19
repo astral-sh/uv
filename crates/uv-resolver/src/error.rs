@@ -27,7 +27,7 @@ use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
+use crate::pubgrub::{PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
@@ -378,6 +378,92 @@ impl NoSolutionError {
         &self.error
     }
 
+    /// Get the packages that are involved in this error.
+    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
+        self.error
+            .packages()
+            .into_iter()
+            .filter_map(|p| p.name())
+            .unique()
+    }
+
+    /// Generate the error report and hints for the resolution failure.
+    ///
+    /// This performs tree transformation once and returns both the formatted
+    /// error report and hints. The hints should be displayed separately from
+    /// the main error message to avoid indentation issues.
+    pub fn report_and_hints(&self) -> (String, IndexSet<PubGrubHint>) {
+        let formatter = PubGrubReportFormatter {
+            available_versions: &self.available_versions,
+            python_requirement: &self.python_requirement,
+            workspace_members: &self.workspace_members,
+            tags: self.tags.as_ref(),
+        };
+
+        // Transform the error tree for reporting
+        let mut tree = self.error.clone();
+        simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
+        let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
+            .is_some()
+            || tracing::enabled!(tracing::Level::TRACE);
+
+        if should_display_tree {
+            display_tree(&tree, "Resolver derivation tree before reduction");
+        }
+
+        collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
+
+        if self.workspace_members.len() == 1 {
+            let project = self.workspace_members.iter().next().unwrap();
+            drop_root_dependency_on_project(&mut tree, project);
+        }
+
+        collapse_unavailable_versions(&mut tree);
+        collapse_redundant_depends_on_no_versions(&mut tree);
+
+        simplify_derivation_tree_ranges(
+            &mut tree,
+            &self.available_versions,
+            &self.selector,
+            &self.env,
+        );
+
+        collapse_redundant_no_versions(&mut tree);
+
+        while collapse_redundant_no_versions_tree(&mut tree) {
+            // Continue collapsing until no more redundant nodes are found
+        }
+
+        if should_display_tree {
+            display_tree(&tree, "Resolver derivation tree after reduction");
+        }
+
+        // Generate the report
+        let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
+
+        // Generate hints
+        let mut hints = IndexSet::default();
+        formatter.generate_hints(
+            &tree,
+            &self.index,
+            &self.selector,
+            &self.index_locations,
+            &self.index_capabilities,
+            &self.available_indexes,
+            &self.unavailable_packages,
+            &self.incomplete_packages,
+            &self.fork_urls,
+            &self.fork_indexes,
+            &self.env,
+            self.tags.as_ref(),
+            &self.workspace_members,
+            &self.options,
+            &mut hints,
+        );
+
+        (report, hints)
+    }
+
     /// Hint at limiting the resolver environment if universal resolution failed for a target
     /// that is not the current platform or not the current Python version.
     fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
@@ -386,8 +472,6 @@ impl NoSolutionError {
             return Ok(());
         };
 
-        // TODO(konsti): This is a crude approximation to telling the user the difference
-        // between their Python version and the relevant Python version range from the marker.
         let current_python_version = self.current_environment.python_version().version.clone();
         let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
@@ -414,15 +498,6 @@ impl NoSolutionError {
             )?;
         }
         Ok(())
-    }
-
-    /// Get the packages that are involved in this error.
-    pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
-        self.error
-            .packages()
-            .into_iter()
-            .filter_map(|p| p.name())
-            .unique()
     }
 }
 
@@ -473,79 +548,11 @@ impl std::error::Error for NoSolutionError {}
 
 impl std::fmt::Display for NoSolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Write the derivation report.
-        let formatter = PubGrubReportFormatter {
-            available_versions: &self.available_versions,
-            python_requirement: &self.python_requirement,
-            workspace_members: &self.workspace_members,
-            tags: self.tags.as_ref(),
-        };
-
-        // Transform the error tree for reporting
-        let mut tree = self.error.clone();
-        simplify_derivation_tree_markers(&self.python_requirement, &mut tree);
-        let should_display_tree = std::env::var_os(EnvVars::UV_INTERNAL__SHOW_DERIVATION_TREE)
-            .is_some()
-            || tracing::enabled!(tracing::Level::TRACE);
-
-        if should_display_tree {
-            display_tree(&tree, "Resolver derivation tree before reduction");
-        }
-
-        collapse_no_versions_of_workspace_members(&mut tree, &self.workspace_members);
-
-        if self.workspace_members.len() == 1 {
-            let project = self.workspace_members.iter().next().unwrap();
-            drop_root_dependency_on_project(&mut tree, project);
-        }
-
-        collapse_unavailable_versions(&mut tree);
-        collapse_redundant_depends_on_no_versions(&mut tree);
-
-        simplify_derivation_tree_ranges(
-            &mut tree,
-            &self.available_versions,
-            &self.selector,
-            &self.env,
-        );
-
-        // This needs to be applied _after_ simplification of the ranges
-        collapse_redundant_no_versions(&mut tree);
-
-        while collapse_redundant_no_versions_tree(&mut tree) {
-            // Continue collapsing until no more redundant nodes are found
-        }
-
-        if should_display_tree {
-            display_tree(&tree, "Resolver derivation tree after reduction");
-        }
-
-        let report = DefaultStringReporter::report_with_formatter(&tree, &formatter);
+        // Get the report (without hints - callers should use report_and_hints() to get hints separately)
+        let (report, _hints) = self.report_and_hints();
         write!(f, "{report}")?;
 
-        // Include any additional hints.
-        let mut additional_hints = IndexSet::default();
-        formatter.generate_hints(
-            &tree,
-            &self.index,
-            &self.selector,
-            &self.index_locations,
-            &self.index_capabilities,
-            &self.available_indexes,
-            &self.unavailable_packages,
-            &self.incomplete_packages,
-            &self.fork_urls,
-            &self.fork_indexes,
-            &self.env,
-            self.tags.as_ref(),
-            &self.workspace_members,
-            &self.options,
-            &mut additional_hints,
-        );
-        for hint in additional_hints {
-            write!(f, "\n\n{hint}")?;
-        }
-
+        // Write disjoint target hints directly (these are handled separately from PubGrubHint)
         self.hint_disjoint_targets(f)?;
 
         Ok(())

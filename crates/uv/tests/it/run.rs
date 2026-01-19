@@ -414,14 +414,14 @@ fn run_pep723_script() -> Result<()> {
     })?;
 
     // Running a script with `--group` should warn.
-    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--group").arg("foo").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies:
+      Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script can't be resolved, we should reference the script.
@@ -436,14 +436,14 @@ fn run_pep723_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies:
+      Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
@@ -786,16 +786,16 @@ fn run_pep723_script_build_constraints() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Compatible build constraints.
@@ -1256,7 +1256,7 @@ fn run_with() -> Result<()> {
     ");
 
     // If the dependencies can't be resolved, we should reference `--with`.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("add").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1264,8 +1264,8 @@ fn run_with() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Audited 2 packages in [TIME]
-      × No solution found when resolving `--with` dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving `--with` dependencies:
+      Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -1594,7 +1594,7 @@ fn run_with_build_constraints() -> Result<()> {
     })?;
 
     // Installing requests with incompatible build constraints should fail.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("requests==1.2").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1608,10 +1608,10 @@ fn run_with_build_constraints() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Change the build constraint to be compatible with `requests==1.2`.
@@ -1940,7 +1940,7 @@ fn run_with_editable() -> Result<()> {
     ");
 
     // If invalid, we should reference `--with-editable`.
-    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--with-editable").arg("./foo").arg("main.py"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1948,8 +1948,8 @@ fn run_with_editable() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Audited 3 packages in [TIME]
-      × Failed to resolve `--with` requirement
-      ╰─▶ Distribution not found at: file://[TEMP_DIR]/foo
+    error: Failed to resolve `--with` requirement
+      Caused by: Distribution not found at: file://[TEMP_DIR]/foo
     ");
 
     Ok(())

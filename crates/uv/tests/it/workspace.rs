@@ -1131,18 +1131,18 @@ fn workspace_inherit_sources() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // As-is, resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
-          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because library was not found in the cache and leaf depends on library, we can conclude that leaf's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
 
-          hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
     );
 
@@ -1351,16 +1351,16 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
-          And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only httpx<=0.27.0 is available and leaf depends on httpx>9999, we can conclude that leaf's requirements are unsatisfiable.
+                 And because your workspace requires leaf, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1419,16 +1419,16 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because bar depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
+                 And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1502,16 +1502,16 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     bird.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
-          And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because bird depends on anyio==4.3.0 and knot depends on anyio==4.2.0, we can conclude that bird and knot are incompatible.
+                 And because your workspace requires bird and knot, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1572,16 +1572,16 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
-          And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because bar[some-extra] depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar[some-extra] are incompatible.
+                 And because your workspace requires bar[some-extra] and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1642,7 +1642,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1650,9 +1650,9 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `packages/bar/pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
-          And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
+                 And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "
     );
 
@@ -1714,16 +1714,16 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     // We should fail
     // TODO(zanieb): This error message is bad?
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
-      ├─▶ Failed to parse entry: `anyio`
-      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
+    error: Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
+      Caused by: Failed to parse entry: `anyio`
+      Caused by: `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "
     );
 
