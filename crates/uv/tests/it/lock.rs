@@ -5232,9 +5232,9 @@ fn lock_requires_python() -> Result<()> {
           And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-
           hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+
+          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
