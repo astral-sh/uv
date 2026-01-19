@@ -152,7 +152,7 @@ reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
 reqsign = { version = "0.18.1", features = ["aws", "google", "default-context"], default-features = false }
-reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest = { version = "0.13.0", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
 reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = ["multipart"] }
 reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
