@@ -7,7 +7,7 @@ use axoupdater::{
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, get_bin, uv_snapshot};
+use uv_test::{get_bin, uv_snapshot};
 
 #[test]
 fn check_self_update() {
@@ -26,7 +26,7 @@ fn check_self_update() {
         app_name: "uv".to_owned(),
         package: "uv".to_owned(),
         owner: "astral-sh".to_owned(),
-        bin: get_bin(),
+        bin: get_bin!(),
         binaries: vec!["uv".to_owned()],
         args: vec!["self".to_owned(), "update".to_owned()],
         release_type: ReleaseSourceType::GitHub,
@@ -45,7 +45,7 @@ fn check_self_update() {
 
 #[test]
 fn test_self_update_offline_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline"),
     @r"

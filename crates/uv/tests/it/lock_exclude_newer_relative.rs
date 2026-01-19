@@ -3,7 +3,7 @@ use assert_fs::fixture::{FileWriteStr, PathChild};
 use insta::assert_snapshot;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Lock with a relative exclude-newer value.
 ///
@@ -12,7 +12,7 @@ use crate::common::{TestContext, uv_snapshot};
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -215,7 +215,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -404,7 +404,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -475,7 +475,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
 /// - 3.7: 2024-04-11
 #[test]
 fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -551,7 +551,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
 /// - 4.11.0: 2024-04-05
 #[test]
 fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -833,7 +833,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
 /// Lock with various relative exclude newer value formats.
 #[test]
 fn lock_exclude_newer_relative_values() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -1078,7 +1078,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
 /// Lock with various relative exclude newer value formats in a `pyproject.toml`.
 #[test]
 fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"

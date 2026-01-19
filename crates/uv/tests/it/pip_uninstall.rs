@@ -5,11 +5,11 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, get_bin, uv_snapshot};
+use uv_test::{get_bin, uv_snapshot};
 
 #[test]
 fn no_arguments() {
-    uv_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin!())
         .arg("pip")
         .arg("uninstall")
         .env_clear(), @"
@@ -32,7 +32,7 @@ fn no_arguments() {
 fn invalid_requirement() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    uv_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin!())
         .arg("pip")
         .arg("uninstall")
         .arg("flask==1.0.x")
@@ -55,7 +55,7 @@ fn invalid_requirement() -> Result<()> {
 fn missing_requirements_txt() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    uv_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin!())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -79,7 +79,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
     let requirements_txt = temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask==1.0.x")?;
 
-    uv_snapshot!(Command::new(get_bin())
+    uv_snapshot!(Command::new(get_bin!())
         .arg("pip")
         .arg("uninstall")
         .arg("-r")
@@ -102,7 +102,7 @@ fn invalid_requirements_txt_requirement() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn uninstall() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -135,7 +135,7 @@ fn uninstall() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn missing_record() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -169,7 +169,7 @@ fn missing_record() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn uninstall_editable_by_name() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -210,7 +210,7 @@ fn uninstall_editable_by_name() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn uninstall_by_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -251,7 +251,7 @@ fn uninstall_by_path() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn uninstall_duplicate_by_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
@@ -297,7 +297,7 @@ fn uninstall_duplicate() -> Result<()> {
     use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
-    let context1 = TestContext::new("3.12");
+    let context1 = uv_test::test_context!("3.12");
     let requirements_txt = context1.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==21.3.1")?;
 
@@ -309,7 +309,7 @@ fn uninstall_duplicate() -> Result<()> {
         .success();
 
     // Sync a different version of `pip` into a virtual environment.
-    let context2 = TestContext::new("3.12");
+    let context2 = uv_test::test_context!("3.12");
     let requirements_txt = context2.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==22.1.1")?;
 
@@ -346,7 +346,7 @@ fn uninstall_duplicate() -> Result<()> {
 /// Uninstall a `.egg-info` package in a virtual environment.
 #[test]
 fn uninstall_egg_info() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -408,7 +408,7 @@ fn normcase(s: &str) -> String {
 /// Uninstall a legacy editable package in a virtual environment.
 #[test]
 fn uninstall_legacy_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -464,7 +464,7 @@ Version: 0.22.0
 
 #[test]
 fn dry_run_uninstall_egg_info() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 

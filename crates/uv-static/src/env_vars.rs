@@ -494,6 +494,11 @@ impl EnvVars {
     #[attr_added_in("0.1.34")]
     pub const UV_UPDATE_SCHEMA: &'static str = "UV_UPDATE_SCHEMA";
 
+    /// Use to update markdown test snapshots. Similar to `INSTA_UPDATE`.
+    #[attr_hidden]
+    #[attr_added_in("next version")]
+    pub const UV_UPDATE_SNAPSHOTS: &'static str = "UV_UPDATE_SNAPSHOTS";
+
     /// Use to disable line wrapping for diagnostics.
     #[attr_added_in("0.0.5")]
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";

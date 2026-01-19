@@ -1,14 +1,14 @@
-use crate::common::{self, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 use fs_err as fs;
 use insta::assert_snapshot;
 use uv_static::EnvVars;
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_list() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -37,7 +37,7 @@ fn tool_list() {
 
 #[test]
 fn tool_list_paths() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -67,7 +67,7 @@ fn tool_list_paths() {
 #[cfg(windows)]
 #[test]
 fn tool_list_paths_windows() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .clear_filters()
         .with_filtered_windows_temp_dir();
     let tool_dir = context.temp_dir.child("tools");
@@ -98,7 +98,7 @@ fn tool_list_paths_windows() {
 
 #[test]
 fn tool_list_empty() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -116,7 +116,7 @@ fn tool_list_empty() {
 
 #[test]
 fn tool_list_missing_receipt() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -145,7 +145,7 @@ fn tool_list_missing_receipt() {
 
 #[test]
 fn tool_list_bad_environment() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -170,7 +170,7 @@ fn tool_list_bad_environment() -> Result<()> {
         .assert()
         .success();
 
-    let venv_path = common::venv_bin_path(tool_dir.path().join("black"));
+    let venv_path = uv_test::venv_bin_path(tool_dir.path().join("black"));
     // Remove the python interpreter for black
     fs::remove_dir_all(venv_path.clone())?;
 
@@ -197,7 +197,7 @@ fn tool_list_bad_environment() -> Result<()> {
 
 #[test]
 fn tool_list_deprecated() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -284,7 +284,7 @@ fn tool_list_deprecated() -> Result<()> {
 
 #[test]
 fn tool_list_show_version_specifiers() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -340,7 +340,7 @@ fn tool_list_show_version_specifiers() {
 
 #[test]
 fn tool_list_show_with() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -455,7 +455,7 @@ fn tool_list_show_with() {
 
 #[test]
 fn tool_list_show_extras() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -566,7 +566,7 @@ fn tool_list_show_extras() {
 
 #[test]
 fn tool_list_show_python() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -596,7 +596,7 @@ fn tool_list_show_python() {
 
 #[test]
 fn tool_list_show_all() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 

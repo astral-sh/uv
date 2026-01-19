@@ -5,13 +5,12 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::TestContext;
-use crate::common::uv_snapshot;
+use uv_test::uv_snapshot;
 
 /// `cache prune` should be a no-op if there's nothing out-of-date in the cache.
 #[test]
 fn prune_no_op() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -48,7 +47,7 @@ fn prune_no_op() -> Result<()> {
 /// `cache prune` should remove any stale top-level directories from the cache.
 #[test]
 fn prune_stale_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -90,7 +89,7 @@ fn prune_stale_directory() -> Result<()> {
 /// `cache prune` should remove all cached environments from the cache.
 #[test]
 fn prune_cached_env() {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -151,7 +150,7 @@ fn prune_cached_env() {
 /// `cache prune` should remove any stale symlink from the cache.
 #[test]
 fn prune_stale_symlink() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
@@ -198,7 +197,7 @@ fn prune_stale_symlink() -> Result<()> {
 
 #[tokio::test]
 async fn prune_force() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("typing-extensions\niniconfig")?;
@@ -252,7 +251,7 @@ async fn prune_force() -> Result<()> {
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
@@ -331,7 +330,7 @@ fn prune_unzipped() -> Result<()> {
 /// `cache prune` should remove any stale source distribution revisions.
 #[test]
 fn prune_stale_revision() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

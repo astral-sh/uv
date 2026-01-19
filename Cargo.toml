@@ -43,6 +43,7 @@ uv-installer = { version = "0.0.15", path = "crates/uv-installer" }
 uv-keyring = { version = "0.0.15", path = "crates/uv-keyring" }
 uv-logging = { version = "0.0.15", path = "crates/uv-logging" }
 uv-macros = { version = "0.0.15", path = "crates/uv-macros" }
+uv-mdtest = { version = "0.0.15", path = "crates/uv-mdtest" }
 uv-metadata = { version = "0.0.15", path = "crates/uv-metadata" }
 uv-normalize = { version = "0.0.15", path = "crates/uv-normalize" }
 uv-once-map = { version = "0.0.15", path = "crates/uv-once-map" }
@@ -66,6 +67,7 @@ uv-shell = { version = "0.0.15", path = "crates/uv-shell" }
 uv-small-str = { version = "0.0.15", path = "crates/uv-small-str" }
 uv-state = { version = "0.0.15", path = "crates/uv-state" }
 uv-static = { version = "0.0.15", path = "crates/uv-static" }
+uv-test = { path = "crates/uv-test" }
 uv-tool = { version = "0.0.15", path = "crates/uv-tool" }
 uv-torch = { version = "0.0.15", path = "crates/uv-torch" }
 uv-trampoline-builder = { version = "0.0.15", path = "crates/uv-trampoline-builder" }
@@ -130,6 +132,7 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.2.0" }
+libtest-mimic = { version = "0.8.1" }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
@@ -142,6 +145,7 @@ path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
+pulldown-cmark = { version = "0.13.0" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
 pubgrub = { version = "0.3.3" , package = "astral-pubgrub" }
@@ -264,6 +268,10 @@ use_self = "warn"
 
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
+
+[workspace.metadata.cargo-shear]
+# xz2 is used by uv-extract for its "static" feature, not for code imports
+ignored = ["xz2"]
 
 [profile.release]
 strip = true

@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
 //
@@ -20,7 +20,7 @@ use crate::common::{TestContext, uv_snapshot};
 /// <https://github.com/astral-sh/uv/issues/8024>
 #[test]
 fn extra_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving with two extras that have
     // conflicting dependencies fails.
@@ -211,7 +211,7 @@ fn extra_basic() -> Result<()> {
 /// extras instead of two.
 #[test]
 fn extra_basic_three_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving with two extras that have
     // conflicting dependencies fails.
@@ -357,7 +357,7 @@ fn extra_basic_three_extras() -> Result<()> {
 /// distinct groups of extras.
 #[test]
 fn extra_multiple_not_conflicting1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -487,7 +487,7 @@ fn extra_multiple_not_conflicting1() -> Result<()> {
 /// conflicting.)
 #[test]
 fn extra_multiple_not_conflicting2() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -648,7 +648,7 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
 /// extras correctly.
 #[test]
 fn extra_multiple_independent() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // If we don't declare any conflicting extras, then resolution
     // will of course fail.
@@ -871,7 +871,7 @@ fn extra_multiple_independent() -> Result<()> {
 
 #[test]
 fn extra_config_change_ignore_lockfile() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1005,7 +1005,7 @@ fn extra_config_change_ignore_lockfile() -> Result<()> {
 /// enables a conflicting extra.
 #[test]
 fn extra_unconditional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -1158,7 +1158,7 @@ fn extra_unconditional() -> Result<()> {
 /// would be completely ignored here.
 #[test]
 fn extra_unconditional_non_conflicting() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -1236,7 +1236,7 @@ fn extra_unconditional_non_conflicting() -> Result<()> {
 
 #[test]
 fn extra_unconditional_in_optional() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -1348,7 +1348,7 @@ fn extra_unconditional_in_optional() -> Result<()> {
 
 #[test]
 fn extra_unconditional_non_local_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -1454,7 +1454,7 @@ fn extra_unconditional_non_local_conflict() -> Result<()> {
 /// packages in a workspace.
 #[test]
 fn extra_nested_across_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -1656,7 +1656,7 @@ fn extra_nested_across_workspace() -> Result<()> {
 /// The project declares conflicting extras, but one of the extras directly depends on the other.
 #[test]
 fn extra_depends_on_conflicting_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1708,7 +1708,7 @@ fn extra_depends_on_conflicting_extra() -> Result<()> {
 /// another package.
 #[test]
 fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1899,7 +1899,7 @@ fn extra_depends_on_conflicting_extra_transitive() -> Result<()> {
 /// This tests a "basic" case for specifying conflicting groups.
 #[test]
 fn group_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving with two groups that have
     // conflicting dependencies fails.
@@ -2082,7 +2082,7 @@ fn group_basic() -> Result<()> {
 /// default.
 #[test]
 fn group_default() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Tell uv about the conflicting groups, which forces it to resolve each in
     // their own fork.
@@ -2262,7 +2262,7 @@ fn group_default() -> Result<()> {
 /// This tests a case where we declare an extra and a group as conflicting.
 #[test]
 fn mixed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First we test that resolving with a conflicting extra
     // and group fails.
@@ -2450,7 +2450,7 @@ fn mixed() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2600,7 +2600,7 @@ fn multiple_sources_index_disjoint_extras() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_groups() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2749,7 +2749,7 @@ fn multiple_sources_index_disjoint_groups() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2918,7 +2918,7 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
 #[test]
 fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3098,7 +3098,7 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 /// despite `sniffio` being an unconditional dependency.
 #[test]
 fn non_optional_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3145,7 +3145,7 @@ fn non_optional_dependency_extra() -> Result<()> {
 /// This test never regressed, but we added it here to ensure it doesn't.
 #[test]
 fn non_optional_dependency_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3193,7 +3193,7 @@ fn non_optional_dependency_group() -> Result<()> {
 /// This test never regressed, but we added it here to ensure it doesn't.
 #[test]
 fn non_optional_dependency_mixed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3249,7 +3249,7 @@ fn non_optional_dependency_mixed() -> Result<()> {
 /// [1]: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_optional_dependency_extra1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3389,7 +3389,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
 /// Ref <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_optional_dependency_group1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3528,7 +3528,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
 /// Ref <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_optional_dependency_mixed1() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3676,7 +3676,7 @@ fn shared_optional_dependency_mixed1() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_extra2() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3817,7 +3817,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_group2() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3961,7 +3961,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9640>
 #[test]
 fn shared_optional_dependency_mixed2() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4110,7 +4110,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4285,7 +4285,7 @@ fn shared_dependency_extra() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_dependency_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4459,7 +4459,7 @@ fn shared_dependency_group() -> Result<()> {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn shared_dependency_mixed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4647,7 +4647,7 @@ fn shared_dependency_mixed() -> Result<()> {
 /// Ref <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn extras_are_namespaced() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
     root_pyproject_toml.write_str(
@@ -4856,7 +4856,7 @@ conflicts = [
 /// [1]: <https://github.com/astral-sh/uv/issues/9289>
 #[test]
 fn jinja_no_conflict_markers1() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5018,7 +5018,7 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 /// shouldn't see any conflict markers in the lock file here.
 #[test]
 fn jinja_no_conflict_markers2() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5193,7 +5193,7 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/pull/9370#discussion_r1876083284>
 #[test]
 fn collision_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5411,7 +5411,7 @@ fn collision_extra() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/pull/9370#discussion_r1875958904>
 #[test]
 fn extra_inferences() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7453,7 +7453,7 @@ fn extra_inferences() -> Result<()> {
 /// [1]: <https://github.com/astral-sh/uv/issues/9296>
 #[test]
 fn deduplicate_resolution_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7602,7 +7602,7 @@ fn deduplicate_resolution_markers() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/11133>
 #[test]
 fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-02-07T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-07T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10352,7 +10352,7 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 /// Ref: <https://github.com/astral-sh/uv/issues/11479>
 #[test]
 fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-02-14T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-14T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -13596,7 +13596,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
 
 #[test]
 fn overlapping_resolution_markers() -> Result<()> {
-    let context = TestContext::new("3.10").with_exclude_newer("2025-01-30T00:00Z");
+    let context = uv_test::test_context!("3.10").with_exclude_newer("2025-01-30T00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14273,7 +14273,7 @@ fn overlapping_resolution_markers() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/9735>
 #[test]
 fn avoids_exponential_lock_file_growth() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-02-06T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-06T00:00Z");
 
     let pyproject = r#"
         [project]
@@ -15155,7 +15155,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
 /// Ref: <https://github.com/astral-sh/uv/issues/14805>
 #[test]
 fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-02-06T00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-02-06T00:00Z");
 
     let pyproject = r#"
         [project]

@@ -1,0 +1,48 @@
+[package]
+name = "uv-test"
+version = "0.0.15"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[features]
+# When enabled, git tests are run and the git CLI is allowed.
+git = []
+# When enabled, tracing duration export is supported.
+tracing-durations-export = []
+
+[dependencies]
+uv-cache = { workspace = true, features = ["clap"] }
+uv-client = { workspace = true }
+uv-configuration = { workspace = true }
+uv-fs = { workspace = true }
+uv-preview = { workspace = true }
+uv-python = { workspace = true }
+uv-static = { workspace = true }
+uv-version = { workspace = true }
+
+anyhow = { workspace = true }
+assert_cmd = { workspace = true }
+assert_fs = { workspace = true }
+base64 = { workspace = true }
+fs-err = { workspace = true, features = ["tokio"] }
+futures = { workspace = true }
+ignore = { workspace = true }
+indoc = { workspace = true }
+insta = { workspace = true, features = ["filters"] }
+itertools = { workspace = true }
+predicates = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+similar = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
