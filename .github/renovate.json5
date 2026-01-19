@@ -66,6 +66,14 @@
       enabled: false,
     },
     {
+      // Exclude test-system.yml from Python version updates, as it intentionally
+      // tests multiple Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-system.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-system.yml",
+      enabled: false,
+    },
+    {
       groupName: "pre-commit dependencies",
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
