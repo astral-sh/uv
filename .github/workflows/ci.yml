@@ -75,6 +75,7 @@ jobs:
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
+            [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
             any_code_changed=1
           done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
@@ -98,7 +99,7 @@ jobs:
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
           [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
-          [[ $has_system_label || $has_extended_label || $on_main_branch ]] && test_system=1
+          [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed ]] && test_system=1
           [[ ! $has_skip_label && $docker_build_changed ]] && build_docker=1
 
           # Output (convert 1/empty to true/false for GHA)
