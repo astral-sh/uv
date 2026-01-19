@@ -977,9 +977,9 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.16.1"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b430743a6eb14e9764d4260d4c0d8123087d504eeb9c48f2b2a5e810dd369df4"
+checksum = "03e45a4a8926227e4197636ba97a9fc9b00477e9f4bd711395687c5f0734bec4"
 dependencies = [
  "encode_unicode",
  "libc",
@@ -2272,7 +2272,7 @@ version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9375e112e4b463ec1b1c6c011953545c65a30164fbab5b581df32b3abf0dcb88"
 dependencies = [
- "console 0.16.1",
+ "console 0.16.2",
  "portable-atomic",
  "unicode-width 0.2.2",
  "unit-prefix",
@@ -5702,7 +5702,7 @@ dependencies = [
  "base64 0.22.1",
  "byteorder",
  "clap",
- "console 0.16.1",
+ "console 0.16.2",
  "ctrlc",
  "diskus",
  "dotenvy",
@@ -6181,7 +6181,7 @@ dependencies = [
 name = "uv-console"
 version = "0.0.15"
 dependencies = [
- "console 0.16.1",
+ "console 0.16.2",
 ]
 
 [[package]]
@@ -6906,7 +6906,7 @@ version = "0.0.15"
 dependencies = [
  "anyhow",
  "configparser",
- "console 0.16.1",
+ "console 0.16.2",
  "fs-err",
  "futures",
  "rustc-hash",
@@ -7240,7 +7240,7 @@ version = "0.9.26"
 name = "uv-virtualenv"
 version = "0.0.15"
 dependencies = [
- "console 0.16.1",
+ "console 0.16.2",
  "fs-err",
  "itertools 0.14.0",
  "owo-colors",
