@@ -179,11 +179,9 @@ linux environments out of the box. For more information, see:
 https://nix.dev/permalink/stub-ld
 ```
 
-This happens because
-["NixOS cannot run dynamically linked executables intended for generic Linux environments out of the box."](https://nix.dev/guides/faq#how-to-run-non-nix-executables)
+This happens because ["NixOS cannot run dynamically linked executables intended for generic Linux environments out of the box."](https://nix.dev/guides/faq#how-to-run-non-nix-executables)
 
-[To fix this](https://wiki.nixos.org/wiki/Python_quickstart_using_uv#Fix_with_nix-ld), you need to
-enable [nix-ld](https://wiki.nixos.org/wiki/Nix-ld) In your `/etc/nixos/configuration.nix`:
+[To fix this](https://wiki.nixos.org/wiki/Python_quickstart_using_uv#Fix_with_nix-ld), you need to enable [nix-ld](https://wiki.nixos.org/wiki/Nix-ld) In your `/etc/nixos/configuration.nix`:
 
 ```nix
 programs.nix-ld.enable = true;
