@@ -369,7 +369,7 @@ jobs:
       - check-generated-files
       - test
       - build-dev-binaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: "Check required jobs passed"
         run: |
