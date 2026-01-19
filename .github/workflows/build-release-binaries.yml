@@ -32,7 +32,7 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04-4
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -635,7 +635,7 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04-4
     strategy:
       matrix:
         platform:
@@ -852,7 +852,7 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04-4
     strategy:
       matrix:
         target:
