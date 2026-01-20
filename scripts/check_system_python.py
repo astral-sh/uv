@@ -52,6 +52,17 @@ if __name__ == "__main__":
         required=False,
         help="Set if the system Python version must be explicitly specified, e.g., for prereleases.",
     )
+    parser.add_argument(
+        "--check-python-version",
+        required=False,
+        help="Verify that this tool has been started with the specified python version. Omitting the patch number will match any patch number.",
+    )
+    parser.add_argument(
+        "--check-path",
+        required=False,
+        action="store_true",
+        help="Attempt to verify that the PATH is set up so that this tool's python will match the python version that uv would automatically pick up.",
+    )
     args = parser.parse_args()
 
     uv: str = os.path.abspath(args.uv) if args.uv else "uv"
@@ -59,6 +70,29 @@ if __name__ == "__main__":
         ["--break-system-packages"] if args.externally_managed else []
     )
     python = ["--python", args.python] if args.python else []
+
+    if args.check_python_version:
+        version = ".".join(map(str, sys.version_info[:3]))
+        if args.check_python_version != version and not version.startswith(
+            args.check_python_version + "."
+        ):
+            raise Exception(
+                f"Expected to be running {args.check_python_version} but we are on {version}."
+            )
+
+    if args.check_path:
+        process = subprocess.run(
+            ["python", "-c", "import sys; print(sys.executable)"],
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        system_python_path = os.path.normcase(os.path.normpath(process.stdout))
+        our_python_path = os.path.normcase(os.path.normpath(sys.executable))
+
+        if our_python_path != system_python_path:
+            raise Exception(
+                f"Script was ran with {our_python_path} but `python` resolves to {system_python_path}"
+            )
 
     # Create a temporary directory.
     with tempfile.TemporaryDirectory() as temp_dir:

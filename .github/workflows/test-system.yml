@@ -538,20 +538,13 @@ jobs:
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
-      - name: "Verify system Python"
-        run: |
-          $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          echo $(which python)
-          $version = python --version
-          if ($version -ne "Python $env:TEST_PYTHON_VERSION") {
-            echo "Expected Python $env:TEST_PYTHON_VERSION, got $version"
-            exit 1
-          }
-
+      # Chocolatey updates the registry but doesn't update `GITHUB_PATH` and since figuring out what
+      # it added would be more work than it's worth, it's simpler to just reload the values from the
+      # registry.
       - name: "Validate global Python install"
         run: |
           $env:PATH = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-          python ./scripts/check_system_python.py --uv ./uv.exe
+          python ./scripts/check_system_python.py --uv ./uv.exe --check-python-version $env:TEST_PYTHON_VERSION --check-path
 
   system-test-pyenv:
     timeout-minutes: 10
