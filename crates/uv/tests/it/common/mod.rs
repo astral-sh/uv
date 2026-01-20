@@ -1290,24 +1290,24 @@ impl TestContext {
     /// Create a `uv python install` command with options shared across scenarios.
     pub fn python_install(&self) -> Command {
         let mut command = Self::new_command();
-        self.add_shared_options(&mut command, true);
         command.arg("python").arg("install");
+        self.add_shared_options(&mut command, true);
         command
     }
 
     /// Create a `uv python uninstall` command with options shared across scenarios.
     pub fn python_uninstall(&self) -> Command {
         let mut command = Self::new_command();
-        self.add_shared_options(&mut command, true);
         command.arg("python").arg("uninstall");
+        self.add_shared_options(&mut command, true);
         command
     }
 
     /// Create a `uv python upgrade` command with options shared across scenarios.
     pub fn python_upgrade(&self) -> Command {
         let mut command = Self::new_command();
-        self.add_shared_options(&mut command, true);
         command.arg("python").arg("upgrade");
+        self.add_shared_options(&mut command, true);
         command
     }
 
