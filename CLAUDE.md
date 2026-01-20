@@ -9,3 +9,5 @@
 - ALWAYS write `SAFETY` comments following our usual style when writing `unsafe` code
 - PREFER `#[expect()]` over `[allow()]` if clippy must be disabled
 - PREFER let chains (`if let` combined with `&&`) over nested `if let` statements
+- NEVER update all dependencies in the lockfile and ALWAYS use `cargo update --precise` to make
+  lockfile changes
