@@ -749,6 +749,7 @@ async fn execute_plan(
             hasher,
             build_options,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            concurrency.builds,
         )
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
