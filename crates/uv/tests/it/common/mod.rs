@@ -1018,6 +1018,10 @@ impl TestContext {
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
             .env(
+                EnvVars::XDG_CONFIG_DIRS,
+                self.home_dir.join("config").as_os_str(),
+            )
+            .env(
                 EnvVars::XDG_DATA_HOME,
                 self.home_dir.join("data").as_os_str(),
             )
@@ -1732,6 +1736,8 @@ impl TestContext {
         let mut command = Command::new(bin);
 
         let passthrough = [
+            // For linux distributions
+            EnvVars::PATH,
             // For debugging tests.
             EnvVars::RUST_LOG,
             EnvVars::RUST_BACKTRACE,
