@@ -1155,10 +1155,10 @@ impl TestContext {
     }
 
     /// Create a `uv help` command with options shared across scenarios.
-    #[allow(clippy::unused_self)]
     pub fn help(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("help");
+        self.add_shared_env(&mut command, false);
         command
     }
 
