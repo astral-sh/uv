@@ -19,7 +19,7 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::Error;
 
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 #[derive(Debug, Default)]
 pub struct Locks {
     /// The parent directory of a file in a synchronized copy

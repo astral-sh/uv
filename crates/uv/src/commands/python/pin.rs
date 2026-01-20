@@ -26,7 +26,7 @@ use crate::commands::{
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pin(
     project_dir: &Path,
     request: Option<String>,

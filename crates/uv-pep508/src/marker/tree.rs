@@ -51,7 +51,6 @@ pub enum MarkerWarningKind {
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-#[allow(clippy::enum_variant_names)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
     ImplementationVersion,
@@ -655,7 +654,7 @@ impl MarkerExpression {
     ///
     /// Returns `None` if the expression consists entirely of meaningless expressions
     /// that are ignored, such as `os_name ~= 'foo'`.
-    #[allow(clippy::should_implement_trait)]
+    #[expect(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Option<Self>, Pep508Error> {
         Self::parse_reporter(s, &mut TracingReporter)
     }

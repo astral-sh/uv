@@ -1563,7 +1563,6 @@ impl Lock {
     }
 
     /// Return a [`SatisfiesResult`] if the given requirements do not match the [`Package`] metadata.
-    #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
         requires_dist: Box<[Requirement]>,
@@ -2339,7 +2338,7 @@ struct ResolverOptions {
     exclude_newer: ExcludeNewerWire,
 }
 
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 #[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
@@ -5551,7 +5550,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)]
+#[expect(clippy::enum_variant_names)]
 enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).

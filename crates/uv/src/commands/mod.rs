@@ -202,14 +202,12 @@ pub(super) async fn compile_bytecode(
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
-#[allow(clippy::disallowed_types)]
 struct OutputWriter<'a> {
     stdout: Option<AutoStream<std::io::Stdout>>,
     output_file: Option<&'a Path>,
     buffer: Vec<u8>,
 }
 
-#[allow(clippy::disallowed_types)]
 impl<'a> OutputWriter<'a> {
     /// Create a new output writer.
     fn new(include_stdout: bool, output_file: Option<&'a Path>) -> Self {
@@ -301,7 +299,7 @@ pub(super) fn capitalize(s: &str) -> String {
 
 /// A Python file that may or may not include an existing PEP 723 script tag.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptPath {
     /// The Python file already includes a PEP 723 script tag.
     Script(Pep723Script),

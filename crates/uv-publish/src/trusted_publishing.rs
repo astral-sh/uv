@@ -121,7 +121,7 @@ pub(crate) async fn get_token(
         let publish_token = service.publish_token(oidc_token).await?;
 
         // If we're on GitHub Actions, mask the exchanged token in logs.
-        #[allow(clippy::print_stdout)]
+        #[expect(clippy::print_stdout)]
         if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
             println!("::add-mask::{publish_token}");
         }

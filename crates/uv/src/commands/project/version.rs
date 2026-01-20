@@ -53,7 +53,7 @@ pub(crate) fn self_version(
 }
 
 /// Read or update project version (`uv version`)
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
     mut bump: Vec<VersionBumpSpec>,
@@ -516,7 +516,6 @@ async fn print_frozen_version(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,

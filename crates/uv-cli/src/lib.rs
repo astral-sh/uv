@@ -189,12 +189,12 @@ pub struct GlobalArgs {
     )]
     pub no_managed_python: bool,
 
-    #[allow(clippy::doc_markdown)]
+    #[expect(clippy::doc_markdown)]
     /// Allow automatically downloading Python when required. [env: "UV_PYTHON_DOWNLOADS=auto"]
     #[arg(global = true, long, help_heading = "Python options", hide = true)]
     pub allow_python_downloads: bool,
 
-    #[allow(clippy::doc_markdown)]
+    #[expect(clippy::doc_markdown)]
     /// Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
     #[arg(global = true, long, help_heading = "Python options")]
     pub no_python_downloads: bool,
@@ -399,7 +399,6 @@ impl From<ColorChoice> for anstream::ColorChoice {
 }
 
 #[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Manage authentication.
     #[command(
@@ -1331,7 +1330,7 @@ fn parse_maybe_file_path(input: &str) -> Result<Maybe<PathBuf>, String> {
 }
 
 // Parse a string, mapping the empty string to `None`.
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
@@ -4761,7 +4760,7 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
-    #[allow(clippy::doc_markdown)]
+    #[expect(clippy::doc_markdown)]
     /// The format to which `uv.lock` should be exported.
     ///
     /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.

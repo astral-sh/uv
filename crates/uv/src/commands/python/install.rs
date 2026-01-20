@@ -177,7 +177,7 @@ pub(crate) enum PythonUpgrade {
 }
 
 /// Download and install Python versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -283,7 +283,7 @@ pub(crate) async fn install(
     installer_result
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn perform_install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -953,7 +953,7 @@ async fn perform_install(
 /// Link the binaries of a managed Python installation to the bin directory.
 ///
 /// This function is fallible, but errors are pushed to `errors` instead of being thrown.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 fn create_bin_links(
     installation: &ManagedPythonInstallation,
     bin: &Path,

@@ -77,7 +77,7 @@ impl TagCompatibility {
 #[derive(Debug, Clone)]
 pub struct Tags {
     /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,

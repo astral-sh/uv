@@ -428,7 +428,7 @@ impl PyProjectToml {
     }
 
     /// Parse and validate the old (PEP 621) and new (PEP 639) license files.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     fn license_metadata(
         &self,
         root: &Path,

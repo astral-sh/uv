@@ -53,7 +53,7 @@ use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
     Unchanged(Lock),
@@ -78,7 +78,6 @@ impl LockResult {
 }
 
 /// Resolve the project requirements into a lockfile.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,

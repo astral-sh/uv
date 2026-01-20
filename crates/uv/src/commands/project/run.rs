@@ -76,7 +76,7 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings, ResolverSettings};
 
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     project_dir: &Path,
     script: Option<Pep723Item>,
@@ -1744,7 +1744,6 @@ async fn resolve_gist_url(
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
-    #[allow(clippy::fn_params_excessive_bools)]
     pub(crate) async fn from_args(
         command: &ExternalCommand,
         client_builder: BaseClientBuilder<'_>,

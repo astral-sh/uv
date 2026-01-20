@@ -330,7 +330,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
                 // I've never seen these in upper case
-                #[allow(clippy::case_sensitive_file_extension_comparisons)]
+                #[expect(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
                     || filename.ends_with(".zip")
                     // Catch all compressed tar variants, e.g., `.tar.gz`
@@ -1477,7 +1477,6 @@ mod tests {
         fn shuffle<T>(vec: &mut [T]) {
             let n: usize = vec.len();
             for i in 0..(n - 1) {
-                #[allow(clippy::cast_possible_truncation)]
                 let j = (fastrand::usize(..)) % (n - i) + i;
                 vec.swap(i, j);
             }
