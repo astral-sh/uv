@@ -644,6 +644,7 @@ impl RegistryClient {
                             data.files,
                             data.core_metadata,
                             package_name,
+                            data.project_status,
                             &url,
                         )
                     }
@@ -659,6 +660,7 @@ impl RegistryClient {
                             data.files,
                             data.core_metadata,
                             package_name,
+                            data.project_status,
                             &url,
                         )
                     }
@@ -674,8 +676,7 @@ impl RegistryClient {
                         SimpleDetailMetadata::from_pypi_files(
                             data.files,
                             package_name,
-                            // TODO
-                            ProjectStatus::default(),
+                            data.project_status,
                             &url,
                         )
                     }
@@ -1454,6 +1455,7 @@ impl SimpleDetailMetadata {
         files: Vec<uv_pypi_types::PyxFile>,
         mut core_metadata: FxHashMap<Version, uv_pypi_types::CoreMetadatum>,
         package_name: &PackageName,
+        project_status: ProjectStatus,
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
@@ -1510,8 +1512,7 @@ impl SimpleDetailMetadata {
                     }
                 })
                 .collect(),
-            // TODO: Pull from pyx metadata.
-            project_status: ProjectStatus::default(),
+            project_status,
         }
     }
 
