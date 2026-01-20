@@ -52,6 +52,7 @@ impl<'de> Deserialize<'de> for Status {
 ///
 /// This includes a status marker and an optional reason for the status.
 #[derive(Clone, Debug, Default, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(derive(Debug))]
 pub struct ProjectStatus {
     pub status: Status,
     pub reason: Option<SmallString>,

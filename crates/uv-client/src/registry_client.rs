@@ -671,7 +671,13 @@ impl RegistryClient {
                         let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
-                        SimpleDetailMetadata::from_pypi_files(data.files, package_name, &url)
+                        SimpleDetailMetadata::from_pypi_files(
+                            data.files,
+                            package_name,
+                            // TODO
+                            ProjectStatus::default(),
+                            &url,
+                        )
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response
