@@ -363,6 +363,7 @@ impl BuildContext for BuildDispatch<'_> {
                     self.concurrency.downloads_semaphore.clone(),
                 )
                 .with_build_stack(build_stack),
+                self.concurrency.downloads,
             );
 
             debug!(
