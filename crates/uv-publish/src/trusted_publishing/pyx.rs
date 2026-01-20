@@ -1,23 +1,26 @@
-//! Services that implement PyPI's Trusted Publishing interfaces.
+//! Services that implement pyx's Trusted Publishing interfaces.
+//!
+//! In practice, this is primarily for pyx.dev.
 
-use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, trace};
 use url::Url;
-use uv_client::BaseClient;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::trusted_publishing::{
     Audience, MintTokenRequest, PublishToken, TrustedPublishingError, TrustedPublishingService,
-    decode_oidc_token,
+    TrustedPublishingToken, decode_oidc_token,
 };
 
-pub(crate) struct PyPIPublishingService<'a> {
-    client: &'a ClientWithMiddleware,
-    registry: &'a DisplaySafeUrl,
+pub(crate) struct PyxPublishingService<'a> {
+    pub(crate) client: &'a reqwest_middleware::ClientWithMiddleware,
+    pub(crate) registry: &'a uv_redacted::DisplaySafeUrl,
 }
 
-impl<'a> PyPIPublishingService<'a> {
-    pub(crate) fn new(registry: &'a DisplaySafeUrl, client: &'a BaseClient) -> Self {
+impl<'a> PyxPublishingService<'a> {
+    pub(crate) fn new(
+        registry: &'a uv_redacted::DisplaySafeUrl,
+        client: &'a uv_client::BaseClient,
+    ) -> Self {
         Self {
             client: client.for_host(registry).raw_client(),
             registry,
@@ -25,26 +28,27 @@ impl<'a> PyPIPublishingService<'a> {
     }
 }
 
-impl TrustedPublishingService for PyPIPublishingService<'_> {
-    fn client(&self) -> &ClientWithMiddleware {
+impl TrustedPublishingService for PyxPublishingService<'_> {
+    fn client(&self) -> &reqwest_middleware::ClientWithMiddleware {
         self.client
     }
 
-    async fn audience(&self) -> Result<String, super::TrustedPublishingError> {
-        // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
-        // (RFC 3986).
+    async fn audience(&self) -> Result<String, TrustedPublishingError> {
         // Prefer HTTPS for OIDC discovery; allow HTTP only in test builds
         let scheme: &str = if cfg!(feature = "test") {
             self.registry.scheme()
         } else {
             "https"
         };
+
         let audience_url = DisplaySafeUrl::parse(&format!(
-            "{}://{}/_/oidc/audience",
+            "{}://{}/v1/trusted-publishing/audience",
             scheme,
             self.registry.authority()
         ))?;
+
         debug!("Querying the trusted publishing audience from {audience_url}");
+
         let response = self
             .client
             .get(Url::from(audience_url.clone()))
@@ -58,24 +62,46 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
             .await
             .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?;
         trace!("The audience is `{}`", &audience.audience);
+
         Ok(audience.audience)
     }
 
     async fn exchange_token(
         &self,
         oidc_token: ambient_id::IdToken,
-    ) -> Result<super::TrustedPublishingToken, super::TrustedPublishingError> {
+    ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
         // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
         let scheme: &str = if cfg!(feature = "test") {
             self.registry.scheme()
         } else {
             "https"
         };
+
+        // A pyx upload path looks like `/v1/upload/{workspace_name}/{registry_name}`; a trailing
+        // slash is also permitted.
+        // We need to extract the workspace and registry names from the path
+        // so that we can construct the token minting URL.
+        let path_segments: Vec<&str> = self
+            .registry
+            .path_segments()
+            .map_or(Vec::new(), std::iter::Iterator::collect);
+
+        let (["v1", "upload", workspace_name, registry_name]
+        | ["v1", "upload", workspace_name, registry_name, "/"]) = path_segments[..]
+        else {
+            return Err(TrustedPublishingError::InvalidPyxUploadUrl(
+                self.registry.clone(),
+            ));
+        };
+
         let mint_token_url = DisplaySafeUrl::parse(&format!(
-            "{}://{}/_/oidc/mint-token",
+            "{}://{}/v1/trusted-publishing/{}/{}/mint-token",
             scheme,
-            self.registry.authority()
+            self.registry.authority(),
+            workspace_name,
+            registry_name
         ))?;
+
         debug!("Querying the trusted publishing upload token from {mint_token_url}");
         let mint_token_payload = MintTokenRequest {
             token: oidc_token.reveal().to_string(),

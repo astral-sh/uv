@@ -78,7 +78,6 @@ from time import sleep
 
 import httpx
 from packaging.utils import (
-    InvalidSdistFilename,
     parse_sdist_filename,
     parse_wheel_filename,
 )
@@ -125,6 +124,14 @@ class TargetConfiguration:
     index_url: str
     index: str | None = None
     attestations: bool = False
+    """
+    The strategy to use to obtain a fresh version for upload.
+
+    'latest' means to query the index and select the next unused version.
+
+    'timestamp' means to synthesize a version based on the current timestamp,
+    e.g. 0.YYYYMMDDHHMMSS.NNN, where NNN is milliseconds.
+    """
 
     def index_declaration(self) -> str | None:
         if not self.index:
@@ -165,11 +172,6 @@ class Plan:
 
     These get merged into `os.environ` when running `uv publish`, and take
     precedence over it.
-    """
-
-    fresh_version: Version | None = None
-    """
-    A "fresh" version that doesn't exist on the target index yet.
     """
 
     def full_env(self) -> dict[str, str]:
@@ -242,60 +244,22 @@ all_targets: dict[str, TargetConfiguration] = local_targets | {
         # OIDC token in addition to the `aud:testpypi` one.
         attestations=False,
     ),
-    # TODO: Not enabled until we have a native Trusted Publishing flow for pyx in uv.
-    # "pyx-trusted-publishing": TargetConfiguration(
-    #     "astral-test-trusted-publishing",
-    #     "https://api.pyx.dev/v1/upload/astral-test/main",
-    #     "https://api.pyx.dev/simple/astral-test/main",
-    # ),
+    "pyx-trusted-publishing-github": TargetConfiguration(
+        "astral-test-trusted-publishing",
+        "https://api.pyx.dev/v1/upload/astral-test/test-uv-trusted-publishing",
+        "https://api.pyx.dev/simple/astral-test/test-uv-trusted-publishing/",
+        index=None,
+    ),
+    "pyx-trusted-publishing-gitlab": TargetConfiguration(
+        "astral-test-trusted-publishing-gitlab",
+        publish_url="https://api.pyx.dev/v1/upload/astral-test/test-uv-trusted-publishing",
+        index_url="https://api.pyx.dev/simple/astral-test/test-uv-trusted-publishing/",
+        index=None,
+    ),
 }
 
 # Temporarily disable codeberg on CI due to unreliability.
 all_targets.pop("codeberg", None)
-
-
-def get_latest_version(plan: Plan, client: httpx.Client) -> Version | None:
-    """Return the latest version on all indexes of the package."""
-    # To keep the number of packages small we reuse them across targets, so we have to
-    # pick a version that doesn't exist on any target yet
-    versions = set()
-    url = plan.configuration.index_url + plan.configuration.project_name + "/"
-
-    # Get with retries
-    error = None
-    for _ in range(5):
-        try:
-            versions.update(collect_versions(url, client))
-            break
-        except httpx.HTTPError as err:
-            error = err
-            print(
-                f"Error getting version for {plan.configuration.project_name}, sleeping for 1s: {err}",
-                file=sys.stderr,
-            )
-            time.sleep(1)
-        except InvalidSdistFilename as err:
-            # Sometimes there's a link that says "status page"
-            error = err
-            print(
-                f"Invalid index page for {plan.configuration.project_name}, sleeping for 1s: {err}",
-                file=sys.stderr,
-            )
-            time.sleep(1)
-    else:
-        raise RuntimeError(f"Failed to fetch {url}") from error
-
-    if not versions:
-        return None
-
-    return max(versions)
-
-
-def get_new_version(latest_version: Version) -> Version:
-    """Bump the path version to obtain an empty version."""
-    release = list(latest_version.release)
-    release[-1] += 1
-    return Version(".".join(str(i) for i in release))
 
 
 def collect_versions(url: str, client: httpx.Client) -> set[Version]:
@@ -467,74 +431,60 @@ def wait_for_index(
         sleep(2)
 
 
+def get_fresh_version(plan: Plan) -> Version:
+    """Get a fresh version."""
+    timestamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+    milliseconds = int((time.time() % 1) * 1000)
+    return Version(f"0.{timestamp}.{milliseconds:03d}")
+
+
 def test_fresh_upload(
     plan: Plan, client: httpx.Client
 ) -> tuple[Version, Path, list[str]]:
     project_name = plan.configuration.project_name
 
-    # If a version was recently uploaded by another run of this script,
-    # `get_latest_version` may get a cached version and uploading fails. In this case
-    # we wait and try again.
-    retries = 3
-    while True:
-        print(f"\nPublish {project_name} for {plan.target}", file=sys.stderr)
+    print(f"\nPublish {project_name} for {plan.target}", file=sys.stderr)
 
-        # The distributions are build to the dist directory of the project.
-        previous_version = get_latest_version(plan, client) or Version("0.0.0")
-        version = get_new_version(previous_version)
-        project_dir = build_project_at_version(plan.target, version, plan.uv)
+    version = get_fresh_version(plan)
+    project_dir = build_project_at_version(plan.target, version, plan.uv)
 
-        # Upload configuration
-        publish_url = plan.configuration.publish_url
-        expected_filenames = [
-            path.name
-            for path in project_dir.joinpath("dist").iterdir()
-            if path.name.endswith((".tar.gz", ".whl"))
-        ]
+    # Upload configuration
+    publish_url = plan.configuration.publish_url
+    expected_filenames = [
+        path.name
+        for path in project_dir.joinpath("dist").iterdir()
+        if path.name.endswith((".tar.gz", ".whl"))
+    ]
 
-        if plan.configuration.attestations:
-            trust = ClientTrustConfig.production()
-            identity = oidc.detect_credential()
+    if plan.configuration.attestations:
+        trust = ClientTrustConfig.production()
+        identity = oidc.detect_credential()
 
-            if not identity:
-                raise RuntimeError("Failed to detect OIDC credential for signing")
+        if not identity:
+            raise RuntimeError("Failed to detect OIDC credential for signing")
 
-            identity_token = oidc.IdentityToken(identity)
-            context = SigningContext.from_trust_config(trust)
+        identity_token = oidc.IdentityToken(identity)
+        context = SigningContext.from_trust_config(trust)
 
-            with context.signer(identity_token=identity_token) as signer:
-                for dist_name in expected_filenames:
-                    dist_path = project_dir / "dist" / dist_name
+        with context.signer(identity_token=identity_token) as signer:
+            for dist_name in expected_filenames:
+                dist_path = project_dir / "dist" / dist_name
 
-                    dist = Distribution.from_file(dist_path)
-                    attestation = Attestation.sign(signer, dist)
+                dist = Distribution.from_file(dist_path)
+                attestation = Attestation.sign(signer, dist)
 
-                    attestation_path = dist_path.with_suffix(
-                        dist_path.suffix + ".publish.attestation"
-                    )
-                    attestation_path.write_text(attestation.model_dump_json())
+                attestation_path = dist_path.with_suffix(
+                    dist_path.suffix + ".publish.attestation"
+                )
+                attestation_path.write_text(attestation.model_dump_json())
 
-        print(
-            f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
-            file=sys.stderr,
-        )
+    print(
+        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
+        file=sys.stderr,
+    )
 
-        args = [plan.uv, "publish", "--publish-url", publish_url, *plan.extra_args]
-        result = run(args, cwd=project_dir, env=plan.full_env(), text=True, stderr=PIPE)
-        if result.returncode == 0:
-            # Successful upload
-            break
-
-        retries -= 1
-        if retries > 0:
-            print(
-                f"Publish failed, retrying after 10s:\n---\n{result.stderr}\n---",
-                file=sys.stderr,
-            )
-            sleep(10)
-        else:
-            # Raise the error after three failures
-            result.check_returncode()
+    args = [plan.uv, "publish", "--publish-url", publish_url, *plan.extra_args]
+    run(args, cwd=project_dir, env=plan.full_env(), check=True)
 
     if plan.configuration.attestations:
         wait_for_index(plan, version)
@@ -549,16 +499,18 @@ def test_reupload_same_files(
     project_dir: Path,
     expected_filenames: list[str],
 ):
-    """Test that re-uploading the same files works on PyPI.
+    """Test that re-uploading the same files works on PyPI."""
 
-    NOTE: This skips Trusted Publishing with GitLab, since it uses
-    a static OIDC token that can't be reused across `uv publish` invocations.
-    """
-
-    if plan.configuration.publish_url != TEST_PYPI_PUBLISH_URL:
-        return
-
-    if plan.target in ("pypi-trusted-publishing-gitlab",):
+    # NOTE: Skips targets aren't PyPI or pyx, since PyPI and pyx are the only
+    # ones known to have the "same file" behavior tested below.
+    # Also skips Trusted Publishing with GitLab, since it uses
+    # a static OIDC token that can't be reused across `uv publish` invocations.
+    if (
+        plan.configuration.publish_url != TEST_PYPI_PUBLISH_URL
+        or plan.target.startswith("pyx-")
+        or plan.target
+        in ("pypi-trusted-publishing-gitlab", "pyx-trusted-publishing-gitlab")
+    ):
         return
 
     # Confirm pypi behaviour: Uploading the same file again is fine.
@@ -604,12 +556,18 @@ def test_reupload_with_check_url(
 ):
     """
     Test that re-uploading with check URL or index skips existing files.
-
-    NOTE: This skips Trusted Publishing with GitLab, since it uses
-    a static OIDC token that can't be reused across `uv publish` invocations.
     """
 
-    if plan.target in ("pypi-trusted-publishing-gitlab",):
+    # NOTE: Skips:
+    #  - Trusted Publishing to PyPI with GitLab, since GitLab CI uses a static
+    #    OIDC token that can't be reused across `uv publish` invocations.
+    #  - Trusted Publishing to pyx with GitHub, since `--check-url` requires
+    #    a read credential for pyx, whereas Trusted Publishing is write-only.
+    if plan.target in (
+        "pypi-trusted-publishing-gitlab",
+        "pyx-trusted-publishing-github",
+        "pyx-trusted-publishing-gitlab",
+    ):
         return
 
     mode = "index" if plan.configuration.index else "check URL"
@@ -665,12 +623,18 @@ def test_reupload_modified_files(
 
     This verifies that the check URL properly detects when local files
     don't match the files already on the index.
-
-    NOTE: This skips Trusted Publishing with GitLab, since it uses
-    a static OIDC token that can't be reused across `uv publish` invocations.
     """
 
-    if plan.target in ("pypi-trusted-publishing-gitlab",):
+    # NOTE: Skips:
+    # - Trusted Publishing to pyx/PyPI with GitLab, since GitLab CI uses a static
+    #   OIDC token that can't be reused across `uv publish` invocations.
+    # - Trusted Publishing to pyx with GitHub, since `--check-url` requires
+    #   a read credential for pyx, whereas Trusted Publishing is write-only.
+    if plan.target in (
+        "pypi-trusted-publishing-gitlab",
+        "pyx-trusted-publishing-github",
+        "pyx-trusted-publishing-gitlab",
+    ):
         return
 
     # Build a different source dist and wheel at the same version, so the upload fails
@@ -762,7 +726,21 @@ def target_configuration(target: str) -> tuple[dict[str, str], list[str]]:
             "GITLAB_CI": "true",
             # NOTE: We may or may not be running in GitHub Actions, so we explicitly toggle this off.
             "GITHUB_ACTIONS": "false",
-            "TESTPYPI_ID_TOKEN": os.environ["UV_TEST_PUBLISH_GITLAB_OIDC_TOKEN"],
+            "TESTPYPI_ID_TOKEN": os.environ["UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN"],
+        }
+    elif target == "pyx-trusted-publishing-github":
+        extra_args = ["--trusted-publishing", "always"]
+        env = {}
+    elif target == "pyx-trusted-publishing-gitlab":
+        extra_args = ["--trusted-publishing", "always"]
+        # We need to impersonate a Gitlab CI environment here.
+        # To do that, we set the CI environment variables accordingly.
+        env = {
+            "CI": "true",
+            "GITLAB_CI": "true",
+            # NOTE: We may or may not be running in GitHub Actions, so we explicitly toggle this off.
+            "GITHUB_ACTIONS": "false",
+            "PYX_ID_TOKEN": os.environ["UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN"],
         }
     elif target == "gitlab":
         env = {"UV_PUBLISH_PASSWORD": os.environ["UV_TEST_PUBLISH_GITLAB_PAT"]}
@@ -807,7 +785,7 @@ def main():
     logging.basicConfig(
         format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
-        level=logging.DEBUG,
+        level=logging.INFO,
     )
 
     parser = ArgumentParser()
