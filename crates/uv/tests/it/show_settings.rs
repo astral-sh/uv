@@ -15,7 +15,8 @@ fn add_shared_args(mut command: Command) -> Command {
         .env(EnvVars::UV_CONCURRENT_DOWNLOADS, "50")
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER);
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS);
 
     if cfg!(unix) {
         // Avoid locale issues in tests
@@ -80,7 +81,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -287,7 +288,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -495,7 +496,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -735,7 +736,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -944,7 +945,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -1129,7 +1130,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -1363,7 +1364,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -1605,7 +1606,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -1905,7 +1906,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -2136,7 +2137,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -2326,7 +2327,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -2566,7 +2567,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -2829,7 +2830,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3009,7 +3010,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3189,7 +3190,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3371,7 +3372,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3572,7 +3573,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3768,7 +3769,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -3982,7 +3983,7 @@ fn resolve_both() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -4235,7 +4236,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -4567,7 +4568,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -4874,7 +4875,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -5057,7 +5058,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -5259,7 +5260,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -5453,7 +5454,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -5695,7 +5696,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -5943,7 +5944,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -6186,7 +6187,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -6436,7 +6437,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -6679,7 +6680,7 @@ fn index_priority() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -6935,7 +6936,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7108,7 +7109,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7279,7 +7280,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7452,7 +7453,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7623,7 +7624,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7795,7 +7796,7 @@ fn verify_hashes() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -7982,7 +7983,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8101,7 +8102,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8220,7 +8221,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8339,7 +8340,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8458,7 +8459,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8579,7 +8580,7 @@ fn preview_features() {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8719,7 +8720,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -8900,7 +8901,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9104,7 +9105,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9283,7 +9284,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9456,7 +9457,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9630,7 +9631,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9869,7 +9870,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -9993,7 +9994,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10140,7 +10141,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10262,7 +10263,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10374,7 +10375,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10487,7 +10488,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10664,7 +10665,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
@@ -10840,7 +10841,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
             ),
         },
         python_preference: Managed,
-        python_downloads: Never,
+        python_downloads: Automatic,
         no_progress: false,
         installer_metadata: true,
     }
