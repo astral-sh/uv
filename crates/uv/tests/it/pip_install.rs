@@ -13160,7 +13160,7 @@ fn overlapping_packages_warning() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
-    warning: The file `built_by_uv/__init__.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing conflicting packages. Packages containing the file:
+    warning: The file `built_by_uv/__init__.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
     * also-built-by-uv (also_built_by_uv-0.1.0-py3-none-any.whl)
     * built-by-uv (built_by_uv-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
@@ -13412,7 +13412,7 @@ fn overlapping_nested_files() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
-    warning: The file `gpu/accelerator/matrix/product.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing conflicting packages. Packages containing the file:
+    warning: The file `gpu/accelerator/matrix/product.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
     * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
     * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
