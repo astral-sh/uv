@@ -50,7 +50,7 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],

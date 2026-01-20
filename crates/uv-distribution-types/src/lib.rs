@@ -204,7 +204,6 @@ pub enum DistRef<'a> {
 
 /// A wheel, with its three possible origins (index, url, path)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
     DirectUrl(DirectUrlBuiltDist),
@@ -213,7 +212,6 @@ pub enum BuiltDist {
 
 /// A source distribution, with its possible origins (index, url, path, git)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
     DirectUrl(DirectUrlSourceDist),

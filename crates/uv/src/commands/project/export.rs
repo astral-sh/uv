@@ -35,7 +35,7 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum ExportTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script),
@@ -54,7 +54,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 }
 
 /// Export the project's `uv.lock` in an alternate format.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
     format: Option<ExportFormat>,

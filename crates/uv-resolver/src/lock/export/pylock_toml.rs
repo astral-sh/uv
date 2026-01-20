@@ -231,7 +231,7 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[allow(clippy::empty_structs_with_brackets)]
+#[expect(clippy::empty_structs_with_brackets)]
 struct PylockTomlDependency {}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1691,7 +1691,7 @@ impl PylockTomlArchive {
 }
 
 /// Convert a Jiff timestamp to a TOML datetime.
-#[allow(clippy::ref_option)]
+#[expect(clippy::ref_option)]
 fn timestamp_to_toml_datetime<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,

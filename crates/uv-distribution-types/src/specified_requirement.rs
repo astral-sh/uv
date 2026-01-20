@@ -78,7 +78,7 @@ impl UnresolvedRequirement {
         lfs: Option<bool>,
         marker: Option<MarkerTree>,
     ) -> Self {
-        #[allow(clippy::manual_map)]
+        #[expect(clippy::manual_map)]
         let git_reference = if let Some(rev) = rev {
             Some(GitReference::from_rev(rev.to_string()))
         } else if let Some(tag) = tag {

@@ -235,14 +235,14 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
 
         /// The permissions the lockfile should end up with
         const DESIRED_MODE: u32 = 0o666;
 
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         fn try_set_permissions(file: &File, path: &Path) {
             if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
                 warn!(

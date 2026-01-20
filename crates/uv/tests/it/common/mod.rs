@@ -1257,7 +1257,7 @@ impl TestContext {
     }
 
     /// Create a `uv publish` command with options shared across scenarios.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn publish(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("publish");
@@ -1632,7 +1632,7 @@ impl TestContext {
     }
 
     /// For when we add pypy to the test suite.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub fn python_kind(&self) -> &'static str {
         "python"
     }
@@ -1935,7 +1935,7 @@ pub fn run_and_format<T: AsRef<str>>(
 /// Execute the command and format its output status, stdout and stderr into a snapshot string.
 ///
 /// This function is derived from `insta_cmd`s `spawn_with_info`.
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 pub fn run_and_format_with_status<T: AsRef<str>>(
     mut command: impl BorrowMut<Command>,
     filters: impl AsRef<[(T, T)]>,

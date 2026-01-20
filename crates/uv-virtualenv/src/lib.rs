@@ -46,7 +46,7 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,

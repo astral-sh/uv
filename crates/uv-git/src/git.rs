@@ -330,7 +330,7 @@ impl GitRemote {
     }
 
     /// Creates a [`GitDatabase`] of this remote at `db_path`.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     pub(crate) fn db_at(&self, db_path: &Path) -> Result<GitDatabase> {
         let repo = GitRepository::open(db_path)?;
         Ok(GitDatabase {

@@ -59,7 +59,7 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -729,7 +729,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
 
-            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            #[expect(clippy::exit, clippy::cast_possible_wrap)]
             std::process::exit(if cfg!(windows) {
                 0xC000_013A_u32 as i32
             } else {
@@ -983,7 +983,7 @@ fn edits(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
@@ -1269,7 +1269,7 @@ fn resolve_requirement(
 
 /// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum PythonTarget {
     Interpreter(Interpreter),
     Environment(PythonEnvironment),
@@ -1287,7 +1287,7 @@ impl PythonTarget {
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
@@ -1351,7 +1351,7 @@ impl AddTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script, interpreter) => {
@@ -1388,7 +1388,7 @@ impl AddTarget {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
     Project(VirtualProject, Option<Vec<u8>>),

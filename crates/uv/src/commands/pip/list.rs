@@ -36,7 +36,6 @@ use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_list(
     editable: Option<bool>,
     exclude: &FxHashSet<PackageName>,

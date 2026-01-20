@@ -31,7 +31,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
                 format!("--no-{name}").green(),
             );
             // No error forwarding since should eventually be solved on the clap side.
-            #[allow(clippy::exit)]
+            #[expect(clippy::exit)]
             {
                 std::process::exit(2);
             }
@@ -176,7 +176,7 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
             display_a.green(),
             display_b.green(),
         );
-        #[allow(clippy::exit)]
+        #[expect(clippy::exit)]
         {
             std::process::exit(2);
         }

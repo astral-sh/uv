@@ -2765,7 +2765,7 @@ fn python_install_emulated_macos() {
     if !arch_status.is_ok_and(|x| x.success()) {
         // Rosetta is not available to run the x86_64 interpreter
         // fail the test in CI, otherwise skip it
-        #[allow(clippy::manual_assert)]
+        #[expect(clippy::manual_assert)]
         if env::var(EnvVars::CI).is_ok() {
             panic!("x86_64 emulation is not available on this CI runner");
         }

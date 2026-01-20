@@ -1009,7 +1009,6 @@ impl IntoIterator for Sources {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
-#[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),

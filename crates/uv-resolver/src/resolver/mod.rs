@@ -913,7 +913,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn version_forks_to_fork_states(
         &self,
         current_state: ForkState,
@@ -3514,7 +3514,7 @@ impl ResolutionDependencyEdge {
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3583,7 +3583,7 @@ impl Display for Request {
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, Option<IndexUrl>, VersionsResponse),

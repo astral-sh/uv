@@ -513,7 +513,7 @@ impl std::fmt::Display for NoSolutionError {
     }
 }
 
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 fn display_tree(
     error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     name: &str,

@@ -582,7 +582,7 @@ fn install_requirements_txt() -> Result<()> {
 
 /// Install a package from a `requirements.txt` passed via `-r -` into a virtual environment.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -620,7 +620,7 @@ fn install_from_stdin() -> Result<()> {
 /// Install a package from a `requirements.txt` passed via `-r /dev/stdin` into a virtual environment.
 #[test]
 #[cfg(not(windows))]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_from_dev_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3624,7 +3624,7 @@ fn install_constraints_txt() -> Result<()> {
 
 /// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_constraints_txt_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -7400,7 +7400,7 @@ fn require_hashes_override() -> Result<()> {
 
 /// Install with overrides from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_with_overrides_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -7431,7 +7431,7 @@ fn install_with_overrides_from_stdin() -> Result<()> {
 
 /// Install with excludes from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_with_excludes_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -8757,7 +8757,7 @@ fn incompatible_build_constraint() -> Result<()> {
 
 /// Include a `build_constraints.txt` file with an incompatible constraint from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn incompatible_build_constraint_from_stdin() -> Result<()> {
     let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 

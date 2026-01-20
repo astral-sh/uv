@@ -49,7 +49,7 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install a set of locked requirements into the current Python environment.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_sync(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],

@@ -181,7 +181,7 @@ impl DisplaySafeUrl {
         Ok(Self(Url::deserialize_internal(deserializer)?))
     }
 
-    #[allow(clippy::result_unit_err)]
+    #[expect(clippy::result_unit_err)]
     pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
         Ok(Self(Url::from_file_path(path)?))
     }

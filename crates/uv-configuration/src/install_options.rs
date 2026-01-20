@@ -34,7 +34,7 @@ pub struct InstallOptions {
 }
 
 impl InstallOptions {
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[expect(clippy::fn_params_excessive_bools)]
     pub fn new(
         no_install_project: bool,
         only_install_project: bool,

@@ -204,7 +204,7 @@ fn set_not_readonly(path: &Path) -> io::Result<bool> {
     }
 
     // We're about to delete the file, so it's fine to set the permissions to world-writable.
-    #[allow(clippy::permissions_set_readonly_false)]
+    #[expect(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
 
     fs_err::set_permissions(path, perms)?;
