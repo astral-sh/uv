@@ -273,6 +273,48 @@ Cloudflare Pages.
 
 After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
 
+## Development code signing on macOS
+
+Code signing can only be performed by Astral team members.
+
+Code signing on macOS can improve developer experience when running tests, e.g., when running tests
+that access the macOS keychain, a signed binary can be approved once but an unsigned binary will
+need to be approved on each re-compile.
+
+### Acquiring a development certificate
+
+1. Generate a
+   [request for the certificate](https://developer.apple.com/help/account/certificates/create-a-certificate-signing-request)
+2. Create a certificate in the
+   [Apple Developer portal](https://developer.apple.com/account/resources/certificates/list)
+3. Download and install the certificate to your login keychain
+
+   ```shell
+   security import ~/Downloads/mac_development.cer -k ~/Library/Keychains/login.keychain-db
+   ```
+
+4. Identify your code signing identity
+
+   ```shell
+   security find-identity -v -p codesigning
+   ```
+
+5. If the above fails to find your identity, install the intermediate certificates
+
+   ```shell
+   curl -sLO "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"
+   security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+   rm AppleWWDRCAG3.cer
+   ```
+
+6. Set `UV_TEST_CODESIGN_IDENTITY`
+
+   ```shell
+   export UV_TEST_CODESIGN_IDENTITY="Mac Developer: Your Name (TEAM_ID)"
+   ```
+
+Note `UV_TEST_CODESIGN_IDENTITY` is only supported via `nextest`.
+
 ## Releases
 
 Releases can only be performed by Astral team members.
