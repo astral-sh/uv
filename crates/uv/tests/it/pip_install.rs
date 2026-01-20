@@ -13359,7 +13359,7 @@ fn overlapping_nested_files() -> Result<()> {
         .child("matrix")
         .child("product.py")
         .write_str("print('Hi!')")?;
-    // This file collides to, but we always show the first file.
+    // This file collides too, but we always show the first file.
     gpu_a
         .child("src")
         .child("gpu")
@@ -13391,7 +13391,7 @@ fn overlapping_nested_files() -> Result<()> {
         .child("matrix")
         .child("product.py")
         .write_str("print('Hello world')")?;
-    // This file collides to, but we always show the first file.
+    // This file collides too, but we always show the first file.
     gpu_b
         .child("src")
         .child("gpu")
@@ -13399,7 +13399,6 @@ fn overlapping_nested_files() -> Result<()> {
         .child("sum.py")
         .write_str("print('Hi!')")?;
 
-    // Check that overlapping packages don't show a warning by default
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview-features")
         .arg("detect-module-conflicts")

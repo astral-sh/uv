@@ -121,7 +121,7 @@ impl Locks {
 
     /// Analyze a directory for conflicts.
     ///
-    /// If there are any non-identical files (checked by size) included in more than one wheels,
+    /// If there are any non-identical files (checked by size) included in more than one wheel,
     /// report this file and return.
     ///
     /// If there are any directories included in more than one wheel, recurse to analyze whether
