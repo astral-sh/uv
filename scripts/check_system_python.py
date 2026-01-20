@@ -82,11 +82,17 @@ if __name__ == "__main__":
 
     if args.check_path:
         process = subprocess.run(
-            ["python", "-c", "import sys; print(sys.executable)"],
+            [
+                "python",
+                "-c",
+                "import os, sys; sys.stdout.buffer.write(os.fsencode(sys.executable))",
+            ],
             check=True,
             stdout=subprocess.PIPE,
         )
-        system_python_path = os.path.normcase(os.path.normpath(process.stdout))
+        system_python_path = os.path.normcase(
+            os.path.normpath(os.fsdecode(process.stdout))
+        )
         our_python_path = os.path.normcase(os.path.normpath(sys.executable))
 
         if our_python_path != system_python_path:
