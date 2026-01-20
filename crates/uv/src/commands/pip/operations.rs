@@ -774,6 +774,7 @@ async fn execute_plan(
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
             ),
+            concurrency.downloads,
         )
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),
