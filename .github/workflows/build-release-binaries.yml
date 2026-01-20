@@ -555,7 +555,6 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -609,7 +608,6 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-        if: matrix.platform.arch != 'ppc64'
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -643,10 +641,6 @@ jobs:
             arch: ppc64le
             # see https://github.com/astral-sh/uv/issues/6528
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -677,7 +671,6 @@ jobs:
             fi
       # TODO(charlie): Re-enable testing for PPC wheels.
       # - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
-      #   if: matrix.platform.arch != 'ppc64'
       #   name: "Test wheel"
       #   with:
       #     arch: ${{ matrix.platform.arch }}
