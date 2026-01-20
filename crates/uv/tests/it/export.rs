@@ -1286,8 +1286,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 
         fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
     }
-    #[cfg(windows)]
-    {
+    if cfg!(windows) {
         use std::process::Command;
 
         // https://superuser.com/a/1489152
@@ -1299,7 +1298,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!("{}:R", whoami::username()))
+            .arg(format!("{}:R", whoami::username()?))
             .assert()
             .success();
     }
