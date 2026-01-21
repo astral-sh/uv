@@ -155,6 +155,10 @@ impl<'a> Installer<'a> {
 }
 
 /// Install a set of wheels into a Python virtual environment synchronously.
+///
+/// Wheels are installed in parallel. When pre-sorted in dependency order,
+/// this increases the likelihood that dependencies complete before their
+/// dependents, though parallel execution means the order is not guaranteed.
 #[instrument(skip_all, fields(num_wheels = %wheels.len()))]
 fn install(
     wheels: Vec<CachedDist>,

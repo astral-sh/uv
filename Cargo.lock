@@ -6482,6 +6482,7 @@ dependencies = [
  "futures",
  "insta",
  "owo-colors",
+ "petgraph",
  "rayon",
  "rustc-hash",
  "same-file",

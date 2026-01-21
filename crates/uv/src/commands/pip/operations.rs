@@ -26,7 +26,9 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{
+    InstallationStrategy, Plan, Planner, Preparer, SitePackages, sort_by_dependency_order,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
@@ -810,7 +812,10 @@ async fn execute_plan(
     }
 
     // Install the resolved distributions.
+    // Sort by dependency order so that if packages have conflicting files,
+    // the dependent package's files take precedence (matching pip's behavior).
     let mut installs = wheels.into_iter().chain(cached).collect::<Vec<_>>();
+    installs = sort_by_dependency_order(installs, resolution);
     if !installs.is_empty() {
         let start = std::time::Instant::now();
         installs = uv_installer::Installer::new(venv, preview)

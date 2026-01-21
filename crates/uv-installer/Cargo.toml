@@ -43,6 +43,7 @@ async-channel = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 owo-colors = { workspace = true }
+petgraph = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
