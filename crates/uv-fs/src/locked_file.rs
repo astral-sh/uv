@@ -280,6 +280,7 @@ impl LockedFile {
                     // bits, it's less likely to ever matter.
                     let file = fs_err::OpenOptions::new()
                         .read(true)
+                        .write(true)
                         .create(true)
                         .open(path.as_ref())?;
 
@@ -299,6 +300,7 @@ impl LockedFile {
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
+            .write(true)
             .create(true)
             .open(path.as_ref())
             .map_err(Into::into)
