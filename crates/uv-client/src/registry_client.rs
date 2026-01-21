@@ -609,7 +609,7 @@ impl RegistryClient {
             .header("Accept", accept)
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _retry_state| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
@@ -788,7 +788,7 @@ impl RegistryClient {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _retry_state| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
@@ -1034,7 +1034,7 @@ impl RegistryClient {
                 lock_entry.lock().await.map_err(ErrorKind::CacheLock)?
             };
 
-            let response_callback = async |response: Response| {
+            let response_callback = async |response: Response, _retry_state| {
                 let bytes = response
                     .bytes()
                     .await
@@ -1138,7 +1138,7 @@ impl RegistryClient {
 
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
-            let read_metadata_range_request = |response: Response| {
+            let read_metadata_range_request = |response: Response, _retry_state| {
                 async {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
@@ -1207,7 +1207,7 @@ impl RegistryClient {
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
         // Stream the file, searching for the METADATA.
-        let read_metadata_stream = |response: Response| {
+        let read_metadata_stream = |response: Response, _retry_state| {
             async {
                 let reader = response
                     .bytes_stream()

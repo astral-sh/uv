@@ -2,7 +2,7 @@ use std::future::Future;
 use std::io;
 use std::path::Path;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
@@ -16,8 +16,8 @@ use url::Url;
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
 use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
-    resumable_reader::ResponseExt,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient, RetryState,
+    resumable_reader::{ResumableConfig, ResponseExt},
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -591,7 +591,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let download = |response: reqwest::Response| {
+        let download = |response: reqwest::Response, retry_state: Arc<Mutex<RetryState>>| {
             async {
                 let size = size.or_else(|| content_length(&response));
 
@@ -606,7 +606,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let supports_range = response.supports_range_requests();
                 let reader: Pin<Box<dyn AsyncRead + Send>> = if supports_range {
                     let base_client = self.client.unmanaged.cached_client().uncached().clone();
-                    match response.resumable_stream(base_client) {
+                    let config = ResumableConfig::new(retry_state);
+                    match response.resumable_stream(base_client, config) {
                         Ok(resumable) => Box::pin(resumable),
                         Err(err) => {
                             return Err(Error::CacheRead(io::Error::new(
@@ -780,8 +781,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let download = |response: reqwest::Response| {
-            async {
+        let download = |response: reqwest::Response, retry_state: Arc<Mutex<RetryState>>| {
+            async move {
                 let size = size.or_else(|| content_length(&response));
 
                 let progress = self
@@ -795,7 +796,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let supports_range = response.supports_range_requests();
                 let mut reader: Pin<Box<dyn AsyncRead + Send>> = if supports_range {
                     let base_client = self.client.unmanaged.cached_client().uncached().clone();
-                    match response.resumable_stream(base_client) {
+                    let config = ResumableConfig::new(retry_state);
+                    match response.resumable_stream(base_client, config) {
                         Ok(resumable) => Box::pin(resumable),
                         Err(err) => {
                             return Err(Error::CacheRead(io::Error::new(

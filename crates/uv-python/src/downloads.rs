@@ -20,7 +20,9 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::resumable_reader::ResponseExt;
+use std::sync::{Arc, Mutex};
+
+use uv_client::resumable_reader::{ResumableConfig, ResponseExt};
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -1733,7 +1735,13 @@ async fn read_url(
         // This allows automatic recovery from transient network failures during
         // large archive downloads.
         let reader: Pin<Box<dyn AsyncRead + Send>> = if response.supports_range_requests() {
-            match response.resumable_stream(client.clone()) {
+            // Create a local RetryState for this download
+            let retry_state = Arc::new(Mutex::new(RetryState::start(
+                client.retry_policy(),
+                url.clone(),
+            )));
+            let config = ResumableConfig::new(retry_state);
+            match response.resumable_stream(client.clone(), config) {
                 Ok(resumable) => Box::pin(resumable),
                 Err(_) => {
                     // Fall back to non-resumable stream if resumable setup fails

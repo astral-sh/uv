@@ -1258,21 +1258,7 @@ impl RetryState {
         // If the middleware performed any retries, consider them in our budget.
         self.total_retries += error_retries;
         match retryable_on_request_failure(err) {
-            Some(Retryable::Transient) => {
-                let retry_decision = self
-                    .retry_policy
-                    .should_retry(self.start_time, self.total_retries);
-                if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                    let duration = execute_after
-                        .duration_since(SystemTime::now())
-                        .unwrap_or_else(|_| Duration::default());
-
-                    self.total_retries += 1;
-                    return Some(duration);
-                }
-
-                None
-            }
+            Some(Retryable::Transient) => self.try_backoff(),
             Some(Retryable::Fatal) | None => None,
         }
     }
@@ -1287,6 +1273,43 @@ impl RetryState {
         // TODO(konsti): Should we show a spinner plus a message in the CLI while
         // waiting?
         tokio::time::sleep(duration).await;
+    }
+
+    /// Determines whether a transient error should be retried.
+    ///
+    /// Use this for errors that have already been classified as transient
+    /// (e.g., IO errors in streaming contexts). For errors that need classification,
+    /// use [`should_retry`] instead.
+    ///
+    /// Takes the number of retries from nested layers (e.g., middleware) as `error_retries`.
+    ///
+    /// Returns the backoff duration if the request should be retried.
+    #[must_use]
+    pub fn should_retry_transient(&mut self, error_retries: u32) -> Option<Duration> {
+        self.total_retries += error_retries;
+        self.try_backoff()
+    }
+
+    /// Check if we have retry budget remaining and compute backoff duration.
+    fn try_backoff(&mut self) -> Option<Duration> {
+        let retry_decision = self
+            .retry_policy
+            .should_retry(self.start_time, self.total_retries);
+        if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
+            let duration = execute_after
+                .duration_since(SystemTime::now())
+                .unwrap_or_else(|_| Duration::default());
+
+            self.total_retries += 1;
+            return Some(duration);
+        }
+
+        None
+    }
+
+    /// Get the URL associated with this retry state.
+    pub fn url(&self) -> &DisplaySafeUrl {
+        &self.url
     }
 }
 

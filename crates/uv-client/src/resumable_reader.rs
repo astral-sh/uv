@@ -19,7 +19,7 @@ use std::error::Error as StdError;
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -33,6 +33,7 @@ use url::Url;
 use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
+use crate::base_client::RetryState;
 
 // ============================================================================
 // Extension Trait for Response
@@ -59,18 +60,13 @@ pub trait ResponseExt {
     /// use uv_client::resumable_reader::ResponseExt;
     ///
     /// let response = client.get(url).send().await?.error_for_status()?;
-    /// let reader = response.resumable_stream(client.clone())?;
+    /// let config = ResumableConfig::new(retry_state);
+    /// let reader = response.resumable_stream(client.clone(), config)?;
     ///
     /// // Now use with GzipDecoder, tar reader, etc.
     /// uv_extract::stream::untar_gz(reader, target).await?;
     /// ```
     fn resumable_stream(
-        self,
-        client: BaseClient,
-    ) -> Result<ResumableReader, ResumableError>;
-
-    /// Convert this response into a resumable async reader with custom configuration.
-    fn resumable_stream_with_config(
         self,
         client: BaseClient,
         config: ResumableConfig,
@@ -86,18 +82,12 @@ impl ResponseExt for Response {
     fn resumable_stream(
         self,
         client: BaseClient,
-    ) -> Result<ResumableReader, ResumableError> {
-        self.resumable_stream_with_config(client, ResumableConfig::default())
-    }
-
-    fn resumable_stream_with_config(
-        self,
-        client: BaseClient,
         config: ResumableConfig,
     ) -> Result<ResumableReader, ResumableError> {
         let url = self.url().clone();
         ResumableReader::new(client, url, self, config)
     }
+
 
     fn supports_range_requests(&self) -> bool {
         // Log all headers for debugging
@@ -125,21 +115,28 @@ impl ResponseExt for Response {
 }
 
 /// Configuration for resumable downloads.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ResumableConfig {
-    /// Maximum number of reconnection attempts per failure.
-    pub max_reconnects: u32,
-    /// Delay between reconnection attempts.
-    pub reconnect_delay: Duration,
+    /// Shared retry state for unified retry quota management.
+    pub retry_state: Arc<Mutex<RetryState>>,
     /// Whether to verify the server supports Range requests.
     pub require_range_support: bool,
 }
 
-impl Default for ResumableConfig {
-    fn default() -> Self {
+impl std::fmt::Debug for ResumableConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResumableConfig")
+            .field("retry_state", &"<shared>")
+            .field("require_range_support", &self.require_range_support)
+            .finish()
+    }
+}
+
+impl ResumableConfig {
+    /// Create a config with the given shared `RetryState`.
+    pub fn new(retry_state: Arc<Mutex<RetryState>>) -> Self {
         Self {
-            max_reconnects: 10,
-            reconnect_delay: Duration::from_millis(500),
+            retry_state,
             require_range_support: true,
         }
     }
@@ -169,12 +166,10 @@ enum ReaderState {
     /// Reconnecting after a failure.
     Reconnecting {
         future: Pin<Box<dyn Future<Output = Result<Response, reqwest_middleware::Error>> + Send>>,
-        attempt: u32,
     },
     /// Waiting before retry.
     Backoff {
         sleep: Pin<Box<tokio::time::Sleep>>,
-        attempt: u32,
     },
     /// Terminal error state.
     Failed(Option<ResumableError>),
@@ -199,6 +194,10 @@ pub struct ResumableReader {
     content_length: Option<u64>,
     /// Bytes successfully delivered to downstream consumer.
     bytes_delivered: Arc<AtomicU64>,
+    /// Number of reconnection attempts made (for logging).
+    reconnect_attempts: u32,
+    /// Accumulated middleware retry count across all reconnection requests.
+    middleware_retries: u32,
     /// Configuration.
     config: ResumableConfig,
     /// Current state.
@@ -233,11 +232,19 @@ impl ResumableReader {
         }
 
         let content_length = initial_response.content_length();
+        
+        // Extract any middleware retries from the initial response before consuming it
+        let initial_retries = initial_response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|r| r.value())
+            .unwrap_or(0);
+
         debug!(
-            "Created ResumableReader for {} (content_length: {:?}, max_reconnects: {})",
+            "Created ResumableReader for {} (content_length: {:?}, initial_retries: {})",
             DisplaySafeUrl::from(url.clone()),
             content_length,
-            config.max_reconnects
+            initial_retries
         );
         let stream = response_to_async_read(initial_response);
 
@@ -246,6 +253,8 @@ impl ResumableReader {
             url,
             content_length,
             bytes_delivered: Arc::new(AtomicU64::new(0)),
+            reconnect_attempts: 0,
+            middleware_retries: initial_retries,
             config,
             state: ReaderState::Reading { stream },
         })
@@ -268,19 +277,42 @@ impl ResumableReader {
         ) || err.to_string().contains("unexpected BufError")
     }
 
+    /// Check if we should retry and get the backoff duration.
+    ///
+    /// Passes the accumulated middleware retry count to the shared retry state.
+    ///
+    /// Returns `None` if retries are exhausted.
+    fn should_retry(&mut self) -> Option<Duration> {
+        let mut state = self.config.retry_state.lock().unwrap();
+        let retries = self.middleware_retries;
+        self.middleware_retries = 0; // Reset after passing to shared state
+        state.should_retry_transient(retries)
+    }
+
+    /// Accumulate middleware retries from a successful reconnection response.
+    fn accumulate_retries(&mut self, response: &Response) {
+        let retries = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|r| r.value())
+            .unwrap_or(0);
+        self.middleware_retries += retries;
+    }
+
     /// Start a reconnection attempt.
-    fn start_reconnect(&mut self, attempt: u32) {
+    fn start_reconnect(&mut self) {
         let position = self.bytes_delivered.load(Ordering::SeqCst);
+        self.reconnect_attempts += 1;
+        let attempt = self.reconnect_attempts;
         let client = self.client.clone();
         let url = self.url.clone();
         let range_header = format!("bytes={}-", position);
 
         debug!(
-            "Attempting to resume download from byte {} for {} (attempt {}/{})",
+            "Attempting to resume download from byte {} for {} (attempt {})",
             position,
             DisplaySafeUrl::from(url.clone()),
             attempt,
-            self.config.max_reconnects
         );
         trace!(
             "Sending Range request: {} for {}",
@@ -299,7 +331,7 @@ impl ResumableReader {
             Ok(response)
         });
 
-        self.state = ReaderState::Reconnecting { future, attempt };
+        self.state = ReaderState::Reconnecting { future };
     }
 
     /// Handle a successful reconnection response.
@@ -357,8 +389,8 @@ impl AsyncRead for ResumableReader {
             match &mut self.state {
                 ReaderState::Reading { stream } => {
                     let before = buf.filled().len();
-                    
-                    match stream.as_mut().poll_read(cx, buf) {
+
+                    return match stream.as_mut().poll_read(cx, buf) {
                         Poll::Ready(Ok(())) => {
                             let bytes_read = buf.filled().len() - before;
                             if bytes_read > 0 {
@@ -369,13 +401,10 @@ impl AsyncRead for ResumableReader {
                                 if let Some(expected) = self.content_length {
                                     let delivered = self.bytes_delivered.load(Ordering::SeqCst);
                                     if delivered < expected {
-                                        // Premature EOF - treat as transient
-                                        if self.config.max_reconnects > 0 {
+                                        // Premature EOF - treat as transient, check retry budget
+                                        if let Some(backoff) = self.should_retry() {
                                             self.state = ReaderState::Backoff {
-                                                sleep: Box::pin(tokio::time::sleep(
-                                                    self.config.reconnect_delay,
-                                                )),
-                                                attempt: 1,
+                                                sleep: Box::pin(tokio::time::sleep(backoff)),
                                             };
                                             continue;
                                         }
@@ -383,10 +412,10 @@ impl AsyncRead for ResumableReader {
                                 }
                                 self.state = ReaderState::Done;
                             }
-                            return Poll::Ready(Ok(()));
+                            Poll::Ready(Ok(()))
                         }
                         Poll::Ready(Err(err)) if Self::is_transient_error(&err) => {
-                            // Transient error - try to reconnect
+                            // Transient error - check retry budget
                             let position = self.bytes_delivered.load(Ordering::SeqCst);
                             trace!(
                                 "Transient error at byte {}: {} (kind: {:?})",
@@ -394,16 +423,13 @@ impl AsyncRead for ResumableReader {
                                 err,
                                 err.kind()
                             );
-                            if self.config.max_reconnects > 0 {
+                            if let Some(backoff) = self.should_retry() {
                                 self.state = ReaderState::Backoff {
-                                    sleep: Box::pin(tokio::time::sleep(
-                                        self.config.reconnect_delay,
-                                    )),
-                                    attempt: 1,
+                                    sleep: Box::pin(tokio::time::sleep(backoff)),
                                 };
                                 continue;
                             }
-                            return Poll::Ready(Err(err));
+                            Poll::Ready(Err(err))
                         }
                         Poll::Ready(Err(err)) => {
                             // Non-transient error - propagate
@@ -413,26 +439,27 @@ impl AsyncRead for ResumableReader {
                                 err.kind()
                             );
                             self.state = ReaderState::Failed(None);
-                            return Poll::Ready(Err(err));
+                            Poll::Ready(Err(err))
                         }
-                        Poll::Pending => return Poll::Pending,
+                        Poll::Pending => Poll::Pending,
                     }
                 }
 
-                ReaderState::Backoff { sleep, attempt } => {
+                ReaderState::Backoff { sleep } => {
                     match sleep.as_mut().poll(cx) {
                         Poll::Ready(()) => {
-                            let attempt = *attempt;
-                            self.start_reconnect(attempt);
+                            self.start_reconnect();
                             continue;
                         }
                         Poll::Pending => return Poll::Pending,
                     }
                 }
 
-                ReaderState::Reconnecting { future, attempt } => {
+                ReaderState::Reconnecting { future } => {
                     match future.as_mut().poll(cx) {
                         Poll::Ready(Ok(response)) => {
+                            // Accumulate middleware retries from successful reconnection
+                            self.accumulate_retries(&response);
                             match self.handle_reconnect_response(response) {
                                 Ok(()) => {
                                     debug!("Successfully resumed download");
@@ -449,33 +476,29 @@ impl AsyncRead for ResumableReader {
                             }
                         }
                         Poll::Ready(Err(err)) => {
-                            let attempt = *attempt;
+                            let attempt = self.reconnect_attempts;
                             trace!("Reconnection attempt {} failed: {}", attempt, err);
-                            if attempt < self.config.max_reconnects {
-                                // Retry with exponential backoff
-                                let delay = self.config.reconnect_delay * (1 << attempt.min(5));
+                            // Middleware retries are already exhausted when we get an error
+                            if let Some(backoff) = self.should_retry() {
                                 debug!(
-                                    "Reconnection failed, retrying in {:?} (attempt {}/{})",
-                                    delay,
-                                    attempt + 1,
-                                    self.config.max_reconnects
+                                    "Reconnection failed, retrying in {:?}",
+                                    backoff,
                                 );
                                 self.state = ReaderState::Backoff {
-                                    sleep: Box::pin(tokio::time::sleep(delay)),
-                                    attempt: attempt + 1,
+                                    sleep: Box::pin(tokio::time::sleep(backoff)),
                                 };
                                 continue;
                             }
                             warn!(
-                                "Max reconnection attempts ({}) exceeded",
-                                self.config.max_reconnects
+                                "Retry budget exhausted after {} reconnection attempts",
+                                attempt
                             );
                             self.state = ReaderState::Failed(Some(
-                                ResumableError::MaxReconnectsExceeded(self.config.max_reconnects),
+                                ResumableError::MaxReconnectsExceeded(attempt),
                             ));
                             return Poll::Ready(Err(io::Error::new(
                                 io::ErrorKind::Other,
-                                "Max reconnects exceeded",
+                                "Retry budget exhausted",
                             )));
                         }
                         Poll::Pending => return Poll::Pending,
@@ -684,22 +707,33 @@ mod tests {
     }
 
     #[test]
-    fn test_default_config() {
-        let config = ResumableConfig::default();
-        assert_eq!(config.max_reconnects, 10);
-        assert_eq!(config.reconnect_delay, Duration::from_millis(500));
+    fn test_config_new() {
+        use crate::base_client::RetryState;
+        use reqwest_retry::policies::ExponentialBackoff;
+        use uv_redacted::DisplaySafeUrl;
+
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let url = DisplaySafeUrl::parse("https://example.com").unwrap();
+        let retry_state = Arc::new(Mutex::new(RetryState::start(retry_policy, url)));
+        
+        let config = ResumableConfig::new(retry_state);
         assert!(config.require_range_support);
     }
 
     #[test]
-    fn test_custom_config() {
+    fn test_config_custom_range_support() {
+        use crate::base_client::RetryState;
+        use reqwest_retry::policies::ExponentialBackoff;
+        use uv_redacted::DisplaySafeUrl;
+
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+        let url = DisplaySafeUrl::parse("https://example.com").unwrap();
+        let retry_state = Arc::new(Mutex::new(RetryState::start(retry_policy, url)));
+        
         let config = ResumableConfig {
-            max_reconnects: 5,
-            reconnect_delay: Duration::from_secs(1),
+            retry_state,
             require_range_support: false,
         };
-        assert_eq!(config.max_reconnects, 5);
-        assert_eq!(config.reconnect_delay, Duration::from_secs(1));
         assert!(!config.require_range_support);
     }
 }
