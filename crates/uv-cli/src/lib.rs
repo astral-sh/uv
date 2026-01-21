@@ -5067,9 +5067,20 @@ pub struct FormatArgs {
 
     /// The version of Ruff to use for formatting.
     ///
-    /// By default, a version of Ruff pinned by uv will be used.
+    /// Accepts either a version (e.g., `0.8.2`) which will be treated as an exact pin,
+    /// or a version specifier (e.g., `>=0.8.0`).
+    ///
+    /// By default, the latest version of Ruff will be used.
     #[arg(long, value_hint = ValueHint::Other)]
     pub version: Option<String>,
+
+    /// Limit candidate Ruff versions to those released prior to the given date.
+    ///
+    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+    /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
+    /// durations relative to "now" (e.g., `-1 week`).
+    #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
+    pub exclude_newer: Option<ExcludeNewerValue>,
 
     /// Additional arguments to pass to Ruff.
     ///

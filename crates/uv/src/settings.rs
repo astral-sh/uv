@@ -2425,6 +2425,7 @@ pub(crate) struct FormatSettings {
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
     pub(crate) version: Option<String>,
+    pub(crate) exclude_newer: Option<jiff::Timestamp>,
     pub(crate) no_project: bool,
 }
 
@@ -2436,6 +2437,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            exclude_newer,
             no_project,
         } = args;
 
@@ -2444,6 +2446,7 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
+            exclude_newer: exclude_newer.map(|v| v.timestamp()),
             no_project,
         }
     }

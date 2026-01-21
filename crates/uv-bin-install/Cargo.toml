@@ -26,9 +26,12 @@ uv-redacted = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+jiff = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

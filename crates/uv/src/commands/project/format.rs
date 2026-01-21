@@ -4,10 +4,11 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use tokio::process::Command;
 
-use uv_bin_install::{Binary, bin_install};
+use uv_bin_install::{
+    BinVersion, Binary, bin_install, bin_install_resolved, find_matching_version,
+};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeatures};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
@@ -24,6 +25,7 @@ pub(crate) async fn format(
     diff: bool,
     extra_args: Vec<String>,
     version: Option<String>,
+    exclude_newer: Option<jiff::Timestamp>,
     client_builder: BaseClientBuilder<'_>,
     cache: Cache,
     printer: Printer,
@@ -60,28 +62,84 @@ pub(crate) async fn format(
         }
     };
 
-    // Parse version if provided
-    let version = version.as_deref().map(Version::from_str).transpose()?;
-
     let retry_policy = client_builder.retry_policy();
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build();
 
-    // Get the path to Ruff, downloading it if necessary
+    // Determine the version to use and get the path to Ruff.
     let reporter = BinaryDownloadReporter::single(printer);
-    let default_version = Binary::Ruff.default_version();
-    let version = version.as_ref().unwrap_or(&default_version);
-    let ruff_path = bin_install(
-        Binary::Ruff,
-        version,
-        &client,
-        &retry_policy,
-        &cache,
-        &reporter,
-    )
-    .await
-    .with_context(|| format!("Failed to install ruff {version}"))?;
+    let bin_version = version
+        .as_deref()
+        .map(BinVersion::from_str)
+        .transpose()?
+        .unwrap_or(BinVersion::Default);
+
+    let ruff_path = match bin_version {
+        BinVersion::Default => {
+            // Use the default pinned version
+            let version = Binary::Ruff.default_version();
+            bin_install(
+                Binary::Ruff,
+                &version,
+                &client,
+                &retry_policy,
+                &cache,
+                &reporter,
+            )
+            .await
+            .with_context(|| format!("Failed to install ruff {version}"))?
+        }
+        BinVersion::Pinned(version) => {
+            // Use the exact version directly without manifest lookup.
+            // Note: `exclude_newer` is not respected for pinned versions.
+            bin_install(
+                Binary::Ruff,
+                &version,
+                &client,
+                &retry_policy,
+                &cache,
+                &reporter,
+            )
+            .await
+            .with_context(|| format!("Failed to install ruff {version}"))?
+        }
+        BinVersion::Latest => {
+            // Fetch the latest version from the manifest
+            let resolved = find_matching_version(Binary::Ruff, None, exclude_newer, &client)
+                .await
+                .with_context(|| "Failed to find latest ruff version")?;
+            bin_install_resolved(
+                Binary::Ruff,
+                &resolved,
+                &client,
+                &retry_policy,
+                &cache,
+                &reporter,
+            )
+            .await
+            .with_context(|| format!("Failed to install ruff {}", resolved.version))?
+        }
+        BinVersion::Constraint(constraints) => {
+            // Find the best version matching the constraints
+            let resolved =
+                find_matching_version(Binary::Ruff, Some(&constraints), exclude_newer, &client)
+                    .await
+                    .with_context(|| {
+                        format!("Failed to find ruff version matching: {constraints}")
+                    })?;
+            bin_install_resolved(
+                Binary::Ruff,
+                &resolved,
+                &client,
+                &retry_policy,
+                &cache,
+                &reporter,
+            )
+            .await
+            .with_context(|| format!("Failed to install ruff {}", resolved.version))?
+        }
+    };
 
     let mut command = Command::new(&ruff_path);
     command.current_dir(target_dir);
