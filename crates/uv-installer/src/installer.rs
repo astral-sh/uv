@@ -4,7 +4,7 @@ use std::sync::{Arc, LazyLock};
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use uv_cache::Cache;
 use uv_configuration::RAYON_INITIALIZE;
@@ -198,6 +198,9 @@ fn install(
 
         Ok::<(), Error>(())
     })?;
+    if let Err(err) = locks.warn_package_conflicts() {
+        warn!("Checking for conflicts between packages failed: {err}");
+    }
 
     Ok(wheels)
 }

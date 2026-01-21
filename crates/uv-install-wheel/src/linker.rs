@@ -1,15 +1,17 @@
-use std::ffi::{OsStr, OsString};
+use std::collections::{BTreeMap, BTreeSet};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use fs_err as fs;
 use fs_err::DirEntry;
+use itertools::Itertools;
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
@@ -19,13 +21,15 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::Error;
 
+/// Avoid and track conflicts between packages.
 #[expect(clippy::struct_field_names)]
 #[derive(Debug, Default)]
 pub struct Locks {
     /// The parent directory of a file in a synchronized copy
     copy_dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
-    /// Top level modules (excluding namespaces) we write to.
-    modules: Mutex<FxHashMap<OsString, WheelFilename>>,
+    /// Top level files and directories in site-packages, stored as relative path, and wheels they
+    /// are from, with the absolute paths in the unpacked wheel.
+    site_packages_paths: Mutex<FxHashMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>>>,
     /// Preview settings for feature flags.
     preview: Preview,
 }
@@ -35,44 +39,209 @@ impl Locks {
     pub fn new(preview: Preview) -> Self {
         Self {
             copy_dir_locks: Mutex::new(FxHashMap::default()),
-            modules: Mutex::new(FxHashMap::default()),
+            site_packages_paths: Mutex::new(FxHashMap::default()),
             preview,
         }
     }
 
-    /// Warn when a module exists in multiple packages.
-    fn warn_module_conflict(&self, module: &OsStr, wheel_a: &WheelFilename) {
-        if let Some(wheel_b) = self
-            .modules
+    /// Register which package installs which (top level) path.
+    ///
+    /// This is later used warn when different files at the same path exist in multiple packages.
+    ///
+    /// The first non-self argument is the target path relative to site-packages, the second is the
+    /// source path in the unpacked wheel.
+    fn register_installed_path(&self, relative: &Path, absolute: &Path, wheel: &WheelFilename) {
+        debug_assert!(!relative.is_absolute());
+        debug_assert!(absolute.is_absolute());
+
+        // Only register top level entries, these are the only ones we have reliably as cloning
+        // a directory on macOS traverses outside our code.
+        if relative.components().count() != 1 {
+            return;
+        }
+
+        self.site_packages_paths
             .lock()
             .unwrap()
-            .insert(module.to_os_string(), wheel_a.clone())
+            .entry(relative.to_path_buf())
+            .or_default()
+            .insert((wheel.clone(), absolute.to_path_buf()));
+    }
+
+    /// Warn when the same file with different contents exists in multiple packages.
+    ///
+    /// The intent is to detect different variants of the same package installed over each other,
+    /// or different packages using the same top-level module name, which cause non-deterministic
+    /// failures only surfacing at runtime. See <https://github.com/astral-sh/uv/pull/13437> for a
+    /// list of cases.
+    ///
+    /// The check has some false negatives. It is rather too lenient than too strict, and includes
+    /// support for namespace packages that include the same `__init__.py` file, e.g., gpu-a and
+    /// gpu-b both including the same `gpu/__init__.py`.
+    ///
+    /// We assume that all wheels of a package have the same module(s), so a conflict between
+    /// installing two unpacked wheels is a conflict between two packages.
+    ///
+    /// # Performance
+    ///
+    /// When there are no namespace packages, this method is a Mutex lock and a hash map iteration.
+    ///
+    /// When there are namespace packages, we only traverse into directories shared by at least two
+    /// packages. For example, for namespace packages gpu-a, gpu-b, and gpu-c with
+    /// `gpu/a/__init__.py`, `gpu/b/__init__.py`, and `gpu/c/__init__.py` respectively, we only
+    /// need to read the `gpu` directory. If there is a deeper shared directory, we only recurse
+    /// down to this directory. As packages without conflicts generally do not share many
+    /// directories, we do not recurse far.
+    ///
+    /// For each directory, we analyze all packages sharing the directory at the same time, reading
+    /// the directory in each unpacked wheel only once. Effectively, we perform a parallel directory
+    /// walk with early exit.
+    ///
+    /// We avoid reading the actual file contents and assume they are the same when their file
+    /// length matches. This also excludes the same empty `__init__.py` files being reported as
+    /// conflicting.
+    pub fn warn_package_conflicts(self) -> Result<(), io::Error> {
+        // This warning is currently in preview.
+        if !self
+            .preview
+            .is_enabled(PreviewFeatures::DETECT_MODULE_CONFLICTS)
         {
-            // Only warn if the preview feature is enabled
-            if !self
-                .preview
-                .is_enabled(PreviewFeatures::DETECT_MODULE_CONFLICTS)
-            {
-                return;
+            return Ok(());
+        }
+
+        for (relative, wheels) in &*self.site_packages_paths.lock().unwrap() {
+            // Fast path: Only one package is using this module name, no conflicts.
+            let mut wheel_iter = wheels.iter();
+            let Some(first_wheel) = wheel_iter.next() else {
+                debug_assert!(false, "at least one wheel");
+                continue;
+            };
+            if wheel_iter.next().is_none() {
+                continue;
             }
 
-            // Sort for consistent output, at least with two packages
-            let (wheel_a, wheel_b) = if wheel_b.name > wheel_a.name {
-                (&wheel_b, wheel_a)
+            // TODO(konsti): This assumes a path is either a file or a directory in all wheels.
+            let file_type = fs_err::metadata(&first_wheel.1)?.file_type();
+            if file_type.is_file() {
+                // Handle conflicts between files directly in site-packages without a module
+                // directory enclosing them.
+                let files: BTreeSet<(&WheelFilename, u64)> = wheels
+                    .iter()
+                    .map(|(wheel, absolute)| Ok((wheel, absolute.metadata()?.len())))
+                    .collect::<Result<_, io::Error>>()?;
+                Self::warn_file_conflict(relative, &files);
+            } else if file_type.is_dir() {
+                // Don't early return if the method returns true, so we show warnings for each
+                // top-level module.
+                Self::warn_directory_conflict(relative, wheels)?;
             } else {
-                (wheel_a, &wheel_b)
-            };
-            warn_user!(
-                "The module `{}` is provided by more than one package, \
-                which causes an install race condition and can result in a broken module. \
-                Consider removing your dependency on either `{}` ({}) or `{}` ({}).",
-                module.simplified_display().green(),
-                wheel_a.name.cyan(),
-                format!("v{}", wheel_a.version).cyan(),
-                wheel_b.name.cyan(),
-                format!("v{}", wheel_b.version).cyan()
-            );
+                // We don't expect any other file type, but it's ok if this check has false
+                // negatives.
+            }
         }
+
+        Ok(())
+    }
+
+    /// Analyze a directory for conflicts.
+    ///
+    /// If there are any non-identical files (checked by size) included in more than one wheel,
+    /// report this file and return.
+    ///
+    /// If there are any directories included in more than one wheel, recurse to analyze whether
+    /// the directories contain conflicting files.
+    ///
+    /// Returns `true` if a warning was emitted.
+    fn warn_directory_conflict(
+        directory: &Path,
+        wheels: &BTreeSet<(WheelFilename, PathBuf)>,
+    ) -> Result<bool, io::Error> {
+        // The files in the directory, as paths relative to the site-packages, with their origin and
+        // size.
+        let mut files: BTreeMap<PathBuf, BTreeSet<(&WheelFilename, u64)>> = BTreeMap::default();
+        // The directories in the directory, as paths relative to the site-packages, with their
+        // origin and absolute path.
+        let mut subdirectories: BTreeMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>> =
+            BTreeMap::default();
+
+        // Read the shared directory in each unpacked wheel.
+        for (wheel, absolute) in wheels {
+            for dir_entry in fs_err::read_dir(absolute)? {
+                let dir_entry = dir_entry?;
+                let relative = directory.join(dir_entry.file_name());
+                let file_type = dir_entry.file_type()?;
+                if file_type.is_file() {
+                    files
+                        .entry(relative)
+                        .or_default()
+                        .insert((wheel, dir_entry.metadata()?.len()));
+                } else if file_type.is_dir() {
+                    subdirectories
+                        .entry(relative)
+                        .or_default()
+                        .insert((wheel.clone(), dir_entry.path()));
+                } else {
+                    // We don't expect any other file type, but it's ok if this check has false
+                    // negatives.
+                }
+            }
+        }
+
+        for (file, file_wheels) in files {
+            if Self::warn_file_conflict(&file, &file_wheels) {
+                return Ok(true);
+            }
+        }
+
+        for (subdirectory, subdirectory_wheels) in subdirectories {
+            if subdirectory_wheels.len() == 1 {
+                continue;
+            }
+            // If there are directories shared between multiple wheels, recurse to check them
+            // for shared files.
+            if Self::warn_directory_conflict(&subdirectory, &subdirectory_wheels)? {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Check if all files are the same size, if so assume they are identical.
+    ///
+    /// It's unlikely that two modules overlap with different contents but their files all have
+    /// the same length, so we use this heuristic in this performance critical path to avoid
+    /// reading potentially large files.
+    fn warn_file_conflict(file: &Path, file_wheels: &BTreeSet<(&WheelFilename, u64)>) -> bool {
+        let Some((_, file_len)) = file_wheels.first() else {
+            debug_assert!(false, "Always at least one element");
+            return false;
+        };
+        if !file_wheels
+            .iter()
+            .any(|(_, file_len_other)| file_len_other != file_len)
+        {
+            return false;
+        }
+
+        let packages = file_wheels
+            .iter()
+            .map(|(wheel_filename, _file_len)| {
+                format!("* {} ({})", wheel_filename.name, wheel_filename)
+            })
+            .join("\n");
+        warn_user!(
+            "The file `{}` is provided by more than one package, \
+            which causes an install race condition and can result in a broken module. \
+            Packages containing the file:\n{}",
+            file.user_display(),
+            packages
+        );
+
+        // Assumption: There is generally two packages that have a conflict. The output is
+        // more helpful with a single message that calls out the packages
+        // rather than being comprehensive about the conflicting files.
+        true
     }
 }
 
@@ -143,16 +312,14 @@ fn clone_wheel_files(
 
     for entry in fs::read_dir(wheel)? {
         let entry = entry?;
-        if entry.path().join("__init__.py").is_file() {
-            locks.warn_module_conflict(
-                entry
-                    .path()
-                    .strip_prefix(wheel)
-                    .expect("wheel path starts with wheel root")
-                    .as_os_str(),
-                filename,
-            );
-        }
+        locks.register_installed_path(
+            entry
+                .path()
+                .strip_prefix(wheel)
+                .expect("wheel path starts with wheel root"),
+            &entry.path(),
+            filename,
+        );
         clone_recursive(site_packages.as_ref(), wheel, locks, &entry, &mut attempt)?;
         count += 1;
     }
@@ -329,8 +496,7 @@ fn copy_wheel_files(
         let path = entry.path();
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
-
-        warn_module_conflict(locks, filename, relative);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -362,7 +528,7 @@ fn hardlink_wheel_files(
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
-        warn_module_conflict(locks, filename, relative);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -462,7 +628,7 @@ fn symlink_wheel_files(
         let relative = path.strip_prefix(&wheel).unwrap();
         let out_path = site_packages.as_ref().join(relative);
 
-        warn_module_conflict(locks, filename, relative);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -566,18 +732,6 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
     fs::copy(from, to)?;
 
     Ok(())
-}
-
-/// Warn when a module exists in multiple packages.
-fn warn_module_conflict(locks: &Locks, filename: &WheelFilename, relative: &Path) {
-    // Check for `__init__.py` to account for namespace packages.
-    // TODO(konsti): We need to warn for overlapping namespace packages, too.
-    if relative.components().count() == 2
-        && relative.components().next_back().unwrap().as_os_str() == "__init__.py"
-    {
-        // Modules must be UTF-8, but we can skip the conversion using OsStr.
-        locks.warn_module_conflict(relative.components().next().unwrap().as_os_str(), filename);
-    }
 }
 
 #[cfg(unix)]
