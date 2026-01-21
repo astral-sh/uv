@@ -7182,6 +7182,7 @@ dependencies = [
  "tracing",
  "uv-console",
  "uv-fs",
+ "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
  "uv-python",
