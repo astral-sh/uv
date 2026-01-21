@@ -723,13 +723,22 @@ impl CachedClient {
             match result {
                 Ok(ok) => return Ok(ok),
                 Err(err) => {
-                    let mut state = retry_state.lock().unwrap();
-                    if let Some(backoff) = state.should_retry(err.error(), err.retries()) {
-                        drop(state); // Release lock before sleeping
-                        retry_state.lock().unwrap().sleep_backoff(backoff).await;
-                        continue;
+                    let backoff_or_retries = {
+                        let mut state = retry_state.lock().unwrap();
+                        if let Some(backoff) = state.should_retry(err.error(), err.retries()) {
+                            Ok(backoff)
+                        } else {
+                            Err(state.total_retries())
+                        }
+                    };
+                    match backoff_or_retries {
+                        Ok(backoff) => {
+                            RetryState::sleep_backoff_static(backoff).await;
+                        }
+                        Err(total_retries) => {
+                            return Err(err.with_retries(total_retries));
+                        }
                     }
-                    return Err(err.with_retries(state.total_retries()));
                 }
             }
         }
@@ -765,13 +774,22 @@ impl CachedClient {
             match result {
                 Ok(ok) => return Ok(ok),
                 Err(err) => {
-                    let mut state = retry_state.lock().unwrap();
-                    if let Some(backoff) = state.should_retry(err.error(), err.retries()) {
-                        drop(state); // Release lock before sleeping
-                        retry_state.lock().unwrap().sleep_backoff(backoff).await;
-                        continue;
+                    let backoff_or_retries = {
+                        let mut state = retry_state.lock().unwrap();
+                        if let Some(backoff) = state.should_retry(err.error(), err.retries()) {
+                            Ok(backoff)
+                        } else {
+                            Err(state.total_retries())
+                        }
+                    };
+                    match backoff_or_retries {
+                        Ok(backoff) => {
+                            RetryState::sleep_backoff_static(backoff).await;
+                        }
+                        Err(total_retries) => {
+                            return Err(err.with_retries(total_retries));
+                        }
                     }
-                    return Err(err.with_retries(state.total_retries()));
                 }
             }
         }

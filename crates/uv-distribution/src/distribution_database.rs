@@ -610,10 +610,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     match response.resumable_stream(base_client, config) {
                         Ok(resumable) => Box::pin(resumable),
                         Err(err) => {
-                            return Err(Error::CacheRead(io::Error::new(
-                                io::ErrorKind::Other,
-                                format!("Failed to setup resumable download: {err}"),
-                            )));
+                            return Err(Error::CacheRead(io::Error::other(format!(
+                                "Failed to setup resumable download: {err}"
+                            ))));
                         }
                     }
                 } else {
@@ -800,10 +799,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     match response.resumable_stream(base_client, config) {
                         Ok(resumable) => Box::pin(resumable),
                         Err(err) => {
-                            return Err(Error::CacheRead(io::Error::new(
-                                io::ErrorKind::Other,
-                                format!("Failed to setup resumable download: {err}"),
-                            )));
+                            return Err(Error::CacheRead(io::Error::other(format!(
+                                "Failed to setup resumable download: {err}"
+                            ))));
                         }
                     }
                 } else {

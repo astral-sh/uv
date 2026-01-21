@@ -1741,25 +1741,24 @@ async fn read_url(
                 url.clone(),
             )));
             let config = ResumableConfig::new(retry_state);
-            match response.resumable_stream(client.clone(), config) {
-                Ok(resumable) => Box::pin(resumable),
-                Err(_) => {
-                    // Fall back to non-resumable stream if resumable setup fails
-                    // (e.g., server advertises Range but doesn't actually support it)
-                    let response = client
-                        .for_host(url)
-                        .get(Url::from(url.clone()))
-                        .send()
-                        .await
-                        .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?
-                        .error_for_status()
-                        .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
-                    let stream = response
-                        .bytes_stream()
-                        .map_err(io::Error::other)
-                        .into_async_read();
-                    Box::pin(stream.compat())
-                }
+            if let Ok(resumable) = response.resumable_stream(client.clone(), config) {
+                Box::pin(resumable)
+            } else {
+                // Fall back to non-resumable stream if resumable setup fails
+                // (e.g., server advertises Range but doesn't actually support it)
+                let response = client
+                    .for_host(url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await
+                    .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?
+                    .error_for_status()
+                    .map_err(|err| Error::from_reqwest(url.clone(), err, retry_count))?;
+                let stream = response
+                    .bytes_stream()
+                    .map_err(io::Error::other)
+                    .into_async_read();
+                Box::pin(stream.compat())
             }
         } else {
             let stream = response

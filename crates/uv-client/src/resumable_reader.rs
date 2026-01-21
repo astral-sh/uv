@@ -184,7 +184,7 @@ enum ReaderState {
 /// 2. Make a new HTTP request with `Range: bytes=N-` header
 /// 3. Continue delivering bytes as if nothing happened
 ///
-/// The downstream consumer (e.g., GzipDecoder) sees a seamless byte stream.
+/// The downstream consumer (e.g., `GzipDecoder`) sees a seamless byte stream.
 pub struct ResumableReader {
     /// HTTP client for making requests.
     client: BaseClient,
@@ -306,7 +306,7 @@ impl ResumableReader {
         let attempt = self.reconnect_attempts;
         let client = self.client.clone();
         let url = self.url.clone();
-        let range_header = format!("bytes={}-", position);
+        let range_header = format!("bytes={position}-");
 
         debug!(
             "Attempting to resume download from byte {} for {} (attempt {})",
@@ -361,7 +361,7 @@ impl ResumableReader {
             if let Some(total) = actual_range
                 .to_str()
                 .ok()
-                .and_then(|s| s.split('/').last())
+                .and_then(|s| s.split('/').next_back())
                 .and_then(|s| s.parse::<u64>().ok())
             {
                 if total != expected {
@@ -449,7 +449,6 @@ impl AsyncRead for ResumableReader {
                     match sleep.as_mut().poll(cx) {
                         Poll::Ready(()) => {
                             self.start_reconnect();
-                            continue;
                         }
                         Poll::Pending => return Poll::Pending,
                     }
@@ -463,13 +462,11 @@ impl AsyncRead for ResumableReader {
                             match self.handle_reconnect_response(response) {
                                 Ok(()) => {
                                     debug!("Successfully resumed download");
-                                    continue;
                                 }
                                 Err(err) => {
                                     warn!("Reconnection failed: {}", err);
                                     self.state = ReaderState::Failed(Some(err));
-                                    return Poll::Ready(Err(io::Error::new(
-                                        io::ErrorKind::Other,
+                                    return Poll::Ready(Err(io::Error::other(
                                         "Reconnection failed",
                                     )));
                                 }
@@ -496,8 +493,7 @@ impl AsyncRead for ResumableReader {
                             self.state = ReaderState::Failed(Some(
                                 ResumableError::MaxReconnectsExceeded(attempt),
                             ));
-                            return Poll::Ready(Err(io::Error::new(
-                                io::ErrorKind::Other,
+                            return Poll::Ready(Err(io::Error::other(
                                 "Retry budget exhausted",
                             )));
                         }
@@ -510,7 +506,7 @@ impl AsyncRead for ResumableReader {
                         .take()
                         .map(|e| e.to_string())
                         .unwrap_or_else(|| "Download failed".to_string());
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, msg)));
+                    return Poll::Ready(Err(io::Error::other(msg)));
                 }
 
                 ReaderState::Done => {
@@ -521,7 +517,7 @@ impl AsyncRead for ResumableReader {
     }
 }
 
-/// Convert a reqwest Response into an AsyncRead.
+/// Convert a reqwest Response into an `AsyncRead`.
 fn response_to_async_read(response: Response) -> Pin<Box<dyn AsyncRead + Send>> {
     let stream = response
         .bytes_stream()
@@ -530,7 +526,7 @@ fn response_to_async_read(response: Response) -> Pin<Box<dyn AsyncRead + Send>> 
     Box::pin(tokio_util::io::StreamReader::new(stream))
 }
 
-/// Convert a reqwest error to an io::Error, preserving error kind for transient errors.
+/// Convert a reqwest error to an `io::Error`, preserving error kind for transient errors.
 fn reqwest_error_to_io_error(err: reqwest::Error) -> io::Error {
     // Check for timeout
     if err.is_timeout() {
@@ -561,7 +557,7 @@ fn reqwest_error_to_io_error(err: reqwest::Error) -> io::Error {
     }
 
     // Default to Other
-    io::Error::new(io::ErrorKind::Other, err)
+    io::Error::other(err)
 }
 
 // ============================================================================
@@ -627,7 +623,6 @@ fn reqwest_error_to_io_error(err: reqwest::Error) -> io::Error {
 ///     response.bytes_stream().map_err(io::Error::other).into_async_read()
 /// };
 /// ```
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -675,8 +670,7 @@ mod tests {
     #[test]
     fn test_is_transient_error_buf_error() {
         // This is the specific error from flate2/async_compression that we want to catch
-        assert!(ResumableReader::is_transient_error(&io::Error::new(
-            io::ErrorKind::Other,
+        assert!(ResumableReader::is_transient_error(&io::Error::other(
             "unexpected BufError"
         )));
     }
@@ -700,8 +694,7 @@ mod tests {
     #[test]
     fn test_is_not_transient_error_other() {
         // A generic "Other" error without the BufError message should not be transient
-        assert!(!ResumableReader::is_transient_error(&io::Error::new(
-            io::ErrorKind::Other,
+        assert!(!ResumableReader::is_transient_error(&io::Error::other(
             "some other error"
         )));
     }

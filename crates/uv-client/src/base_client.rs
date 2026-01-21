@@ -1275,6 +1275,11 @@ impl RetryState {
         tokio::time::sleep(duration).await;
     }
 
+    /// Wait before retrying the request (static version without logging).
+    pub async fn sleep_backoff_static(duration: Duration) {
+        tokio::time::sleep(duration).await;
+    }
+
     /// Determines whether a transient error should be retried.
     ///
     /// Use this for errors that have already been classified as transient
