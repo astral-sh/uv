@@ -13423,6 +13423,82 @@ fn overlapping_nested_files() -> Result<()> {
     Ok(())
 }
 
+/// Warn for conflicting files directly in site-packages without a folder containing them.
+///
+/// There are some packages which are just a Python file or just a shared library, not contained
+/// in a module directory.
+#[test]
+fn overlapping_file_without_enclosing_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu-a");
+    gpu_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = ""
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_a
+        .child("src")
+        .child("gpu.abi3.so")
+        .write_str("ELF file contents")?;
+
+    let gpu_b = context.temp_dir.child("gpu-b");
+    gpu_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = ""
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_b
+        .child("src")
+        .child("gpu.abi3.so")
+        .write_str("DT_NEEDED libblas.so")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg("./gpu-a")
+        .arg("./gpu-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The file `gpu.abi3.so` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
+    * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
+    * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
+    Installed 2 packages in [TIME]
+     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
+     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+    "
+    );
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/15386>
 #[test]
 fn transitive_dependency_config_settings_invalidation() -> Result<()> {

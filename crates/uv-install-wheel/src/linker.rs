@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -28,9 +27,9 @@ use crate::Error;
 pub struct Locks {
     /// The parent directory of a file in a synchronized copy
     copy_dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
-    /// Top level modules and wheels they are from, as well as their directory in the unpacked
-    /// wheel.
-    modules: Mutex<FxHashMap<OsString, BTreeSet<(WheelFilename, PathBuf)>>>,
+    /// Top level files and directories in site-packages, stored as relative path, and wheels they
+    /// are from, with the absolute paths in the unpacked wheel.
+    site_packages_paths: Mutex<FxHashMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>>>,
     /// Preview settings for feature flags.
     preview: Preview,
 }
@@ -40,31 +39,36 @@ impl Locks {
     pub fn new(preview: Preview) -> Self {
         Self {
             copy_dir_locks: Mutex::new(FxHashMap::default()),
-            modules: Mutex::new(FxHashMap::default()),
+            site_packages_paths: Mutex::new(FxHashMap::default()),
             preview,
         }
     }
 
-    /// Register which package contains which top level module, to later warn when different files
-    /// at the same path exist in multiple packages.
-    fn register_module_origin(&self, relative: &Path, absolute: &Path, wheel: &WheelFilename) {
+    /// Register which package installs which (top level) path.
+    ///
+    /// This is later used warn when different files at the same path exist in multiple packages.
+    ///
+    /// The first non-self argument is the target path relative to site-packages, the second is the
+    /// source path in the unpacked wheel.
+    fn register_installed_path(&self, relative: &Path, absolute: &Path, wheel: &WheelFilename) {
         debug_assert!(!relative.is_absolute());
         debug_assert!(absolute.is_absolute());
 
-        // Only register top level modules
+        // Only register top level entries, these are the only ones we have reliably as cloning
+        // a directory on macOS traverses outside our code.
         if relative.components().count() != 1 {
             return;
         }
 
-        self.modules
+        self.site_packages_paths
             .lock()
             .unwrap()
-            .entry(relative.as_os_str().to_os_string())
+            .entry(relative.to_path_buf())
             .or_default()
             .insert((wheel.clone(), absolute.to_path_buf()));
     }
 
-    /// Warn when a module exists in multiple packages.
+    /// Warn when the same file with different contents exists in multiple packages.
     ///
     /// The intent is to detect different variants of the same package installed over each other,
     /// or different packages using the same top-level module name, which cause non-deterministic
@@ -105,15 +109,35 @@ impl Locks {
             return Ok(());
         }
 
-        for (top_level_module, wheels) in &*self.modules.lock().unwrap() {
+        for (relative, wheels) in &*self.site_packages_paths.lock().unwrap() {
             // Fast path: Only one package is using this module name, no conflicts.
-            if wheels.len() == 1 {
+            let mut wheel_iter = wheels.iter();
+            let Some(first_wheel) = wheel_iter.next() else {
+                debug_assert!(false, "at least one wheel");
+                continue;
+            };
+            if wheel_iter.next().is_none() {
                 continue;
             }
 
-            // Don't early return if the method returns true, so we show warnings for each top-level
-            // module
-            Self::warn_directory_conflict(Path::new(top_level_module), wheels)?;
+            // TODO(konsti): This assumes a path is either a file or a directory in all wheels.
+            let file_type = fs_err::metadata(&first_wheel.1)?.file_type();
+            if file_type.is_file() {
+                // Handle conflicts between files directly in site-packages without a module
+                // directory enclosing them.
+                let files: BTreeSet<(&WheelFilename, u64)> = wheels
+                    .iter()
+                    .map(|(wheel, absolute)| Ok((wheel, absolute.metadata()?.len())))
+                    .collect::<Result<_, io::Error>>()?;
+                Self::warn_file_conflict(&relative, &files);
+            } else if file_type.is_dir() {
+                // Don't early return if the method returns true, so we show warnings for each
+                // top-level module.
+                Self::warn_directory_conflict(relative, wheels)?;
+            } else {
+                // We don't expect any other file type, but it's ok if this check has false
+                // negatives.
+            }
         }
 
         Ok(())
@@ -134,7 +158,7 @@ impl Locks {
     ) -> Result<bool, io::Error> {
         // The files in the directory, as paths relative to the site-packages, with their origin and
         // size.
-        let mut files: BTreeMap<PathBuf, BTreeSet<(WheelFilename, u64)>> = BTreeMap::default();
+        let mut files: BTreeMap<PathBuf, BTreeSet<(&WheelFilename, u64)>> = BTreeMap::default();
         // The directories in the directory, as paths relative to the site-packages, with their
         // origin and absolute path.
         let mut subdirectories: BTreeMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>> =
@@ -142,23 +166,20 @@ impl Locks {
 
         // Read the shared directory in each unpacked wheel.
         for (wheel, absolute) in wheels {
-            let mut entries: Vec<DirEntry> =
-                fs_err::read_dir(absolute)?.collect::<Result<Vec<DirEntry>, io::Error>>()?;
-            // Ensure we always warn for the same first file.
-            entries.sort_by_key(DirEntry::path);
-            for dir_entry in entries {
+            for dir_entry in fs_err::read_dir(absolute)? {
+                let dir_entry = dir_entry?;
                 let relative = directory.join(dir_entry.file_name());
                 let file_type = dir_entry.file_type()?;
                 if file_type.is_file() {
                     files
                         .entry(relative)
                         .or_default()
-                        .insert((wheel.clone(), dir_entry.metadata()?.len()));
+                        .insert((wheel, dir_entry.metadata()?.len()));
                 } else if file_type.is_dir() {
                     subdirectories
                         .entry(relative)
                         .or_default()
-                        .insert((wheel.clone(), dir_entry.path().clone()));
+                        .insert((wheel.clone(), dir_entry.path()));
                 } else {
                     // We don't expect any other file type, but it's ok if this check has false
                     // negatives.
@@ -167,31 +188,7 @@ impl Locks {
         }
 
         for (file, file_wheels) in files {
-            let Some((_, file_len)) = file_wheels.first() else {
-                debug_assert!(false, "Always at least one element");
-                continue;
-            };
-
-            if file_wheels
-                .iter()
-                .any(|(_, file_len_other)| file_len_other != file_len)
-            {
-                let packages = file_wheels
-                    .iter()
-                    .map(|(wheel_filename, _file_len)| {
-                        format!("* {} ({})", wheel_filename.name, wheel_filename)
-                    })
-                    .join("\n");
-                warn_user!(
-                    "The file `{}` is provided by more than one package, \
-                    which causes an install race condition and can result in a broken module. \
-                    Packages containing the file:\n{}",
-                    file.user_display(),
-                    packages
-                );
-                // Assumption: There is generally two packages that have a conflict. The output is
-                // more helpful with a single message that calls out the packages
-                // rather than being comprehensive about the conflicting files.
+            if Self::warn_file_conflict(&file, &file_wheels) {
                 return Ok(true);
             }
         }
@@ -208,6 +205,43 @@ impl Locks {
         }
 
         Ok(false)
+    }
+
+    /// Check if all files are the same size, if so assume they are identical.
+    ///
+    /// It's unlikely that two modules overlap with different contents but their files all have
+    /// the same length, so we use this heuristic in this performance critical path to avoid
+    /// reading potentially large files.
+    fn warn_file_conflict(file: &Path, file_wheels: &BTreeSet<(&WheelFilename, u64)>) -> bool {
+        let Some((_, file_len)) = file_wheels.first() else {
+            debug_assert!(false, "Always at least one element");
+            return false;
+        };
+        if !file_wheels
+            .iter()
+            .any(|(_, file_len_other)| file_len_other != file_len)
+        {
+            return false;
+        }
+
+        let packages = file_wheels
+            .iter()
+            .map(|(wheel_filename, _file_len)| {
+                format!("* {} ({})", wheel_filename.name, wheel_filename)
+            })
+            .join("\n");
+        warn_user!(
+            "The file `{}` is provided by more than one package, \
+            which causes an install race condition and can result in a broken module. \
+            Packages containing the file:\n{}",
+            file.user_display(),
+            packages
+        );
+
+        // Assumption: There is generally two packages that have a conflict. The output is
+        // more helpful with a single message that calls out the packages
+        // rather than being comprehensive about the conflicting files.
+        true
     }
 }
 
@@ -278,7 +312,7 @@ fn clone_wheel_files(
 
     for entry in fs::read_dir(wheel)? {
         let entry = entry?;
-        locks.register_module_origin(
+        locks.register_installed_path(
             entry
                 .path()
                 .strip_prefix(wheel)
@@ -462,7 +496,7 @@ fn copy_wheel_files(
         let path = entry.path();
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
-        locks.register_module_origin(relative, path, filename);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -494,7 +528,7 @@ fn hardlink_wheel_files(
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
 
-        locks.register_module_origin(relative, path, filename);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -594,7 +628,7 @@ fn symlink_wheel_files(
         let relative = path.strip_prefix(&wheel).unwrap();
         let out_path = site_packages.as_ref().join(relative);
 
-        locks.register_module_origin(relative, path, filename);
+        locks.register_installed_path(relative, path, filename);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
