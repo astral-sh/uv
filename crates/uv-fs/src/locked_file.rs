@@ -235,41 +235,22 @@ impl LockedFile {
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
-        #[expect(clippy::disallowed_types)]
-        use std::{fs::File, os::unix::fs::PermissionsExt};
-        use tempfile::NamedTempFile;
+        use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+        use tempfile::Builder;
 
-        /// The permissions the lockfile should end up with
-        const DESIRED_MODE: u32 = 0o666;
-
-        #[expect(clippy::disallowed_types)]
-        fn try_set_permissions(file: &File, path: &Path) {
-            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
-                warn!(
-                    "Failed to set permissions on temporary file `{path}`: {err}",
-                    path = path.user_display()
-                );
-            }
-        }
-
-        // If path already exists, return it.
-        if let Ok(file) = fs_err::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(path.as_ref())
-        {
+        // If path already exists (and we can read it), return it.
+        if let Ok(file) = fs_err::OpenOptions::new().read(true).open(path.as_ref()) {
             return Ok(file);
         }
 
-        // Otherwise, create a temporary file with 666 permissions. We must set
-        // permissions _after_ creating the file, to override the `umask`.
+        // Otherwise, create a temporary file with 644 perms in the same directory as path.
+        let perms = Permissions::from_mode(0o644);
         let file = if let Some(parent) = path.as_ref().parent() {
-            NamedTempFile::new_in(parent)
+            Builder::new().permissions(perms).tempfile_in(parent)
         } else {
-            NamedTempFile::new()
+            Builder::new().permissions(perms).tempfile()
         }
         .map_err(LockedFileError::CreateTemporary)?;
-        try_set_permissions(file.as_file(), file.path());
 
         // Try to move the file to path, but if path exists now, just open path
         match file.persist_noclobber(path.as_ref()) {
@@ -278,7 +259,6 @@ impl LockedFile {
                 if err.error.kind() == std::io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
-                        .write(true)
                         .open(path.as_ref())
                         .map_err(Into::into)
                 } else if matches!(
@@ -300,20 +280,9 @@ impl LockedFile {
                     // bits, it's less likely to ever matter.
                     let file = fs_err::OpenOptions::new()
                         .read(true)
-                        .write(true)
                         .create(true)
                         .open(path.as_ref())?;
 
-                    // We don't want to `try_set_permissions` in cases where another user's process
-                    // has already created the lockfile and changed its permissions because we might
-                    // not have permission to change the permissions which would produce a confusing
-                    // warning.
-                    if file
-                        .metadata()
-                        .is_ok_and(|metadata| metadata.permissions().mode() != DESIRED_MODE)
-                    {
-                        try_set_permissions(file.file(), path.as_ref());
-                    }
                     Ok(file)
                 } else {
                     let temp_path = err.file.into_temp_path();
@@ -330,7 +299,6 @@ impl LockedFile {
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
-            .write(true)
             .create(true)
             .open(path.as_ref())
             .map_err(Into::into)
