@@ -660,8 +660,12 @@ fn find_lib_dir(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
+    use uv_distribution_filename::WheelFilename;
     use uv_platform_tags::BinaryFormat;
+
+    use super::*;
 
     #[test]
     fn test_is_system_library() {
@@ -754,112 +758,67 @@ mod tests {
 
     #[test]
     fn test_update_platform_tags_version() {
+        fn update_wheel_macos_version(input: &str, version: MacOSVersion) -> String {
+            let filename = WheelFilename::from_str(input).unwrap();
+            let platform_tags = filename.platform_tags();
+            let updated = update_platform_tags_version(&platform_tags, version);
+            filename.with_platform_tags(&updated).to_string()
+        }
+
         // Upgrade from 10.9 to 11.0.
-        let tags = [PlatformTag::Macos {
-            major: 10,
-            minor: 9,
-            binary_format: BinaryFormat::X86_64,
-        }];
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
-            updated,
-            vec![PlatformTag::Macos {
-                major: 11,
-                minor: 0,
-                binary_format: BinaryFormat::X86_64,
-            }]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
+                MacOSVersion::new(11, 0)
+            ),
+            "foo-1.0-cp311-cp311-macosx_11_0_x86_64.whl"
         );
 
         // Upgrade from 10.9 to 10.15.
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(10, 15));
         assert_eq!(
-            updated,
-            vec![PlatformTag::Macos {
-                major: 10,
-                minor: 15,
-                binary_format: BinaryFormat::X86_64,
-            }]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
+                MacOSVersion::new(10, 15)
+            ),
+            "foo-1.0-cp311-cp311-macosx_10_15_x86_64.whl"
         );
 
         // Universal2.
-        let tags = [PlatformTag::Macos {
-            major: 10,
-            minor: 9,
-            binary_format: BinaryFormat::Universal2,
-        }];
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
-            updated,
-            vec![PlatformTag::Macos {
-                major: 11,
-                minor: 0,
-                binary_format: BinaryFormat::Universal2,
-            }]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-macosx_10_9_universal2.whl",
+                MacOSVersion::new(11, 0)
+            ),
+            "foo-1.0-cp311-cp311-macosx_11_0_universal2.whl"
         );
 
         // macOS 11+ always has minor=0 for tagging.
-        let tags = [PlatformTag::Macos {
-            major: 11,
-            minor: 0,
-            binary_format: BinaryFormat::Arm64,
-        }];
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(14, 2));
         assert_eq!(
-            updated,
-            vec![PlatformTag::Macos {
-                major: 14,
-                minor: 0,
-                binary_format: BinaryFormat::Arm64,
-            }]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-macosx_11_0_arm64.whl",
+                MacOSVersion::new(14, 2)
+            ),
+            "foo-1.0-cp311-cp311-macosx_14_0_arm64.whl"
         );
 
         // Non-macOS tag unchanged.
-        let tags = [PlatformTag::Linux {
-            arch: uv_platform_tags::Arch::X86_64,
-        }];
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(11, 0));
         assert_eq!(
-            updated,
-            vec![PlatformTag::Linux {
-                arch: uv_platform_tags::Arch::X86_64
-            }]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-linux_x86_64.whl",
+                MacOSVersion::new(11, 0)
+            ),
+            "foo-1.0-cp311-cp311-linux_x86_64.whl"
         );
 
         // Tags are sorted by string representation, which can reverse order.
         // Before: macosx_11_0_x86_64 < macosx_12_0_arm64 (because "11" < "12")
         // After updating to 13: macosx_13_0_arm64 < macosx_13_0_x86_64 (because "arm64" < "x86_64")
-        let tags = [
-            PlatformTag::Macos {
-                major: 11,
-                minor: 0,
-                binary_format: BinaryFormat::X86_64,
-            },
-            PlatformTag::Macos {
-                major: 12,
-                minor: 0,
-                binary_format: BinaryFormat::Arm64,
-            },
-        ];
-        // Verify input order: x86_64 first, arm64 second.
-        assert_eq!(tags[0].to_string(), "macosx_11_0_x86_64");
-        assert_eq!(tags[1].to_string(), "macosx_12_0_arm64");
-
-        let updated = update_platform_tags_version(&tags, MacOSVersion::new(13, 0));
-        // After update, sorted by string: arm64 < x86_64.
         assert_eq!(
-            updated,
-            vec![
-                PlatformTag::Macos {
-                    major: 13,
-                    minor: 0,
-                    binary_format: BinaryFormat::Arm64,
-                },
-                PlatformTag::Macos {
-                    major: 13,
-                    minor: 0,
-                    binary_format: BinaryFormat::X86_64,
-                },
-            ]
+            update_wheel_macos_version(
+                "foo-1.0-cp311-cp311-macosx_11_0_x86_64.macosx_12_0_arm64.whl",
+                MacOSVersion::new(13, 0)
+            ),
+            "foo-1.0-cp311-cp311-macosx_13_0_arm64.macosx_13_0_x86_64.whl"
         );
     }
 
