@@ -129,7 +129,7 @@ impl Locks {
                     .iter()
                     .map(|(wheel, absolute)| Ok((wheel, absolute.metadata()?.len())))
                     .collect::<Result<_, io::Error>>()?;
-                Self::warn_file_conflict(&relative, &files);
+                Self::warn_file_conflict(relative, &files);
             } else if file_type.is_dir() {
                 // Don't early return if the method returns true, so we show warnings for each
                 // top-level module.
