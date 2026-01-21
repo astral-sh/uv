@@ -6311,7 +6311,7 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
 ///
 /// Note that the marker strings returned will include conflict markers if they
 /// are present.
-fn simplified_universal_markers(
+pub(crate) fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
