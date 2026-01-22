@@ -450,7 +450,7 @@ supported formats.
 !!! note
 
     PyPy is [not actively developed anymore](https://github.com/numpy/numpy/issues/30416) and
-    supports only up to Python 3.11.
+    only supports Python versions up to 3.11.
 
 ## Managed Python distributions
 
