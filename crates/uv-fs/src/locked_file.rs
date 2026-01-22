@@ -239,7 +239,7 @@ impl LockedFile {
         use std::{fs::Permissions, os::unix::fs::PermissionsExt};
         use tempfile::Builder;
 
-        const DESIRED_MODE: u32 = 0o644;
+        const DESIRED_MODE: u32 = 0o444;
 
         // If path already exists (and we can read it), return it.
         if let Ok(file) = fs_err::OpenOptions::new().read(true).open(path.as_ref()) {
