@@ -449,7 +449,7 @@ impl schemars::JsonSchema for PackageExcludeNewer {
         Cow::Borrowed("PackageExcludeNewer")
     }
 
-    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+    fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "oneOf": [
                 {
@@ -457,10 +457,7 @@ impl schemars::JsonSchema for PackageExcludeNewer {
                     "const": false,
                     "description": "Disable exclude-newer for this package."
                 },
-                {
-                    "type": "string",
-                    "description": "A date, timestamp, or duration to use as the exclude-newer cutoff for this package."
-                }
+                generator.subschema_for::<ExcludeNewerValue>(),
             ]
         })
     }
@@ -826,7 +823,7 @@ impl std::fmt::Display for ExcludeNewer {
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for ExcludeNewerValue {
     fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("ExcludeNewerTimestamp")
+        Cow::Borrowed("ExcludeNewerValue")
     }
 
     fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
