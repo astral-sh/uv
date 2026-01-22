@@ -1868,6 +1868,205 @@ mod tests {
         assert_eq!(versions, ["1.7.8".to_string()]);
     }
 
+    /// Test for project statuses from PyPI's JSON detail response.
+    #[test]
+    fn project_status_pypi_json() {
+        // Minimized from https://pypi.org/simple/pepy/
+        let json = r#"
+        {
+          "alternate-locations": [],
+          "files": [
+            {
+              "core-metadata": false,
+              "data-dist-info-metadata": false,
+              "filename": "pepy-2.1.1.tar.gz",
+              "hashes": {
+                "sha256": "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829"
+              },
+              "provenance": null,
+              "requires-python": ">=3.7",
+              "size": 15399,
+              "upload-time": "2022-11-14T17:14:53.935145Z",
+              "url": "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+              "yanked": false
+            }
+          ],
+          "meta": {
+            "_last-serial": 15765070,
+            "api-version": "1.4"
+          },
+          "name": "pepy",
+          "project-status": {
+            "status": "archived"
+          },
+          "versions": [
+            "2.1.1"
+          ]
+        }
+        "#;
+
+        let data: PypiSimpleDetail = serde_json::from_str(json).unwrap();
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &PackageName::from_str("pepy").unwrap(),
+            data.project_status,
+            &base,
+        );
+
+        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        SimpleDetailMetadata {
+            project_status: ProjectStatus {
+                status: Archived,
+                reason: None,
+            },
+            versions: [
+                SimpleDetailMetadatum {
+                    version: "2.1.1",
+                    files: VersionFiles {
+                        wheels: [],
+                        source_dists: [
+                            VersionSourceDist {
+                                name: SourceDistFilename {
+                                    name: PackageName(
+                                        "pepy",
+                                    ),
+                                    version: "2.1.1",
+                                    extension: TarGz,
+                                },
+                                file: File {
+                                    dist_info_metadata: false,
+                                    filename: "pepy-2.1.1.tar.gz",
+                                    hashes: HashDigests(
+                                        [
+                                            HashDigest {
+                                                algorithm: Sha256,
+                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            },
+                                        ],
+                                    ),
+                                    requires_python: Some(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: GreaterThanEqual,
+                                                    version: "3.7",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                    size: Some(
+                                        15399,
+                                    ),
+                                    upload_time_utc_ms: Some(
+                                        1668446093935,
+                                    ),
+                                    url: AbsoluteUrl(
+                                        UrlString(
+                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                        ),
+                                    ),
+                                    yanked: Some(
+                                        Bool(
+                                            false,
+                                        ),
+                                    ),
+                                    zstd: None,
+                                },
+                            },
+                        ],
+                    },
+                    metadata: None,
+                },
+            ],
+        }
+        "#);
+    }
+
+    /// Test for project statuses from PyPI's HTML detail response.
+    #[test]
+    fn project_status_pypi_html() {
+        // Minimized from https://pypi.org/simple/pepy/
+        let html = r#"
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta name="pypi:repository-version" content="1.4">
+        <meta name="pypi:project-status" content="archived">    <title>Links for pepy</title>
+          </head>
+          <body>
+            <h1>Links for pepy</h1>
+        <a href="https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz#sha256=cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829" data-requires-python="&gt;=3.7" >pepy-2.1.1.tar.gz</a><br />
+        </body>
+        </html>
+        <!--SERIAL 15765070-->
+        "#;
+
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let simple_metadata =
+            SimpleDetailMetadata::from_html(html, &PackageName::from_str("pepy").unwrap(), &base)
+                .unwrap();
+        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        SimpleDetailMetadata {
+            project_status: ProjectStatus {
+                status: Archived,
+                reason: None,
+            },
+            versions: [
+                SimpleDetailMetadatum {
+                    version: "2.1.1",
+                    files: VersionFiles {
+                        wheels: [],
+                        source_dists: [
+                            VersionSourceDist {
+                                name: SourceDistFilename {
+                                    name: PackageName(
+                                        "pepy",
+                                    ),
+                                    version: "2.1.1",
+                                    extension: TarGz,
+                                },
+                                file: File {
+                                    dist_info_metadata: false,
+                                    filename: "pepy-2.1.1.tar.gz",
+                                    hashes: HashDigests(
+                                        [
+                                            HashDigest {
+                                                algorithm: Sha256,
+                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            },
+                                        ],
+                                    ),
+                                    requires_python: Some(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: GreaterThanEqual,
+                                                    version: "3.7",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                    size: None,
+                                    upload_time_utc_ms: None,
+                                    url: AbsoluteUrl(
+                                        UrlString(
+                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                        ),
+                                    ),
+                                    yanked: None,
+                                    zstd: None,
+                                },
+                            },
+                        ],
+                    },
+                    metadata: None,
+                },
+            ],
+        }
+        "#);
+    }
+
     /// Test for AWS Code Artifact registry
     ///
     /// See: <https://github.com/astral-sh/uv/issues/1388>
