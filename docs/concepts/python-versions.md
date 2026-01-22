@@ -470,6 +470,11 @@ documentation for details.
 
 ### PyPy distributions
 
+!!! note
+
+    PyPy is [not actively developed anymore](https://github.com/numpy/numpy/issues/30416) and
+    only supports Python versions up to 3.11
+
 PyPy distributions are provided by the [PyPy project](https://pypy.org).
 
 ### Pyodide distributions
