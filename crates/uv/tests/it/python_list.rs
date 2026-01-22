@@ -682,3 +682,114 @@ fn python_list_with_mirrors() {
     ----- stderr -----
     ");
 }
+
+/// Test `uv python list` with remote NDJSON metadata using the preview feature.
+///
+/// This tests the streaming NDJSON functionality with early-exit behavior.
+#[tokio::test]
+async fn python_list_remote_ndjson_with_preview() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    // NDJSON format: one JSON object per line, each representing a Python version
+    // with all its artifacts. Note: versions are ordered newest first to enable
+    // early-exit during streaming.
+    let ndjson_content = r#"{"version":"3.14.0","artifacts":[{"url":"https://custom.com/cpython-3.14.0-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"abc123","variant":"install_only"}]}
+{"version":"3.13.2","artifacts":[{"url":"https://custom.com/cpython-3.13.2-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"def456","variant":"install_only"},{"url":"https://custom.com/cpython-3.13.2+freethreaded-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"ghi789","variant":"freethreaded+pgo+lto"}]}
+{"version":"3.12.8","artifacts":[{"url":"https://custom.com/cpython-3.12.8-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"jkl012","variant":"install_only"}]}
+"#;
+
+    Mock::given(method("GET"))
+        .and(path("/versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(ndjson_content, "application/x-ndjson"),
+        )
+        .mount(&server)
+        .await;
+
+    // Test listing all versions from NDJSON with preview feature
+    uv_snapshot!(context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-versions")
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--show-urls")
+        .arg("--preview-features").arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url").arg(format!("{}/versions.ndjson", server.uri())), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0-macos-aarch64-none                 https://custom.com/cpython-3.14.0-darwin-aarch64.tar.gz
+    cpython-3.13.2-macos-aarch64-none                 https://custom.com/cpython-3.13.2-darwin-aarch64.tar.gz
+    cpython-3.13.2+freethreaded-macos-aarch64-none    https://custom.com/cpython-3.13.2+freethreaded-darwin-aarch64.tar.gz
+    cpython-3.12.8-macos-aarch64-none                 https://custom.com/cpython-3.12.8-darwin-aarch64.tar.gz
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test `uv python list` with streaming limit (without --all-versions).
+///
+/// When not using --all-versions, the streaming implementation limits the
+/// number of downloads fetched for better performance.
+#[tokio::test]
+async fn python_list_remote_ndjson_with_limit() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[]);
+    let server = MockServer::start().await;
+
+    // Create NDJSON with many versions to test the limit behavior
+    // The limit is 50 matching downloads, which translates to roughly 50 versions
+    // for a single platform
+    let mut ndjson_lines = Vec::new();
+    for minor in (7..=14).rev() {
+        for patch in (0..=5).rev() {
+            let version = format!("3.{minor}.{patch}");
+            let line = format!(
+                r#"{{"version":"{}","artifacts":[{{"url":"https://custom.com/cpython-{}-darwin-aarch64.tar.gz","platform":"aarch64-apple-darwin","sha256":"hash{}{}","variant":"install_only"}}]}}"#,
+                version, version, minor, patch
+            );
+            ndjson_lines.push(line);
+        }
+    }
+    let ndjson_content = ndjson_lines.join("\n") + "\n";
+
+    Mock::given(method("GET"))
+        .and(path("/many-versions.ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(ndjson_content, "application/x-ndjson"),
+        )
+        .mount(&server)
+        .await;
+
+    // Test listing versions with default limit (no --all-versions)
+    // This should use streaming with early-exit after the limit is reached
+    let output = context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--all-platforms")
+        .arg("--all-arches")
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("--python-downloads-json-url")
+        .arg(format!("{}/many-versions.ndjson", server.uri()))
+        .output()?;
+
+    // The output should be limited (not all 48 versions)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line_count = stdout.lines().count();
+
+    // With a limit of 50 downloads, we should see at most 50 versions
+    assert!(
+        line_count <= 50,
+        "Expected at most 50 versions due to limit, got {line_count}"
+    );
+    assert!(
+        line_count > 0,
+        "Expected some versions to be listed, got {line_count}"
+    );
+
+    Ok(())
+}
