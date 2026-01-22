@@ -234,17 +234,20 @@ impl LockedFile {
 
     #[cfg(unix)]
     fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+        use fs_err::os::unix::fs::OpenOptionsExt;
         use rustix::io::Errno;
         use std::{fs::Permissions, os::unix::fs::PermissionsExt};
         use tempfile::Builder;
+
+        const DESIRED_MODE: u32 = 0o644;
 
         // If path already exists (and we can read it), return it.
         if let Ok(file) = fs_err::OpenOptions::new().read(true).open(path.as_ref()) {
             return Ok(file);
         }
 
-        // Otherwise, create a temporary file with 644 perms in the same directory as path.
-        let perms = Permissions::from_mode(0o644);
+        // Otherwise, create a temporary file with DESIRED_MODE in the same directory as path.
+        let perms = Permissions::from_mode(DESIRED_MODE);
         let file = if let Some(parent) = path.as_ref().parent() {
             Builder::new().permissions(perms).tempfile_in(parent)
         } else {
@@ -278,9 +281,10 @@ impl LockedFile {
                     // are locking two different files. Also, since `persist_noclobber` is more
                     // likely to not be supported on special filesystems which don't have permission
                     // bits, it's less likely to ever matter.
+
                     let file = fs_err::OpenOptions::new()
                         .read(true)
-                        .write(true)
+                        .mode(DESIRED_MODE)
                         .create(true)
                         .open(path.as_ref())?;
 
