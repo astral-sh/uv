@@ -8,7 +8,7 @@ use std::str::FromStr;
 use anyhow::{Context, Error, Result};
 use futures::{StreamExt, join};
 use indexmap::IndexSet;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc;
@@ -26,7 +26,7 @@ use uv_python::downloads::{
 };
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
-    create_link_to_executable, python_executable_dir,
+    compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
     ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
@@ -524,24 +524,47 @@ async fn perform_install(
         (vec![], unsatisfied)
     } else {
         // If we can find one existing installation that matches the request, it is satisfied
-        requests.iter().partition_map(|request| {
-            if let Some(installation) = existing_installations.iter().find(|installation| {
-                if matches!(upgrade, PythonUpgrade::Enabled(_)) {
-                    // If this is an upgrade, the requested version is a minor version but the
-                    // requested download is the highest patch for that minor version. We need to
-                    // install it unless an exact match is found.
-                    request.download.key() == installation.key()
+        let mut satisfied = Vec::new();
+        let mut unsatisfied = Vec::new();
+
+        for request in &requests {
+            if matches!(upgrade, PythonUpgrade::Enabled(_)) {
+                // If this is an upgrade, the requested version is a minor version but the
+                // requested download is the highest patch for that minor version. We need to
+                // install it unless an exact match is found (including build version).
+                if let Some(installation) = existing_installations
+                    .iter()
+                    .find(|inst| request.download.key() == inst.key())
+                {
+                    if matches_build(request.download.build(), installation.build()) {
+                        debug!("Found `{}` for request `{}`", installation.key(), request);
+                        satisfied.push(installation);
+                    } else {
+                        // Key matches but build version differs - track as existing for reinstall
+                        debug!(
+                            "Build version mismatch for `{}`, will upgrade",
+                            installation.key()
+                        );
+                        changelog.existing.insert(installation.key().clone());
+                        unsatisfied.push(Cow::Borrowed(request));
+                    }
                 } else {
-                    request.matches_installation(installation)
+                    debug!("No installation found for request `{}`", request);
+                    unsatisfied.push(Cow::Borrowed(request));
                 }
-            }) {
+            } else if let Some(installation) = existing_installations
+                .iter()
+                .find(|inst| request.matches_installation(inst))
+            {
                 debug!("Found `{}` for request `{}`", installation.key(), request);
-                Either::Left(installation)
+                satisfied.push(installation);
             } else {
                 debug!("No installation found for request `{}`", request);
-                Either::Right(Cow::Borrowed(request))
+                unsatisfied.push(Cow::Borrowed(request));
             }
-        })
+        }
+
+        (satisfied, unsatisfied)
     };
 
     // For all satisfied installs, bytecode compile them now before any future
@@ -1322,5 +1345,19 @@ fn find_matching_bin_link<'a>(
         installations.find(|installation| installation.executable(false) == target)
     } else {
         unreachable!("Only Unix and Windows are supported")
+    }
+}
+
+/// Check if a download's build version matches an installation's build version.
+///
+/// Returns `true` if the build versions match (no upgrade needed), `false` if an upgrade is needed.
+fn matches_build(download_build: Option<&str>, installation_build: Option<&str>) -> bool {
+    match (download_build, installation_build) {
+        // Both have build, check if they match
+        (Some(d), Some(i)) => compare_build_versions(d, i) == std::cmp::Ordering::Equal,
+        // Legacy installation without BUILD file needs upgrade
+        (Some(_), None) => false,
+        // Download doesn't have build info, assume matches
+        (None, _) => true,
     }
 }
