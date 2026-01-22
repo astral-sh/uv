@@ -318,7 +318,8 @@ pub(crate) fn create(
         } else if matches!(interpreter.platform().os(), Os::Pyodide { .. }) {
             // For Pyodide, link only `python.exe`.
             // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
-            create_link_to_executable(executable.as_path(), &executable_target)
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            create_link_to_executable(target.as_path(), &executable_target)
                 .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
