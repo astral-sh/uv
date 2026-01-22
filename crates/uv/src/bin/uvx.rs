@@ -18,7 +18,7 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
         cmd.stdin(std::process::Stdio::inherit());
         let status = cmd.status()?;
 
-        #[allow(clippy::exit)]
+        #[expect(clippy::exit)]
         std::process::exit(status.code().unwrap())
     }
 }
@@ -37,7 +37,7 @@ fn get_uv_path(current_exe_parent: &Path, uvx_suffix: Option<&str>) -> std::io::
     // First try to find a matching suffixed `uv`, e.g. `uv@1.2.3(.exe)`
     let uv_with_suffix = uvx_suffix.map(|suffix| current_exe_parent.join(format!("uv{suffix}")));
     if let Some(uv_with_suffix) = &uv_with_suffix {
-        #[allow(clippy::print_stderr, reason = "printing a very rare warning")]
+        #[expect(clippy::print_stderr, reason = "printing a very rare warning")]
         match uv_with_suffix.try_exists() {
             Ok(true) => return Ok(uv_with_suffix.to_owned()),
             Ok(false) => { /* definitely not there, proceed to fallback */ }
@@ -96,7 +96,7 @@ fn run() -> std::io::Result<ExitStatus> {
     match exec_spawn(&mut cmd)? {}
 }
 
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 fn main() -> ExitCode {
     let result = run();
     match result {

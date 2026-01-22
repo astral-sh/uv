@@ -133,7 +133,6 @@ impl FromStr for AbiTag {
     type Err = ParseAbiTagError;
 
     /// Parse an [`AbiTag`] from a string.
-    #[allow(clippy::cast_possible_truncation)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         /// Parse a Python version from a string (e.g., convert `39` into `(3, 9)`).
         fn parse_python_version(

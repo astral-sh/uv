@@ -1180,13 +1180,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if args.no_system {
                 warn_user_once!(
-                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                    "The `--no-system` flag has no effect, `uv venv` always ignores virtual environments when finding a Python interpreter; did you mean `--managed-python`?"
                 );
             }
 
             if args.system {
                 warn_user_once!(
-                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                    "The `--system` flag has no effect, `uv venv` always ignores virtual environments when finding a Python interpreter; did you mean `--no-managed-python`?"
                 );
             }
 

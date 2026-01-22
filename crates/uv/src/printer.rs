@@ -74,10 +74,7 @@ impl std::fmt::Write for Stdout {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Enabled => {
-                #[allow(clippy::print_stdout, clippy::ignored_unit_patterns)]
-                {
-                    print!("{s}");
-                }
+                print!("{s}");
             }
             Self::Disabled => {}
         }
@@ -96,10 +93,7 @@ impl std::fmt::Write for Stderr {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         match self {
             Self::Enabled => {
-                #[allow(clippy::print_stderr, clippy::ignored_unit_patterns)]
-                {
-                    eprint!("{s}");
-                }
+                eprint!("{s}");
             }
             Self::Disabled => {}
         }

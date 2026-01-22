@@ -1023,7 +1023,7 @@ impl ManagedPythonDownloadList {
                 // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
                 // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
                 // have the same parsing effect.)
-                #[allow(clippy::zero_sized_map_values)]
+                #[expect(clippy::zero_sized_map_values)]
                 |e| {
                     let source = match json_source {
                         Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),

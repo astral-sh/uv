@@ -34045,10 +34045,10 @@
     "minor": 13,
     "patch": 2,
     "prerelease": "",
-    "url": "https://github.com/pyodide/pyodide/releases/download/0.29.1/xbuildenv-0.29.1.tar.bz2",
+    "url": "https://github.com/pyodide/pyodide/releases/download/0.29.2/xbuildenv-0.29.2.tar.bz2",
     "sha256": null,
     "variant": null,
-    "build": "0.29.1"
+    "build": "0.29.2"
   },
   "cpython-3.13.2-linux-aarch64-gnu": {
     "name": "cpython",
@@ -68759,10 +68759,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.1/graalpy-25.0.1-macos-aarch64.tar.gz",
-    "sha256": "389e0732f4d79e30335b70d41b6e8a2d769b435512fcb41675eb3dce4fc4d014",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.2/graalpy-25.0.2-macos-aarch64.tar.gz",
+    "sha256": "c771688b8636932026180bdd9b5e3d6116316fa868faf7e602a60ba020c7bade",
     "variant": null,
-    "build": "25.0.1"
+    "build": "25.0.2"
   },
   "graalpy-3.12.0-darwin-x86_64-none": {
     "name": "graalpy",
@@ -68793,10 +68793,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.1/graalpy-25.0.1-linux-aarch64.tar.gz",
-    "sha256": "f3315d1a3f13e7fcd785d0ca9b954d251da5f5d0dedae094c28a0566a239e4fd",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.2/graalpy-25.0.2-linux-aarch64.tar.gz",
+    "sha256": "805f3526296e04692b27ca001ba97674e53d0f036412d9ffc29aeb8b51517ab6",
     "variant": null,
-    "build": "25.0.1"
+    "build": "25.0.2"
   },
   "graalpy-3.12.0-linux-x86_64-gnu": {
     "name": "graalpy",
@@ -68810,10 +68810,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.1/graalpy-25.0.1-linux-amd64.tar.gz",
-    "sha256": "b5baff786753ebb774300fcf68a9bca4d14cbb8099f055637bee11786abb2d57",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.2/graalpy-25.0.2-linux-amd64.tar.gz",
+    "sha256": "8967e4bae1c5040d62dbc98976f2099d5c36c00a79944e99b848d455e618ecdf",
     "variant": null,
-    "build": "25.0.1"
+    "build": "25.0.2"
   },
   "graalpy-3.12.0-windows-x86_64-none": {
     "name": "graalpy",
@@ -68827,10 +68827,10 @@
     "minor": 12,
     "patch": 0,
     "prerelease": "",
-    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.1/graalpy-25.0.1-windows-amd64.zip",
-    "sha256": "e39e99c4e5a0c1a6518d56a97850ef7fac0159c0e314d2861ed27638aa267ead",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-25.0.2/graalpy-25.0.2-windows-amd64.zip",
+    "sha256": "93b72dac049e649002640914eba43b091e113c4be679bf24f7e4210ee3fbd101",
     "variant": null,
-    "build": "25.0.1"
+    "build": "25.0.2"
   },
   "graalpy-3.11.0-darwin-aarch64-none": {
     "name": "graalpy",

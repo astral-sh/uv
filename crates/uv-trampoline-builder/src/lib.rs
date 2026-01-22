@@ -479,7 +479,7 @@ pub fn windows_python_launcher(
 }
 
 #[cfg(all(test, windows))]
-#[allow(clippy::print_stdout)]
+#[expect(clippy::print_stdout)]
 mod test {
     use std::io::Write;
     use std::path::Path;

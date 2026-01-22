@@ -1204,7 +1204,7 @@ fn login_text_store() {
 }
 
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn login_password_stdin() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
 
@@ -1247,7 +1247,7 @@ fn login_password_stdin() -> Result<()> {
 }
 
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn login_token_stdin() -> Result<()> {
     let context = TestContext::new_with_versions(&[]);
 

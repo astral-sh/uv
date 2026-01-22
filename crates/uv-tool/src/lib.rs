@@ -153,7 +153,7 @@ impl InstalledTools {
     /// included with an error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {

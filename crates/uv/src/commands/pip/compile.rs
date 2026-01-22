@@ -60,7 +60,7 @@ use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -794,7 +794,6 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the uv command used to generate the output file.
-#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
     include_find_links: bool,

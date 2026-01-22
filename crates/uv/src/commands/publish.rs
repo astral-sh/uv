@@ -406,6 +406,7 @@ async fn gather_credentials(
         username.as_deref(),
         password.as_deref(),
         keyring_provider,
+        token_store,
         trusted_publishing,
         &publish_url,
         oidc_client,

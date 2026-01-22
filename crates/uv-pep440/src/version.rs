@@ -1206,13 +1206,13 @@ impl VersionSmall {
     }
 
     #[inline]
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn epoch(&self) -> u64 {
         0
     }
 
     #[inline]
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn set_epoch(&mut self, value: u64) -> bool {
         if value != 0 {
             return false;
@@ -1940,7 +1940,7 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// The "separators" that are allowed in several different parts of a
     /// version.
-    #[allow(clippy::byte_char_slices)]
+    #[expect(clippy::byte_char_slices)]
     const SEPARATOR: ByteSet = ByteSet::new(&[b'.', b'_', b'-']);
 
     /// Create a new `Parser` for parsing the version in the given byte string.

@@ -37,7 +37,7 @@ impl From<EphemeralEnvironment> for PythonEnvironment {
 
 impl EphemeralEnvironment {
     /// Set the ephemeral overlay for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
         let site_packages = self
             .0
@@ -50,7 +50,7 @@ impl EphemeralEnvironment {
     }
 
     /// Enable system site packages for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
         self.0
             .set_pyvenv_cfg("include-system-site-packages", "true")?;
@@ -69,7 +69,7 @@ impl EphemeralEnvironment {
     /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
     /// easier for these tools to statically and reliably understand the relationship between
     /// the two environments.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_parent_environment(
         &self,
         parent_environment_sys_prefix: &Path,

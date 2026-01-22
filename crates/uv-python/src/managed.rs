@@ -937,7 +937,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))

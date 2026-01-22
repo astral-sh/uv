@@ -58,7 +58,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,

@@ -61,7 +61,7 @@ fn confirm_inner(
                 term.write_str("\n")?;
                 term.flush()?;
 
-                #[allow(clippy::exit, clippy::cast_possible_wrap)]
+                #[expect(clippy::exit, clippy::cast_possible_wrap)]
                 std::process::exit(if cfg!(windows) {
                     0xC000_013A_u32 as i32
                 } else {

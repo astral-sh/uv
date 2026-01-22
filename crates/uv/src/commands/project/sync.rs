@@ -56,7 +56,6 @@ use crate::settings::{
 };
 
 /// Sync the project environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -464,7 +463,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
@@ -548,7 +547,7 @@ fn identify_installation_target<'a>(
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
     Project(VirtualProject),
@@ -601,7 +600,6 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,

@@ -333,7 +333,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///

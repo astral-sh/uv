@@ -6443,6 +6443,7 @@ dependencies = [
  "data-encoding",
  "fs-err",
  "indoc",
+ "itertools 0.14.0",
  "mailparse",
  "owo-colors",
  "pathdiff",
