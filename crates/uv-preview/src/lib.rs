@@ -32,6 +32,7 @@ bitflags::bitflags! {
         const METADATA_JSON = 1 << 20;
         const GCS_ENDPOINT = 1 << 21;
         const ADJUST_ULIMIT = 1 << 22;
+        const REMOTE_PYTHON_DOWNLOAD_METADATA = 1 << 23;
     }
 }
 
@@ -64,6 +65,7 @@ impl PreviewFeatures {
             Self::METADATA_JSON => "metadata-json",
             Self::GCS_ENDPOINT => "gcs-endpoint",
             Self::ADJUST_ULIMIT => "adjust-ulimit",
+            Self::REMOTE_PYTHON_DOWNLOAD_METADATA => "remote-python-download-metadata",
             _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
         }
     }
@@ -124,6 +126,7 @@ impl FromStr for PreviewFeatures {
                 "target-workspace-discovery" => Self::TARGET_WORKSPACE_DISCOVERY,
                 "metadata-json" => Self::METADATA_JSON,
                 "adjust-ulimit" => Self::ADJUST_ULIMIT,
+                "remote-python-download-metadata" => Self::REMOTE_PYTHON_DOWNLOAD_METADATA,
                 _ => {
                     warn_user_once!("Unknown preview feature: `{part}`");
                     continue;
@@ -316,6 +319,10 @@ mod tests {
         assert_eq!(
             PreviewFeatures::ADJUST_ULIMIT.flag_as_str(),
             "adjust-ulimit"
+        );
+        assert_eq!(
+            PreviewFeatures::REMOTE_PYTHON_DOWNLOAD_METADATA.flag_as_str(),
+            "remote-python-download-metadata"
         );
     }
 

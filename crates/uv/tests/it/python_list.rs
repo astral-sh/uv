@@ -682,3 +682,26 @@ fn python_list_with_mirrors() {
     ----- stderr -----
     ");
 }
+
+/// Test that `uv python list` fetches from the remote metadata endpoint when using the preview feature.
+#[test]
+fn python_list_remote_metadata_preview() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions();
+
+    // List Python versions using the remote metadata preview feature
+    // This fetches from the remote endpoint instead of embedded metadata
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("--preview-features")
+        .arg("remote-python-download-metadata")
+        .arg("cpython-3.13")
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.[LATEST]-[PLATFORM]    <download available>
+
+    ----- stderr -----
+    ");
+}

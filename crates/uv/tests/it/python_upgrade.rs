@@ -772,3 +772,42 @@ fn python_upgrade_implementation() {
     All versions already on latest supported patch release
     ");
 }
+
+/// Test that `uv python upgrade` works with the remote metadata preview feature.
+#[test]
+fn python_upgrade_remote_metadata_preview() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs();
+
+    // Install an earlier patch version using embedded metadata
+    uv_snapshot!(context.filters(), context.python_install()
+        .arg("--preview-features")
+        .arg("python-install-default,python-upgrade")
+        .arg("3.12.8"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM] (python3.12)
+    ");
+
+    // Upgrade using remote metadata - this should find a newer version
+    uv_snapshot!(context.filters(), context.python_upgrade()
+        .arg("--preview-features")
+        .arg("python-upgrade,remote-python-download-metadata")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.[LATEST] in [TIME]
+     + cpython-3.12.[LATEST]-[PLATFORM] (python3.12)
+    ");
+}

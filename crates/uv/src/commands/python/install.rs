@@ -349,7 +349,8 @@ async fn perform_install(
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build();
     let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
+        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref(), &preview)
+            .await?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
