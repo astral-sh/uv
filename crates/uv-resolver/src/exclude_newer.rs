@@ -436,12 +436,34 @@ impl std::fmt::Display for ExcludeNewerValue {
 /// This enum represents whether exclude-newer should be disabled for a package,
 /// or if a specific cutoff (absolute or relative) should be used.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum PackageExcludeNewer {
     /// Disable exclude-newer for this package (allow all versions regardless of upload date).
     Disabled,
     /// Enable exclude-newer with this cutoff for this package.
     Enabled(Box<ExcludeNewerValue>),
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for PackageExcludeNewer {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PackageExcludeNewer")
+    }
+
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "oneOf": [
+                {
+                    "type": "boolean",
+                    "const": false,
+                    "description": "Disable exclude-newer for this package."
+                },
+                {
+                    "type": "string",
+                    "description": "A date, timestamp, or duration to use as the exclude-newer cutoff for this package."
+                }
+            ]
+        })
+    }
 }
 
 /// A package-specific exclude-newer entry.

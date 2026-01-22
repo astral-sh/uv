@@ -1102,23 +1102,15 @@
       }
     },
     "PackageExcludeNewer": {
-      "description": "Per-package exclude-newer setting.\n\nThis enum represents whether exclude-newer should be disabled for a package,\nor if a specific cutoff (absolute or relative) should be used.",
       "oneOf": [
         {
-          "description": "Disable exclude-newer for this package (allow all versions regardless of upload date).",
-          "type": "string",
-          "const": "Disabled"
+          "description": "Disable exclude-newer for this package.",
+          "type": "boolean",
+          "const": false
         },
         {
-          "description": "Enable exclude-newer with this cutoff for this package.",
-          "type": "object",
-          "properties": {
-            "Enabled": {
-              "$ref": "#/definitions/ExcludeNewerTimestamp"
-            }
-          },
-          "additionalProperties": false,
-          "required": ["Enabled"]
+          "description": "A date, timestamp, or duration to use as the exclude-newer cutoff for this package.",
+          "type": "string"
         }
       ]
     },
