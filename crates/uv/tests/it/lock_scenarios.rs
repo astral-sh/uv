@@ -15,7 +15,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, packse_index_url, uv_snapshot};
+use uv_test::{packse_index_url, uv_snapshot};
 
 /// There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
 ///
@@ -83,7 +83,7 @@ use crate::common::{TestContext, packse_index_url, uv_snapshot};
 /// ```
 #[test]
 fn wrong_backtracking_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -250,7 +250,7 @@ fn wrong_backtracking_basic() -> Result<()> {
 /// ```
 #[test]
 fn wrong_backtracking_indirect() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -392,7 +392,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
 /// ```
 #[test]
 fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -510,7 +510,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 /// ```
 #[test]
 fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -613,7 +613,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 /// ```
 #[test]
 fn fork_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -748,7 +748,7 @@ fn fork_basic() -> Result<()> {
 /// ```
 #[test]
 fn conflict_in_fork() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -818,7 +818,7 @@ fn conflict_in_fork() -> Result<()> {
 /// ```
 #[test]
 fn fork_conflict_unsatisfiable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -899,7 +899,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 /// ```
 #[test]
 fn fork_filter_sibling_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1081,7 +1081,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 /// ```
 #[test]
 fn fork_upgrade() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1200,7 +1200,7 @@ fn fork_upgrade() -> Result<()> {
 /// ```
 #[test]
 fn fork_incomplete_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1355,7 +1355,7 @@ fn fork_incomplete_markers() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_accrue() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1489,7 +1489,7 @@ fn fork_marker_accrue() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1559,7 +1559,7 @@ fn fork_marker_disjoint() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit_combined_allowed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1740,7 +1740,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit_combined_disallowed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1910,7 +1910,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit_combined() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2073,7 +2073,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit_isolated() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2222,7 +2222,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2379,7 +2379,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_inherit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2517,7 +2517,7 @@ fn fork_marker_inherit() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_limited_inherit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2673,7 +2673,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_selection() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2829,7 +2829,7 @@ fn fork_marker_selection() -> Result<()> {
 /// ```
 #[test]
 fn fork_marker_track() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2983,7 +2983,7 @@ fn fork_marker_track() -> Result<()> {
 /// ```
 #[test]
 fn fork_non_fork_marker_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3118,7 +3118,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 /// ```
 #[test]
 fn fork_non_local_fork_marker_direct() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3190,7 +3190,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 /// ```
 #[test]
 fn fork_non_local_fork_marker_transitive() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3278,7 +3278,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// ```
 #[test]
 fn fork_overlapping_markers_basic() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3448,7 +3448,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// ```
 #[test]
 fn preferences_dependent_forking_bistable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3683,7 +3683,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// ```
 #[test]
 fn preferences_dependent_forking_conflicting() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3825,7 +3825,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// ```
 #[test]
 fn preferences_dependent_forking_tristable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4109,7 +4109,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// ```
 #[test]
 fn preferences_dependent_forking() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4285,7 +4285,7 @@ fn preferences_dependent_forking() -> Result<()> {
 /// ```
 #[test]
 fn fork_remaining_universe_partitioning() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4438,7 +4438,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
 /// ```
 #[test]
 fn fork_requires_python_full_prerelease() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4522,7 +4522,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 /// ```
 #[test]
 fn fork_requires_python_full() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4611,7 +4611,7 @@ fn fork_requires_python_full() -> Result<()> {
 /// ```
 #[test]
 fn fork_requires_python_patch_overlap() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4704,7 +4704,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 /// ```
 #[test]
 fn fork_requires_python() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4785,7 +4785,7 @@ fn fork_requires_python() -> Result<()> {
 /// ```
 #[test]
 fn requires_python_wheels() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4882,7 +4882,7 @@ fn requires_python_wheels() -> Result<()> {
 /// ```
 #[test]
 fn unreachable_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4982,7 +4982,7 @@ fn unreachable_package() -> Result<()> {
 /// ```
 #[test]
 fn unreachable_wheels() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -5114,7 +5114,7 @@ fn unreachable_wheels() -> Result<()> {
 /// ```
 #[test]
 fn marker_variants_have_different_extras() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -5252,7 +5252,7 @@ fn marker_variants_have_different_extras() -> Result<()> {
 /// ```
 #[test]
 fn virtual_package_extra_priorities() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -5373,7 +5373,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
 /// ```
 #[test]
 fn specific_architecture() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();

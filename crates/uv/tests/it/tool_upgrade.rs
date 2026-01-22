@@ -3,11 +3,11 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_upgrade_empty() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -92,7 +92,7 @@ fn tool_upgrade_empty() {
 
 #[test]
 fn tool_upgrade_name() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -142,7 +142,7 @@ fn tool_upgrade_name() {
 
 #[test]
 fn tool_upgrade_multiple_names() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -217,7 +217,7 @@ fn tool_upgrade_multiple_names() {
 
 #[test]
 fn tool_upgrade_pinned_hint() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
 
@@ -268,7 +268,7 @@ fn tool_upgrade_pinned_hint() {
 
 #[test]
 fn tool_upgrade_pinned_hint_with_mixed_constraint() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
 
@@ -320,7 +320,7 @@ fn tool_upgrade_pinned_hint_with_mixed_constraint() {
 
 #[test]
 fn tool_upgrade_all() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -394,7 +394,7 @@ fn tool_upgrade_all() {
 
 #[test]
 fn tool_upgrade_non_existing_package() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -432,7 +432,7 @@ fn tool_upgrade_non_existing_package() {
 
 #[test]
 fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -512,7 +512,7 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
 
 #[test]
 fn tool_upgrade_settings() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -577,7 +577,7 @@ fn tool_upgrade_settings() {
 
 #[test]
 fn tool_upgrade_respect_constraints() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -628,7 +628,7 @@ fn tool_upgrade_respect_constraints() {
 
 #[test]
 fn tool_upgrade_constraint() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -743,7 +743,7 @@ fn tool_upgrade_constraint() {
 /// itself.
 #[test]
 fn tool_upgrade_with() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -793,7 +793,7 @@ fn tool_upgrade_with() {
 
 #[test]
 fn tool_upgrade_python() {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -852,7 +852,7 @@ fn tool_upgrade_python() {
 
 #[test]
 fn tool_upgrade_python_with_all() {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -945,7 +945,7 @@ fn tool_upgrade_python_with_all() {
 /// packages.
 #[test]
 fn test_tool_upgrade_additional_entrypoints() {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");

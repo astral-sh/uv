@@ -1,8 +1,5 @@
 #![allow(clippy::disallowed_types)]
 
-#[cfg(feature = "git")]
-use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use crate::common::{TestContext, apply_filters, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -14,10 +11,13 @@ use std::process::Stdio;
 #[cfg(feature = "git")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+#[cfg(feature = "git")]
+use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
+use uv_test::{apply_filters, uv_snapshot};
 
 #[test]
 fn requirements_txt_dependency() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -65,7 +65,7 @@ fn requirements_txt_dependency() -> Result<()> {
 
 #[test]
 fn requirements_txt_export_no_header() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -111,7 +111,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
 
 #[test]
 fn requirements_txt_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -194,7 +194,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 
 #[test]
 fn requirements_txt_project_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -346,7 +346,7 @@ fn requirements_txt_project_extra() -> Result<()> {
 
 #[test]
 fn requirements_txt_prune() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -411,7 +411,7 @@ fn requirements_txt_prune() -> Result<()> {
 
 #[test]
 fn requirements_txt_dependency_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -463,7 +463,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
 
 #[test]
 fn requirements_txt_dependency_multiple_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -546,7 +546,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
 
 #[test]
 fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -790,7 +790,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
 
 #[test]
 fn requirements_txt_non_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -851,7 +851,7 @@ fn requirements_txt_non_root() -> Result<()> {
 
 #[test]
 fn allrequirements_txt_() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -926,7 +926,7 @@ fn allrequirements_txt_() -> Result<()> {
 
 #[test]
 fn requirements_txt_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1014,7 +1014,7 @@ fn requirements_txt_frozen() -> Result<()> {
 
 #[test]
 fn requirements_txt_create_missing_dir() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1092,7 +1092,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
 
 #[test]
 fn requirements_txt_non_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1148,7 +1148,7 @@ fn requirements_txt_non_project() -> Result<()> {
 #[test]
 fn virtual_empty() -> Result<()> {
     // testing how `uv export` reacts to a pyproject with no `[project]` and nothing useful to it
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1175,7 +1175,7 @@ fn virtual_empty() -> Result<()> {
 fn virtual_dependency_group() -> Result<()> {
     // testing basic `uv export --group` functionality
     // when the pyproject.toml is fully virtual (no `[project]`)
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -1244,7 +1244,7 @@ fn virtual_dependency_group() -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1309,7 +1309,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1397,7 +1397,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
 #[test]
 fn requirements_txt_https_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -1430,7 +1430,7 @@ fn requirements_txt_https_credentials() -> Result<()> {
 
 #[test]
 fn requirements_txt_non_project_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1485,7 +1485,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
 
 #[test]
 fn requirements_txt_non_project_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1563,7 +1563,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
 #[test]
 fn requirements_txt_non_project_fork() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1789,7 +1789,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
 #[test]
 fn requirements_txt_relative_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dependency = context.temp_dir.child("dependency");
     dependency.child("pyproject.toml").write_str(
@@ -1877,7 +1877,7 @@ fn requirements_txt_relative_path() -> Result<()> {
 
 #[test]
 fn devrequirements_txt_() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1972,7 +1972,7 @@ fn devrequirements_txt_() -> Result<()> {
 
 #[test]
 fn requirements_txt_no_hashes() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2014,7 +2014,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
 
 #[test]
 fn requirements_txt_output_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2081,7 +2081,7 @@ fn requirements_txt_output_file() -> Result<()> {
 
 #[test]
 fn requirements_txt_no_emit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2267,7 +2267,7 @@ fn requirements_txt_no_emit() -> Result<()> {
 
 #[test]
 fn requirements_txt_only_emit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2353,7 +2353,7 @@ fn requirements_txt_only_emit() -> Result<()> {
 
 #[test]
 fn requirements_txt_no_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2428,7 +2428,7 @@ fn requirements_txt_no_editable() -> Result<()> {
 
 #[test]
 fn requirements_txt_export_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2605,7 +2605,7 @@ fn requirements_txt_export_group() -> Result<()> {
 
 #[test]
 fn requirements_txt_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2868,7 +2868,7 @@ fn requirements_txt_script() -> Result<()> {
 
 #[test]
 fn requirements_txt_conflicts() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2970,7 +2970,7 @@ fn requirements_txt_conflicts() -> Result<()> {
 
 #[test]
 fn requirements_txt_simple_conflict_markers() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3055,7 +3055,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
 #[test]
 fn requirements_txt_complex_conflict_markers() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3430,7 +3430,7 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
 /// Export requirements in the presence of a cycle.
 #[test]
 fn requirements_txt_cyclic_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3516,7 +3516,7 @@ fn requirements_txt_cyclic_dependencies() -> Result<()> {
 /// Export requirements in the presence of a cycle, with conflicts enabled.
 #[test]
 fn requirements_txt_cyclic_dependencies_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3615,7 +3615,7 @@ fn requirements_txt_cyclic_dependencies_conflict() -> Result<()> {
 
 #[test]
 fn pep_751_dependency() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3678,7 +3678,7 @@ fn pep_751_dependency() -> Result<()> {
 
 #[test]
 fn pep_751_export_no_header() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3739,7 +3739,7 @@ fn pep_751_export_no_header() -> Result<()> {
 
 #[test]
 fn pep_751_export_no_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3802,7 +3802,7 @@ fn pep_751_export_no_editable() -> Result<()> {
 
 #[test]
 fn pep_751_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -3919,7 +3919,7 @@ fn pep_751_dependency_extra() -> Result<()> {
 
 #[test]
 fn pep_751_project_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4150,7 +4150,7 @@ fn pep_751_project_extra() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn pep_751_git_dependency() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4192,7 +4192,7 @@ fn pep_751_git_dependency() -> Result<()> {
 
 #[test]
 fn pep_751_wheel_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4245,7 +4245,7 @@ fn pep_751_wheel_url() -> Result<()> {
 
 #[test]
 fn pep_751_sdist_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4298,7 +4298,7 @@ fn pep_751_sdist_url() -> Result<()> {
 
 #[test]
 fn pep_751_sdist_url_subdirectory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4361,7 +4361,7 @@ fn pep_751_sdist_url_subdirectory() -> Result<()> {
 
 #[test]
 fn pep_751_infer_output_format() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4497,7 +4497,7 @@ fn pep_751_infer_output_format() -> Result<()> {
 
 #[test]
 fn pep_751_filename() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4532,7 +4532,7 @@ fn pep_751_filename() -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn pep_751_https_git_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4571,7 +4571,7 @@ fn pep_751_https_git_credentials() -> Result<()> {
 
 #[test]
 fn pep_751_https_credentials() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {r#"
@@ -4612,7 +4612,7 @@ fn pep_751_https_credentials() -> Result<()> {
 /// <https://github.com/astral-sh/uv/issues/15103>
 #[test]
 fn no_editable_env_var() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context
         .init()
@@ -4640,7 +4640,7 @@ fn no_editable_env_var() -> Result<()> {
 
 #[test]
 fn export_only_group_and_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4693,7 +4693,7 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
 /// The members in the workspace (`foo`) and in the lockfile (`bar`) mismatch.
 #[test]
 fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4735,7 +4735,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
 /// Export multiple packages within a workspace.
 #[test]
 fn multiple_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4878,7 +4878,7 @@ fn multiple_packages() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_basic() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -4953,7 +4953,7 @@ fn cyclonedx_export_basic() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_direct_url() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5030,7 +5030,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5106,7 +5106,7 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_no_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5169,7 +5169,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn cyclonedx_export_mixed_source_types() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5273,7 +5273,7 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_project_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5353,7 +5353,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5457,7 +5457,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_with_workspace_member() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5617,7 +5617,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_workspace_non_root() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5714,7 +5714,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_workspace_with_extras() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5927,7 +5927,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_workspace_frozen() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6079,7 +6079,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_workspace_all_packages() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6259,7 +6259,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6347,7 +6347,7 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
 // Contains a combination of combination of workspace and registry deps, with another workspace dep not depended on by the root
 #[test]
 fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6522,7 +6522,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_dependency_marker() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6619,7 +6619,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6742,7 +6742,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_dependency_extra() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6868,7 +6868,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_prune() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7050,7 +7050,7 @@ fn cyclonedx_export_prune() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_group() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7270,7 +7270,7 @@ fn cyclonedx_export_group() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_non_project() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7361,7 +7361,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_no_emit() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7553,7 +7553,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_relative_path() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let dependency = context.temp_dir.child("dependency");
     dependency.child("pyproject.toml").write_str(
@@ -7660,7 +7660,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7853,7 +7853,7 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_dev_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8048,7 +8048,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
-    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8189,7 +8189,7 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
 
 #[test]
 fn cyclonedx_export_alternative_registry() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_cyclonedx_filters()
         .with_exclude_newer("2025-01-30T00:00:00Z");
 

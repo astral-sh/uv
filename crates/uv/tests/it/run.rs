@@ -11,11 +11,11 @@ use uv_fs::copy_dir_all;
 use uv_python::PYTHON_VERSION_FILENAME;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::{TestContext, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11", "3.9"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -141,7 +141,7 @@ fn run_with_python_version() -> Result<()> {
 
 #[test]
 fn run_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let mut filters = context.filters();
     filters.push((r"Usage: (uv|\.exe) run \[OPTIONS\] (?s).*", "[UV RUN HELP]"));
@@ -199,7 +199,7 @@ fn run_args() -> Result<()> {
 /// This should list the available scripts.
 #[test]
 fn run_no_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -267,7 +267,7 @@ fn run_no_args() -> Result<()> {
 /// dependencies.
 #[test]
 fn run_pep723_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -475,7 +475,7 @@ fn run_pep723_script() -> Result<()> {
 
 #[test]
 fn run_pep723_script_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.11"]);
 
     // If we have a `.python-version` that's incompatible with the script, we should error.
     let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
@@ -536,7 +536,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
 fn run_pythonw_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -580,7 +580,7 @@ fn run_pythonw_script() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn run_pep723_script_metadata() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // If the script contains a PEP 723 tag, we should install its requirements.
     let test_script = context.temp_dir.child("main.py");
@@ -648,7 +648,7 @@ fn run_pep723_script_metadata() -> Result<()> {
 /// Run a PEP 723-compatible script with a `[[tool.uv.index]]`.
 #[test]
 fn run_pep723_script_index() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -689,7 +689,7 @@ fn run_pep723_script_index() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` constraints.
 #[test]
 fn run_pep723_script_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -727,7 +727,7 @@ fn run_pep723_script_constraints() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` overrides.
 #[test]
 fn run_pep723_script_overrides() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -765,7 +765,7 @@ fn run_pep723_script_overrides() -> Result<()> {
 /// Run a PEP 723-compatible script with `tool.uv` build constraints.
 #[test]
 fn run_pep723_script_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let test_script = context.temp_dir.child("main.py");
 
@@ -838,7 +838,7 @@ fn run_pep723_script_build_constraints() -> Result<()> {
 /// Run a PEP 723-compatible script with a lockfile.
 #[test]
 fn run_pep723_script_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -1046,7 +1046,7 @@ fn run_pep723_script_lock() -> Result<()> {
 /// With `managed = false`, we should avoid installing the project itself.
 #[test]
 fn run_managed_false() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1079,7 +1079,7 @@ fn run_managed_false() -> Result<()> {
 
 #[test]
 fn run_exact() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1148,7 +1148,7 @@ fn run_exact() -> Result<()> {
 
 #[test]
 fn run_with() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1276,7 +1276,7 @@ fn run_with() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = TestContext::new("3.12").with_pyvenv_cfg_filters();
+    let context = uv_test::test_context!("3.12").with_pyvenv_cfg_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1328,7 +1328,7 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 
 #[test]
 fn run_with_overlay_interpreter() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1572,7 +1572,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
 #[test]
 fn run_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1647,7 +1647,7 @@ fn run_with_build_constraints() -> Result<()> {
 /// Sync all members in a workspace.
 #[test]
 fn run_in_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1809,7 +1809,7 @@ fn run_in_workspace() -> Result<()> {
 
 #[test]
 fn run_with_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let anyio_local = context.temp_dir.child("src").child("anyio_local");
     copy_dir_all(
@@ -1957,7 +1957,7 @@ fn run_with_editable() -> Result<()> {
 
 #[test]
 fn run_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2150,7 +2150,7 @@ fn run_group() -> Result<()> {
 
 #[test]
 fn run_locked() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2314,7 +2314,7 @@ fn run_locked() -> Result<()> {
 
 #[test]
 fn run_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2379,7 +2379,7 @@ fn run_frozen() -> Result<()> {
 
 #[test]
 fn run_no_sync() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2438,7 +2438,7 @@ fn run_no_sync() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/17390>
 #[test]
 fn run_no_sync_env_var() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2494,7 +2494,7 @@ fn run_no_sync_env_var() -> Result<()> {
 
 #[test]
 fn run_empty_requirements_txt() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2554,7 +2554,7 @@ fn run_empty_requirements_txt() -> Result<()> {
 
 #[test]
 fn run_requirements_txt() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2704,7 +2704,7 @@ fn run_requirements_txt() -> Result<()> {
 /// Ignore and warn when (e.g.) the `--index-url` argument is a provided `requirements.txt`.
 #[test]
 fn run_requirements_txt_arguments() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2758,7 +2758,7 @@ fn run_requirements_txt_arguments() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -2811,7 +2811,7 @@ fn run_editable() -> Result<()> {
 #[test]
 fn run_from_directory() -> Result<()> {
     // Default to 3.11 so that the `.python-version` is meaningful.
-    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"])
         .with_filtered_missing_file_error();
 
     let project_dir = context.temp_dir.child("project");
@@ -2990,7 +2990,7 @@ fn run_from_directory() -> Result<()> {
 /// By default, omit resolver and installer output.
 #[test]
 fn run_without_output() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3038,7 +3038,7 @@ fn run_without_output() -> Result<()> {
 /// Ensure that we can import from the root project when layering `--with` requirements.
 #[test]
 fn run_isolated_python_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3132,7 +3132,7 @@ fn run_isolated_python_version() -> Result<()> {
 /// Ignore the existing project when executing with `--no-project`.
 #[test]
 fn run_no_project() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -3222,7 +3222,7 @@ fn run_no_project() -> Result<()> {
 
 #[test]
 fn run_stdin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -3246,7 +3246,7 @@ fn run_stdin() -> Result<()> {
 
 #[test]
 fn run_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let main_script = context.temp_dir.child("__main__.py");
     main_script.write_str(indoc! { r#"
@@ -3268,7 +3268,7 @@ fn run_package() -> Result<()> {
 
 #[test]
 fn run_zipapp() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a zipapp.
     let child = context.temp_dir.child("app");
@@ -3307,7 +3307,7 @@ fn run_zipapp() -> Result<()> {
 
 #[test]
 fn run_stdin_args() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import sys; print(sys.argv)").arg("foo").arg("bar"), @"
     success: true
@@ -3322,7 +3322,7 @@ fn run_stdin_args() {
 /// Run a module equivalent to `python -m foo`.
 #[test]
 fn run_module() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("__hello__"), @"
     success: true
@@ -3358,7 +3358,7 @@ fn run_module() {
 
 #[test]
 fn run_module_stdin() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("-m").arg("-"), @"
     success: false
@@ -3373,7 +3373,7 @@ fn run_module_stdin() {
 /// Test for how run reacts to a pyproject.toml without a `[project]`
 #[test]
 fn virtual_empty() -> Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -3416,7 +3416,7 @@ fn virtual_empty() -> Result<()> {
 
 #[test]
 fn run_isolated_incompatible_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.11"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3472,7 +3472,7 @@ fn run_isolated_incompatible_python() -> Result<()> {
 
 #[test]
 fn run_isolated_does_not_modify_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3575,7 +3575,7 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
 
 #[test]
 fn run_isolated_with_frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3643,7 +3643,7 @@ fn run_isolated_with_frozen() -> Result<()> {
 
 #[test]
 fn run_compiled_python_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a non-PEP 723 script.
     let test_non_script = context.temp_dir.child("main.py");
@@ -3744,7 +3744,7 @@ fn run_compiled_python_file() -> Result<()> {
 
 #[test]
 fn run_exit_code() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script.py");
     test_script.write_str(indoc! { r#"
@@ -3763,7 +3763,7 @@ fn run_exit_code() -> Result<()> {
 
 #[test]
 fn run_invalid_project_table() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3802,7 +3802,7 @@ fn run_invalid_project_table() -> Result<()> {
 #[test]
 #[cfg(target_family = "unix")]
 fn run_script_without_build_system() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3843,7 +3843,7 @@ fn run_script_without_build_system() -> Result<()> {
 
 #[test]
 fn run_script_module_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -3929,7 +3929,7 @@ fn run_script_module_conflict() -> Result<()> {
 
 #[test]
 fn run_script_explicit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -3962,7 +3962,7 @@ fn run_script_explicit() -> Result<()> {
 
 #[test]
 fn run_script_explicit_stdin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -3995,7 +3995,7 @@ fn run_script_explicit_stdin() -> Result<()> {
 
 #[test]
 fn run_script_explicit_no_file() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context
         .run()
         .arg("--script")
@@ -4008,7 +4008,7 @@ fn run_script_explicit_no_file() {
 #[cfg(target_family = "unix")]
 #[test]
 fn run_script_explicit_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     fs_err::create_dir(context.temp_dir.child("script"))?;
 
@@ -4027,7 +4027,7 @@ fn run_script_explicit_directory() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn run_gui_script_explicit_windows() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4061,7 +4061,7 @@ fn run_gui_script_explicit_windows() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn run_gui_script_explicit_stdin_windows() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4095,7 +4095,7 @@ fn run_gui_script_explicit_stdin_windows() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_unix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
         # /// script
@@ -4126,7 +4126,7 @@ fn run_gui_script_explicit_unix() -> Result<()> {
 fn run_linked_environment_path() -> Result<()> {
     use anyhow::Ok;
 
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4205,7 +4205,7 @@ fn run_linked_environment_path() -> Result<()> {
 
 #[test]
 fn run_active_project_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4312,7 +4312,7 @@ fn run_active_project_environment() -> Result<()> {
 
 #[test]
 fn run_active_script_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()
         .with_filtered_python_names();
 
@@ -4413,7 +4413,7 @@ fn run_active_script_environment() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn run_gui_script_explicit_stdin_unix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("script");
     test_script.write_str(indoc! { r#"
@@ -4446,7 +4446,7 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 
 #[test]
 fn run_remote_pep723_script() {
-    let context = TestContext::new("3.12").with_filtered_python_names();
+    let context = uv_test::test_context!("3.12").with_filtered_python_names();
     let mut filters = context.filters();
     filters.push((
         r"(?m)^Downloaded remote script to:.*\.py$",
@@ -4472,7 +4472,7 @@ fn run_remote_pep723_script() {
 #[cfg(unix)] // A URL could be a valid filepath on Unix but not on Windows
 #[test]
 fn run_url_like_with_local_file_priority() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let url = "https://example.com/path/to/main.py";
     let local_path: std::path::PathBuf = ["https:", "", "example.com", "path", "to", "main.py"]
@@ -4500,7 +4500,7 @@ fn run_url_like_with_local_file_priority() -> Result<()> {
 
 #[test]
 fn run_stdin_with_pep723() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -4533,7 +4533,7 @@ fn run_stdin_with_pep723() -> Result<()> {
 
 #[test]
 fn run_with_env() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4581,7 +4581,7 @@ fn run_with_env() -> Result<()> {
 
 #[test]
 fn run_with_env_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4617,7 +4617,7 @@ fn run_with_env_file() -> Result<()> {
 
 #[test]
 fn run_with_multiple_env_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4667,7 +4667,7 @@ fn run_with_multiple_env_files() -> Result<()> {
 
 #[test]
 fn run_with_env_omitted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4694,7 +4694,7 @@ fn run_with_env_omitted() -> Result<()> {
 
 #[test]
 fn run_with_malformed_env() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4722,7 +4722,7 @@ fn run_with_malformed_env() -> Result<()> {
 
 #[test]
 fn run_with_not_existing_env_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("test.py").write_str(indoc! { "
         import os
@@ -4750,7 +4750,7 @@ fn run_with_not_existing_env_file() -> Result<()> {
 
 #[test]
 fn run_with_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4796,7 +4796,7 @@ fn run_with_extra_conflict() -> Result<()> {
 
 #[test]
 fn run_with_group_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -4842,7 +4842,7 @@ fn run_with_group_conflict() -> Result<()> {
 
 #[test]
 fn run_default_groups() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5074,8 +5074,8 @@ fn run_default_groups() -> Result<()> {
 
 #[test]
 fn run_groups_requires_python() -> Result<()> {
-    let context =
-        TestContext::new_with_versions(&["3.11", "3.12", "3.13"]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"])
+        .with_filtered_python_sources();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5233,7 +5233,7 @@ fn run_groups_requires_python() -> Result<()> {
 
 #[test]
 fn run_groups_include_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12", "3.13"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12", "3.13"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5333,7 +5333,7 @@ fn run_groups_include_requires_python() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn exit_status_signal() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("segfault.py");
     script.write_str(indoc! {r"
@@ -5347,7 +5347,7 @@ fn exit_status_signal() -> Result<()> {
 
 #[test]
 fn run_repeated() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.13", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5417,7 +5417,7 @@ fn run_repeated() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/11117>
 #[test]
 fn run_without_overlay() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.13"]);
+    let context = uv_test::test_context_with_versions!(&["3.13"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5488,18 +5488,18 @@ fn run_without_overlay() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn detect_infinite_recursion() -> Result<()> {
-    use crate::common::get_bin;
     use indoc::formatdoc;
     use std::os::unix::fs::PermissionsExt;
+    use uv_test::get_bin;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main");
     test_script.write_str(&formatdoc! { r#"
         #!{uv} run
 
         print("Hello, world!")
-    "#, uv = get_bin().display() })?;
+    "#, uv = get_bin!().display() })?;
 
     fs_err::set_permissions(test_script.path(), PermissionsExt::from_mode(0o0744))?;
 
@@ -5525,7 +5525,7 @@ fn detect_infinite_recursion() -> Result<()> {
 
 #[test]
 fn run_uv_variable() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Display the `UV` variable
     uv_snapshot!(
@@ -5546,7 +5546,7 @@ fn run_uv_variable() {
 #[cfg(windows)]
 #[test]
 fn run_windows_legacy_scripts() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
 
@@ -5777,7 +5777,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13173>
 #[test]
 fn run_pep723_script_with_constraints_lock() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -5872,7 +5872,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/13173>
 #[test]
 fn run_pep723_script_with_constraints() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -5924,7 +5924,7 @@ fn run_pep723_script_with_constraints() -> Result<()> {
 
 #[test]
 fn run_no_sync_incompatible_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.12", "3.11", "3.9"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.11", "3.9"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -5976,7 +5976,7 @@ fn run_no_sync_incompatible_python() -> Result<()> {
 #[test]
 fn run_python_preference_no_project() {
     let context =
-        TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
+        uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
 
     context.venv().assert().success();
 
@@ -6022,7 +6022,7 @@ fn run_python_preference_no_project() {
 /// Regression test for: <https://github.com/astral-sh/uv/issues/15518>
 #[test]
 fn isolate_child_environment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -6102,7 +6102,7 @@ fn isolate_child_environment() -> Result<()> {
 
 #[test]
 fn run_only_group_and_extra_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -6156,7 +6156,7 @@ fn run_only_group_and_extra_conflict() -> Result<()> {
 /// from the target's directory rather than the current working directory.
 #[test]
 fn run_target_workspace_discovery() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a workspace in a subdirectory.
     let workspace = context.temp_dir.child("project");

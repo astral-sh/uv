@@ -10,7 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
+use uv_test::{copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
@@ -26,7 +26,7 @@ fn workspaces_dir() -> PathBuf {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_in_examples_bird_feeder() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -70,7 +70,7 @@ fn test_albatross_in_examples_bird_feeder() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_in_examples() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -111,7 +111,7 @@ fn test_albatross_in_examples() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_just_project() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -152,7 +152,7 @@ fn test_albatross_just_project() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_project_in_excluded() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -228,7 +228,7 @@ fn test_albatross_project_in_excluded() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_root_workspace() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -272,7 +272,7 @@ fn test_albatross_root_workspace() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -318,7 +318,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_albatross() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -364,7 +364,7 @@ fn test_albatross_root_workspace_albatross() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_albatross_virtual_workspace() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
@@ -412,7 +412,7 @@ fn test_albatross_virtual_workspace() {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
     copy_dir_ignore(
@@ -482,7 +482,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
 
     copy_dir_ignore(
@@ -523,7 +523,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
@@ -586,7 +586,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn test_uv_run_isolate() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
 
     copy_dir_ignore(workspaces_dir().join("albatross-root-workspace"), &work_dir)?;
@@ -682,7 +682,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
     let mut shared_lock = None;
 
     for dir in subdirectories {
-        let context = TestContext::new("3.12");
+        let context = uv_test::test_context!("3.12");
         let work_dir = context.temp_dir.join(workspace);
 
         copy_dir_ignore(workspaces_dir().join(workspace), &work_dir)?;
@@ -759,7 +759,7 @@ struct Package {
 /// `e`. We have `a -> b`, `b -> c`, `c -> d`. `e` should not be installed.
 #[test]
 fn workspace_to_workspace_paths_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let main_workspace = context.temp_dir.child("main-workspace");
@@ -855,7 +855,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
 /// Ensure that workspace discovery errors if a member is missing a `pyproject.toml`.
 #[test]
 fn workspace_empty_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -897,7 +897,7 @@ fn workspace_empty_member() -> Result<()> {
 /// Ensure that workspace discovery ignores hidden directories.
 #[test]
 fn workspace_hidden_files() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -953,7 +953,7 @@ fn workspace_hidden_files() -> Result<()> {
 /// Ensure that workspace discovery accepts valid hidden directories.
 #[test]
 fn workspace_hidden_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -1019,7 +1019,7 @@ fn workspace_hidden_member() -> Result<()> {
 /// Ensure that workspace discovery accepts valid hidden directories.
 #[test]
 fn workspace_non_included_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -1082,7 +1082,7 @@ fn workspace_non_included_member() -> Result<()> {
 /// relative to the member.
 #[test]
 fn workspace_inherit_sources() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1316,7 +1316,7 @@ fn workspace_inherit_sources() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1372,7 +1372,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1440,7 +1440,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1523,7 +1523,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1593,7 +1593,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1664,7 +1664,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 #[test]
 #[cfg(feature = "pypi")]
 fn workspace_member_name_shadows_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create the workspace root.
     let workspace = context.temp_dir.child("workspace");
@@ -1736,7 +1736,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 /// the paths don't line up by accident.
 #[test]
 fn test_path_hopping() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main project ...
     let deps = indoc! {r#"
@@ -1794,7 +1794,7 @@ fn test_path_hopping() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1869,7 +1869,7 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1934,7 +1934,7 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
 
 #[test]
 fn workspace_members_with_leading_dot_slash() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace with leading `./` in member paths
     let workspace = context.temp_dir.child("workspace");
@@ -2004,7 +2004,7 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
 
 #[test]
 fn workspace_members_with_parent_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build a workspace with a member outside its directory using `../`
     let workspace = context.temp_dir.child("workspace");
@@ -2049,7 +2049,7 @@ fn workspace_members_with_parent_directory() -> Result<()> {
 
 #[test]
 fn workspace_members_with_complex_relative_paths() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build a workspace with complex relative path normalization
     let workspace = context.temp_dir.child("workspace");

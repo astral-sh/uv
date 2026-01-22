@@ -7,7 +7,7 @@ use uv_static::EnvVars;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::{TestContext, uv_snapshot};
 
 /// Creates a CONNECT tunnel proxy that forwards connections to the target.
 ///
@@ -170,7 +170,7 @@ async fn mixed_error_server() -> (MockServer, String) {
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn simple_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
@@ -195,7 +195,7 @@ async fn simple_http_500() {
 /// Check the simple index error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn simple_io_err() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
@@ -222,7 +222,7 @@ async fn simple_io_err() {
 /// Check the find links error message when the server returns HTTP status 500, a retryable error.
 #[tokio::test]
 async fn find_links_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
@@ -249,7 +249,7 @@ async fn find_links_http_500() {
 /// Check the find links error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn find_links_io_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
@@ -279,7 +279,7 @@ async fn find_links_io_error() {
 /// returns different kinds of retryable errors.
 #[tokio::test]
 async fn find_links_mixed_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
 
@@ -307,7 +307,7 @@ async fn find_links_mixed_error() {
 /// error.
 #[tokio::test]
 async fn direct_url_http_500() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
@@ -334,7 +334,7 @@ async fn direct_url_http_500() {
 /// Check the direct package URL error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn direct_url_io_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
@@ -364,7 +364,7 @@ async fn direct_url_io_error() {
 /// different kinds of retryable errors.
 #[tokio::test]
 async fn direct_url_mixed_error() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let (_server_drop_guard, mock_server_uri) = mixed_error_server().await;
 
@@ -418,7 +418,7 @@ fn write_python_downloads_json(context: &TestContext, mock_server_uri: &String) 
 /// error.
 #[tokio::test]
 async fn python_install_http_500() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -449,7 +449,7 @@ async fn python_install_http_500() {
 /// Check the Python install error message when the server returns a retryable IO error.
 #[tokio::test]
 async fn python_install_io_error() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -481,7 +481,7 @@ async fn python_install_io_error() {
 
 #[tokio::test]
 async fn install_http_retries() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -554,7 +554,7 @@ async fn install_http_retries() {
 
 #[tokio::test]
 async fn install_http_retry_low_level() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -589,7 +589,7 @@ async fn install_http_retry_low_level() {
 /// Test problem details with a 403 error containing license compliance information
 #[tokio::test]
 async fn rfc9457_problem_details_license_violation() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -637,7 +637,7 @@ async fn rfc9457_problem_details_license_violation() {
 /// Test that invalid proxy URL in uv.toml produces a helpful error message.
 #[tokio::test]
 async fn proxy_invalid_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml
@@ -668,7 +668,7 @@ async fn proxy_invalid_url_in_uv_toml() {
 /// Test that invalid proxy URL (not a URL) in uv.toml produces a helpful error message.
 #[tokio::test]
 async fn proxy_invalid_url_not_a_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let uv_toml = context.temp_dir.child("uv.toml");
     uv_toml
@@ -700,7 +700,7 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
 #[cfg(feature = "pypi")]
 #[tokio::test]
 async fn proxy_valid_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     Mock::given(any())
@@ -759,7 +759,7 @@ async fn proxy_valid_url_in_uv_toml() {
 #[cfg(feature = "pypi")]
 #[test]
 fn proxy_https_proxy_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let proxy_addr = start_connect_tunnel_proxy();
     let proxy_uri = format!("http://{proxy_addr}");
@@ -796,7 +796,7 @@ fn proxy_https_proxy_in_uv_toml() {
 #[cfg(feature = "pypi")]
 #[tokio::test]
 async fn proxy_no_proxy_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     mock_simple_api(&target_server).await;
@@ -864,7 +864,7 @@ no-proxy = ["{target_host}"]
 #[cfg(feature = "pypi")]
 #[tokio::test]
 async fn proxy_schemeless_url_in_uv_toml() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let target_server = MockServer::start().await;
     Mock::given(any())

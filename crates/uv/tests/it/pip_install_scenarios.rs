@@ -9,7 +9,7 @@ use std::process::Command;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
+use uv_test::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
 
 /// Create a `pip install` command with options shared across all scenarios.
 fn command(context: &TestContext) -> Command {
@@ -37,7 +37,7 @@ fn command(context: &TestContext) -> Command {
 /// ```
 #[test]
 fn requires_exact_version_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -73,7 +73,7 @@ fn requires_exact_version_does_not_exist() {
 /// ```
 #[test]
 fn requires_greater_version_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -110,7 +110,7 @@ fn requires_greater_version_does_not_exist() {
 /// ```
 #[test]
 fn requires_less_version_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -143,7 +143,7 @@ fn requires_less_version_does_not_exist() {
 /// ```
 #[test]
 fn requires_package_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -180,7 +180,7 @@ fn requires_package_does_not_exist() {
 /// ```
 #[test]
 fn transitive_requires_package_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -262,7 +262,7 @@ fn transitive_requires_package_does_not_exist() {
 /// ```
 #[test]
 fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -365,7 +365,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 /// ```
 #[test]
 fn dependency_excludes_range_of_compatible_versions() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -442,7 +442,7 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// ```
 #[test]
 fn excluded_only_compatible_version() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -495,7 +495,7 @@ fn excluded_only_compatible_version() {
 /// ```
 #[test]
 fn excluded_only_version() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -558,7 +558,7 @@ fn excluded_only_version() {
 /// ```
 #[test]
 fn all_extras_required() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -609,7 +609,7 @@ fn all_extras_required() {
 /// ```
 #[test]
 fn extra_does_not_exist_backtrack() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -659,7 +659,7 @@ fn extra_does_not_exist_backtrack() {
 /// ```
 #[test]
 fn extra_incompatible_with_extra_not_requested() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -710,7 +710,7 @@ fn extra_incompatible_with_extra_not_requested() {
 /// ```
 #[test]
 fn extra_incompatible_with_extra() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -757,7 +757,7 @@ fn extra_incompatible_with_extra() {
 /// ```
 #[test]
 fn extra_incompatible_with_root() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -802,7 +802,7 @@ fn extra_incompatible_with_root() {
 /// ```
 #[test]
 fn extra_required() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -841,7 +841,7 @@ fn extra_required() {
 /// ```
 #[test]
 fn missing_extra() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -892,7 +892,7 @@ fn missing_extra() {
 /// ```
 #[test]
 fn multiple_extras_required() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -936,7 +936,7 @@ fn multiple_extras_required() {
 /// ```
 #[test]
 fn direct_incompatible_versions() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -977,7 +977,7 @@ fn direct_incompatible_versions() {
 /// ```
 #[test]
 fn transitive_incompatible_versions() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1020,7 +1020,7 @@ fn transitive_incompatible_versions() {
 /// ```
 #[test]
 fn transitive_incompatible_with_root_version() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1069,7 +1069,7 @@ fn transitive_incompatible_with_root_version() {
 /// ```
 #[test]
 fn transitive_incompatible_with_transitive() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1110,7 +1110,7 @@ fn transitive_incompatible_with_transitive() {
 /// ```
 #[test]
 fn local_greater_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1148,7 +1148,7 @@ fn local_greater_than_or_equal() {
 /// ```
 #[test]
 fn local_greater_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1185,7 +1185,7 @@ fn local_greater_than() {
 /// ```
 #[test]
 fn local_less_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1223,7 +1223,7 @@ fn local_less_than_or_equal() {
 /// ```
 #[test]
 fn local_less_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1262,7 +1262,7 @@ fn local_less_than() {
 /// ```
 #[test]
 fn local_not_latest() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1301,7 +1301,7 @@ fn local_not_latest() {
 /// ```
 #[test]
 fn local_not_used_with_sdist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1341,7 +1341,7 @@ fn local_not_used_with_sdist() {
 /// ```
 #[test]
 fn local_simple() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1391,7 +1391,7 @@ fn local_simple() {
 /// ```
 #[test]
 fn local_transitive_backtrack() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1439,7 +1439,7 @@ fn local_transitive_backtrack() {
 /// ```
 #[test]
 fn local_transitive_conflicting() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1485,7 +1485,7 @@ fn local_transitive_conflicting() {
 /// ```
 #[test]
 fn local_transitive_confounding() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1533,7 +1533,7 @@ fn local_transitive_confounding() {
 /// ```
 #[test]
 fn local_transitive_greater_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1581,7 +1581,7 @@ fn local_transitive_greater_than_or_equal() {
 /// ```
 #[test]
 fn local_transitive_greater_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1627,7 +1627,7 @@ fn local_transitive_greater_than() {
 /// ```
 #[test]
 fn local_transitive_less_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1675,7 +1675,7 @@ fn local_transitive_less_than_or_equal() {
 /// ```
 #[test]
 fn local_transitive_less_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1721,7 +1721,7 @@ fn local_transitive_less_than() {
 /// ```
 #[test]
 fn local_transitive() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1764,7 +1764,7 @@ fn local_transitive() {
 /// ```
 #[test]
 fn local_used_without_sdist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1803,7 +1803,7 @@ fn local_used_without_sdist() {
 /// ```
 #[test]
 fn post_equal_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1842,7 +1842,7 @@ fn post_equal_available() {
 /// ```
 #[test]
 fn post_equal_not_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1879,7 +1879,7 @@ fn post_equal_not_available() {
 /// ```
 #[test]
 fn post_greater_than_or_equal_post() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1917,7 +1917,7 @@ fn post_greater_than_or_equal_post() {
 /// ```
 #[test]
 fn post_greater_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1957,7 +1957,7 @@ fn post_greater_than_or_equal() {
 /// ```
 #[test]
 fn post_greater_than_post_not_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1993,7 +1993,7 @@ fn post_greater_than_post_not_available() {
 /// ```
 #[test]
 fn post_greater_than_post() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2031,7 +2031,7 @@ fn post_greater_than_post() {
 /// ```
 #[test]
 fn post_greater_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2066,7 +2066,7 @@ fn post_greater_than() {
 /// ```
 #[test]
 fn post_less_than_or_equal() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2101,7 +2101,7 @@ fn post_less_than_or_equal() {
 /// ```
 #[test]
 fn post_less_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2137,7 +2137,7 @@ fn post_less_than() {
 /// ```
 #[test]
 fn post_local_greater_than_post() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2173,7 +2173,7 @@ fn post_local_greater_than_post() {
 /// ```
 #[test]
 fn post_local_greater_than() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2208,7 +2208,7 @@ fn post_local_greater_than() {
 /// ```
 #[test]
 fn post_simple() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2247,7 +2247,7 @@ fn post_simple() {
 /// ```
 #[test]
 fn package_multiple_prereleases_kinds() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2289,7 +2289,7 @@ fn package_multiple_prereleases_kinds() {
 /// ```
 #[test]
 fn package_multiple_prereleases_numbers() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2329,7 +2329,7 @@ fn package_multiple_prereleases_numbers() {
 /// ```
 #[test]
 fn package_only_prereleases_boundary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2368,7 +2368,7 @@ fn package_only_prereleases_boundary() {
 /// ```
 #[test]
 fn package_only_prereleases_in_range() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2406,7 +2406,7 @@ fn package_only_prereleases_in_range() {
 /// ```
 #[test]
 fn package_only_prereleases() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2450,7 +2450,7 @@ fn package_only_prereleases() {
 /// ```
 #[test]
 fn package_prerelease_specified_mixed_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2492,7 +2492,7 @@ fn package_prerelease_specified_mixed_available() {
 /// ```
 #[test]
 fn package_prerelease_specified_only_final_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2540,7 +2540,7 @@ fn package_prerelease_specified_only_final_available() {
 /// ```
 #[test]
 fn package_prerelease_specified_only_prerelease_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2586,7 +2586,7 @@ fn package_prerelease_specified_only_prerelease_available() {
 /// ```
 #[test]
 fn package_prereleases_boundary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2627,7 +2627,7 @@ fn package_prereleases_boundary() {
 /// ```
 #[test]
 fn package_prereleases_global_boundary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2672,7 +2672,7 @@ fn package_prereleases_global_boundary() {
 /// ```
 #[test]
 fn package_prereleases_specifier_boundary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2711,7 +2711,7 @@ fn package_prereleases_specifier_boundary() {
 /// ```
 #[test]
 fn requires_package_only_prereleases_in_range_global_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2756,7 +2756,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 /// ```
 #[test]
 fn requires_package_prerelease_and_final_any() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2802,7 +2802,7 @@ fn requires_package_prerelease_and_final_any() {
 /// ```
 #[test]
 fn transitive_package_only_prereleases_in_range_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2857,7 +2857,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 /// ```
 #[test]
 fn transitive_package_only_prereleases_in_range() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2900,7 +2900,7 @@ fn transitive_package_only_prereleases_in_range() {
 /// ```
 #[test]
 fn transitive_package_only_prereleases() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2976,7 +2976,7 @@ fn transitive_package_only_prereleases() {
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3071,7 +3071,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3131,7 +3131,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3198,7 +3198,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3248,7 +3248,7 @@ fn transitive_prerelease_and_stable_dependency() {
 /// ```
 #[test]
 fn python_greater_than_current_backtrack() {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3293,7 +3293,7 @@ fn python_greater_than_current_backtrack() {
 /// ```
 #[test]
 fn python_greater_than_current_excluded() {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3363,7 +3363,7 @@ fn python_greater_than_current_excluded() {
 /// ```
 #[test]
 fn python_greater_than_current_many() {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3400,7 +3400,7 @@ fn python_greater_than_current_many() {
 #[cfg(feature = "python-patch")]
 #[test]
 fn python_greater_than_current_patch() {
-    let context = TestContext::new("3.13.0");
+    let context = uv_test::test_context!("3.13.0");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3437,7 +3437,7 @@ fn python_greater_than_current_patch() {
 /// ```
 #[test]
 fn python_greater_than_current() {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3474,7 +3474,7 @@ fn python_greater_than_current() {
 /// ```
 #[test]
 fn python_less_than_current() {
-    let context = TestContext::new("3.9");
+    let context = uv_test::test_context!("3.9");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3512,7 +3512,7 @@ fn python_less_than_current() {
 /// ```
 #[test]
 fn python_version_does_not_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3548,7 +3548,7 @@ fn python_version_does_not_exist() {
 /// ```
 #[test]
 fn no_binary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3587,7 +3587,7 @@ fn no_binary() {
 /// ```
 #[test]
 fn no_build() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3626,7 +3626,7 @@ fn no_build() {
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_abi() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3665,7 +3665,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_platform() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3704,7 +3704,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_python() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3743,7 +3743,7 @@ fn no_sdist_no_wheels_with_matching_python() {
 /// ```
 #[test]
 fn no_wheels_no_build() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3783,7 +3783,7 @@ fn no_wheels_no_build() {
 /// ```
 #[test]
 fn no_wheels_with_matching_platform() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3818,7 +3818,7 @@ fn no_wheels_with_matching_platform() {
 /// ```
 #[test]
 fn no_wheels() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3853,7 +3853,7 @@ fn no_wheels() {
 /// ```
 #[test]
 fn only_wheels_no_binary() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3893,7 +3893,7 @@ fn only_wheels_no_binary() {
 /// ```
 #[test]
 fn only_wheels() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3928,7 +3928,7 @@ fn only_wheels() {
 /// ```
 #[test]
 fn specific_tag_and_default() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3964,7 +3964,7 @@ fn specific_tag_and_default() {
 /// ```
 #[test]
 fn package_only_yanked_in_range() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4004,7 +4004,7 @@ fn package_only_yanked_in_range() {
 /// ```
 #[test]
 fn package_only_yanked() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4045,7 +4045,7 @@ fn package_only_yanked() {
 /// ```
 #[test]
 fn package_yanked_specified_mixed_available() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4084,7 +4084,7 @@ fn package_yanked_specified_mixed_available() {
 /// ```
 #[test]
 fn requires_package_yanked_and_unyanked_any() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4129,7 +4129,7 @@ fn requires_package_yanked_and_unyanked_any() {
 /// ```
 #[test]
 fn transitive_package_only_yanked_in_range_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4179,7 +4179,7 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 /// ```
 #[test]
 fn transitive_package_only_yanked_in_range() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4224,7 +4224,7 @@ fn transitive_package_only_yanked_in_range() {
 /// ```
 #[test]
 fn transitive_package_only_yanked() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4275,7 +4275,7 @@ fn transitive_package_only_yanked() {
 /// ```
 #[test]
 fn transitive_yanked_and_unyanked_dependency_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4343,7 +4343,7 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 /// ```
 #[test]
 fn transitive_yanked_and_unyanked_dependency() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();

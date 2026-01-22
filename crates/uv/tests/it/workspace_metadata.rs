@@ -2,12 +2,12 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 
-use crate::common::{TestContext, copy_dir_ignore, uv_snapshot};
+use uv_test::{copy_dir_ignore, uv_snapshot};
 
 /// Test basic metadata output for a simple workspace with one member.
 #[test]
 fn workspace_metadata_simple() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Initialize a workspace with one member
     context.init().arg("foo").assert().success();
@@ -40,7 +40,7 @@ fn workspace_metadata_simple() {
 /// Test metadata for a root workspace (workspace with a root package).
 #[test]
 fn workspace_metadata_root_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
@@ -86,7 +86,7 @@ fn workspace_metadata_root_workspace() -> Result<()> {
 /// Test metadata for a virtual workspace (no root package).
 #[test]
 fn workspace_metadata_virtual_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
@@ -132,7 +132,7 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
 /// Test metadata when run from a workspace member directory.
 #[test]
 fn workspace_metadata_from_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
@@ -180,7 +180,7 @@ fn workspace_metadata_from_member() -> Result<()> {
 /// Test metadata for a workspace with multiple packages.
 #[test]
 fn workspace_metadata_multiple_members() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Initialize workspace root
     context.init().arg("pkg-a").assert().success();
@@ -236,7 +236,7 @@ fn workspace_metadata_multiple_members() {
 /// Test metadata for a single project (not a workspace).
 #[test]
 fn workspace_metadata_single_project() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.init().arg("my-project").assert().success();
 
@@ -268,7 +268,7 @@ fn workspace_metadata_single_project() {
 /// Test metadata with excluded packages.
 #[test]
 fn workspace_metadata_with_excluded() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     copy_dir_ignore(
@@ -306,7 +306,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
 /// Test metadata error when not in a project.
 #[test]
 fn workspace_metadata_no_project() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_metadata(), @"
     success: false

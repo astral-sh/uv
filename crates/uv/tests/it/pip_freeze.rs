@@ -3,11 +3,11 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn freeze_many() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -42,7 +42,7 @@ fn freeze_duplicate() -> Result<()> {
     use uv_fs::copy_dir_all;
 
     // Sync a version of `pip` into a virtual environment.
-    let context1 = TestContext::new("3.12");
+    let context1 = uv_test::test_context!("3.12");
     let requirements_txt = context1.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==21.3.1")?;
 
@@ -54,7 +54,7 @@ fn freeze_duplicate() -> Result<()> {
         .success();
 
     // Sync a different version of `pip` into a virtual environment.
-    let context2 = TestContext::new("3.12");
+    let context2 = uv_test::test_context!("3.12");
     let requirements_txt = context2.temp_dir.child("requirements.txt");
     requirements_txt.write_str("pip==22.1.1")?;
 
@@ -92,7 +92,7 @@ fn freeze_duplicate() -> Result<()> {
 /// List a direct URL package in a virtual environment.
 #[test]
 fn freeze_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio\niniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl")?;
@@ -124,7 +124,7 @@ fn freeze_url() -> Result<()> {
 
 #[test]
 fn freeze_with_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -178,7 +178,7 @@ fn freeze_with_editable() -> Result<()> {
 /// Show an `.egg-info` package in a virtual environment.
 #[test]
 fn freeze_with_egg_info() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -231,7 +231,7 @@ fn freeze_with_egg_info() -> Result<()> {
 /// Python version.
 #[test]
 fn freeze_with_egg_info_no_py() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -283,7 +283,7 @@ fn freeze_with_egg_info_no_py() -> Result<()> {
 /// Show a set of `.egg-info` files in a virtual environment.
 #[test]
 fn freeze_with_egg_info_file() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
     let site_packages = ChildPath::new(context.site_packages());
 
     // Manually create a `.egg-info` file with python version.
@@ -319,7 +319,7 @@ fn freeze_with_egg_info_file() -> Result<()> {
 
 #[test]
 fn freeze_with_legacy_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let site_packages = ChildPath::new(context.site_packages());
 
@@ -357,7 +357,7 @@ Version: 0.22.0
 
 #[test]
 fn freeze_path() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -391,7 +391,7 @@ fn freeze_path() -> Result<()> {
 
 #[test]
 fn freeze_multiple_paths() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt1 = context.temp_dir.child("requirements1.txt");
     requirements_txt1.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -434,7 +434,7 @@ fn freeze_multiple_paths() -> Result<()> {
 // We follow pip in just ignoring nonexistent paths
 #[test]
 fn freeze_nonexistent_path() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let nonexistent_dir = {
         let dir = context.temp_dir.child("blahblah");
@@ -456,7 +456,7 @@ fn freeze_nonexistent_path() {
 
 #[test]
 fn freeze_with_quiet_flag() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -485,7 +485,7 @@ fn freeze_with_quiet_flag() -> Result<()> {
 
 #[test]
 fn freeze_target() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -531,7 +531,7 @@ fn freeze_target() -> Result<()> {
 
 #[test]
 fn freeze_prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3\ntomli==2.0.1")?;
@@ -577,7 +577,7 @@ fn freeze_prefix() -> Result<()> {
 
 #[test]
 fn freeze_exclude() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let prefix = context.temp_dir.child("prefix");
 

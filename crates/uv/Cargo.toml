@@ -124,22 +124,20 @@ embed-manifest = { workspace = true }
 
 [dev-dependencies]
 uv-publish = { workspace = true, features = ["test"] }
+uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 backon = { workspace = true }
-base64 = { workspace = true }
 byteorder = { workspace = true }
 filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
-ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
-similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-util = { workspace = true }
@@ -163,7 +161,7 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 self-update = ["axoupdater", "uv-cli/self-update"]
 
 # Features for development only.
-tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export", "uv-test/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
 default-tests = [
@@ -181,7 +179,7 @@ default-tests = [
 # Introduces a testing dependency on crates.io.
 crates-io = []
 # Introduces a testing dependency on Git.
-git = []
+git = ["uv-test/git"]
 # Introduces a testing dependency on Git LFS.
 git-lfs = ["git"]
 # Introduces a testing dependency on PyPI.

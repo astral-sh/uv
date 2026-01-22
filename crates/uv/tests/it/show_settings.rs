@@ -3,7 +3,7 @@ use std::process::Command;
 use assert_fs::prelude::*;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Add shared arguments to a command.
 ///
@@ -32,7 +32,7 @@ fn add_shared_args(mut command: Command) -> Command {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_uv_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -679,7 +679,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_pyproject_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -1313,7 +1313,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_index_url() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -1855,7 +1855,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_find_links() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `pyproject.toml` file to the directory.
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -2087,7 +2087,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_top_level() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write out to the top-level (`tool.uv`, rather than `tool.uv.pip`).
     let pyproject = context.temp_dir.child("pyproject.toml");
@@ -2789,7 +2789,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         resolution = "lowest-direct"
     "#})?;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
@@ -3528,7 +3528,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         resolution = "lowest-direct"
     "#})?;
 
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Add a local configuration to disable build isolation.
     let config = context.temp_dir.child("uv.toml");
@@ -3710,7 +3710,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_poetry_toml() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("pyproject.toml");
@@ -3918,7 +3918,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_both() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -4170,7 +4170,7 @@ fn resolve_both() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_both_special_fields() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to the directory.
     let config = context.temp_dir.child("uv.toml");
@@ -4414,7 +4414,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
 /// Tests that errors when parsing `conflicts` are reported.
 #[test]
 fn invalid_conflicts() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
     // Write in `pyproject.toml` schema and test the singleton case.
@@ -4479,7 +4479,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 /// Tests that valid `conflicts` are parsed okay.
 #[test]
 fn valid_conflicts() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
@@ -4516,7 +4516,7 @@ fn valid_conflicts() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_config_file() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` to a temporary location. (Use the cache directory for convenience, since
     // it's already obfuscated in the fixtures.)
@@ -4816,7 +4816,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_skip_empty() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Set `lowest-direct` in a `uv.toml`.
     let config = context.temp_dir.child("uv.toml");
@@ -5205,7 +5205,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn allow_insecure_host() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
@@ -5407,7 +5407,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn index_priority() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let config = context.temp_dir.child("uv.toml");
     config.write_str(indoc::indoc! {r#"
@@ -6896,7 +6896,7 @@ fn index_priority() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn verify_hashes() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
@@ -7943,7 +7943,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn preview_features() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let cmd = || {
         let mut cmd = context.version();
@@ -8676,7 +8676,7 @@ fn preview_features() {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
@@ -9822,7 +9822,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {r#"
@@ -10619,7 +10619,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn build_isolation_override() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Write a `uv.toml` file to disable build isolation.
     let uv_toml = context.temp_dir.child("uv.toml");
