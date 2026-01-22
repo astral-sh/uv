@@ -49,7 +49,7 @@ struct InstallRequest<'a> {
     /// A download request corresponding to the `request` with platform information filled
     download_request: PythonDownloadRequest,
     /// A download that satisfies the request
-    download: &'a ManagedPythonDownload,
+    download: Cow<'a, ManagedPythonDownload>,
 }
 
 impl<'a> InstallRequest<'a> {
@@ -66,7 +66,7 @@ impl<'a> InstallRequest<'a> {
 
         // Find a matching download
         let download = match download_list.find(&download_request) {
-            Ok(download) => download,
+            Ok(download) => Cow::Borrowed(download),
             Err(downloads::Error::NoDownloadFound(request))
                 if request.libc().is_some_and(Libc::is_musl)
                     && request.arch().is_some_and(|arch| {
@@ -81,6 +81,58 @@ impl<'a> InstallRequest<'a> {
         };
 
         Ok(Self {
+            request,
+            download_request,
+            download,
+        })
+    }
+
+    /// Create an install request using streaming find for early-exit.
+    ///
+    /// This is useful when installing a single Python version, as it avoids
+    /// downloading all available versions when using remote NDJSON sources.
+    async fn new_streaming(
+        request: PythonRequest,
+        client: &uv_client::BaseClient,
+        python_downloads_json_url: Option<&str>,
+        preview: &Preview,
+    ) -> Result<InstallRequest<'static>> {
+        // Make sure the request is a valid download request and fill platform information
+        let download_request = PythonDownloadRequest::from_request(&request)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "`{}` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions",
+                    request.to_canonical_string()
+                )
+            })?
+            .fill()?;
+
+        // Find a matching download using streaming
+        let download = match ManagedPythonDownloadList::find_streaming(
+            client,
+            python_downloads_json_url,
+            preview,
+            &download_request,
+        )
+        .await
+        {
+            Ok(Some(download)) => Cow::Owned(download),
+            Ok(None) => {
+                if download_request.libc().is_some_and(Libc::is_musl)
+                    && download_request.arch().is_some_and(|arch| {
+                        arch.inner() == Arch::from(&uv_platform_tags::Arch::Armv7L)
+                    })
+                {
+                    return Err(anyhow::anyhow!(
+                        "uv does not yet provide musl Python distributions on armv7."
+                    ));
+                }
+                return Err(downloads::Error::NoDownloadFound(download_request).into());
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        Ok(InstallRequest {
             request,
             download_request,
             download,
@@ -348,69 +400,98 @@ async fn perform_install(
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build();
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref(), &preview)
-            .await?;
+
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
-    let requests: Vec<_> = if targets.is_empty() {
-        if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) {
-            is_unspecified_upgrade = true;
-            // On upgrade, derive requests for all of the existing installations
-            let mut minor_version_requests = IndexSet::<InstallRequest>::default();
-            for installation in &existing_installations {
-                let mut request = PythonDownloadRequest::from(installation);
-                // We should always have a version in the request from an existing installation
-                let version = request.take_version().unwrap();
-                // Drop the patch and prerelease parts from the request
-                request = request.with_version(version.only_minor());
-                let install_request =
-                    InstallRequest::new(PythonRequest::Key(request), &download_list)?;
-                minor_version_requests.insert(install_request);
-            }
-            minor_version_requests.into_iter().collect::<Vec<_>>()
-        } else {
-            PythonVersionFile::discover(
-                project_dir,
-                &VersionFileDiscoveryOptions::default()
-                    .with_no_config(no_config)
-                    .with_preference(VersionFilePreference::Versions),
-            )
-            .await?
-            .inspect(|file| {
-                debug!(
-                    "Found Python version file at: {}",
-                    file.path().user_display()
-                );
-            })
-            .map(PythonVersionFile::into_versions)
-            .inspect(|_| is_from_python_version_file = true)
-            .unwrap_or_else(|| {
-                // If no version file is found and no requests were made
-                // TODO(zanieb): We should consider differentiating between a global Python version
-                // file here, allowing a request from there to enable `is_default_install`.
-                is_default_install = true;
-                vec![if reinstall {
-                    // On bare `--reinstall`, reinstall all Python versions
-                    PythonRequest::Any
-                } else {
-                    PythonRequest::Default
-                }]
-            })
-            .into_iter()
-            .map(|request| InstallRequest::new(request, &download_list))
-            .collect::<Result<Vec<_>>>()?
-        }
+
+    // For single-target installs without reinstall, use streaming to avoid downloading all
+    // available versions. This is a significant optimization when using remote NDJSON sources.
+    // We skip streaming for reinstalls because we may need the download list later.
+    let use_streaming = targets.len() == 1 && !reinstall;
+
+    // Optionally load the download list (needed for multi-target, reinstall, or upgrade cases)
+    let download_list = if use_streaming {
+        None
     } else {
-        targets
-            .iter()
-            .map(|target| PythonRequest::parse(target.as_str()))
-            .map(|request| InstallRequest::new(request, &download_list))
-            .collect::<Result<Vec<_>>>()?
+        Some(
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref(), &preview)
+                .await?,
+        )
+    };
+
+    let requests: Vec<InstallRequest<'_>> = if use_streaming {
+        let target = &targets[0];
+        let request = PythonRequest::parse(target.as_str());
+        let install_request = InstallRequest::new_streaming(
+            request,
+            &client,
+            python_downloads_json_url.as_deref(),
+            &preview,
+        )
+        .await?;
+        vec![install_request]
+    } else {
+        let download_list = download_list.as_ref().expect("download_list should be set");
+
+        if targets.is_empty() {
+            if matches!(
+                upgrade,
+                PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
+            ) {
+                is_unspecified_upgrade = true;
+                // On upgrade, derive requests for all of the existing installations
+                let mut minor_version_requests = IndexSet::<InstallRequest>::default();
+                for installation in &existing_installations {
+                    let mut request = PythonDownloadRequest::from(installation);
+                    // We should always have a version in the request from an existing installation
+                    let version = request.take_version().unwrap();
+                    // Drop the patch and prerelease parts from the request
+                    request = request.with_version(version.only_minor());
+                    let install_request =
+                        InstallRequest::new(PythonRequest::Key(request), download_list)?;
+                    minor_version_requests.insert(install_request);
+                }
+                minor_version_requests.into_iter().collect::<Vec<_>>()
+            } else {
+                PythonVersionFile::discover(
+                    project_dir,
+                    &VersionFileDiscoveryOptions::default()
+                        .with_no_config(no_config)
+                        .with_preference(VersionFilePreference::Versions),
+                )
+                .await?
+                .inspect(|file| {
+                    debug!(
+                        "Found Python version file at: {}",
+                        file.path().user_display()
+                    );
+                })
+                .map(PythonVersionFile::into_versions)
+                .inspect(|_| is_from_python_version_file = true)
+                .unwrap_or_else(|| {
+                    // If no version file is found and no requests were made
+                    // TODO(zanieb): We should consider differentiating between a global Python version
+                    // file here, allowing a request from there to enable `is_default_install`.
+                    is_default_install = true;
+                    vec![if reinstall {
+                        // On bare `--reinstall`, reinstall all Python versions
+                        PythonRequest::Any
+                    } else {
+                        PythonRequest::Default
+                    }]
+                })
+                .into_iter()
+                .map(|request| InstallRequest::new(request, download_list))
+                .collect::<Result<Vec<_>>>()?
+            }
+        } else {
+            targets
+                .iter()
+                .map(|target| PythonRequest::parse(target.as_str()))
+                .map(|request| InstallRequest::new(request, download_list))
+                .collect::<Result<Vec<_>>>()?
+        }
     };
 
     if requests.is_empty() {
@@ -490,9 +571,13 @@ async fn perform_install(
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
                     // Construct an install request matching the existing installation
+                    // Note: download_list is guaranteed to be Some here because use_streaming
+                    // is false when reinstall is true
                     match InstallRequest::new(
                         PythonRequest::Key(installation.into()),
-                        &download_list,
+                        download_list
+                            .as_ref()
+                            .expect("download_list should be set when reinstalling"),
                     ) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key());
@@ -573,7 +658,7 @@ async fn perform_install(
                 request.download, request,
             );
         })
-        .map(|request| request.download)
+        .map(|request| request.download.as_ref())
         // Ensure we only download each version once
         .unique_by(|download| download.key())
         .collect::<Vec<_>>();
