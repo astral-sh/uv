@@ -447,11 +447,6 @@ Implementation name requests are not case-sensitive.
 See the [Python version request](#requesting-a-version) documentation for more details on the
 supported formats.
 
-!!! note
-
-    PyPy is [not actively developed anymore](https://github.com/numpy/numpy/issues/30416) and
-    only supports Python versions up to 3.11.
-
 ## Managed Python distributions
 
 uv supports downloading and installing CPython, PyPy, and Pyodide distributions.
