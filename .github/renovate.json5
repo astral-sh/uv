@@ -134,7 +134,9 @@
     // Maturin version used in maturin-action
     {
       customType: "regex",
-      managerFilePatterns: ["/.github/workflows/build-binaries\\.yml$/"],
+      managerFilePatterns: [
+        "/.github/workflows/build-release-binaries\\.yml$/",
+      ],
       matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       depNameTemplate: "maturin",
       packageNameTemplate: "PyO3/maturin",
