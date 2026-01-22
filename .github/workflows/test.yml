@@ -76,7 +76,12 @@ jobs:
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') || github.ref == 'refs/heads/main' }}
+    if: >-
+      ${{
+        contains(github.event.pull_request.labels.*.name, 'test:macos') ||
+        contains(github.event.pull_request.labels.*.name, 'test:extended') ||
+        github.ref == 'refs/heads/main'
+      }}
     runs-on: depot-macos-14
     name: "cargo test on macos"
     steps:
