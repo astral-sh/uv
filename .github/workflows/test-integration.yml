@@ -615,6 +615,31 @@ jobs:
           ./uv pip install packaging
           python -c 'import packaging'
 
+  integration-test-pyodide-windows:
+    name: "pyodide on windows"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Install Pyodide with uv python"
+        run: |
+          .\uv.exe python install cpython-3.13.2-emscripten-wasm32-musl
+
+      - name: "Install Emscripten wheels with uv python"
+        run: |
+          .\uv.exe venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide
+          & venv-pyodide\Scripts\Activate.ps1
+          .\uv.exe pip install --extra-index-url=https://index.pyodide.org/0.29.2 --no-build numpy
+          python -c 'import numpy'
+
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
