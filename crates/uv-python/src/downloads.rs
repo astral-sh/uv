@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::task::{Context, Poll};
 use std::{env, io};
 
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryError;
@@ -25,6 +25,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
+use uv_preview::{Preview, PreviewFeatures};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
@@ -106,6 +107,10 @@ pub enum Error {
     UnsupportedPythonDownloadsJSON(String),
     #[error("Error while fetching remote python downloads json from '{0}'")]
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
+    #[error("Unable to parse NDJSON line at {0}")]
+    InvalidPythonDownloadsNdjsonLine(String, #[source] serde_json::Error),
+    #[error("Error while fetching remote python downloads NDJSON from '{0}'")]
+    FetchingPythonDownloadsNdjsonError(String, #[source] Box<Self>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -888,6 +893,9 @@ impl FromStr for PythonDownloadRequest {
 const BUILTIN_PYTHON_DOWNLOADS_JSON: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/download-metadata-minified.json"));
 
+/// Default URL for the remote Python download metadata endpoint (NDJSON format).
+const REMOTE_PYTHON_DOWNLOAD_METADATA_URL: &str = "https://raw.githubusercontent.com/astral-sh/versions/refs/heads/main/v1/python-build-standalone.ndjson";
+
 pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
 }
@@ -912,6 +920,151 @@ struct JsonPythonDownload {
 struct JsonArch {
     family: String,
     variant: Option<String>,
+}
+
+/// A Python version entry from the NDJSON format.
+/// Each line represents one Python version with all its platform artifacts.
+#[derive(Debug, Deserialize, Clone)]
+struct NdjsonPythonVersionInfo {
+    /// Version string in format "3.15.0a5+20260114" (version + build)
+    version: String,
+    /// All artifacts for this version across platforms
+    artifacts: Vec<NdjsonPythonArtifact>,
+}
+
+/// A single artifact from the NDJSON format.
+#[derive(Debug, Deserialize, Clone)]
+struct NdjsonPythonArtifact {
+    /// Platform string in Rust target triple format (e.g., "aarch64-apple-darwin")
+    platform: String,
+    /// Build variant (e.g., `install_only`, `freethreaded+pgo+lto+full`)
+    variant: String,
+    /// Download URL
+    url: String,
+    /// SHA256 hash of the artifact
+    sha256: Option<String>,
+}
+
+/// Detected format for the download list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DownloadListFormat {
+    Json,
+    Ndjson,
+}
+
+/// Detect the format of a download list based on the URL or path extension.
+fn detect_download_list_format(url_or_path: &str) -> DownloadListFormat {
+    if url_or_path.ends_with(".ndjson") {
+        DownloadListFormat::Ndjson
+    } else {
+        DownloadListFormat::Json
+    }
+}
+
+/// Parse a version string with optional build suffix.
+///
+/// Format: "3.15.0a5+20260114" -> (PythonVersion("3.15.0a5"), Some("20260114"))
+fn parse_version_with_build(s: &str) -> Result<(PythonVersion, Option<&str>), Error> {
+    if let Some((version_str, build)) = s.split_once('+') {
+        let version = PythonVersion::from_str(version_str)
+            .map_err(|_| Error::InvalidPythonVersion(s.to_string()))?;
+        Ok((version, Some(build)))
+    } else {
+        let version =
+            PythonVersion::from_str(s).map_err(|_| Error::InvalidPythonVersion(s.to_string()))?;
+        Ok((version, None))
+    }
+}
+
+/// Parse the NDJSON variant string to determine Python variant.
+///
+/// Variants can be: `install_only`, `install_only_stripped`, `freethreaded+pgo+lto+full`, etc.
+fn parse_ndjson_variant(variant: &str) -> Option<PythonVariant> {
+    // Skip debug builds
+    if variant.contains("debug") {
+        return None;
+    }
+
+    // Handle freethreaded builds - accept both install_only and optimized full variants
+    if variant.contains("freethreaded") {
+        // Accept freethreaded variants (prefer pgo+lto+full as it's the most optimized)
+        if variant.contains("pgo") && variant.contains("lto") {
+            return Some(PythonVariant::Freethreaded);
+        }
+        // Also accept other freethreaded variants
+        if variant.contains("full") || variant.contains("install_only") {
+            return Some(PythonVariant::Freethreaded);
+        }
+        return None;
+    }
+
+    // For non-freethreaded builds, prefer install_only variants as they're smaller
+    // Full archives are available but we skip them in favor of install_only
+    if variant.contains("install_only") {
+        return Some(PythonVariant::default());
+    }
+
+    // Skip full archives for non-freethreaded builds (install_only is preferred)
+    None
+}
+
+/// Parse an NDJSON version info into a list of [`ManagedPythonDownload`]s.
+fn parse_ndjson_version_info(version_info: NdjsonPythonVersionInfo) -> Vec<ManagedPythonDownload> {
+    let (version, build) = match parse_version_with_build(&version_info.version) {
+        Ok((version, build)) => (version, build),
+        Err(e) => {
+            debug!(
+                "Skipping NDJSON entry: Invalid version '{}' - {}",
+                version_info.version, e
+            );
+            return Vec::new();
+        }
+    };
+
+    let build = build.map(|s| Box::leak(s.to_owned().into_boxed_str()) as &'static str);
+
+    version_info
+        .artifacts
+        .into_iter()
+        .filter_map(|artifact| parse_ndjson_artifact(&version, build, artifact))
+        .collect()
+}
+
+/// Parse a single NDJSON artifact into a [`ManagedPythonDownload`].
+fn parse_ndjson_artifact(
+    version: &PythonVersion,
+    build: Option<&'static str>,
+    artifact: NdjsonPythonArtifact,
+) -> Option<ManagedPythonDownload> {
+    // Parse the variant to determine if this is a build we want
+    let python_variant = parse_ndjson_variant(&artifact.variant)?;
+
+    // Parse the platform triple using the centralized Platform parser
+    let platform = match Platform::from_cargo_dist_triple(&artifact.platform) {
+        Ok(platform) => platform,
+        Err(e) => {
+            debug!(
+                "Skipping NDJSON artifact: Failed to parse platform '{}' - {}",
+                artifact.platform, e
+            );
+            return None;
+        }
+    };
+
+    // Implementation is always CPython for python-build-standalone
+    let implementation = LenientImplementationName::Known(ImplementationName::CPython);
+
+    Some(ManagedPythonDownload {
+        key: PythonInstallationKey::new_from_version(
+            implementation,
+            version,
+            platform,
+            python_variant,
+        ),
+        url: Cow::Owned(artifact.url),
+        sha256: artifact.sha256.map(Cow::Owned),
+        build,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -975,11 +1128,15 @@ impl ManagedPythonDownloadList {
     /// `crates/uv-python/download-metadata.json`), or `Some` local path
     /// or file://, http://, or https:// URL.
     ///
+    /// When `preview` has `REMOTE_PYTHON_DOWNLOAD_METADATA` enabled and no explicit URL is provided,
+    /// the downloads will be fetched from the default NDJSON endpoint.
+    ///
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
         client: &BaseClient,
         python_downloads_json_url: Option<&str>,
+        preview: &Preview,
     ) -> Result<Self, Error> {
         // Although read_url() handles file:// URLs and converts them to local file reads, here we
         // want to also support parsing bare filenames like "/tmp/py.json", not just
@@ -989,12 +1146,23 @@ impl ManagedPythonDownloadList {
             BuiltIn,
             Path(Cow<'a, Path>),
             Http(DisplaySafeUrl),
+            Ndjson(DisplaySafeUrl),
         }
 
-        let json_source = if let Some(url_or_path) = python_downloads_json_url {
+        // Determine the source and format
+        let source = if let Some(url_or_path) = python_downloads_json_url {
+            // Explicit URL provided - detect format from extension
+            let is_ndjson = detect_download_list_format(url_or_path) == DownloadListFormat::Ndjson;
+
             if let Ok(url) = DisplaySafeUrl::parse(url_or_path) {
                 match url.scheme() {
-                    "http" | "https" => Source::Http(url),
+                    "http" | "https" => {
+                        if is_ndjson {
+                            Source::Ndjson(url)
+                        } else {
+                            Source::Http(url)
+                        }
+                    }
                     "file" => Source::Path(Cow::Owned(
                         url.to_file_path().or(Err(Error::InvalidUrlFormat(url)))?,
                     )),
@@ -1003,46 +1171,66 @@ impl ManagedPythonDownloadList {
             } else {
                 Source::Path(Cow::Borrowed(Path::new(url_or_path)))
             }
+        } else if preview.is_enabled(PreviewFeatures::REMOTE_PYTHON_DOWNLOAD_METADATA) {
+            // Preview flag enabled - use default remote metadata endpoint
+            let url = DisplaySafeUrl::parse(REMOTE_PYTHON_DOWNLOAD_METADATA_URL)
+                .expect("default NDJSON URL should be valid");
+            Source::Ndjson(url)
         } else {
             Source::BuiltIn
         };
 
-        let buf: Cow<'_, [u8]> = match json_source {
-            Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
-            Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => fetch_bytes_from_url(client, url)
-                .await
-                .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
-                .into(),
-        };
-        let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
-            .map_err(
-                // As an explicit compatibility mechanism, if there's a top-level "version" key, it
-                // means it's a newer format than we know how to deal with.  Before reporting a
-                // parse error about the format of JsonPythonDownload, check for that key. We can do
-                // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
-                // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
-                // have the same parsing effect.)
-                #[expect(clippy::zero_sized_map_values)]
-                |e| {
-                    let source = match json_source {
-                        Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
-                        Source::Path(path) => path.to_string_lossy().to_string(),
-                        Source::Http(url) => url.to_string(),
-                    };
-                    if let Ok(keys) =
-                        serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(&buf)
-                        && keys.contains_key("version")
-                    {
-                        Error::UnsupportedPythonDownloadsJSON(source)
-                    } else {
-                        Error::InvalidPythonDownloadsJSON(source, e)
-                    }
-                },
-            )?;
+        // Fetch and parse based on format
+        let downloads = match source {
+            Source::BuiltIn => {
+                let json_downloads: HashMap<String, JsonPythonDownload> =
+                    serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
+                    })?;
+                parse_json_downloads(json_downloads)
+            }
+            Source::Path(ref path) => {
+                let buf = fs_err::read(path.as_ref())?;
+                let is_ndjson = detect_download_list_format(&path.to_string_lossy())
+                    == DownloadListFormat::Ndjson;
 
-        let result = parse_json_downloads(json_downloads);
-        Ok(Self { downloads: result })
+                if is_ndjson {
+                    parse_ndjson_bytes(&path.to_string_lossy(), &buf)?
+                } else {
+                    let json_downloads: HashMap<String, JsonPythonDownload> =
+                        serde_json::from_slice(&buf).map_err(|e| {
+                            Error::InvalidPythonDownloadsJSON(path.to_string_lossy().to_string(), e)
+                        })?;
+                    parse_json_downloads(json_downloads)
+                }
+            }
+            Source::Http(ref url) => {
+                let buf = fetch_bytes_from_url(client, url).await.map_err(|e| {
+                    Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e))
+                })?;
+                let json_downloads: HashMap<String, JsonPythonDownload> =
+                    serde_json::from_slice(&buf).map_err(
+                        #[expect(clippy::zero_sized_map_values)]
+                        |e| {
+                            if let Ok(keys) = serde_json::from_slice::<
+                                HashMap<String, serde::de::IgnoredAny>,
+                            >(&buf)
+                                && keys.contains_key("version")
+                            {
+                                Error::UnsupportedPythonDownloadsJSON(url.to_string())
+                            } else {
+                                Error::InvalidPythonDownloadsJSON(url.to_string(), e)
+                            }
+                        },
+                    )?;
+                parse_json_downloads(json_downloads)
+            }
+            Source::Ndjson(ref url) => fetch_ndjson_from_url(client, url).await.map_err(|e| {
+                Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e))
+            })?,
+        };
+
+        Ok(Self { downloads })
     }
 
     /// Load available Python distributions from the compiled-in list only.
@@ -1063,6 +1251,112 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
     let mut buf = Vec::with_capacity(capacity);
     reader.read_to_end(&mut buf).await?;
     Ok(buf)
+}
+
+/// Fetch and parse NDJSON Python downloads from a URL, streaming line by line.
+///
+/// TODO(zanieb): This currently collects all downloads into a Vec. For better performance,
+/// we could accept a predicate and early-exit on the first match.
+async fn fetch_ndjson_from_url(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let response = client
+        .for_host(url)
+        .get(Url::from(url.clone()))
+        .send()
+        .await
+        .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
+
+    let response = response
+        .error_for_status()
+        .map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
+
+    // Stream the response line by line
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+    let mut downloads = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
+        buffer.extend_from_slice(&chunk);
+
+        // Process complete lines
+        while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
+            let line = &buffer[..newline_pos];
+
+            // Skip empty lines
+            if !line.is_empty() {
+                let line_str = std::str::from_utf8(line).map_err(|_| {
+                    Error::InvalidPythonDownloadsNdjsonLine(
+                        url.to_string(),
+                        serde_json::from_str::<()>("invalid utf8").unwrap_err(),
+                    )
+                })?;
+
+                let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
+                    .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(url.to_string(), e))?;
+
+                downloads.extend(parse_ndjson_version_info(version_info));
+            }
+
+            buffer.drain(..=newline_pos);
+        }
+    }
+
+    // Process any remaining data in buffer (in case there's no trailing newline)
+    if !buffer.is_empty() {
+        let line_str = std::str::from_utf8(&buffer).map_err(|_| {
+            Error::InvalidPythonDownloadsNdjsonLine(
+                url.to_string(),
+                serde_json::from_str::<()>("invalid utf8").unwrap_err(),
+            )
+        })?;
+
+        if !line_str.trim().is_empty() {
+            let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
+                .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(url.to_string(), e))?;
+
+            downloads.extend(parse_ndjson_version_info(version_info));
+        }
+    }
+
+    // Sort by key in descending order (newest first)
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+
+    Ok(downloads)
+}
+
+/// Parse NDJSON content from bytes into a list of [`ManagedPythonDownload`]s.
+fn parse_ndjson_bytes(source: &str, buf: &[u8]) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+
+    for line in buf.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+
+        let line_str = std::str::from_utf8(line).map_err(|_| {
+            Error::InvalidPythonDownloadsNdjsonLine(
+                source.to_string(),
+                serde_json::from_str::<()>("invalid utf8").unwrap_err(),
+            )
+        })?;
+
+        if line_str.trim().is_empty() {
+            continue;
+        }
+
+        let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
+            .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(source.to_string(), e))?;
+
+        downloads.extend(parse_ndjson_version_info(version_info));
+    }
+
+    // Sort by key in descending order (newest first)
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+
+    Ok(downloads)
 }
 
 impl ManagedPythonDownload {
@@ -1966,7 +2260,10 @@ mod tests {
             .with_build("20240814".to_string());
 
         let client = uv_client::BaseClientBuilder::default().build();
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let preview = Preview::default();
+        let download_list = ManagedPythonDownloadList::new(&client, None, &preview)
+            .await
+            .unwrap();
 
         let downloads: Vec<_> = download_list
             .iter_all()
@@ -1992,7 +2289,10 @@ mod tests {
             .with_build("99999999".to_string());
 
         let client = uv_client::BaseClientBuilder::default().build();
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let preview = Preview::default();
+        let download_list = ManagedPythonDownloadList::new(&client, None, &preview)
+            .await
+            .unwrap();
 
         // Should find no matching downloads
         let downloads: Vec<_> = download_list
@@ -2213,5 +2513,165 @@ mod tests {
             download_without_build.to_display_with_build().to_string(),
             "cpython-3.12.0-linux-x86_64-gnu"
         );
+    }
+
+    #[test]
+    fn test_parse_version_with_build() {
+        // Test version with build suffix
+        let (version, build) = parse_version_with_build("3.15.0a5+20260114").unwrap();
+        assert_eq!(version.to_string(), "3.15.0a5");
+        assert_eq!(build, Some("20260114"));
+
+        // Test version without build suffix
+        let (version, build) = parse_version_with_build("3.12.1").unwrap();
+        assert_eq!(version.to_string(), "3.12.1");
+        assert_eq!(build, None);
+
+        // Test version with prerelease
+        let (version, build) = parse_version_with_build("3.13.0rc1").unwrap();
+        assert_eq!(version.to_string(), "3.13.0rc1");
+        assert_eq!(build, None);
+
+        // Test version with prerelease and build
+        let (version, build) = parse_version_with_build("3.14.0b2+20251201").unwrap();
+        assert_eq!(version.to_string(), "3.14.0b2");
+        assert_eq!(build, Some("20251201"));
+
+        // Test invalid version
+        assert!(parse_version_with_build("invalid").is_err());
+    }
+
+    #[test]
+    fn test_detect_download_list_format() {
+        // Test JSON format detection
+        assert_eq!(
+            detect_download_list_format("download-metadata.json"),
+            DownloadListFormat::Json
+        );
+        assert_eq!(
+            detect_download_list_format("https://example.com/downloads.json"),
+            DownloadListFormat::Json
+        );
+
+        // Test NDJSON format detection
+        assert_eq!(
+            detect_download_list_format("versions.ndjson"),
+            DownloadListFormat::Ndjson
+        );
+        assert_eq!(
+            detect_download_list_format("https://example.com/python.ndjson"),
+            DownloadListFormat::Ndjson
+        );
+
+        // Test default (JSON) for unknown extensions
+        assert_eq!(
+            detect_download_list_format("downloads.txt"),
+            DownloadListFormat::Json
+        );
+    }
+
+    #[test]
+    fn test_parse_ndjson_variant() {
+        // install_only variants should be accepted
+        assert_eq!(
+            parse_ndjson_variant("install_only"),
+            Some(PythonVariant::Default)
+        );
+        assert_eq!(
+            parse_ndjson_variant("install_only_stripped"),
+            Some(PythonVariant::Default)
+        );
+
+        // freethreaded variants should return Freethreaded
+        assert_eq!(
+            parse_ndjson_variant("freethreaded+pgo+lto+full"),
+            Some(PythonVariant::Freethreaded)
+        );
+        assert_eq!(
+            parse_ndjson_variant("freethreaded+install_only"),
+            Some(PythonVariant::Freethreaded)
+        );
+
+        // debug variants should be skipped
+        assert_eq!(parse_ndjson_variant("debug+full"), None);
+        assert_eq!(parse_ndjson_variant("freethreaded+debug+full"), None);
+
+        // full variants without install_only should be skipped
+        assert_eq!(parse_ndjson_variant("pgo+lto+full"), None);
+    }
+
+    #[test]
+    fn test_parse_ndjson_bytes() {
+        let ndjson = br#"{"version":"3.12.0+20240101","artifacts":[{"platform":"x86_64-unknown-linux-gnu","variant":"install_only","url":"https://example.com/python.tar.gz","sha256":"abc123"}]}
+{"version":"3.11.5+20240101","artifacts":[{"platform":"aarch64-apple-darwin","variant":"install_only","url":"https://example.com/python2.tar.gz","sha256":"def456"}]}"#;
+
+        let downloads = parse_ndjson_bytes("test", ndjson).unwrap();
+
+        // Should have 2 downloads (one per version per platform)
+        assert_eq!(downloads.len(), 2);
+
+        // Check first download
+        let download = &downloads[0];
+        assert_eq!(download.key().version().to_string(), "3.12.0");
+        assert_eq!(download.build(), Some("20240101"));
+
+        // Check second download
+        let download = &downloads[1];
+        assert_eq!(download.key().version().to_string(), "3.11.5");
+        assert_eq!(download.build(), Some("20240101"));
+    }
+
+    #[test]
+    fn test_parse_ndjson_version_info() {
+        let version_info = NdjsonPythonVersionInfo {
+            version: "3.12.1+20240815".to_string(),
+            artifacts: vec![
+                NdjsonPythonArtifact {
+                    platform: "x86_64-unknown-linux-gnu".to_string(),
+                    variant: "install_only".to_string(),
+                    url: "https://example.com/python-linux.tar.gz".to_string(),
+                    sha256: Some("abc123".to_string()),
+                },
+                NdjsonPythonArtifact {
+                    platform: "aarch64-apple-darwin".to_string(),
+                    variant: "install_only".to_string(),
+                    url: "https://example.com/python-macos.tar.gz".to_string(),
+                    sha256: Some("def456".to_string()),
+                },
+                NdjsonPythonArtifact {
+                    platform: "x86_64-unknown-linux-gnu".to_string(),
+                    variant: "debug+full".to_string(), // Should be skipped
+                    url: "https://example.com/python-debug.tar.gz".to_string(),
+                    sha256: Some("ghi789".to_string()),
+                },
+            ],
+        };
+
+        let downloads = parse_ndjson_version_info(version_info);
+
+        // Should have 2 downloads (debug variant is skipped)
+        assert_eq!(downloads.len(), 2);
+
+        // All downloads should have the same version and build
+        for download in &downloads {
+            assert_eq!(download.key().version().to_string(), "3.12.1");
+            assert_eq!(download.build(), Some("20240815"));
+        }
+    }
+
+    #[test]
+    fn test_parse_ndjson_artifact_freethreaded() {
+        let version = PythonVersion::from_str("3.13.0").unwrap();
+        let build = Some(Box::leak("20240901".to_string().into_boxed_str()) as &'static str);
+
+        let artifact = NdjsonPythonArtifact {
+            platform: "x86_64-unknown-linux-gnu".to_string(),
+            variant: "freethreaded+pgo+lto+full".to_string(),
+            url: "https://example.com/python-ft.tar.gz".to_string(),
+            sha256: Some("xyz789".to_string()),
+        };
+
+        let download = parse_ndjson_artifact(&version, build, artifact).unwrap();
+        assert_eq!(download.key().variant(), &PythonVariant::Freethreaded);
     }
 }

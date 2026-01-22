@@ -91,7 +91,7 @@ impl PythonInstallation {
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build();
         let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url, &preview).await?;
         let downloads_enabled = preference.allows_managed()
             && python_downloads.is_automatic()
             && client_builder.connectivity.is_online();
@@ -137,7 +137,7 @@ impl PythonInstallation {
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build();
         let download_list =
-            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url, &preview).await?;
 
         // Search for the installation
         let err = match Self::find(
