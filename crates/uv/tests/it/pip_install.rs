@@ -2549,10 +2549,21 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Git authentication failed for `https://git:****@github.com/astral-test/uv-private-pypackage`. Check your credentials and try again. Falling back to full fetch which may also fail.
       × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ Git authentication failed for `https://git:***@github.com/astral-test/uv-private-pypackage`. Ensure you have the correct credentials configured.
+
+          For HTTPS repositories:
+            - Check your Git credential helper: `git config --global credential.helper`
+            - Or use a personal access token in the URL
+
+          For SSH repositories:
+            - Ensure your SSH key is added: `ssh-add -l`
+            - Verify SSH access: `ssh -T git@<host>`
+
+          Original error: process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
           remote: Invalid username or token. Password authentication is not supported for Git operations.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
@@ -2647,10 +2658,21 @@ fn install_git_private_https_interactive() {
     ----- stdout -----
 
     ----- stderr -----
+    warning: Git authentication failed for `https://github.com/astral-test/uv-private-pypackage`. Check your credentials and try again. Falling back to full fetch which may also fail.
       × Failed to download and build `uv-private-pypackage @ git+https://github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ Git authentication failed for `https://github.com/astral-test/uv-private-pypackage`. Ensure you have the correct credentials configured.
+
+          For HTTPS repositories:
+            - Check your Git credential helper: `git config --global credential.helper`
+            - Or use a personal access token in the URL
+
+          For SSH repositories:
+            - Ensure your SSH key is added: `ssh-add -l`
+            - Verify SSH access: `ssh -T git@<host>`
+
+          Original error: process didn't exit successfully: `/usr/bin/git fetch --force --update-head-ok 'https://github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
           fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");

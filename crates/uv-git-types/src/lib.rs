@@ -1,4 +1,5 @@
 pub use crate::github::GitHubRepository;
+pub use crate::gitlab::GitLabRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
 use std::sync::LazyLock;
@@ -8,6 +9,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 mod github;
+mod gitlab;
 mod oid;
 mod reference;
 

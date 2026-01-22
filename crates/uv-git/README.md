@@ -1,4 +1,4 @@
-<!-- This file is generated. DO NOT EDIT -->
+~<!-- This file is generated. DO NOT EDIT -->
 
 # uv-git
 
