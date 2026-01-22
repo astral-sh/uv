@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
@@ -1088,7 +1089,7 @@ impl Display for ManagedPythonDownloadWithBuild<'_> {
 
 impl ManagedPythonDownloadList {
     /// Iterate over all [`ManagedPythonDownload`]s.
-    fn iter_all(&self) -> impl Iterator<Item = &ManagedPythonDownload> {
+    pub fn iter_all(&self) -> impl Iterator<Item = &ManagedPythonDownload> {
         self.downloads.iter()
     }
 
@@ -1243,6 +1244,199 @@ impl ManagedPythonDownloadList {
         let result = parse_json_downloads(json_downloads);
         Ok(Self { downloads: result })
     }
+
+    /// Load available Python distributions with optional filtering and limiting.
+    ///
+    /// When using the NDJSON format (default for preview), this streams the data and
+    /// early-exits once `limit` matching downloads are found. For JSON format, filtering
+    /// is applied after loading all data.
+    ///
+    /// This is useful for commands like `uv python list` where we only need a subset
+    /// of matching downloads.
+    pub async fn new_filtered(
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        preview: &Preview,
+        filter: Option<&PythonDownloadRequest>,
+        limit: Option<usize>,
+    ) -> Result<Self, Error> {
+        // Determine the source
+        enum Source<'a> {
+            BuiltIn,
+            Path(Cow<'a, Path>),
+            Http(DisplaySafeUrl),
+            Ndjson(DisplaySafeUrl),
+        }
+
+        let source = if let Some(url_or_path) = python_downloads_json_url {
+            let is_ndjson = detect_download_list_format(url_or_path) == DownloadListFormat::Ndjson;
+
+            if let Ok(url) = DisplaySafeUrl::parse(url_or_path) {
+                match url.scheme() {
+                    "http" | "https" => {
+                        if is_ndjson {
+                            Source::Ndjson(url)
+                        } else {
+                            Source::Http(url)
+                        }
+                    }
+                    "file" => Source::Path(Cow::Owned(
+                        url.to_file_path().or(Err(Error::InvalidUrlFormat(url)))?,
+                    )),
+                    _ => Source::Path(Cow::Borrowed(Path::new(url_or_path))),
+                }
+            } else {
+                Source::Path(Cow::Borrowed(Path::new(url_or_path)))
+            }
+        } else if preview.is_enabled(PreviewFeatures::REMOTE_PYTHON_DOWNLOAD_METADATA) {
+            let url = DisplaySafeUrl::parse(REMOTE_PYTHON_DOWNLOAD_METADATA_URL)
+                .expect("default NDJSON URL should be valid");
+            Source::Ndjson(url)
+        } else {
+            Source::BuiltIn
+        };
+
+        // For NDJSON sources, use streaming with filter and limit
+        if let Source::Ndjson(ref url) = source {
+            let downloads = fetch_ndjson_collect(
+                client,
+                url,
+                |download| {
+                    filter
+                        .map(|f| f.satisfied_by_download(download))
+                        .unwrap_or(true)
+                },
+                limit,
+            )
+            .await
+            .map_err(|e| Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e)))?;
+
+            return Ok(Self { downloads });
+        }
+
+        // For other sources, load all and filter afterward
+        let mut downloads = match source {
+            Source::Ndjson(_) => unreachable!("handled above"),
+            Source::BuiltIn => {
+                let json_downloads: HashMap<String, JsonPythonDownload> =
+                    serde_json::from_slice(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_owned(), e)
+                    })?;
+                parse_json_downloads(json_downloads)
+            }
+            Source::Path(ref path) => {
+                let buf = fs_err::read(path.as_ref())?;
+                let is_ndjson = detect_download_list_format(&path.to_string_lossy())
+                    == DownloadListFormat::Ndjson;
+
+                if is_ndjson {
+                    parse_ndjson_bytes(&path.to_string_lossy(), &buf)?
+                } else {
+                    let json_downloads: HashMap<String, JsonPythonDownload> =
+                        serde_json::from_slice(&buf).map_err(|e| {
+                            Error::InvalidPythonDownloadsJSON(path.to_string_lossy().to_string(), e)
+                        })?;
+                    parse_json_downloads(json_downloads)
+                }
+            }
+            Source::Http(ref url) => {
+                let buf = fetch_bytes_from_url(client, url).await.map_err(|e| {
+                    Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e))
+                })?;
+                let json_downloads: HashMap<String, JsonPythonDownload> =
+                    serde_json::from_slice(&buf).map_err(
+                        #[expect(clippy::zero_sized_map_values)]
+                        |e| {
+                            if let Ok(keys) = serde_json::from_slice::<
+                                HashMap<String, serde::de::IgnoredAny>,
+                            >(&buf)
+                                && keys.contains_key("version")
+                            {
+                                Error::UnsupportedPythonDownloadsJSON(url.to_string())
+                            } else {
+                                Error::InvalidPythonDownloadsJSON(url.to_string(), e)
+                            }
+                        },
+                    )?;
+                parse_json_downloads(json_downloads)
+            }
+        };
+
+        // Apply filter if provided
+        if let Some(filter) = filter {
+            downloads.retain(|download| filter.satisfied_by_download(download));
+        }
+
+        // Apply limit if provided
+        if let Some(limit) = limit {
+            downloads.truncate(limit);
+        }
+
+        Ok(Self { downloads })
+    }
+
+    /// Find a single download matching the request, using streaming for NDJSON sources.
+    ///
+    /// This method streams NDJSON data and early-exits on the first match, making it
+    /// more efficient than loading all downloads when only one is needed.
+    pub async fn find_streaming(
+        client: &BaseClient,
+        python_downloads_json_url: Option<&str>,
+        preview: &Preview,
+        request: &PythonDownloadRequest,
+    ) -> Result<Option<ManagedPythonDownload>, Error> {
+        // Check if we should use NDJSON streaming
+        let ndjson_url = if let Some(url_or_path) = python_downloads_json_url {
+            let is_ndjson = detect_download_list_format(url_or_path) == DownloadListFormat::Ndjson;
+
+            if is_ndjson {
+                if let Ok(url) = DisplaySafeUrl::parse(url_or_path) {
+                    match url.scheme() {
+                        "http" | "https" => Some(url),
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else if preview.is_enabled(PreviewFeatures::REMOTE_PYTHON_DOWNLOAD_METADATA) {
+            Some(
+                DisplaySafeUrl::parse(REMOTE_PYTHON_DOWNLOAD_METADATA_URL)
+                    .expect("default NDJSON URL should be valid"),
+            )
+        } else {
+            None
+        };
+
+        // For NDJSON sources, use streaming find for early exit
+        if let Some(ref url) = ndjson_url {
+            let result = fetch_ndjson_find(client, url, |download| {
+                request.satisfied_by_download(download)
+            })
+            .await
+            .map_err(|e| Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e)))?;
+
+            // If no direct match and prereleases not allowed, try with prereleases
+            if result.is_none() && !request.allows_prereleases() {
+                let request_with_prereleases = request.clone().with_prereleases(true);
+                return fetch_ndjson_find(client, url, |download| {
+                    request_with_prereleases.satisfied_by_download(download)
+                })
+                .await
+                .map_err(|e| {
+                    Error::FetchingPythonDownloadsNdjsonError(url.to_string(), Box::new(e))
+                });
+            }
+
+            return Ok(result);
+        }
+
+        // For other sources, load and search
+        let list = Self::new(client, python_downloads_json_url, preview).await?;
+        Ok(list.find(request).ok().cloned())
+    }
 }
 
 async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
@@ -1255,12 +1449,37 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
 
 /// Fetch and parse NDJSON Python downloads from a URL, streaming line by line.
 ///
-/// TODO(zanieb): This currently collects all downloads into a Vec. For better performance,
-/// we could accept a predicate and early-exit on the first match.
+/// This collects all downloads into a sorted Vec. For early-exit behavior, use
+/// [`fetch_ndjson_streaming`] instead.
 async fn fetch_ndjson_from_url(
     client: &BaseClient,
     url: &DisplaySafeUrl,
 ) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+    fetch_ndjson_streaming(client, url, |download| {
+        downloads.push(download);
+        ControlFlow::<()>::Continue(())
+    })
+    .await?;
+
+    // Sort by key in descending order (newest first)
+    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+
+    Ok(downloads)
+}
+
+/// Fetch and parse NDJSON Python downloads from a URL with a visitor callback.
+///
+/// The visitor is called for each download as it's parsed from the stream. Return
+/// `ControlFlow::Break(value)` to stop streaming early and return `Ok(Some(value))`.
+/// Return `ControlFlow::Continue(())` to continue processing.
+///
+/// Note: Downloads are streamed in file order (newest versions first in the NDJSON file).
+async fn fetch_ndjson_streaming<T>(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    mut visitor: impl FnMut(ManagedPythonDownload) -> ControlFlow<T, ()>,
+) -> Result<Option<T>, Error> {
     let response = client
         .for_host(url)
         .get(Url::from(url.clone()))
@@ -1275,7 +1494,6 @@ async fn fetch_ndjson_from_url(
     // Stream the response line by line
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
-    let mut downloads = Vec::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|err| Error::from_reqwest(url.clone(), err, None))?;
@@ -1297,7 +1515,11 @@ async fn fetch_ndjson_from_url(
                 let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
                     .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(url.to_string(), e))?;
 
-                downloads.extend(parse_ndjson_version_info(version_info));
+                for download in parse_ndjson_version_info(version_info) {
+                    if let ControlFlow::Break(result) = visitor(download) {
+                        return Ok(Some(result));
+                    }
+                }
             }
 
             buffer.drain(..=newline_pos);
@@ -1317,12 +1539,59 @@ async fn fetch_ndjson_from_url(
             let version_info: NdjsonPythonVersionInfo = serde_json::from_str(line_str)
                 .map_err(|e| Error::InvalidPythonDownloadsNdjsonLine(url.to_string(), e))?;
 
-            downloads.extend(parse_ndjson_version_info(version_info));
+            for download in parse_ndjson_version_info(version_info) {
+                if let ControlFlow::Break(result) = visitor(download) {
+                    return Ok(Some(result));
+                }
+            }
         }
     }
 
-    // Sort by key in descending order (newest first)
-    downloads.sort_by(|a, b| Ord::cmp(&b.key, &a.key));
+    Ok(None)
+}
+
+/// Fetch NDJSON Python downloads and find the first one matching a predicate.
+///
+/// Streams the NDJSON and early-exits on the first match.
+async fn fetch_ndjson_find(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+) -> Result<Option<ManagedPythonDownload>, Error> {
+    fetch_ndjson_streaming(client, url, |download| {
+        if predicate(&download) {
+            ControlFlow::Break(download)
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .await
+}
+
+/// Fetch NDJSON Python downloads and collect matching ones with an optional limit.
+///
+/// Streams the NDJSON and collects downloads that match the predicate, stopping early
+/// if a limit is reached.
+async fn fetch_ndjson_collect(
+    client: &BaseClient,
+    url: &DisplaySafeUrl,
+    predicate: impl Fn(&ManagedPythonDownload) -> bool,
+    limit: Option<usize>,
+) -> Result<Vec<ManagedPythonDownload>, Error> {
+    let mut downloads = Vec::new();
+
+    fetch_ndjson_streaming(client, url, |download| {
+        if predicate(&download) {
+            downloads.push(download);
+            if let Some(limit) = limit {
+                if downloads.len() >= limit {
+                    return ControlFlow::Break(());
+                }
+            }
+        }
+        ControlFlow::Continue(())
+    })
+    .await?;
 
     Ok(downloads)
 }

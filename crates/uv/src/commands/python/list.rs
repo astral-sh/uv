@@ -79,29 +79,25 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
-    let client = client_builder.build();
-    let download_list =
-        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref(), &preview)
-            .await?;
-    let mut output = BTreeSet::new();
-    if let Some(base_download_request) = base_download_request {
-        let download_request = match kinds {
+    // Construct the download request based on flags
+    let download_request = base_download_request.and_then(|base_download_request| {
+        match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
             } else if all_arches {
-                base_download_request.fill_platform()?.with_any_arch()
+                base_download_request.fill_platform().ok()?.with_any_arch()
             } else {
-                base_download_request.fill_platform()?
+                base_download_request.fill_platform().ok()?
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
                         base_download_request
                     } else if all_arches {
-                        base_download_request.fill_platform()?.with_any_arch()
+                        base_download_request.fill_platform().ok()?.with_any_arch()
                     } else {
-                        base_download_request.fill_platform()?
+                        base_download_request.fill_platform().ok()?
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default
@@ -110,13 +106,30 @@ pub(crate) async fn list(
             }
         }
         // Include pre-release versions
-        .map(|request| request.with_prereleases(true));
+        .map(|request| request.with_prereleases(true))
+    });
 
-        let downloads = download_request
-            .as_ref()
-            .map(|request| download_list.iter_matching(request))
-            .into_iter()
-            .flatten()
+    let client = client_builder.build();
+
+    // Use streaming with limit for NDJSON sources when not showing all versions
+    // Default limit of 50 filtered downloads provides enough versions for display
+    // while allowing early-exit during streaming
+    let download_limit = if all_versions { None } else { Some(50) };
+
+    let download_list = ManagedPythonDownloadList::new_filtered(
+        &client,
+        python_downloads_json_url.as_deref(),
+        &preview,
+        download_request.as_ref(),
+        download_limit,
+    )
+    .await?;
+
+    let mut output = BTreeSet::new();
+    if download_request.is_some() {
+        // Downloads are already filtered by the request during loading
+        let downloads = download_list
+            .iter_all()
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
             .filter(|download| !download.key().variant().is_debug());
 
