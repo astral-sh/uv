@@ -2254,7 +2254,7 @@ mod tests {
         let request = PythonDownloadRequest::default()
             .with_version(VersionRequest::from_str("3.12").unwrap())
             .with_implementation(ImplementationName::CPython)
-            .with_build("20240814".to_string());
+            .with_build("20260114".to_string());
 
         let client = uv_client::BaseClientBuilder::default().build();
         let preview = Preview::default();
@@ -2272,7 +2272,7 @@ mod tests {
             "Should find at least one matching download"
         );
         for download in downloads {
-            assert_eq!(download.build(), Some("20240814"));
+            assert_eq!(download.build(), Some("20260114"));
         }
     }
 

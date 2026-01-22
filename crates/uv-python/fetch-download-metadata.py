@@ -667,8 +667,66 @@ class GraalPyFinder(Finder):
                 download.sha256 = resp.text.strip()
 
 
+def filter_cpython_versions(downloads: list[PythonDownload]) -> list[PythonDownload]:
+    """Filter CPython versions to reduce embedded metadata size.
+
+    - Keep last 3 patch versions per minor version for stable releases
+    - Keep only the latest prerelease for development versions
+    - Keep all PyPy and GraalPy versions unchanged
+    """
+    # Separate CPython from other implementations
+    cpython_downloads = [
+        d for d in downloads if d.implementation == ImplementationName.CPYTHON
+    ]
+    other_downloads = [
+        d for d in downloads if d.implementation != ImplementationName.CPYTHON
+    ]
+
+    # Group CPython by (minor, arch, os, libc, variant)
+    groups: dict[tuple, list[PythonDownload]] = {}
+    for download in cpython_downloads:
+        group_key = (
+            download.version.minor,
+            download.triple.arch.key(),
+            download.triple.platform,
+            download.triple.libc,
+            download.variant,
+        )
+        groups.setdefault(group_key, []).append(download)
+
+    # Filter each group
+    filtered_cpython: list[PythonDownload] = []
+    for group_downloads in groups.values():
+        # Separate stable and prerelease versions
+        stable = [d for d in group_downloads if not d.version.prerelease]
+        prereleases = [d for d in group_downloads if d.version.prerelease]
+
+        # For stable versions: sort by patch descending, keep first 3
+        stable.sort(key=lambda d: d.version.patch, reverse=True)
+        filtered_cpython.extend(stable[:3])
+
+        # For prereleases: sort by (patch desc, prerelease desc), keep first 1
+        def prerelease_sort_key(d: PythonDownload) -> tuple[int, tuple[int, int]]:
+            pre = d.version.prerelease
+            if pre.startswith("rc"):
+                return (d.version.patch, (2, int(pre[2:])))
+            elif pre.startswith("b"):
+                return (d.version.patch, (1, int(pre[1:])))
+            elif pre.startswith("a"):
+                return (d.version.patch, (0, int(pre[1:])))
+            return (d.version.patch, (-1, 0))
+
+        prereleases.sort(key=prerelease_sort_key, reverse=True)
+        if prereleases:
+            filtered_cpython.append(prereleases[0])
+
+    return filtered_cpython + other_downloads
+
+
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
+    # Filter CPython versions to reduce embedded metadata size
+    downloads = filter_cpython_versions(downloads)
 
     def prerelease_sort_key(prerelease: str) -> tuple[int, int]:
         if prerelease.startswith("a"):

@@ -6,16 +6,38 @@ use std::{env, fs};
 
 use uv_static::EnvVars;
 
-fn process_json(data: &serde_json::Value) -> serde_json::Value {
-    let mut out_data = serde_json::Map::new();
+/// Filter JSON entries to only include those matching the target OS.
+fn filter_by_platform(data: serde_json::Value) -> serde_json::Value {
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
 
-    if let Some(obj) = data.as_object() {
-        for (key, value) in obj {
-            out_data.insert(key.clone(), value.clone());
-        }
-    }
+    // Map Cargo target OS to the JSON `os` field value
+    let json_os = match target_os.as_str() {
+        "macos" => Some("darwin"),
+        "linux" => Some("linux"),
+        "windows" => Some("windows"),
+        _ => None, // Unknown OS: include all entries
+    };
 
-    serde_json::Value::Object(out_data)
+    let Some(json_os) = json_os else {
+        return data;
+    };
+
+    let Some(obj) = data.as_object() else {
+        return data;
+    };
+
+    let filtered: serde_json::Map<String, serde_json::Value> = obj
+        .iter()
+        .filter(|(_, value)| {
+            value
+                .get("os")
+                .and_then(|v| v.as_str())
+                .is_some_and(|os| os == json_os)
+        })
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    serde_json::Value::Object(filtered)
 }
 
 fn main() {
@@ -39,13 +61,13 @@ fn main() {
         version_metadata_minified.to_str().unwrap()
     );
 
+    #[expect(clippy::disallowed_methods)]
     let json_data: serde_json::Value = serde_json::from_str(
-        #[expect(clippy::disallowed_methods)]
         &fs::read_to_string(&version_metadata).expect("Failed to read download-metadata.json"),
     )
     .expect("Failed to parse JSON");
 
-    let filtered_data = process_json(&json_data);
+    let filtered_data = filter_by_platform(json_data);
 
     #[expect(clippy::disallowed_types)]
     let mut out_file = File::create(version_metadata_minified)
