@@ -5,6 +5,10 @@ on:
         required: false
         type: string
         default: "true"
+      test-macos:
+        required: false
+        type: string
+        default: "false"
 
 permissions: {}
 
@@ -76,12 +80,7 @@ jobs:
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
-    if: >-
-      ${{
-        contains(github.event.pull_request.labels.*.name, 'test:macos') ||
-        contains(github.event.pull_request.labels.*.name, 'test:extended') ||
-        github.ref == 'refs/heads/main'
-      }}
+    if: ${{ inputs.test-macos == 'true' }}
     runs-on: depot-macos-14
     name: "cargo test on macos"
     steps:
