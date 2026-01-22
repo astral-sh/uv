@@ -392,9 +392,6 @@ pub enum ErrorKind {
         "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
     )]
     Offline(String),
-
-    #[error("Invalid cache control header: `{0}`")]
-    InvalidCacheControl(String),
 }
 
 impl ErrorKind {
