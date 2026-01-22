@@ -190,9 +190,7 @@ class Finder:
 class CPythonFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
-    RELEASE_URL = (
-        "https://api.github.com/repos/astral-sh/python-build-standalone/releases"
-    )
+    VERSIONS_URL = "https://raw.githubusercontent.com/astral-sh/versions/main/v1/python-build-standalone.ndjson"
 
     FLAVOR_PREFERENCES = [
         "install_only_stripped",
@@ -201,80 +199,30 @@ class CPythonFinder(Finder):
         "shared-noopt",
         "static-noopt",
     ]
-    SPECIAL_TRIPLES = {
-        "macos": "x86_64-apple-darwin",
-        "linux64": "x86_64-unknown-linux-gnu",
-        "windows-amd64": "x86_64-pc-windows",
-        "windows-x86": "i686-pc-windows",
-        "windows-amd64-shared": "x86_64-pc-windows",
-        "windows-x86-shared": "i686-pc-windows",
-        "linux64-musl": "x86_64-unknown-linux-musl",
-    }
     # Normalized mappings to match the Rust types
     ARCH_MAP = {
         "ppc64": "powerpc64",
         "ppc64le": "powerpc64le",
     }
 
-    _filename_re = re.compile(
-        r"""(?x)
-        ^
-            cpython-
-            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
-            (?P<date>\d+)-
-            # Note we lookahead to avoid matching "debug" as a triple as we'd
-            # prefer it matches as a build option; we could enumerate all known
-            # build options instead but this is the easy path forward
-            (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-(?!debug(?:-|$))[a-z\d_]+)-
-            (?:(?P<build_options>.+)-)?
-            (?P<flavor>[a-z_]+)?
-            \.tar\.(?:gz|zst)
-        $
-        """
-    )
-
-    _legacy_filename_re = re.compile(
-        r"""(?x)
-        ^
-            cpython-
-            (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?-
-            (?P<triple>[a-z\d_-]+)-
-            (?P<build_options>(debug|pgo|noopt|lto|pgo\+lto))?-
-            (?P<date>[a-zA-z\d]+)
-            \.tar\.(?:gz|zst)
-        $
-        """
-    )
-
     def __init__(self, client: httpx.AsyncClient):
         self.client = client
 
     async def find(self) -> list[PythonDownload]:
-        downloads = await self._fetch_downloads()
-        await self._fetch_checksums(downloads, n=20)
-        return downloads
+        return await self._fetch_downloads()
 
-    async def _fetch_downloads(self, pages: int = 100) -> list[PythonDownload]:
-        """Fetch all the indygreg downloads from the release API."""
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        """Fetch all the CPython downloads from the versions ndjson endpoint."""
+        logging.info("Fetching CPython versions from ndjson endpoint")
         downloads_by_version: dict[Version, list[PythonDownload]] = {}
 
-        # Collect all available Python downloads
-        for page in range(1, pages + 1):
-            logging.info("Fetching CPython release page %d", page)
-            resp = await self.client.get(
-                self.RELEASE_URL, params={"page": page, "per_page": 10}
-            )
+        async with self.client.stream("GET", self.VERSIONS_URL) as resp:
             resp.raise_for_status()
-            rows = resp.json()
-            if not rows:
-                break
-            for row in rows:
-                # Sort the assets to ensure deterministic results
-                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
-                for asset in row["assets"]:
-                    download = self._parse_download_asset(asset)
-                    if download is None:
-                        continue
+            async for line in resp.aiter_lines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                for download in self._parse_version_row(row):
                     if (
                         download.release < CPYTHON_MUSL_STATIC_RELEASE_END
                         and download.triple.libc == "musl"
@@ -317,88 +265,49 @@ class CPythonFinder(Finder):
 
         return downloads
 
-    async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
-        """Fetch the checksums for the given downloads."""
-        checksum_urls = set()
-        for download in downloads:
-            # Skip the newer releases where we got the hash from the GitHub API
-            if download.sha256:
-                continue
-            release_base_url = download.url.rsplit("/", maxsplit=1)[0]
-            checksum_url = release_base_url + "/SHA256SUMS"
-            checksum_urls.add(checksum_url)
+    def _parse_version_row(
+        self, row: dict[str, Any]
+    ) -> Generator[PythonDownload, None, None]:
+        """Parse a version row from the ndjson endpoint into PythonDownload objects."""
+        # Version format: "3.15.0a5+20260114"
+        version_str = row["version"]
+        if "+" in version_str:
+            ver, build = version_str.split("+", 1)
+            release = int(build)
+        else:
+            ver = version_str
+            release = 0
 
-        async def fetch_checksums(url: str) -> httpx.Response | None:
-            try:
-                resp = await self.client.get(url)
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    return None
-                raise
-            return resp
+        version = Version.from_str(ver)
 
-        completed = 0
-        tasks = []
-        for batch in batched(checksum_urls, n):
-            logging.info(
-                "Fetching CPython checksums: %d/%d", completed, len(checksum_urls)
-            )
-            async with asyncio.TaskGroup() as tg:
-                for url in batch:
-                    task = tg.create_task(fetch_checksums(url))
-                    tasks.append(task)
-            completed += n
+        for artifact in row["artifacts"]:
+            download = self._parse_artifact(artifact, version, release)
+            if download is not None:
+                yield download
 
-        checksums = {}
-        for task in tasks:
-            resp = task.result()
-            if resp is None:
-                continue
-            lines = resp.text.splitlines()
-            for line in lines:
-                checksum, filename = line.split(" ", maxsplit=1)
-                filename = filename.strip()
-                checksums[filename] = checksum
+    def _parse_artifact(
+        self, artifact: dict[str, Any], version: Version, release: int
+    ) -> PythonDownload | None:
+        """Parse an artifact from the ndjson into a PythonDownload object."""
+        platform = artifact["platform"]
+        variant_str = artifact["variant"]
+        url = artifact["url"]
+        sha256 = artifact.get("sha256")
 
-        for download in downloads:
-            if download.sha256:
-                continue
-            download.sha256 = checksums.get(download.filename)
+        # Extract filename from URL
+        filename = url.rsplit("/", 1)[-1]
+        # URL-decode the filename (e.g., %2B -> +)
+        filename = filename.replace("%2B", "+")
 
-    def _parse_download_asset(self, asset: dict[str, Any]) -> PythonDownload | None:
-        """Parse a python-build-standalone download asset into a PythonDownload object."""
-        url = asset["browser_download_url"]
-        # Ex)
-        # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
-        if url.endswith(".sha256"):
-            return None
-        release = int(url.rsplit("/")[-2])
-        filename = asset["name"]
-        sha256 = None
-        # On older versions, GitHub didn't backfill the digest.
-        if digest := asset["digest"]:
-            sha256 = digest.removeprefix("sha256:")
+        # Parse the variant string (e.g., "debug+full", "install_only_stripped", "freethreaded+pgo+lto+full")
+        variant_parts = variant_str.split("+")
+        flavor = variant_parts[-1] if variant_parts else "full"
+        build_options = variant_parts[:-1] if len(variant_parts) > 1 else []
 
-        match = self._filename_re.match(filename) or self._legacy_filename_re.match(
-            filename
-        )
-        if match is None:
-            logging.debug("Skipping %s: no regex match", filename)
-            return None
-
-        groups = match.groupdict()
-        version = groups["ver"]
-        triple = groups["triple"]
-        build_options = groups.get("build_options")
-        flavor = groups.get("flavor", "full")
-
-        build_options = build_options.split("+") if build_options else []
         variant = Variant.from_build_options(build_options)
-        version = Version.from_str(version)
-        triple = self._normalize_triple(triple)
+
+        triple = self._normalize_triple(platform)
         if triple is None:
-            # Skip is logged in `_normalize_triple`
             return None
 
         return PythonDownload(
@@ -420,7 +329,6 @@ class CPythonFinder(Finder):
             logging.debug("Skipping %r: static unsupported", triple)
             return None
 
-        triple = self.SPECIAL_TRIPLES.get(triple, triple)
         pieces = triple.split("-")
         try:
             arch = self._normalize_arch(pieces[0])
