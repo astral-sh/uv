@@ -49,9 +49,6 @@ pub enum ResolveError {
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
 
-    #[error(transparent)]
-    Join(#[from] tokio::task::JoinError),
-
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
 
@@ -103,9 +100,6 @@ pub enum ResolveError {
 
     #[error(transparent)]
     DistributionType(#[from] uv_distribution_types::Error),
-
-    #[error(transparent)]
-    ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("{0} `{1}`")]
     Dist(
