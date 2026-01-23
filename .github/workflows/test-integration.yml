@@ -638,23 +638,23 @@ jobs:
           .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.31.1 pip
 
       - name: "Install Pyodide interpreter"
-        shell: pwsh
+        shell: cmd
         run: |
-          & .\venv-native\Scripts\Activate.ps1
+          call .\venv-native\Scripts\activate.bat
           pyodide xbuildenv install 0.29.2
-          $env:PYODIDE_PYTHON = pyodide config get interpreter
-          $env:PYODIDE_INDEX = pyodide config get package_index
-          echo "PYODIDE_PYTHON=$env:PYODIDE_PYTHON" >> $env:GITHUB_ENV
-          echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
+          for /f "delims=" %%i in ('pyodide config get interpreter') do set PYODIDE_PYTHON=%%i
+          for /f "delims=" %%i in ('pyodide config get package_index') do set PYODIDE_INDEX=%%i
+          echo PYODIDE_PYTHON=%PYODIDE_PYTHON%>>%GITHUB_ENV%
+          echo PYODIDE_INDEX=%PYODIDE_INDEX%>>%GITHUB_ENV%
 
       - name: "Create Pyodide virtual environment"
-        shell: pwsh
+        shell: cmd
         run: |
-          $env:RUST_LOG="debug"
-          .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
-          & .\venv-pyodide\Scripts\Activate.ps1
-          .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
-          python -c 'import numpy'
+          set RUST_LOG=debug
+          .\uv.exe venv -p %PYODIDE_PYTHON% venv-pyodide
+          call .\venv-pyodide\Scripts\activate.bat
+          .\uv.exe pip install --extra-index-url=%PYODIDE_INDEX% --no-build numpy
+          python -c "import numpy"
 
   integration-test-github-actions:
     name: "github actions"
