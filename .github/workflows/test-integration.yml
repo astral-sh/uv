@@ -619,6 +619,9 @@ jobs:
     name: "pyodide on windows"
     timeout-minutes: 10
     runs-on: windows-latest
+    # Github Actions Windows runner uses D drive as pwd.
+    # Pyodide CLI has an issue running cross-drive,
+    # So ensure that cache and Pyodide paths are on D drive as well.
     env:
       UV_CACHE_DIR: D:\uv-cache
       PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
