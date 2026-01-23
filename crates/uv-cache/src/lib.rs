@@ -1145,7 +1145,7 @@ pub enum CacheBucket {
     ///  * `simple-v0/pypi/<package_name>.rkyv`
     ///  * `simple-v0/<digest(index_url)>/<package_name>.rkyv`
     ///
-    /// The response is parsed into `uv_client::SimpleMetadata` before storage.
+    /// The response is parsed into `uv_client::SimpleDetailMetadata` before storage.
     Simple,
     /// A cache of unzipped wheels, stored as directories. This is used internally within the cache.
     /// When other buckets need to store directories, they should persist them to
@@ -1174,7 +1174,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v18",
+            Self::Simple => "simple-v19",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
             Self::Wheels => "wheels-v5",

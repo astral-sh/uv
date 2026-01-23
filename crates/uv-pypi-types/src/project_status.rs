@@ -10,7 +10,10 @@ use tracing::info;
 use uv_small_str::SmallString;
 
 /// The status marker for a project.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub enum Status {
     #[default]
     Active,
@@ -48,7 +51,8 @@ impl<'de> Deserialize<'de> for Status {
 /// The project status information.
 ///
 /// This includes a status marker and an optional reason for the status.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(derive(Debug))]
 pub struct ProjectStatus {
     pub status: Status,
     pub reason: Option<SmallString>,
