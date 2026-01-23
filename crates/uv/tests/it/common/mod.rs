@@ -1257,10 +1257,10 @@ impl TestContext {
     }
 
     /// Create a `uv publish` command with options shared across scenarios.
-    #[expect(clippy::unused_self)]
     pub fn publish(&self) -> Command {
         let mut command = Self::new_command();
         command.arg("publish");
+        self.add_shared_options(&mut command, false);
         command
     }
 
