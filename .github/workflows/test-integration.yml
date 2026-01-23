@@ -629,15 +629,29 @@ jobs:
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
-      - name: "Install Pyodide with uv python"
+      - name: "Create a native virtual environment"
         run: |
-          .\uv.exe python install cpython-3.13.2-emscripten-wasm32-musl
+          .\uv.exe venv venv-native -p 3.13
+          # We use features added in 0.30.3 but there is no known breakage in
+          # newer versions.
+          .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.30.7 pip
 
-      - name: "Install Emscripten wheels with uv python"
+      - name: "Install Pyodide interpreter"
+        shell: pwsh
         run: |
-          .\uv.exe venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide
-          & venv-pyodide\Scripts\Activate.ps1
-          .\uv.exe pip install --extra-index-url=https://index.pyodide.org/0.29.2 --no-build numpy
+          & .\venv-native\Scripts\Activate.ps1
+          pyodide xbuildenv install 0.29.2
+          $env:PYODIDE_PYTHON = pyodide config get interpreter
+          $env:PYODIDE_INDEX = pyodide config get package_index
+          echo "PYODIDE_PYTHON=$env:PYODIDE_PYTHON" >> $env:GITHUB_ENV
+          echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
+
+      - name: "Create Pyodide virtual environment"
+        shell: pwsh
+        run: |
+          .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
+          & .\venv-pyodide\Scripts\Activate.ps1
+          .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
           python -c 'import numpy'
 
   integration-test-github-actions:
