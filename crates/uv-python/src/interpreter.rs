@@ -956,9 +956,8 @@ impl InterpreterInfo {
         // modifications, and then (2) adding the path containing our query script to the front of
         // `sys.path` so that we can import it.
         let script = format!(
-            r#"import sys; import os; tmpdir = "{}"; sys.path = [tmpdir] + sys.path; print("DEBUG: sys.meta_path:", sys.meta_path, file=sys.stderr); print("DEBUG: sys.executable:", sys.executable, file=sys.stderr); print("DEBUG: interpreter path:", {}, file=sys.stderr); print("DEBUG: os.getcwd:", os.getcwd( ), file=sys.stderr); print("DEBUG: os.listdir:", os.listdir('.'), file=sys.stderr); root = chr(47); print("DEBUG: os.listdir:", os.listdir(root), file=sys.stderr); print("DEBUG: sys.path[0] contents:", os.listdir(tmpdir[2:].replace("//", "/") + "/python"), file=sys.stderr); from python.get_interpreter_info import main; main()"#,
-            tempdir.path().escape_for_python(),
-            format!("'{}'", interpreter.display()).replace('\\', "\\\\")
+            r#"import sys; sys.path = ["{}"] + sys.path; tmpdir = sys.path[0]; print("DEBUG: sys.meta_path[-1].find_spec", sys.meta_path[-1].find_spec("python", tmpdir), file=sys.stderr); from python.get_interpreter_info import main; main()"#,
+            tempdir.path().escape_for_python()
         );
         debug!("Executing Python script to query interpreter info");
         debug!("Script tempdir path: {}", tempdir.path().display());
