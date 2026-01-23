@@ -632,9 +632,7 @@ jobs:
       - name: "Create a native virtual environment"
         run: |
           .\uv.exe venv venv-native -p 3.13
-          # We use features added in 0.30.3 but there is no known breakage in
-          # newer versions.
-          .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.30.7 pip
+          .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.31.1 pip
 
       - name: "Install Pyodide interpreter"
         shell: pwsh
