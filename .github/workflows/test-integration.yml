@@ -619,6 +619,9 @@ jobs:
     name: "pyodide on windows"
     timeout-minutes: 10
     runs-on: windows-latest
+    env:
+      UV_CACHE_DIR: D:\uv-cache
+      PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
