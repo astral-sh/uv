@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use owo_colors::OwoColorize;
 use uv_fs::Simplified;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -19,10 +19,10 @@ pub(crate) async fn list(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::WORKSPACE_LIST) {
+    if !preview.is_enabled(PreviewFeature::WorkspaceList) {
         warn_user!(
             "The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::WORKSPACE_LIST
+            PreviewFeature::WorkspaceList
         );
     }
 

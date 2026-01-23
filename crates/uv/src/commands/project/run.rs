@@ -28,7 +28,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -549,7 +549,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         // When running a target with the preview flag enabled, discover the workspace starting
         // from the target's directory rather than the current working directory.
         let discovery_dir: Cow<'_, Path> =
-            if preview.is_enabled(PreviewFeatures::TARGET_WORKSPACE_DISCOVERY) {
+            if preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery) {
                 if let Some(dir) = command.as_ref().and_then(RunCommand::script_dir) {
                     Cow::Owned(std::path::absolute(dir)?)
                 } else {

@@ -8,7 +8,7 @@ use reqwest_middleware::{ClientWithMiddleware, Error, Middleware, Next};
 use tokio::sync::Mutex;
 use tracing::{debug, trace, warn};
 
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
@@ -815,7 +815,7 @@ impl AuthMiddleware {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
         } else if let Some(credentials) = {
-            if self.preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+            if self.preview.is_enabled(PreviewFeature::NativeAuth) {
                 let native_store = KeyringProvider::native();
                 let username = credentials.and_then(|credentials| credentials.username());
                 let display_username = if let Some(username) = username {

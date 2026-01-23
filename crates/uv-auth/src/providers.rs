@@ -6,7 +6,7 @@ use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
 use url::Url;
 
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -70,10 +70,10 @@ impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
     pub(crate) fn is_s3_endpoint(url: &Url, preview: Preview) -> bool {
         if let Some(s3_endpoint_realm) = S3_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
-            if !preview.is_enabled(PreviewFeatures::S3_ENDPOINT) {
+            if !preview.is_enabled(PreviewFeature::S3Endpoint) {
                 warn_user_once!(
                     "The `s3-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeatures::S3_ENDPOINT
+                    PreviewFeature::S3Endpoint
                 );
             }
 
@@ -119,10 +119,10 @@ impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
     pub(crate) fn is_gcs_endpoint(url: &Url, preview: Preview) -> bool {
         if let Some(gcs_endpoint_realm) = GCS_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
-            if !preview.is_enabled(PreviewFeatures::GCS_ENDPOINT) {
+            if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
                 warn_user_once!(
                     "The `gcs-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeatures::GCS_ENDPOINT
+                    PreviewFeature::GcsEndpoint
                 );
             }
 

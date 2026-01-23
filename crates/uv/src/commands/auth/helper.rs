@@ -8,7 +8,7 @@ use tracing::debug;
 
 use uv_auth::{AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use uv_client::BaseClientBuilder;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
 
@@ -123,10 +123,10 @@ pub(crate) async fn helper(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::AUTH_HELPER) {
+    if !preview.is_enabled(PreviewFeature::AuthHelper) {
         warn_user!(
             "The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeatures::AUTH_HELPER
+            PreviewFeature::AuthHelper
         );
     }
 

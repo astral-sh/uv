@@ -12,7 +12,7 @@ use fs_err as fs;
 use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -807,7 +807,7 @@ impl PythonMinorVersionLink {
         // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
-        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) && !minor_version_link.exists() {
+        if !preview.is_enabled(PreviewFeature::PythonUpgrade) && !minor_version_link.exists() {
             return None;
         }
         Some(minor_version_link)
