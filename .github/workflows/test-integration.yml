@@ -649,6 +649,7 @@ jobs:
       - name: "Create Pyodide virtual environment"
         shell: pwsh
         run: |
+          $env:RUST_LOG="debug"
           .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
           & .\venv-pyodide\Scripts\Activate.ps1
           .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
