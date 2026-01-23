@@ -16,7 +16,7 @@ use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::Error;
@@ -104,7 +104,7 @@ impl Locks {
         // This warning is currently in preview.
         if !self
             .preview
-            .is_enabled(PreviewFeatures::DETECT_MODULE_CONFLICTS)
+            .is_enabled(PreviewFeature::DetectModuleConflicts)
         {
             return Ok(());
         }

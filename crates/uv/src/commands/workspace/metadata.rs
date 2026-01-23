@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use uv_fs::PortablePathBuf;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -55,10 +55,10 @@ pub(crate) async fn metadata(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::WORKSPACE_METADATA) {
+    if !preview.is_enabled(PreviewFeature::WorkspaceMetadata) {
         warn_user!(
             "The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::WORKSPACE_METADATA
+            PreviewFeature::WorkspaceMetadata
         );
     }
 

@@ -29,7 +29,7 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -103,19 +103,19 @@ pub(crate) async fn add(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if bounds.is_some() && !preview.is_enabled(PreviewFeatures::ADD_BOUNDS) {
+    if bounds.is_some() && !preview.is_enabled(PreviewFeature::AddBounds) {
         warn_user_once!(
             "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::ADD_BOUNDS
+            PreviewFeature::AddBounds
         );
     }
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !settings.resolver.extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 

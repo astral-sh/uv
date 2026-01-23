@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -190,7 +190,7 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+    let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
         && python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());

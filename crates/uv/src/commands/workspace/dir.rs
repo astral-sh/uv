@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
@@ -20,10 +20,10 @@ pub(crate) async fn dir(
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::WORKSPACE_DIR) {
+    if !preview.is_enabled(PreviewFeature::WorkspaceDir) {
         warn_user!(
             "The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::WORKSPACE_DIR
+            PreviewFeature::WorkspaceDir
         );
     }
 

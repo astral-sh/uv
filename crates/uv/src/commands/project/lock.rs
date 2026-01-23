@@ -25,7 +25,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
@@ -472,12 +472,12 @@ async fn do_lock(
         torch_backend: _,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 
@@ -542,7 +542,7 @@ async fn do_lock(
     }
 
     // Check if any conflicts contain project-level conflicts
-    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+    if !preview.is_enabled(PreviewFeature::PackageConflicts)
         && conflicts.iter().any(|set| {
             set.iter()
                 .any(|item| matches!(item.kind(), ConflictKind::Project))
@@ -550,7 +550,7 @@ async fn do_lock(
     {
         warn_user_once!(
             "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::PACKAGE_CONFLICTS
+            PreviewFeature::PackageConflicts
         );
     }
 

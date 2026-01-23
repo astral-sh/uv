@@ -19,7 +19,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
     PythonDownloadRequest,
@@ -311,18 +311,18 @@ async fn perform_install(
     // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
     // surprised if `uv python find` returned the "newest" Python version rather than the one I just
     // installed with the `--default` flag.
-    if default && !preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT) {
+    if default && !preview.is_enabled(PreviewFeature::PythonInstallDefault) {
         warn_user!(
             "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeatures::PYTHON_INSTALL_DEFAULT
+            PreviewFeature::PythonInstallDefault
         );
     }
 
     if let PythonUpgrade::Enabled(source @ PythonUpgradeSource::Upgrade) = upgrade {
-        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) {
+        if !preview.is_enabled(PreviewFeature::PythonUpgrade) {
             warn_user!(
                 "`{source}` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-                PreviewFeatures::PYTHON_UPGRADE
+                PreviewFeature::PythonUpgrade
             );
         }
     }
@@ -972,8 +972,8 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let should_create_default_links = default
-        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT));
+    let should_create_default_links =
+        default || (is_default_install && preview.is_enabled(PreviewFeature::PythonInstallDefault));
 
     let targets = if should_create_default_links {
         vec![
