@@ -945,7 +945,11 @@ struct InterpreterInfo {
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
     pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+        debug!("Querying Python interpreter at: {}", interpreter.display());
+        
         let tempdir = tempfile::tempdir_in(cache.root())?;
+        debug!("Created temporary directory at: {}", tempdir.path().display());
+        
         Self::setup_python_query_files(tempdir.path())?;
 
         // Sanitize the path by (1) running under isolated mode (`-I`) to ignore any site packages
@@ -955,6 +959,9 @@ impl InterpreterInfo {
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
         );
+        debug!("Executing Python script to query interpreter info");
+        debug!("Script tempdir path: {}", tempdir.path().display());
+        
         let output = Command::new(interpreter)
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
@@ -991,8 +998,11 @@ impl InterpreterInfo {
                 }
             })?;
 
+        debug!("Python command executed with status: {}", output.status);
+        
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            debug!("Python command failed. stderr: {}", stderr);
 
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
@@ -1010,9 +1020,11 @@ impl InterpreterInfo {
             }));
         }
 
+        debug!("Parsing Python interpreter query output");
         let result: InterpreterInfoResult =
             serde_json::from_slice(&output.stdout).map_err(|err| {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                debug!("Failed to parse interpreter output as JSON: {}", err);
 
                 // If the Python version is too old, we may not even be able to invoke the query script
                 if stderr.contains("Unknown option: -I") {
@@ -1042,34 +1054,53 @@ impl InterpreterInfo {
     /// Duplicate the directory structure we have in `../python` into a tempdir, so we can run
     /// the Python probing scripts with `python -m python.get_interpreter_info` from that tempdir.
     fn setup_python_query_files(root: &Path) -> Result<(), Error> {
+        debug!("Setting up Python query files in: {}", root.display());
+        
         let python_dir = root.join("python");
+        debug!("Creating directory: {}", python_dir.display());
         fs_err::create_dir(&python_dir)?;
+        
+        debug!("Writing: {}", python_dir.join("get_interpreter_info.py").display());
         fs_err::write(
             python_dir.join("get_interpreter_info.py"),
             include_str!("../python/get_interpreter_info.py"),
         )?;
+        
+        debug!("Writing: {}", python_dir.join("__init__.py").display());
         fs_err::write(
             python_dir.join("__init__.py"),
             include_str!("../python/__init__.py"),
         )?;
+        
         let packaging_dir = python_dir.join("packaging");
+        debug!("Creating directory: {}", packaging_dir.display());
         fs_err::create_dir(&packaging_dir)?;
+        
+        debug!("Writing: {}", packaging_dir.join("__init__.py").display());
         fs_err::write(
             packaging_dir.join("__init__.py"),
             include_str!("../python/packaging/__init__.py"),
         )?;
+        
+        debug!("Writing: {}", packaging_dir.join("_elffile.py").display());
         fs_err::write(
             packaging_dir.join("_elffile.py"),
             include_str!("../python/packaging/_elffile.py"),
         )?;
+        
+        debug!("Writing: {}", packaging_dir.join("_manylinux.py").display());
         fs_err::write(
             packaging_dir.join("_manylinux.py"),
             include_str!("../python/packaging/_manylinux.py"),
         )?;
+        
+        debug!("Writing: {}", packaging_dir.join("_musllinux.py").display());
         fs_err::write(
             packaging_dir.join("_musllinux.py"),
             include_str!("../python/packaging/_musllinux.py"),
         )?;
+        
+        debug!("Successfully set up Python query files");
         Ok(())
     }
 
