@@ -619,46 +619,23 @@ jobs:
     name: "pyodide on windows"
     timeout-minutes: 10
     runs-on: windows-latest
-    env:
-      UV_CACHE_DIR: D:\uv-cache
-      PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-        with:
-          persist-credentials: false
-
-      - name: "Setup Node.js"
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
-        with:
-          node-version: "24"
-
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
-      - name: "Create a native virtual environment"
-        run: |
-          .\uv.exe venv venv-native -p 3.13
-          .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.31.1 pip
-
       - name: "Install Pyodide interpreter"
         shell: pwsh
         run: |
-          & .\venv-native\Scripts\Activate.ps1
-          pyodide xbuildenv install 0.29.2
-          $env:PYODIDE_PYTHON = pyodide config get interpreter
-          $env:PYODIDE_INDEX = pyodide config get package_index
-          echo "PYODIDE_PYTHON=$env:PYODIDE_PYTHON" >> $env:GITHUB_ENV
-          echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
+          .\uv.exe python install cpython-3.13.2-emscripten-wasm32-musl
 
       - name: "Create Pyodide virtual environment"
         shell: pwsh
         run: |
-          $env:RUST_LOG="debug"
-          .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
-          & .\venv-pyodide\Scripts\Activate.ps1
-          .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
+          .\uv.exe venv -p cpython-3.13.2-emscripten-wasm32-musl venv-pyodide
+          & venv-pyodide\Scripts\Activate.ps1
+          .\uv.exe pip install --extra-index-url=https://index.pyodide.org/0.29.2 --no-build numpy
           python -c 'import numpy'
 
   integration-test-github-actions:
