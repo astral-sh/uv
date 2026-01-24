@@ -23,15 +23,8 @@ RUN case "$TARGETPLATFORM" in \
   *) exit 1 ;; \
   esac
 
-# Temporarily using nightly-2025-11-02 for bundled musl v1.2.5
-# Ref: https://github.com/rust-lang/rust/pull/142682
-# TODO(samypr100): Remove when toolchain updates to 1.93
-COPY <<EOF rust-toolchain.toml
-[toolchain]
-channel = "nightly-2025-11-02"
-EOF
 # Update rustup whenever we bump the rust version
-# COPY rust-toolchain.toml rust-toolchain.toml
+COPY rust-toolchain.toml rust-toolchain.toml
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target $(cat rust_target.txt) --profile minimal --default-toolchain none
 ENV PATH="$HOME/.cargo/bin:$PATH"
 # Install the toolchain then the musl target
