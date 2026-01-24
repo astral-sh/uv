@@ -21,8 +21,7 @@ class VariantPropertyType:
     values: list[str]
 
 
-def get_supported_configs(
-) -> list[VariantFeatureConfigType]:
+def get_supported_configs() -> list[VariantFeatureConfigType]:
     if override := os.getenv("UV_CPU_LEVEL_OVERRIDE"):
         try:
             current_level = int(override)
