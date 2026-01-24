@@ -98,6 +98,10 @@ impl EnvVars {
     #[attr_added_in("0.1.40")]
     pub const UV_PYTHON: &'static str = "UV_PYTHON";
 
+    /// Equivalent to the `--python-platform` command-line argument. Represented as a "target triple", e.g.
+    /// i686-pc-windows-msvc. Overrides the platform uv autodetects from the local machine.
+    pub const UV_PYTHON_PLATFORM: &'static str = "UV_PYTHON_PLATFORM";
+
     /// Equivalent to the `--break-system-packages` command-line argument. If set to `true`,
     /// uv will allow the installation of packages that conflict with system-installed packages.
     ///
