@@ -11,7 +11,7 @@ description: A guide to using uv in GitLab CI/CD, including installation, settin
 Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
 Select a variant that is suitable for your workflow.
 
-```yaml title="gitlab-ci.yml"
+```yaml title=".gitlab-ci.yml"
 variables:
   UV_VERSION: "0.9.26"
   PYTHON_VERSION: "3.12"
@@ -73,7 +73,7 @@ how [variables and their precedence works in GitLab here](https://docs.gitlab.co
 
 Opt-in for the entire workflow by defining it at the top level:
 
-```yaml title="gitlab-ci.yml"
+```yaml title=".gitlab-ci.yml"
 variables:
   UV_SYSTEM_PYTHON: 1
 
