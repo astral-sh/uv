@@ -329,6 +329,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 exclude_newer,
                 exclude_newer_package,
                 link_mode,
+                link_limit,
                 compile_bytecode,
                 no_sources,
                 no_sources_package: _,
@@ -480,6 +481,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if link_mode.is_some() {
         masked_fields.push("link-mode");
+    }
+    if link_limit.is_some() {
+        masked_fields.push("link-limit");
     }
     if compile_bytecode.is_some() {
         masked_fields.push("compile-bytecode");

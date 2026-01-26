@@ -16,6 +16,7 @@ use uv_python::PythonEnvironment;
 pub struct Installer<'a> {
     venv: &'a PythonEnvironment,
     link_mode: LinkMode,
+    link_limit: Option<u64>,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
     /// The name of the [`Installer`].
@@ -32,6 +33,7 @@ impl<'a> Installer<'a> {
         Self {
             venv,
             link_mode: LinkMode::default(),
+            link_limit: None,
             cache: None,
             reporter: None,
             name: Some("uv".to_string()),
@@ -44,6 +46,15 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_link_mode(self, link_mode: LinkMode) -> Self {
         Self { link_mode, ..self }
+    }
+
+    /// Set the hardlink limit for this installer.
+    ///
+    /// When set, cached files that have reached this number of hardlinks will be
+    /// "reset" (copied to a new inode) before creating new hardlinks.
+    #[must_use]
+    pub fn with_link_limit(self, link_limit: Option<u64>) -> Self {
+        Self { link_limit, ..self }
     }
 
     /// Set the [`Cache`] to use for this installer.
@@ -89,6 +100,7 @@ impl<'a> Installer<'a> {
             venv,
             cache,
             link_mode,
+            link_limit,
             reporter,
             name: installer_name,
             metadata: installer_metadata,
@@ -115,6 +127,7 @@ impl<'a> Installer<'a> {
                 &layout,
                 installer_name.as_deref(),
                 link_mode,
+                link_limit,
                 reporter.as_ref(),
                 relocatable,
                 installer_metadata,
@@ -146,6 +159,7 @@ impl<'a> Installer<'a> {
             &self.venv.interpreter().layout(),
             self.name.as_deref(),
             self.link_mode,
+            self.link_limit,
             self.reporter.as_ref(),
             self.venv.relocatable(),
             self.metadata,
@@ -161,6 +175,7 @@ fn install(
     layout: &Layout,
     installer_name: Option<&str>,
     link_mode: LinkMode,
+    link_limit: Option<u64>,
     reporter: Option<&Arc<dyn Reporter>>,
     relocatable: bool,
     installer_metadata: bool,
@@ -188,6 +203,7 @@ fn install(
             installer_name,
             installer_metadata,
             link_mode,
+            link_limit,
             &locks,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;

@@ -279,11 +279,14 @@ impl LinkMode {
         wheel: impl AsRef<Path>,
         locks: &Locks,
         filename: &WheelFilename,
+        link_limit: Option<u64>,
     ) -> Result<usize, Error> {
         match self {
             Self::Clone => clone_wheel_files(site_packages, wheel, locks, filename),
             Self::Copy => copy_wheel_files(site_packages, wheel, locks, filename),
-            Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks, filename),
+            Self::Hardlink => {
+                hardlink_wheel_files(site_packages, wheel, locks, filename, link_limit)
+            }
             Self::Symlink => symlink_wheel_files(site_packages, wheel, locks, filename),
         }
     }
@@ -517,6 +520,7 @@ fn hardlink_wheel_files(
     wheel: impl AsRef<Path>,
     locks: &Locks,
     filename: &WheelFilename,
+    link_limit: Option<u64>,
 ) -> Result<usize, Error> {
     let mut attempt = Attempt::default();
     let mut count = 0usize;
@@ -540,6 +544,26 @@ fn hardlink_wheel_files(
             synchronized_copy(path, &out_path, locks)?;
             count += 1;
             continue;
+        }
+
+        // Check and reset if we've hit the hardlink limit.
+        // A limit of 0 or None means no limit.
+        if let Some(limit) = link_limit.filter(|&l| l > 0)
+            && let Ok(metadata) = fs::metadata(path)
+            && get_hardlink_count(&metadata) >= limit
+        {
+            debug!(
+                "File {} has reached hardlink limit ({}), resetting inode",
+                path.display(),
+                limit
+            );
+            if let Err(err) = reset_file_inode(path) {
+                debug!(
+                    "Failed to reset inode for {}: {}, continuing anyway",
+                    path.display(),
+                    err
+                );
+            }
         }
 
         // Fallback to copying if hardlinks aren't supported for this installation.
@@ -730,6 +754,45 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 
     // Copy the file, which will also set its permissions.
     fs::copy(from, to)?;
+
+    Ok(())
+}
+
+/// Get the number of hardlinks for a file.
+#[cfg(unix)]
+fn get_hardlink_count(metadata: &std::fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink()
+}
+
+/// Get the number of hardlinks for a file.
+#[cfg(windows)]
+fn get_hardlink_count(metadata: &std::fs::Metadata) -> u64 {
+    use std::os::windows::fs::MetadataExt;
+    // Windows returns Option<u32> since the count may not be available
+    // for all filesystems. Default to 1 if unavailable.
+    metadata.number_of_links().unwrap_or(1) as u64
+}
+
+/// Reset a file's inode by copying it to a temp file and renaming back.
+///
+/// This gives the file a new inode with nlink=1, breaking the hardlink
+/// chain with any previously linked files.
+fn reset_file_inode(path: &Path) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "path has no parent directory")
+    })?;
+    let tempdir = tempfile::tempdir_in(parent)?;
+    let temp_path = tempdir.path().join(
+        path.file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?,
+    );
+
+    // Copy to temp file
+    fs::copy(path, &temp_path)?;
+
+    // Atomic rename over original
+    fs::rename(&temp_path, path)?;
 
     Ok(())
 }

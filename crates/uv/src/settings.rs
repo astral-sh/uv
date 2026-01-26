@@ -1010,6 +1010,7 @@ impl ToolUpgradeSettings {
             build_isolation,
             exclude_newer,
             link_mode,
+            link_limit,
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
@@ -1048,6 +1049,7 @@ impl ToolUpgradeSettings {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            link_limit,
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
@@ -3377,6 +3379,7 @@ impl VenvSettings {
             exclude_newer,
             no_project,
             link_mode,
+            link_limit,
             refresh,
             compat_args: _,
             exclude_newer_package,
@@ -3407,6 +3410,7 @@ impl VenvSettings {
                     exclude_newer_package: exclude_newer_package
                         .map(ExcludeNewerPackage::from_iter),
                     link_mode,
+                    link_limit,
                     ..PipOptions::from(index_args)
                 },
                 filesystem,
@@ -3433,6 +3437,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
     pub(crate) exclude_newer: &'a ExcludeNewer,
     pub(crate) link_mode: LinkMode,
+    pub(crate) link_limit: Option<u64>,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
@@ -3455,6 +3460,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) link_mode: LinkMode,
+    pub(crate) link_limit: Option<u64>,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -3516,6 +3522,7 @@ impl From<ResolverOptions> for ResolverSettings {
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
             exclude_newer: value.exclude_newer,
             link_mode: value.link_mode.unwrap_or_default(),
+            link_limit: value.link_limit,
             torch_backend: value.torch_backend,
             sources: NoSources::from_args(
                 value.no_sources,
@@ -3605,6 +3612,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 index_strategy: value.index_strategy.unwrap_or_default(),
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
                 link_mode: value.link_mode.unwrap_or_default(),
+                link_limit: value.link_limit,
                 build_isolation: value.build_isolation.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
@@ -3673,6 +3681,7 @@ pub(crate) struct PipSettings {
     pub(crate) emit_index_annotation: bool,
     pub(crate) annotation_style: AnnotationStyle,
     pub(crate) link_mode: LinkMode,
+    pub(crate) link_limit: Option<u64>,
     pub(crate) compile_bytecode: bool,
     pub(crate) sources: NoSources,
     pub(crate) hash_checking: Option<HashCheckingMode>,
@@ -3749,6 +3758,7 @@ impl PipSettings {
             emit_index_annotation,
             annotation_style,
             link_mode,
+            link_limit,
             compile_bytecode,
             require_hashes,
             verify_hashes,
@@ -3781,6 +3791,7 @@ impl PipSettings {
             extra_build_variables: top_level_extra_build_variables,
             exclude_newer: top_level_exclude_newer,
             link_mode: top_level_link_mode,
+            link_limit: top_level_link_limit,
             compile_bytecode: top_level_compile_bytecode,
             no_sources: top_level_no_sources,
             no_sources_package: top_level_no_sources_package,
@@ -3830,6 +3841,7 @@ impl PipSettings {
             .combine(top_level_exclude_newer_package)
             .unwrap_or_default();
         let link_mode = link_mode.combine(top_level_link_mode);
+        let link_limit = link_limit.combine(top_level_link_limit);
         let compile_bytecode = compile_bytecode.combine(top_level_compile_bytecode);
         let no_sources = no_sources.combine(top_level_no_sources);
         let no_sources_package = no_sources_package.combine(top_level_no_sources_package);
@@ -3975,6 +3987,7 @@ impl PipSettings {
                 .combine(emit_index_annotation)
                 .unwrap_or_default(),
             link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            link_limit: args.link_limit.combine(link_limit),
             hash_checking: HashCheckingMode::from_args(
                 args.require_hashes.combine(require_hashes),
                 args.verify_hashes.combine(verify_hashes),
@@ -4060,6 +4073,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
             link_mode: settings.resolver.link_mode,
+            link_limit: settings.resolver.link_limit,
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,

@@ -198,6 +198,7 @@ mod resolver {
             &extra_build_requires,
             &extra_build_variables,
             LinkMode::default(),
+            None,
             &build_options,
             &hashes,
             exclude_newer,

@@ -374,6 +374,7 @@ pub struct InstallerOptions {
     pub config_settings: Option<ConfigSettings>,
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub link_mode: Option<LinkMode>,
+    pub link_limit: Option<u64>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<Reinstall>,
     pub build_isolation: Option<BuildIsolation>,
@@ -403,6 +404,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
+    pub link_limit: Option<u64>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
     pub build_isolation: Option<BuildIsolation>,
@@ -439,6 +441,7 @@ pub struct ResolverInstallerOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
+    pub link_limit: Option<u64>,
     pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
@@ -474,6 +477,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            link_limit,
             torch_backend,
             compile_bytecode,
             no_sources,
@@ -510,6 +514,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            link_limit,
             torch_backend,
             compile_bytecode,
             no_sources,
@@ -896,6 +901,21 @@ pub struct ResolverInstallerSchema {
         possible_values = true
     )]
     pub link_mode: Option<LinkMode>,
+    /// Reset cached files when they reach this number of hardlinks.
+    ///
+    /// When using hardlink mode, if a cached file has reached this many hardlinks,
+    /// uv will "reset" it by copying to a temp file and renaming back, giving it
+    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
+    ///
+    /// Set to 0 to disable (default).
+    #[option(
+        default = "0",
+        value_type = "int",
+        example = r#"
+            link-limit = 1000
+        "#
+    )]
+    pub link_limit: Option<u64>,
     /// Compile Python files to bytecode after installation.
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
@@ -1763,6 +1783,21 @@ pub struct PipOptions {
         possible_values = true
     )]
     pub link_mode: Option<LinkMode>,
+    /// Reset cached files when they reach this number of hardlinks.
+    ///
+    /// When using hardlink mode, if a cached file has reached this many hardlinks,
+    /// uv will "reset" it by copying to a temp file and renaming back, giving it
+    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
+    ///
+    /// Set to 0 to disable (default).
+    #[option(
+        default = "0",
+        value_type = "int",
+        example = r#"
+            link-limit = 1000
+        "#
+    )]
+    pub link_limit: Option<u64>,
     /// Compile Python files to bytecode after installation.
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
@@ -1964,6 +1999,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
                     .collect(),
             ),
             link_mode: value.link_mode,
+            link_limit: value.link_limit,
             upgrade: Upgrade::from_args(
                 value.upgrade,
                 value
@@ -2012,6 +2048,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             )
             .global,
             link_mode: value.link_mode,
+            link_limit: value.link_limit,
             compile_bytecode: value.compile_bytecode,
             reinstall: Reinstall::from_args(
                 value.reinstall,
@@ -2060,6 +2097,7 @@ pub struct ToolOptions {
     pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
+    pub link_limit: Option<u64>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
     pub no_sources_package: Option<Vec<PackageName>>,
@@ -2092,6 +2130,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
+            link_limit: value.link_limit,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
@@ -2126,6 +2165,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
+            link_limit: value.link_limit,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
             no_sources_package: value.no_sources_package,
@@ -2185,6 +2225,7 @@ pub struct OptionsWire {
     exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
+    link_limit: Option<u64>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
     no_sources_package: Option<Vec<PackageName>>,
@@ -2282,6 +2323,7 @@ impl From<OptionsWire> for Options {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            link_limit,
             compile_bytecode,
             no_sources,
             no_sources_package,
@@ -2360,6 +2402,7 @@ impl From<OptionsWire> for Options {
                 exclude_newer,
                 exclude_newer_package,
                 link_mode,
+                link_limit,
                 compile_bytecode,
                 no_sources,
                 no_sources_package,

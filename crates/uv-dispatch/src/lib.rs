@@ -90,6 +90,7 @@ pub struct BuildDispatch<'a> {
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
     link_mode: uv_install_wheel::LinkMode,
+    link_limit: Option<u64>,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
@@ -120,6 +121,7 @@ impl<'a> BuildDispatch<'a> {
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
         link_mode: uv_install_wheel::LinkMode,
+        link_limit: Option<u64>,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
@@ -144,6 +146,7 @@ impl<'a> BuildDispatch<'a> {
             extra_build_requires,
             extra_build_variables,
             link_mode,
+            link_limit,
             build_options,
             hasher,
             exclude_newer,
@@ -395,6 +398,7 @@ impl BuildContext for BuildDispatch<'_> {
             );
             wheels = Installer::new(venv, self.preview)
                 .with_link_mode(self.link_mode)
+                .with_link_limit(self.link_limit)
                 .with_cache(self.cache)
                 .install(wheels)
                 .await

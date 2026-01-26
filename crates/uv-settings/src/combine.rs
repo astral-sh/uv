@@ -114,6 +114,7 @@ impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);
 impl_combine_or!(bool);
+impl_combine_or!(u64);
 
 impl<T> Combine for Option<Vec<T>> {
     /// Combine two vectors by extending the vector in `self` with the vector in `other`, if they're
