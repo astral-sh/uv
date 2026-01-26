@@ -3,6 +3,50 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.27
+
+Released on 2026-01-26.
+
+### Python
+
+- Upgrade Pyodide to 0.29.2 ([#17652](https://github.com/astral-sh/uv/pull/17652))
+- Upgrade to GraalPy 25.0.2 ([#17634](https://github.com/astral-sh/uv/pull/17634))
+
+### Enhancements
+
+- Add `-t` shortform for `--target` to `uv pip` subcommands ([#17501](https://github.com/astral-sh/uv/pull/17501))
+- Add support for ROCm 7.0 and 7.1 accelerator backends ([#17681](https://github.com/astral-sh/uv/pull/17681))
+- Further improve free-threading ABI incompatibility errors ([#17491](https://github.com/astral-sh/uv/pull/17491))
+- Implement `uv pip freeze --exclude` flag ([#17045](https://github.com/astral-sh/uv/pull/17045))
+- Improve warnings for `--system` and `--no-system` in `uv venv` ([#17647](https://github.com/astral-sh/uv/pull/17647))
+- Make `uv pip compile` attempt to download a specified `--python-version` if it can. ([#17249](https://github.com/astral-sh/uv/pull/17249))
+- Support Trusted Publishing with pyx ([#17438](https://github.com/astral-sh/uv/pull/17438))
+- Fix JSON schema for `exclude-newer-package` ([#17665](https://github.com/astral-sh/uv/pull/17665))
+
+### Preview features
+
+- Better detection for conflicting packages ([#17623](https://github.com/astral-sh/uv/pull/17623))
+- Upgrade based on outdated build versions in `uv python upgrade` ([#17653](https://github.com/astral-sh/uv/pull/17653))
+
+### Bug fixes
+
+- Change chocolatey system test to ensure uv uses the right python ([#17533](https://github.com/astral-sh/uv/pull/17533))
+- Fix infinite loop when `SSL_CERT_FILE` is a directory ([#17503](https://github.com/astral-sh/uv/pull/17503))
+
+### Documentation
+
+- Add cargo-xwin to the CONTRIBUTING guide ([#17507](https://github.com/astral-sh/uv/pull/17507))
+- Fix typo in the documentation of UV_PUBLISH_INDEX ([#17672](https://github.com/astral-sh/uv/pull/17672))
+- Move MSRV to platform support section ([#17534](https://github.com/astral-sh/uv/pull/17534))
+- Update the testing instructions in the CONTRIBUTING guide ([#17528](https://github.com/astral-sh/uv/pull/17528))
+- Use `--locked` to install `cargo-xwin` in guide ([#17530](https://github.com/astral-sh/uv/pull/17530))
+- Warn about PyPy being unmaintained ([#17643](https://github.com/astral-sh/uv/pull/17643))
+- docs: Correct gitlab-ci.yml to .gitlab-ci.yml ([#17682](https://github.com/astral-sh/uv/pull/17682))
+
+### Other changes
+
+- Update MSRV to 1.91 ([#17677](https://github.com/astral-sh/uv/pull/17677))
+
 ## 0.9.26
 
 Released on 2026-01-15.

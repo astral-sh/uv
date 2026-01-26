@@ -113,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.26,<0.10.0"]
+requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -136,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.26,<0.10.0"]
+requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
 ```
 
@@ -197,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.9.26,<0.10.0"]
+requires = ["uv_build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
 ```
 
