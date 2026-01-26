@@ -238,7 +238,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -446,7 +445,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -655,7 +653,6 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -896,7 +893,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -1072,7 +1068,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -1294,7 +1289,6 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -1560,7 +1554,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -1838,7 +1831,6 @@ fn resolve_index_url() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -2071,7 +2063,6 @@ fn resolve_find_links() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -2269,7 +2260,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -2527,7 +2517,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -2768,7 +2757,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -2965,7 +2953,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -3146,7 +3133,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -3327,7 +3313,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -3510,7 +3495,6 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -3643,7 +3627,6 @@ fn resolve_tool() -> anyhow::Result<()> {
             exclude_newer: None,
             exclude_newer_package: None,
             link_mode: Some(
-            link_limit: None,
                 Clone,
             ),
             torch_backend: None,
@@ -3687,7 +3670,6 @@ fn resolve_tool() -> anyhow::Result<()> {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -3910,7 +3892,6 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -4159,7 +4140,6 @@ fn resolve_both() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -4413,7 +4393,6 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -4746,7 +4725,6 @@ fn resolve_config_file() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -5020,7 +4998,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -5204,7 +5181,6 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -5407,7 +5383,6 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -5671,7 +5646,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -5914,7 +5888,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -6163,7 +6136,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -6407,7 +6379,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -6658,7 +6629,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -6902,7 +6872,6 @@ fn index_priority() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -7090,7 +7059,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -7264,7 +7232,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: None,
@@ -7436,7 +7403,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -7610,7 +7576,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: None,
@@ -7782,7 +7747,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: None,
@@ -7955,7 +7919,6 @@ fn verify_hashes() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -8086,7 +8049,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8206,7 +8168,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8327,7 +8288,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8448,7 +8408,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8569,7 +8528,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8691,7 +8649,6 @@ fn preview_features() {
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
                 link_mode: Clone,
-                link_limit: None,
                 build_isolation: Isolate,
                 extra_build_dependencies: ExtraBuildDependencies(
                     {},
@@ -8890,7 +8847,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9072,7 +9028,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9277,7 +9232,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9457,7 +9411,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9631,7 +9584,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9806,7 +9758,6 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -9981,7 +9932,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10106,7 +10056,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10254,7 +10203,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10377,7 +10325,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10490,7 +10437,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10604,7 +10550,6 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
             link_mode: Clone,
-            link_limit: None,
             build_isolation: Isolate,
             extra_build_dependencies: ExtraBuildDependencies(
                 {},
@@ -10847,7 +10792,6 @@ fn build_isolation_override() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(
@@ -11030,7 +10974,6 @@ fn build_isolation_override() -> anyhow::Result<()> {
             emit_index_annotation: false,
             annotation_style: Split,
             link_mode: Clone,
-            link_limit: None,
             compile_bytecode: false,
             sources: None,
             hash_checking: Some(

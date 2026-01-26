@@ -279,14 +279,11 @@ impl LinkMode {
         wheel: impl AsRef<Path>,
         locks: &Locks,
         filename: &WheelFilename,
-        link_limit: Option<u64>,
     ) -> Result<usize, Error> {
         match self {
             Self::Clone => clone_wheel_files(site_packages, wheel, locks, filename),
             Self::Copy => copy_wheel_files(site_packages, wheel, locks, filename),
-            Self::Hardlink => {
-                hardlink_wheel_files(site_packages, wheel, locks, filename, link_limit)
-            }
+            Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks, filename),
             Self::Symlink => symlink_wheel_files(site_packages, wheel, locks, filename),
         }
     }
@@ -520,7 +517,6 @@ fn hardlink_wheel_files(
     wheel: impl AsRef<Path>,
     locks: &Locks,
     filename: &WheelFilename,
-    link_limit: Option<u64>,
 ) -> Result<usize, Error> {
     let mut attempt = Attempt::default();
     let mut count = 0usize;
@@ -546,34 +542,14 @@ fn hardlink_wheel_files(
             continue;
         }
 
-        // Check and reset if we've hit the hardlink limit.
-        // A limit of 0 or None means no limit.
-        if let Some(limit) = link_limit.filter(|&l| l > 0)
-            && let Ok(metadata) = fs::metadata(path)
-            && get_hardlink_count(&metadata) >= limit
-        {
-            debug!(
-                "File {} has reached hardlink limit ({}), resetting inode",
-                path.display(),
-                limit
-            );
-            if let Err(err) = reset_file_inode(path) {
-                debug!(
-                    "Failed to reset inode for {}: {}, continuing anyway",
-                    path.display(),
-                    err
-                );
-            }
-        }
-
         // Fallback to copying if hardlinks aren't supported for this installation.
         match attempt {
             Attempt::Initial => {
                 // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
                 attempt = Attempt::Subsequent;
-                if let Err(err) = fs::hard_link(path, &out_path) {
-                    // If the file already exists, remove it and try again.
-                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                match hard_link_or_reset(path, &out_path) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
                             "File already exists (initial attempt), overwriting: {}",
                             out_path.display()
@@ -581,7 +557,7 @@ fn hardlink_wheel_files(
                         // Removing and recreating would lead to race conditions.
                         let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
-                        if fs::hard_link(path, &tempfile).is_ok() {
+                        if hard_link_or_reset(path, &tempfile).is_ok() {
                             fs_err::rename(&tempfile, &out_path)?;
                         } else {
                             debug!(
@@ -592,7 +568,8 @@ fn hardlink_wheel_files(
                             synchronized_copy(path, &out_path, locks)?;
                             attempt = Attempt::UseCopyFallback;
                         }
-                    } else {
+                    }
+                    Err(_) => {
                         debug!(
                             "Failed to hardlink `{}` to `{}`, attempting to copy files as a fallback",
                             out_path.display(),
@@ -604,9 +581,9 @@ fn hardlink_wheel_files(
                 }
             }
             Attempt::Subsequent => {
-                if let Err(err) = fs::hard_link(path, &out_path) {
-                    // If the file already exists, remove it and try again.
-                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                match hard_link_or_reset(path, &out_path) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
                             "File already exists (subsequent attempt), overwriting: {}",
                             out_path.display()
@@ -614,9 +591,10 @@ fn hardlink_wheel_files(
                         // Removing and recreating would lead to race conditions.
                         let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
-                        fs::hard_link(path, &tempfile)?;
+                        hard_link_or_reset(path, &tempfile)?;
                         fs_err::rename(&tempfile, &out_path)?;
-                    } else {
+                    }
+                    Err(err) => {
                         return Err(err.into());
                     }
                 }
@@ -758,20 +736,25 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
     Ok(())
 }
 
-/// Get the number of hardlinks for a file.
-#[cfg(unix)]
-fn get_hardlink_count(metadata: &std::fs::Metadata) -> u64 {
-    use std::os::unix::fs::MetadataExt;
-    metadata.nlink()
-}
-
-/// Get the number of hardlinks for a file.
+/// Try to create a hard link, handling EMLINK/`ERROR_TOO_MANY_LINKS` by resetting the source file's inode.
 ///
-/// On Windows, this requires the unstable `windows_by_handle` feature (rust-lang/rust#63010).
-/// Until it stabilizes, `--link-limit` is not supported on Windows.
-#[cfg(windows)]
-fn get_hardlink_count(_metadata: &std::fs::Metadata) -> u64 {
-    unimplemented!("--link-limit is not supported on Windows")
+/// When a file has too many hardlinks (e.g., 65000 on ext4, ~1024 on NTFS, 177 on AWS EFS),
+/// creating another hardlink fails with EMLINK (Unix) or `ERROR_TOO_MANY_LINKS` (Windows).
+/// This function handles that by copying the source file to break its hardlink chain,
+/// then retrying the hardlink.
+fn hard_link_or_reset(source: &Path, dest: &Path) -> io::Result<()> {
+    match fs::hard_link(source, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
+            warn_user_once!(
+                "Resetting cache entry due to too many hardlinks: {}",
+                source.user_display()
+            );
+            reset_file_inode(source)?;
+            fs::hard_link(source, dest)
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// Reset a file's inode by copying it to a temp file and renaming back.

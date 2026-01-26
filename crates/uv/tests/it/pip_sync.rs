@@ -214,65 +214,6 @@ fn install_hardlink() -> Result<()> {
     Ok(())
 }
 
-/// Install a package into multiple virtual environments using hardlink semantics with a link limit.
-/// Verifies that the hardlink count in the cache is reset when it reaches the limit.
-#[test]
-#[cfg(unix)]
-fn install_hardlink_with_link_limit() -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-    use walkdir::WalkDir;
-
-    let context = TestContext::new("3.12");
-
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
-
-    // Install with link limit of 2 into 3 different venvs.
-    // Without the limit, hardlink count would grow to 4 (cache + 3 venvs).
-    // With limit of 2, the cache file should be reset before each new install after the first.
-    for i in 1..=3 {
-        let venv_path = context.temp_dir.child(format!("venv{i}"));
-
-        // Create a new venv
-        context.venv().arg(venv_path.path()).assert().success();
-
-        // Install the package with hardlink mode and link limit
-        context
-            .pip_sync()
-            .arg("requirements.txt")
-            .arg("--link-mode")
-            .arg("hardlink")
-            .arg("--link-limit")
-            .arg("2")
-            .env(EnvVars::VIRTUAL_ENV, venv_path.path())
-            .assert()
-            .success();
-    }
-
-    // Check that no file in the cache has more than 2 hardlinks.
-    // The limit is 2, so nlink should never exceed 2.
-    let mut max_nlink = 0u64;
-    for entry in WalkDir::new(context.cache_dir.path())
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-    {
-        let metadata = entry.metadata()?;
-        let nlink = metadata.nlink();
-        if nlink > max_nlink {
-            max_nlink = nlink;
-        }
-    }
-
-    // With link limit of 2, the maximum hardlink count should be 2.
-    assert!(
-        max_nlink <= 2,
-        "Expected max hardlink count <= 2, but found {max_nlink}"
-    );
-
-    Ok(())
-}
-
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
 #[cfg(unix)] // Windows does not allow symlinks by default

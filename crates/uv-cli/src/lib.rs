@@ -3238,16 +3238,6 @@ pub struct VenvArgs {
     #[arg(long, value_enum, env = EnvVars::UV_LINK_MODE)]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Reset cached files when they reach this number of hardlinks.
-    ///
-    /// When using hardlink mode, if a cached file has reached this many hardlinks,
-    /// uv will "reset" it by copying to a temp file and renaming back, giving it
-    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
-    ///
-    /// Set to 0 to disable (default).
-    #[arg(long, value_name = "LIMIT", env = EnvVars::UV_LINK_LIMIT)]
-    pub link_limit: Option<u64>,
-
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
@@ -5906,21 +5896,6 @@ pub struct ToolUpgradeArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Reset cached files when they reach this number of hardlinks.
-    ///
-    /// When using hardlink mode, if a cached file has reached this many hardlinks,
-    /// uv will "reset" it by copying to a temp file and renaming back, giving it
-    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
-    ///
-    /// Set to 0 to disable (default).
-    #[arg(
-        long,
-        value_name = "LIMIT",
-        env = EnvVars::UV_LINK_LIMIT,
-        help_heading = "Installer options"
-    )]
-    pub link_limit: Option<u64>,
-
     /// Compile Python files to bytecode after installation.
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
@@ -6943,21 +6918,6 @@ pub struct InstallerArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Reset cached files when they reach this number of hardlinks.
-    ///
-    /// When using hardlink mode, if a cached file has reached this many hardlinks,
-    /// uv will "reset" it by copying to a temp file and renaming back, giving it
-    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
-    ///
-    /// Set to 0 to disable (default).
-    #[arg(
-        long,
-        value_name = "LIMIT",
-        env = EnvVars::UV_LINK_LIMIT,
-        help_heading = "Installer options"
-    )]
-    pub link_limit: Option<u64>,
-
     /// Compile Python files to bytecode after installation.
     ///
     /// By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
@@ -7198,21 +7158,6 @@ pub struct ResolverArgs {
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
 
-    /// Reset cached files when they reach this number of hardlinks.
-    ///
-    /// When using hardlink mode, if a cached file has reached this many hardlinks,
-    /// uv will "reset" it by copying to a temp file and renaming back, giving it
-    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
-    ///
-    /// Set to 0 to disable (default).
-    #[arg(
-        long,
-        value_name = "LIMIT",
-        env = EnvVars::UV_LINK_LIMIT,
-        help_heading = "Installer options"
-    )]
-    pub link_limit: Option<u64>,
-
     /// Ignore the `tool.uv.sources` table when resolving dependencies. Used to lock against the
     /// standards-compliant, publishable package metadata, as opposed to using any workspace, Git,
     /// URL, or local path sources.
@@ -7451,21 +7396,6 @@ pub struct ResolverInstallerArgs {
         help_heading = "Installer options"
     )]
     pub link_mode: Option<uv_install_wheel::LinkMode>,
-
-    /// Reset cached files when they reach this number of hardlinks.
-    ///
-    /// When using hardlink mode, if a cached file has reached this many hardlinks,
-    /// uv will "reset" it by copying to a temp file and renaming back, giving it
-    /// a new inode. This is useful on filesystems that limit hardlinks per inode.
-    ///
-    /// Set to 0 to disable (default).
-    #[arg(
-        long,
-        value_name = "LIMIT",
-        env = EnvVars::UV_LINK_LIMIT,
-        help_heading = "Installer options"
-    )]
-    pub link_limit: Option<u64>,
 
     /// Compile Python files to bytecode after installation.
     ///

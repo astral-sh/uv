@@ -538,7 +538,6 @@ pub(crate) async fn install(
     reinstall: &Reinstall,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    link_limit: Option<u64>,
     compile: bool,
     hasher: &HashStrategy,
     tags: &Tags,
@@ -637,7 +636,6 @@ pub(crate) async fn install(
             resolution,
             build_options,
             link_mode,
-            link_limit,
             hasher,
             tags,
             client,
@@ -667,7 +665,6 @@ pub(crate) async fn install(
             resolution,
             build_options,
             link_mode,
-            link_limit,
             hasher,
             tags,
             client,
@@ -720,7 +717,6 @@ async fn execute_plan(
     resolution: &Resolution,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    link_limit: Option<u64>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -819,7 +815,6 @@ async fn execute_plan(
         let start = std::time::Instant::now();
         installs = uv_installer::Installer::new(venv, preview)
             .with_link_mode(link_mode)
-            .with_link_limit(link_limit)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
             .with_reporter(Arc::new(

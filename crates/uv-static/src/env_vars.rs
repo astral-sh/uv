@@ -150,13 +150,6 @@ impl EnvVars {
     #[attr_added_in("0.1.40")]
     pub const UV_LINK_MODE: &'static str = "UV_LINK_MODE";
 
-    /// Equivalent to the `--link-limit` command-line argument. If set to a positive integer,
-    /// uv will reset cached files that have reached this number of hardlinks before creating
-    /// a new hardlink. This prevents issues with filesystems that limit the number of hardlinks
-    /// per inode. Set to 0 to disable (default).
-    #[attr_added_in("next release")]
-    pub const UV_LINK_LIMIT: &'static str = "UV_LINK_LIMIT";
-
     /// Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
     /// skip isolation when building source distributions.
     #[attr_added_in("0.1.40")]

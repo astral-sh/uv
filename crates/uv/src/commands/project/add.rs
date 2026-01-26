@@ -469,7 +469,6 @@ pub(crate) async fn add(
                 &extra_build_requires,
                 &extra_build_variables,
                 settings.resolver.link_mode,
-                settings.resolver.link_limit,
                 &settings.resolver.build_options,
                 &build_hasher,
                 settings.resolver.exclude_newer.clone(),

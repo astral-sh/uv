@@ -37,7 +37,6 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
-    link_limit: Option<u64>,
     locks: &Locks,
 ) -> Result<(), Error> {
     let dist_info_prefix = find_dist_info(&wheel)?;
@@ -75,8 +74,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked =
-        link_mode.link_wheel_files(site_packages, &wheel, locks, filename, link_limit)?;
+    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks, filename)?;
     trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.
