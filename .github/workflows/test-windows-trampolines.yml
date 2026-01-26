@@ -58,7 +58,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@3522286d40783523f9c7880e33f785905b4c20d0 # v2.66.1
+        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
         with:
           tool: cargo-bloat
 
