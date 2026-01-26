@@ -244,7 +244,10 @@ fn install_hardlink_after_emlink() -> Result<()> {
         .filter_map(Result::ok)
         .find(|e| {
             e.file_type().is_file()
-                && (e.path().extension().is_some_and(|ext| ext == "so" || ext == "py"))
+                && (e
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "so" || ext == "py"))
         })
         .expect("should find a cached file")
         .into_path();
