@@ -1,6 +1,7 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
-use std::{fmt::Formatter, str::FromStr};
+use std::fmt::Formatter;
+use std::str::FromStr;
 
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError};
 

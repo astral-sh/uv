@@ -13,6 +13,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep508::MarkerVariantsUniversal;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
@@ -126,7 +127,7 @@ pub(crate) fn pip_show(
                 metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &MarkerVariantsUniversal, &[]))
                     .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
@@ -144,7 +145,7 @@ pub(crate) fn pip_show(
                 let requires = metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.evaluate_markers(&markers, &MarkerVariantsUniversal, &[]))
                     .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {

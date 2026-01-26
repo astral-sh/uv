@@ -15,7 +15,9 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion, MarkerVariantsUniversal,
+};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
@@ -555,7 +557,7 @@ impl PubGrubReportFormatter<'_> {
                 output_hints.insert(PubGrubHint::DisjointPythonVersion {
                     python_version: current_python_version,
                 });
-            } else if !markers.evaluate(current_environment, &[]) {
+            } else if !markers.evaluate(current_environment, &MarkerVariantsUniversal, &[]) {
                 output_hints.insert(PubGrubHint::DisjointEnvironment);
             }
         }

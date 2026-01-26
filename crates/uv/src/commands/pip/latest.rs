@@ -68,7 +68,7 @@ impl LatestClient<'_> {
                 // Determine whether there's a compatible wheel and/or source distribution.
                 let mut best = None;
 
-                for (filename, file) in files.all() {
+                for (filename, file) in files.dists() {
                     // Skip distributions uploaded after the cutoff.
                     if let Some(exclude_newer) = self.exclude_newer.exclude_newer_package(package) {
                         match file.upload_time_utc_ms.as_ref() {

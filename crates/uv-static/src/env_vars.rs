@@ -1284,6 +1284,17 @@ impl EnvVars {
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
 
+    /// A comma separated list of variant provider backends that use the current environment instead
+    /// of an isolated environment.
+    ///
+    /// The requirements need to be installed in the current environment, no provider `requires`
+    /// will be installed. This option is intended for development and as an escape hatch where
+    /// isolation fails.
+    ///
+    /// Example: `UV_NO_PROVIDER_ISOLATION=gpu.provider:api,cpu,blas.backend`
+    #[attr_added_in("0.9.2")]
+    pub const UV_NO_PROVIDER_ISOLATION: &'static str = "UV_NO_PROVIDER_ISOLATION";
+
     /// Suppress output from the build backend when building source distributions, even in the event
     /// of build failures.
     #[attr_added_in("0.9.15")]

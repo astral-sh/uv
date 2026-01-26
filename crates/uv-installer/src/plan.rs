@@ -14,7 +14,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
     ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist,
+    RemoteSource, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -209,7 +209,10 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Registry requirement already cached: {distribution}");
+                        debug!(
+                            "Registry requirement already cached: {distribution} ({})",
+                            wheel.best_wheel().filename
+                        );
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -495,7 +498,11 @@ impl<'a> Planner<'a> {
                 }
             }
 
-            debug!("Identified uncached distribution: {dist}");
+            if let Ok(filename) = dist.filename() {
+                debug!("Identified uncached distribution: {dist} ({filename})");
+            } else {
+                debug!("Identified uncached distribution: {dist}");
+            }
             remote.push(dist.clone());
         }
 
