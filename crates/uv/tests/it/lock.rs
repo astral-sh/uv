@@ -11697,7 +11697,7 @@ fn lock_override_upgrade_package() -> Result<()> {
         "#,
     )?;
 
-    // Overrride upgrade_package with --no-upgrade-package.
+    // Override upgrade_package with --no-upgrade-package.
     uv_snapshot!(context.filters(), context.lock().arg("--no-upgrade-package").arg("anyio"), @"
     success: true
     exit_code: 0
