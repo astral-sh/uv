@@ -254,7 +254,7 @@ fn install_hardlink_with_link_limit() -> Result<()> {
     let mut max_nlink = 0u64;
     for entry in WalkDir::new(context.cache_dir.path())
         .into_iter()
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .filter(|e| e.file_type().is_file())
     {
         let metadata = entry.metadata()?;

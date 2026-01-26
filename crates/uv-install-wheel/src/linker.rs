@@ -766,12 +766,12 @@ fn get_hardlink_count(metadata: &std::fs::Metadata) -> u64 {
 }
 
 /// Get the number of hardlinks for a file.
+///
+/// On Windows, this requires the unstable `windows_by_handle` feature (rust-lang/rust#63010).
+/// Until it stabilizes, `--link-limit` is not supported on Windows.
 #[cfg(windows)]
-fn get_hardlink_count(metadata: &std::fs::Metadata) -> u64 {
-    use std::os::windows::fs::MetadataExt;
-    // Windows returns Option<u32> since the count may not be available
-    // for all filesystems. Default to 1 if unavailable.
-    metadata.number_of_links().unwrap_or(1) as u64
+fn get_hardlink_count(_metadata: &std::fs::Metadata) -> u64 {
+    unimplemented!("--link-limit is not supported on Windows")
 }
 
 /// Reset a file's inode by copying it to a temp file and renaming back.
