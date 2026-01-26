@@ -118,6 +118,40 @@ cargo run -- venv
 cargo run -- pip install requests
 ```
 
+### Test features
+
+Some tests require network access or specific local dependencies. These are controlled via Cargo
+features in [`crates/uv/Cargo.toml`](crates/uv/Cargo.toml). The `default-tests` feature enables all
+test categories:
+
+| Feature          | Dependency                                           |
+| ---------------- | ---------------------------------------------------- |
+| `pypi`           | Network access to PyPI                               |
+| `crates-io`      | Network access to crates.io                          |
+| `git`            | Network access to GitHub/GitLab for git dependencies |
+| `python`         | Local Python installation                            |
+| `python-patch`   | Local Python with specific patch versions            |
+| `python-managed` | Managed Python installations                         |
+| `python-eol`     | Local Python with an EOL version                     |
+| `slow-tests`     | Slow test cases                                      |
+| `test-ecosystem` | Ecosystem packages                                   |
+
+To run a subset of tests, use `--no-default-features` with the specific features you need:
+
+```shell
+# Run only tests that don't require network access or special dependencies
+cargo nextest run --no-default-features
+
+# Run tests that only require Git (but not PyPI, crates.io, etc.)
+cargo nextest run --no-default-features --features git
+
+# Run tests that require PyPI, Git, and a local Python installation
+cargo nextest run --no-default-features --features pypi,git,python
+```
+
+If you're behind a corporate firewall or VPN that blocks access to certain domains, you can disable
+specific features and let CI run those tests.
+
 ## Formatting
 
 ```shell
