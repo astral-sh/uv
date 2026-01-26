@@ -1526,6 +1526,12 @@ impl TestContext {
             self.extra_env
                 .push((EnvVars::HOME.to_string().into(), home));
         }
+        // Use the test's isolated config directory to avoid reading user
+        // configuration files (like `.python-version`) that could interfere with tests.
+        self.extra_env.push((
+            EnvVars::XDG_CONFIG_HOME.into(),
+            self.user_config_dir.as_os_str().into(),
+        ));
         self
     }
 
