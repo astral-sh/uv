@@ -16,7 +16,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
@@ -611,7 +611,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/WHEEL"),
         wheel_info.to_string().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeatures::METADATA_JSON) {
+    if preview.is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/WHEEL.json"),
             &serde_json::to_vec(&wheel_info).map_err(Error::Json)?,
@@ -632,7 +632,7 @@ fn write_dist_info(
         &format!("{dist_info_dir}/METADATA"),
         metadata.core_metadata_format().as_bytes(),
     )?;
-    if preview.is_enabled(PreviewFeatures::METADATA_JSON) {
+    if preview.is_enabled(PreviewFeature::MetadataJson) {
         writer.write_bytes(
             &format!("{dist_info_dir}/METADATA.json"),
             &serde_json::to_vec(&metadata).map_err(Error::Json)?,

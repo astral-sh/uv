@@ -17,7 +17,7 @@ use uv_configuration::{
 use uv_fs::PortablePath;
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
@@ -263,10 +263,10 @@ pub fn from_lock<'lock>(
     preview: Preview,
     all_packages: bool,
 ) -> Result<Bom, LockError> {
-    if !preview.is_enabled(PreviewFeatures::SBOM_EXPORT) {
+    if !preview.is_enabled(PreviewFeature::SbomExport) {
         warn_user!(
             "`uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::SBOM_EXPORT
+            PreviewFeature::SbomExport
         );
     }
 

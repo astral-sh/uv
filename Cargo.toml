@@ -9,7 +9,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.90.0"
+rust-version = "1.91"
 homepage = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
@@ -110,6 +110,7 @@ dunce = { version = "1.0.5" }
 either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
 embed-manifest = { version = "1.5.0" }
+enumflags2 = { version = "0.7.12" }
 etcetera = { version = "0.11.0" }
 fastrand = { version = "2.3.0" }
 flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }

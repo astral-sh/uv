@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeatures;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -340,7 +340,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Adjust open file limits on Unix if the preview feature is enabled.
     #[cfg(unix)]
-    if globals.preview.is_enabled(PreviewFeatures::ADJUST_ULIMIT) {
+    if globals.preview.is_enabled(PreviewFeature::AdjustUlimit) {
         match uv_unix::adjust_open_file_limit() {
             Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
             // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
@@ -1962,10 +1962,7 @@ async fn run_project(
 
             // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
             if explicit_project {
-                if globals
-                    .preview
-                    .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
-                {
+                if globals.preview.is_enabled(PreviewFeature::InitProjectFlag) {
                     bail!(
                         "The `--project` option cannot be used in `uv init`. {}",
                         if args.path.is_some() {

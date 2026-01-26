@@ -1,3 +1,2 @@
-# TODO(samypr100): When updating to 1.93, adjust Dockerfile to remove nightly-2025-11-02
 [toolchain]
-channel = "1.92.0"
+channel = "1.93"

@@ -23,7 +23,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
-use uv_preview::PreviewFeatures;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -306,7 +306,7 @@ pub struct GlobalArgs {
         alias = "preview-feature",
         value_enum,
     )]
-    pub preview_features: Vec<PreviewFeatures>,
+    pub preview_features: Vec<PreviewFeature>,
 
     /// Avoid discovering a `pyproject.toml` or `uv.toml` file [env: UV_ISOLATED=]
     ///

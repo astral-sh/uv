@@ -284,7 +284,7 @@ impl EnvVars {
     pub const UV_PUBLISH_TOKEN: &'static str = "UV_PUBLISH_TOKEN";
 
     /// Equivalent to the `--index` command-line argument in `uv publish`. If
-    /// set, uv the index with this name in the configuration for publishing.
+    /// set, uv will use the index with this name in the configuration for publishing.
     #[attr_added_in("0.5.8")]
     pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
 
