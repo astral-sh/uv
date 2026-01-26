@@ -1557,10 +1557,11 @@ mod tests {
             }
         }
 
-        assert_debug_snapshot!(retried, @"
+        assert_debug_snapshot!(retried, @r"
         [
             100,
             102,
+            103,
             408,
             429,
             500,
