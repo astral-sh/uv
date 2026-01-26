@@ -791,8 +791,9 @@ pub(crate) fn get_relocatable_executable(
     })
 }
 
-/// Reads the record file
-/// <https://www.python.org/dev/peps/pep-0376/#record>
+/// Reads the record file.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
 pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Error> {
     csv::ReaderBuilder::new()
         .has_headers(false)
@@ -808,6 +809,23 @@ pub fn read_record_file(record: &mut impl Read) -> Result<Vec<RecordEntry>, Erro
             })
         })
         .collect()
+}
+
+/// Writes a record file.
+///
+/// The records are sorted for reproducibility before writing.
+///
+/// See: <https://packaging.python.org/en/latest/specifications/recording-installed-packages/#the-record-file>
+pub fn write_record_file(path: &Path, mut records: Vec<RecordEntry>) -> Result<(), Error> {
+    records.sort();
+    let mut writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .escape(b'"')
+        .from_path(path)?;
+    for record in records {
+        writer.serialize(record)?;
+    }
+    Ok(())
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
@@ -847,7 +865,7 @@ fn parse_email_message_file(
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
 ///
 /// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
-pub(crate) fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
+pub fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
         let entry = entry.ok()?;

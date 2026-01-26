@@ -1,0 +1,155 @@
+//! Python wheel file operations.
+//!
+//! Provides functionality for unpacking, modifying, and repacking wheel files,
+//! including RECORD file updates.
+
+use std::io;
+use std::path::Path;
+
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use fs_err as fs;
+use fs_err::File;
+use sha2::{Digest, Sha256};
+use uv_fs::Simplified;
+use uv_install_wheel::{RecordEntry, write_record_file};
+use walkdir::WalkDir;
+use zip::ZipWriter;
+use zip::write::FileOptions;
+
+use crate::error::DelocateError;
+
+/// Unpack a wheel to a directory.
+pub fn unpack_wheel(wheel_path: &Path, dest_dir: &Path) -> Result<(), DelocateError> {
+    let file = File::open(wheel_path)?;
+    uv_extract::unzip(file, dest_dir)?;
+    Ok(())
+}
+
+/// Repack a directory into a wheel file.
+pub fn pack_wheel(source_dir: &Path, wheel_path: &Path) -> Result<(), DelocateError> {
+    let file = File::create(wheel_path)?;
+    let mut zip = ZipWriter::new(file);
+
+    let options = FileOptions::<()>::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o644);
+
+    let walkdir = WalkDir::new(source_dir);
+    let mut paths: Vec<_> = walkdir
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .collect();
+
+    // Sort for reproducibility.
+    paths.sort_by(|a, b| a.path().cmp(b.path()));
+
+    for entry in paths {
+        let path = entry.path();
+        let relative =
+            path.strip_prefix(source_dir)
+                .map_err(|_| DelocateError::PathNotInWheel {
+                    path: path.to_path_buf(),
+                    wheel_dir: source_dir.to_path_buf(),
+                })?;
+
+        let relative_str = relative.to_string_lossy();
+
+        // Normalize permissions: 0o755 for executables, 0o644 for non-executable files.
+        #[cfg(unix)]
+        let options = {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(path)?;
+            let is_executable = metadata.permissions().mode() & 0o111 != 0;
+            let permissions = if is_executable { 0o755 } else { 0o644 };
+            options.unix_permissions(permissions)
+        };
+
+        zip.start_file(relative_str.as_ref(), options)?;
+
+        let mut f = File::open(path)?;
+        io::copy(&mut f, &mut zip)?;
+    }
+
+    zip.finish()?;
+    Ok(())
+}
+
+fn hash_file(path: &Path) -> Result<(String, u64), DelocateError> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let size = io::copy(&mut file, &mut hasher)?;
+    let hash = hasher.finalize();
+    let hash_str = format!("sha256={}", URL_SAFE_NO_PAD.encode(hash));
+    Ok((hash_str, size))
+}
+
+/// Update the RECORD file in a wheel directory.
+pub fn update_record(wheel_dir: &Path, dist_info_dir: &str) -> Result<(), DelocateError> {
+    let record_path = wheel_dir.join(dist_info_dir).join("RECORD");
+
+    let mut records = Vec::new();
+
+    for entry in WalkDir::new(wheel_dir) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(wheel_dir)
+            .map_err(|_| DelocateError::PathNotInWheel {
+                path: path.to_path_buf(),
+                wheel_dir: wheel_dir.to_path_buf(),
+            })?;
+
+        let relative_str = relative.portable_display().to_string();
+
+        // RECORD file itself has no hash.
+        if relative_str == format!("{dist_info_dir}/RECORD") {
+            records.push(RecordEntry::unhashed(relative_str));
+        } else {
+            let (hash, size) = hash_file(path)?;
+            records.push(RecordEntry::new(relative_str, hash, size));
+        }
+    }
+
+    write_record_file(&record_path, records)?;
+
+    Ok(())
+}
+
+/// Update the WHEEL file with new platform tags.
+///
+/// This replaces all `Tag:` entries with the new tags derived from the wheel filename.
+pub fn update_wheel_file(
+    wheel_dir: &Path,
+    dist_info_dir: &str,
+    new_tags: &[String],
+) -> Result<(), DelocateError> {
+    use std::io::{BufRead, BufReader, Write};
+
+    let wheel_path = wheel_dir.join(dist_info_dir).join("WHEEL");
+    let content = fs::read_to_string(&wheel_path)?;
+
+    let mut output = Vec::new();
+
+    // Copy all non-Tag lines, skipping empty lines.
+    for line in BufReader::new(content.as_bytes()).lines() {
+        let line = line?;
+        if !line.starts_with("Tag:") && !line.is_empty() {
+            writeln!(output, "{line}")?;
+        }
+    }
+
+    // Add new tags.
+    for tag in new_tags {
+        writeln!(output, "Tag: {tag}")?;
+    }
+
+    fs::write(&wheel_path, output)?;
+
+    Ok(())
+}

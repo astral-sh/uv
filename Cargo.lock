@@ -6103,6 +6103,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-platform",
  "uv-platform-tags",
  "uv-static",
 ]
@@ -6112,6 +6113,28 @@ name = "uv-console"
 version = "0.0.15"
 dependencies = [
  "console 0.16.2",
+]
+
+[[package]]
+name = "uv-delocate"
+version = "0.0.11"
+dependencies = [
+ "base64 0.22.1",
+ "fs-err",
+ "goblin",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tracing",
+ "uv-distribution-filename",
+ "uv-extract",
+ "uv-fs",
+ "uv-install-wheel",
+ "uv-platform",
+ "uv-platform-tags",
+ "uv-static",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]

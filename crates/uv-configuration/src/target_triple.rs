@@ -1,6 +1,7 @@
 use tracing::debug;
 
 use uv_pep508::MarkerEnvironment;
+use uv_platform::MacOSVersion;
 use uv_platform_tags::{Arch, Os, Platform};
 use uv_static::EnvVars;
 
@@ -297,18 +298,26 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let MacOSVersion { major, minor } =
+                    MacOSVersion::from_env().map_or(MacOSVersion::DEFAULT, |version| {
+                        debug!(
+                            "Found macOS deployment target: {}.{}",
+                            version.major, version.minor
+                        );
+                        version
+                    });
                 Platform::new(Os::Macos { major, minor }, Arch::Aarch64)
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
-                    debug!("Found macOS deployment target: {}.{}", major, minor);
-                    (major, minor)
-                });
+                let MacOSVersion { major, minor } =
+                    MacOSVersion::from_env().map_or(MacOSVersion::DEFAULT, |version| {
+                        debug!(
+                            "Found macOS deployment target: {}.{}",
+                            version.major, version.minor
+                        );
+                        version
+                    });
                 Platform::new(Os::Macos { major, minor }, Arch::X86_64)
             }
             Self::Aarch64UnknownLinuxGnu => Platform::new(
@@ -934,20 +943,6 @@ impl TargetTriple {
             .with_platform_release(self.platform_release())
             .with_platform_version(self.platform_version())
     }
-}
-
-/// Return the macOS deployment target as parsed from the environment.
-fn macos_deployment_target() -> Option<(u16, u16)> {
-    let version = std::env::var(EnvVars::MACOSX_DEPLOYMENT_TARGET).ok()?;
-    let mut parts = version.split('.');
-
-    // Parse the major version (e.g., `12` in `12.0`).
-    let major = parts.next()?.parse::<u16>().ok()?;
-
-    // Parse the minor version (e.g., `0` in `12.0`), with a default of `0`.
-    let minor = parts.next().unwrap_or("0").parse::<u16>().ok()?;
-
-    Some((major, minor))
 }
 
 /// Return the iOS deployment target as parsed from the environment.

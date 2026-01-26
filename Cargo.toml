@@ -15,6 +15,9 @@ repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
+[workspace.metadata.cargo-shear]
+ignored = ["uv-delocate"]
+
 [workspace.dependencies]
 uv-auth = { version = "0.0.15", path = "crates/uv-auth" }
 uv-bin-install = { version = "0.0.15", path = "crates/uv-bin-install" }
@@ -27,6 +30,7 @@ uv-cli = { version = "0.0.15", path = "crates/uv-cli" }
 uv-client = { version = "0.0.15", path = "crates/uv-client" }
 uv-configuration = { version = "0.0.15", path = "crates/uv-configuration" }
 uv-console = { version = "0.0.15", path = "crates/uv-console" }
+uv-delocate = { version = "0.0.15", path = "crates/uv-delocate" }
 uv-dirs = { version = "0.0.15", path = "crates/uv-dirs" }
 uv-dispatch = { version = "0.0.15", path = "crates/uv-dispatch" }
 uv-distribution = { version = "0.0.15", path = "crates/uv-distribution" }
@@ -119,7 +123,7 @@ futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
-goblin = { version = "0.10.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
+goblin = { version = "0.10.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd", "mach32", "mach64"] }
 h2 = { version = "0.4.7" }
 hashbrown = { version = "0.16.0" }
 hex = { version = "0.4.3" }
