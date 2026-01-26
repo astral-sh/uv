@@ -170,17 +170,17 @@ impl Upgrade {
             None if upgrade_package.is_empty() => None,
             None => {
                 let exclusions: FxHashSet<_> = no_upgrade_package.into_iter().collect();
-                Some(Self::Packages(upgrade_package.into_iter()
-                    .filter(|req| !exclusions.contains(&req.name))
-                    .fold(
-                        FxHashMap::default(),
-                        |mut map, requirement| {
+                Some(Self::Packages(
+                    upgrade_package
+                        .into_iter()
+                        .filter(|req| !exclusions.contains(&req.name))
+                        .fold(FxHashMap::default(), |mut map, requirement| {
                             map.entry(requirement.name.clone())
                                 .or_default()
                                 .push(requirement);
                             map
-                        },
-                    )))
+                        }),
+                ))
             }
         }
     }
