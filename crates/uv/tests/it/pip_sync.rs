@@ -214,6 +214,97 @@ fn install_hardlink() -> Result<()> {
     Ok(())
 }
 
+/// Test that EMLINK (too many hardlinks) is handled gracefully.
+///
+/// This test exhausts the hardlink limit on a cached file, then verifies that
+/// a subsequent install still succeeds by resetting the file's inode.
+#[test]
+#[cfg(unix)]
+fn install_hardlink_after_emlink() -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    use walkdir::WalkDir;
+
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    // First install to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .assert()
+        .success();
+
+    // Find a cached file from the package (any .so or .py file will do).
+    let cached_file = WalkDir::new(context.cache_dir.path())
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|e| {
+            e.file_type().is_file()
+                && (e.path().extension().is_some_and(|ext| ext == "so" || ext == "py"))
+        })
+        .expect("should find a cached file")
+        .into_path();
+
+    // Create a temp directory to hold our hardlinks.
+    let hardlink_dir = context.temp_dir.child("hardlinks");
+    hardlink_dir.create_dir_all()?;
+
+    // Create hardlinks until we hit EMLINK or reach 66000 (ext4 limit is 65000).
+    // Note: tmpfs doesn't have a per-file hardlink limit, so this test will be
+    // skipped on systems where /tmp is tmpfs. It will work on ext4/btrfs filesystems.
+    let mut hit_emlink = false;
+    for i in 0..66000 {
+        let link_path = hardlink_dir.child(format!("link_{i}"));
+        match fs::hard_link(&cached_file, link_path.path()) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::TooManyLinks => {
+                hit_emlink = true;
+                break;
+            }
+            Err(_) => {
+                // Some other error - skip the test.
+                tracing::debug!("Skipping test: filesystem error creating hardlinks");
+                return Ok(());
+            }
+        }
+    }
+
+    if !hit_emlink {
+        // Filesystem allows more than 66000 hardlinks (e.g., tmpfs), skip the test.
+        tracing::debug!("Skipping test: filesystem allows >66000 hardlinks");
+        return Ok(());
+    }
+
+    // Now try to install into a new venv - this should succeed because
+    // the installer will reset the cached file's inode when it hits EMLINK.
+    let venv2 = context.temp_dir.child("venv2");
+    context.venv().arg(venv2.path()).assert().success();
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--link-mode")
+        .arg("hardlink")
+        .env(EnvVars::VIRTUAL_ENV, venv2.path())
+        .assert()
+        .success();
+
+    // Verify the cached file now has a low hardlink count (should be 2:
+    // the cache itself + the new venv).
+    let metadata = fs::metadata(&cached_file)?;
+    let nlink = metadata.nlink();
+    assert!(
+        nlink <= 3,
+        "Expected hardlink count <= 3 after reset, got {nlink}"
+    );
+
+    Ok(())
+}
+
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
 #[cfg(unix)] // Windows does not allow symlinks by default
