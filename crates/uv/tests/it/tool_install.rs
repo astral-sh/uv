@@ -4558,16 +4558,17 @@ fn tool_install_git_relative_submodules() {
     let context = TestContext::new("3.13");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
+        .arg(format!("git+https://github.com/{TEST_REPO}")), @"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
-    No executables are provided by `uv-test`
+    No executables are provided by package `uv-test`; removing tool
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
+    error: Failed to install entrypoints for `uv-test`
     ");
 }
