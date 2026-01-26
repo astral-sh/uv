@@ -6816,6 +6816,7 @@ dependencies = [
  "uv-static",
  "uv-trampoline-builder",
  "uv-warnings",
+ "walkdir",
  "which",
  "windows",
  "windows-registry",
