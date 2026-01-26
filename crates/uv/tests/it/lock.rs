@@ -11584,7 +11584,7 @@ fn lock_no_upgrade_package() -> Result<()> {
     Ok(())
 }
 
-/// Override upgrade_package in pyproject.toml with --no-upgrade-package.
+/// Override `upgrade_package` in pyproject.toml with `--no-upgrade-package`.
 #[test]
 fn lock_override_upgrade_package() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -11684,7 +11684,7 @@ fn lock_override_upgrade_package() -> Result<()> {
         );
     });
 
-    // Remove the constraints, set upgrade_package in pyproject.toml.
+    // Remove the constraints, set `upgrade_package` in pyproject.toml.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -11697,7 +11697,7 @@ fn lock_override_upgrade_package() -> Result<()> {
         "#,
     )?;
 
-    // Override upgrade_package with --no-upgrade-package.
+    // Override `upgrade_package` with `--no-upgrade-package`.
     uv_snapshot!(context.filters(), context.lock().arg("--no-upgrade-package").arg("anyio"), @"
     success: true
     exit_code: 0
