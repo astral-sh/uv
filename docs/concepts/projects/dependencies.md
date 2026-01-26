@@ -89,6 +89,34 @@ uv add -r requirements.txt
 See the [pip migration guide](../../guides/migration/pip-to-project.md#importing-requirements-files)
 for more details.
 
+<!-- TODO(#16508): Add documentation for importing constraints
+### Importing constraints from a constraints file
+
+Constraints from a constraints file can be imported into `tool.uv.constraint-dependencies` using
+the `--constraints` option without specifying packages:
+
+```console
+$ uv add --constraints constraints.txt
+```
+
+This reads the constraints file and adds them to your `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+constraint-dependencies = [
+    "boto3==1.40.61",
+]
+```
+
+Remote constraints files are also supported:
+
+```console
+$ uv add --constraints https://example.com/constraints.txt
+```
+
+This is useful for syncing constraints from external sources like Apache Airflow's constraints file.
+-->
+
 ## Removing dependencies
 
 To remove a dependency:
