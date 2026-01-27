@@ -6846,7 +6846,6 @@ fn add_script_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 3 packages in [TIME]
     ");
 
@@ -14098,7 +14097,6 @@ fn add_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -14138,7 +14136,6 @@ fn add_bounds() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `bounds` option is in preview and may change in any future release. Pass `--preview-features add-bounds` to disable this warning.
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -14163,7 +14160,7 @@ fn add_bounds() -> Result<()> {
     );
 
     // Existing constraints take precedence over the bounds option
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14190,7 +14187,7 @@ fn add_bounds() -> Result<()> {
     );
 
     // Explicit constraints take precedence over the bounds option
-    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14221,8 +14218,8 @@ fn add_bounds() -> Result<()> {
     "#
     );
 
-    // Set bounds on the CLI and use `--preview` to silence the warning.
-    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor").arg("--preview"), @"
+    // Set bounds on the CLI.
+    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14271,7 +14268,7 @@ fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
         requires-python = ">=3.12"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor"), @"
     success: true
     exit_code: 0
     ----- stdout -----
