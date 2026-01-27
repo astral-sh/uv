@@ -6260,6 +6260,7 @@ dependencies = [
 name = "uv-distribution-filename"
 version = "0.0.16"
 dependencies = [
+ "either",
  "insta",
  "memchr",
  "rkyv",

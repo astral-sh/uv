@@ -10,7 +10,7 @@ use tracing::warn;
 use url::Url;
 
 use uv_cache_info::CacheInfo;
-use uv_distribution_filename::{EggInfoFilename, ExpandedTags};
+use uv_distribution_filename::{EggInfoFilename, ExpandedTags, WheelTags, WheelWireMetadata};
 use uv_fs::Simplified;
 use uv_install_wheel::WheelFile;
 use uv_normalize::PackageName;
@@ -75,7 +75,7 @@ pub struct InstalledDist {
     // Cache data that must be read from the `.dist-info` directory. These are safe to cache as
     // the `InstalledDist` is immutable after creation.
     metadata_cache: OnceLock<uv_pypi_types::ResolutionMetadata>,
-    tags_cache: OnceLock<Option<ExpandedTags>>,
+    tags_cache: OnceLock<Option<WheelTags>>,
 }
 
 impl From<InstalledDistKind> for InstalledDist {
@@ -484,8 +484,12 @@ impl InstalledDist {
         }
     }
 
-    /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
-    pub fn read_tags(&self) -> Result<Option<&ExpandedTags>, InstalledDistError> {
+    /// Return the supported wheel tags for the distribution.
+    ///
+    /// The tags are read from `uv_wheel.json` (written by uv at install time), or from the `WHEEL`
+    /// file (for backwards compatibility with older uv versions, or for packages not installed by
+    /// uv).
+    pub fn read_tags(&self) -> Result<Option<&WheelTags>, InstalledDistError> {
         if let Some(tags) = self.tags_cache.get() {
             return Ok(tags.as_ref());
         }
@@ -498,15 +502,27 @@ impl InstalledDist {
             InstalledDistKind::LegacyEditable(_) => return Ok(None),
         };
 
-        // Read the `WHEEL` file.
-        let contents = fs_err::read_to_string(path.join("WHEEL"))?;
-        let wheel_file = WheelFile::parse(&contents)?;
-
-        // Parse the tags.
-        let tags = if let Some(tags) = wheel_file.tags() {
-            Some(ExpandedTags::parse(tags.iter().map(String::as_str))?)
-        } else {
-            None
+        // Try to read the tags from the `uv_wheel.json` file, which contains the wheel filename
+        // as provided to us at install time. This is preferred over the `WHEEL` file, since the
+        // `WHEEL` file may have incorrect tags (e.g., `macosx_110_0` instead of `macosx_11_0`).
+        let tags = match fs::read_to_string(path.join("uv_wheel.json")) {
+            Ok(contents) => {
+                let wheel_metadata: WheelWireMetadata = serde_json::from_str(&contents)?;
+                Some(WheelTags::Filename(wheel_metadata.filename))
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // Fall back to reading tags from the `WHEEL` file.
+                let contents = fs_err::read_to_string(path.join("WHEEL"))?;
+                let wheel_file = WheelFile::parse(&contents)?;
+                if let Some(tags) = wheel_file.tags() {
+                    Some(WheelTags::Expanded(ExpandedTags::parse(
+                        tags.iter().map(String::as_str),
+                    )?))
+                } else {
+                    None
+                }
+            }
+            Err(err) => return Err(err.into()),
         };
 
         let _ = self.tags_cache.set(tags);
