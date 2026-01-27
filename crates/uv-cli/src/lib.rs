@@ -3431,7 +3431,7 @@ pub struct InitArgs {
     /// Avoid discovering a workspace and create a standalone project.
     ///
     /// By default, uv searches for workspaces in the current directory or any parent directory.
-    #[arg(long, alias = "no-project")]
+    #[arg(long, visible_alias = "no-project")]
     pub no_workspace: bool,
 
     /// The Python interpreter to use to determine the minimum supported Python version.

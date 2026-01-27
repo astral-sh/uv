@@ -1952,6 +1952,39 @@ fn init_no_workspace_warning() {
     });
 }
 
+/// `--no-project` is an alias for `--no-workspace`.
+#[test]
+fn init_no_project_alias() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-project").arg("--name").arg("project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `project`
+    ");
+
+    let workspace = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+        );
+    });
+}
+
 #[test]
 fn init_project_inside_project() -> Result<()> {
     let context = TestContext::new("3.12");
