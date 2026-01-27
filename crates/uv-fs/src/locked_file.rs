@@ -14,7 +14,7 @@ use crate::{Simplified, is_known_already_locked_error};
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    let default_timeout = Duration::from_secs(300);
+    let default_timeout = Duration::from_mins(5);
     let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
         return default_timeout;
     };

@@ -693,7 +693,7 @@ impl EnvironmentOptions {
             )?
             .map(Duration::from_secs)
             .or(http_timeout)
-            .unwrap_or(Duration::from_secs(15 * 60)),
+            .unwrap_or(Duration::from_mins(15)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),
