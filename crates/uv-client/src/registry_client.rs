@@ -1237,12 +1237,13 @@ impl RegistryClient {
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
+        let current_timeout = self.timeout().as_secs();
+        let suggested_timeout = current_timeout * 2;
         if err.is_timeout() {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.timeout().as_secs()
+                    "Failed to download distribution due to network timeout ({current_timeout}s).\nTry increasing ``UV_HTTP_TIMEOUT`` to a larger value, e.g., ``UV_HTTP_TIMEOUT={suggested_timeout}``"
                 ),
             )
         } else {
