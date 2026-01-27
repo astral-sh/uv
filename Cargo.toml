@@ -114,7 +114,7 @@ enumflags2 = { version = "0.7.12" }
 etcetera = { version = "0.11.0" }
 fastrand = { version = "2.3.0" }
 flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }
-fs-err = { version = "3.0.0", features = ["tokio"] }
+fs-err = { version = "3.2.2", features = ["tokio"] }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
