@@ -99,6 +99,28 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Cow::Owned)
         .unwrap_or_else(|| Cow::Borrowed(&*CWD));
 
+    // Validate that the project directory exists if explicitly provided via --project.
+    let skip_project_validation = matches!(
+        &*cli.command,
+        Commands::Project(command) if matches!(**command, ProjectCommand::Init(_))
+    );
+
+    if !skip_project_validation {
+        if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
+            if !project_dir.exists() {
+                warn_user_once!(
+                    "Project directory `{}` does not exist. This will become an error in the future.",
+                    project_path.user_display()
+                );
+            } else if !project_dir.is_dir() {
+                warn_user_once!(
+                    "Project path `{}` is not a directory. This will become an error in the future.",
+                    project_path.user_display()
+                );
+            }
+        }
+    }
+
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
 
