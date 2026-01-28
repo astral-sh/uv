@@ -68,6 +68,9 @@ pub(crate) mod printer;
 pub(crate) mod settings;
 #[cfg(windows)]
 mod windows_exception;
+#[cfg(windows)]
+#[doc(hidden)]
+pub mod windows_spawn;
 
 #[instrument(skip_all)]
 async fn run(mut cli: Cli) -> Result<ExitStatus> {
