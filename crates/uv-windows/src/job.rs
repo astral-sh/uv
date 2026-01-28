@@ -21,13 +21,13 @@ use windows::Win32::System::JobObjects::{
 #[derive(Debug, Clone, Copy)]
 pub enum JobError {
     /// Failed to create the job object.
-    CreateFailed(i32),
+    Create(i32),
     /// Failed to query job object information.
-    QueryFailed(i32),
+    Query(i32),
     /// Failed to set job object information.
-    SetFailed(i32),
+    Set(i32),
     /// Failed to assign process to job object.
-    AssignFailed(i32),
+    Assign(i32),
 }
 
 impl JobError {
@@ -35,10 +35,7 @@ impl JobError {
     #[must_use]
     pub const fn code(&self) -> i32 {
         match *self {
-            Self::CreateFailed(code)
-            | Self::QueryFailed(code)
-            | Self::SetFailed(code)
-            | Self::AssignFailed(code) => code,
+            Self::Create(code) | Self::Query(code) | Self::Set(code) | Self::Assign(code) => code,
         }
     }
 
@@ -46,10 +43,10 @@ impl JobError {
     #[must_use]
     pub const fn message(&self) -> &'static str {
         match self {
-            Self::CreateFailed(_) => "failed to create job object",
-            Self::QueryFailed(_) => "failed to query job object information",
-            Self::SetFailed(_) => "failed to set job object information",
-            Self::AssignFailed(_) => "failed to assign process to job object",
+            Self::Create(_) => "failed to create job object",
+            Self::Query(_) => "failed to query job object information",
+            Self::Set(_) => "failed to set job object information",
+            Self::Assign(_) => "failed to assign process to job object",
         }
     }
 }
@@ -83,8 +80,8 @@ impl Job {
     pub fn new() -> Result<Self, JobError> {
         // SAFETY: CreateJobObjectW with None parameters creates an unnamed job object.
         // This is a standard Windows API call with no special requirements.
-        let handle = unsafe { CreateJobObjectW(None, None) }
-            .map_err(|e| JobError::CreateFailed(e.code().0))?;
+        let handle =
+            unsafe { CreateJobObjectW(None, None) }.map_err(|e| JobError::Create(e.code().0))?;
 
         let job = Self { handle };
         job.configure_limits()?;
@@ -104,7 +101,7 @@ impl Job {
         // SAFETY: Caller guarantees process_handle is valid. self.handle is valid
         // because we only create it via new() and don't expose mutation.
         unsafe { AssignProcessToJobObject(self.handle, process_handle) }
-            .map_err(|e| JobError::AssignFailed(e.code().0))
+            .map_err(|e| JobError::Assign(e.code().0))
     }
 
     /// Returns the raw job handle.
@@ -121,7 +118,6 @@ impl Job {
     fn configure_limits(&self) -> Result<(), JobError> {
         let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         let info_size = u32::try_from(size_of_val(&info)).expect("job info size fits in u32");
-        let mut return_length = 0u32;
 
         // SAFETY: We pass a valid job handle, the correct information class,
         // a properly sized buffer, and the buffer size.
@@ -131,10 +127,10 @@ impl Job {
                 JobObjectExtendedLimitInformation,
                 (&raw mut info).cast::<c_void>(),
                 info_size,
-                Some(&raw mut return_length),
+                None,
             )
         }
-        .map_err(|e| JobError::QueryFailed(e.code().0))?;
+        .map_err(|e| JobError::Query(e.code().0))?;
 
         // Set the limits we need
         info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -150,7 +146,7 @@ impl Job {
                 info_size,
             )
         }
-        .map_err(|e| JobError::SetFailed(e.code().0))
+        .map_err(|e| JobError::Set(e.code().0))
     }
 }
 

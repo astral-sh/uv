@@ -258,12 +258,6 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     &arguments[offset..]
 }
 
-fn make_job_object() -> Job {
-    Job::new().unwrap_or_else(|e| {
-        print_job_error_and_exit("Job object setup failed", e);
-    })
-}
-
 #[cold]
 fn print_job_error_and_exit(context: &str, err: uv_windows::JobError) -> ! {
     let message = format!(
@@ -433,7 +427,9 @@ pub fn bounce(is_gui: bool) -> ! {
     unsafe { GetStartupInfoA(&mut si) }
 
     let child_handle = spawn_child(&si, child_cmdline);
-    let job = make_job_object();
+    let job = Job::new().unwrap_or_else(|e| {
+        print_job_error_and_exit("Job object setup failed", e);
+    });
 
     // SAFETY: child_handle is a valid process handle returned by spawn_child.
     if let Err(e) = unsafe { job.assign_process(child_handle) } {
