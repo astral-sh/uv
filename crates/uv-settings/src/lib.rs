@@ -772,13 +772,19 @@ where
 
     match value.parse::<T>() {
         Ok(v) => Ok(Some(v)),
-        Err(err) => Err(Error::InvalidEnvironmentVariable(
-            InvalidEnvironmentVariable {
-                name: name.to_string(),
-                value,
-                err: err.to_string(),
-            },
-        )),
+        Err(err) => {
+            let mut err_str = err.to_string();
+            if name.contains("TIMEOUT") && value.ends_with('s') {
+                err_str.push_str("; expected an integer (in seconds), e.g., '60' instead of '60s'");
+            }
+            Err(Error::InvalidEnvironmentVariable(
+                InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value,
+                    err: err_str,
+                },
+            ))
+        }
     }
 }
 
