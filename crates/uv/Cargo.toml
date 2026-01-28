@@ -114,6 +114,7 @@ zip = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
+uv-windows = { workspace = true }
 windows = { workspace = true }
 
 [build-dependencies]

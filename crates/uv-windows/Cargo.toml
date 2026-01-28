@@ -1,0 +1,23 @@
+[package]
+name = "uv-windows"
+version = "0.0.16"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+description = "Windows-specific utilities for uv"
+
+[lints]
+workspace = true
+
+[lib]
+doctest = false
+
+[features]
+default = ["std"]
+std = []
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }

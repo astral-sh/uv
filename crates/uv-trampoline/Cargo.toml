@@ -38,6 +38,7 @@ debug = false
 
 [dependencies]
 uv-static = { path = "../uv-static" }
+uv-windows = { path = "../uv-windows", default-features = false }
 
 windows = { version = "0.61.0", features = [
   "std",

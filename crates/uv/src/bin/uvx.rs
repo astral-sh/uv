@@ -15,11 +15,7 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     }
     #[cfg(windows)]
     {
-        cmd.stdin(std::process::Stdio::inherit());
-        let status = cmd.status()?;
-
-        #[expect(clippy::exit)]
-        std::process::exit(status.code().unwrap())
+        uv_windows::spawn_child(cmd, false)
     }
 }
 
