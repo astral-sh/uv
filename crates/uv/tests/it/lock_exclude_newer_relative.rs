@@ -91,6 +91,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
 
     // Changing the span to 2 weeks should cause a new resolution.
     // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
+    // However, since we prefer existing lockfile versions, idna stays at 3.6 (which is still valid).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -104,10 +105,10 @@ fn lock_exclude_newer_relative() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
-    Updated idna v3.6 -> v3.7
     ");
 
-    // Both `exclude-newer` values in the lockfile should be changed, and we should now have idna 3.7
+    // The `exclude-newer` values in the lockfile should be changed, but idna stays at 3.6
+    // since existing lockfile versions are preferred and 3.6 is still valid within the new constraint.
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -120,11 +121,11 @@ fn lock_exclude_newer_relative() -> Result<()> {
 
     [[package]]
     name = "idna"
-    version = "3.7"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -139,7 +140,9 @@ fn lock_exclude_newer_relative() -> Result<()> {
     requires-dist = [{ name = "idna" }]
     "#);
 
-    // Similarly, using something like `--upgrade` should cause a new resolution
+    // Similarly, using something like `--upgrade` should cause a new resolution.
+    // Since the lockfile now has idna 3.6 (from the previous resolution), --upgrade picks the
+    // latest version within the constraint, which is idna 3.7.
     let current_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
@@ -154,6 +157,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
     ");
 
     // And the `exclude-newer` timestamp value in the lockfile should be changed
@@ -204,6 +208,129 @@ fn lock_exclude_newer_relative() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Test that exclude-newer changes in either direction work correctly:
+/// - Getting OLDER (more restrictive): forces downgrade of invalid versions
+/// - Getting NEWER (less restrictive): keeps existing versions stable (use --upgrade to get newer)
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+#[test]
+fn lock_exclude_newer_older_vs_newer() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    // Start with a cutoff that allows idna 3.7 (released 2024-04-11)
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is AFTER idna 3.7 release
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    // Should resolve to idna 3.7 (released 2024-04-11, before cutoff of 2024-04-17)
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 in lockfile"
+    );
+
+    // Now make exclude-newer OLDER (more restrictive): 3 weeks back from 2024-05-01 is 2024-04-10
+    // This is BEFORE idna 3.7 release (2024-04-11), so 3.7 becomes INVALID
+    // Even with Preferable, invalid versions must be replaced
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.7 -> v3.6
+    ");
+
+    let lock = context.read("uv.lock");
+    // Should downgrade to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 in lockfile after downgrade"
+    );
+
+    // Now make exclude-newer NEWER (less restrictive): back to 2 weeks (2024-04-17)
+    // This allows idna 3.7 again, but existing version (3.6) is still valid
+    // Without --upgrade, version should stay stable at 3.6
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    // Should stay at idna 3.6 (existing version is preferred and still valid)
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 to stay stable"
+    );
+
+    // With --upgrade, should now get idna 3.7 since the constraint allows it
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
+    ");
+
+    let lock = context.read("uv.lock");
+    // Should upgrade to idna 3.7 with --upgrade
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 after --upgrade"
+    );
 
     Ok(())
 }
@@ -295,6 +422,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 
     // Changing the span to 2 weeks should cause a new resolution.
     // 2 weeks before 2024-05-01 is 2024-04-17, which is after idna 3.7 (released 2024-04-11).
+    // However, since we prefer existing lockfile versions, idna stays at 3.6 (which is still valid).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -308,10 +436,10 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
-    Updated idna v3.6 -> v3.7
     ");
 
-    // Both `exclude-newer-package` values in the lockfile should be changed, and we should now have idna 3.7
+    // The `exclude-newer-package` values in the lockfile should be changed, but idna stays at 3.6
+    // since existing lockfile versions are preferred and 3.6 is still valid within the new constraint.
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
@@ -325,11 +453,11 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 
     [[package]]
     name = "idna"
-    version = "3.7"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -344,7 +472,9 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     requires-dist = [{ name = "idna" }]
     "#);
 
-    // Similarly, using something like `--upgrade` should cause a new resolution
+    // Similarly, using something like `--upgrade` should cause a new resolution.
+    // Since the lockfile now has idna 3.6 (from the previous resolution), --upgrade picks the
+    // latest version within the constraint, which is idna 3.7.
     let current_timestamp = "2024-06-01T00:00:00Z";
     uv_snapshot!(context.filters(), context
         .lock()
@@ -359,6 +489,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
     ");
 
     // And the `exclude-newer-package` timestamp value in the lockfile should be changed
@@ -655,7 +786,8 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ");
 
     // Changing the global span to 2 weeks should cause a new resolution.
-    // 2 weeks before 2024-05-01 is 2024-04-17 (after idna 3.7 released 2024-04-11) → idna 3.7
+    // 2 weeks before 2024-05-01 is 2024-04-17 (after idna 3.7 released 2024-04-11).
+    // However, since we prefer existing lockfile versions, idna stays at 3.6 (which is still valid).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -671,7 +803,6 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
-    Updated idna v3.6 -> v3.7
     ");
 
     // Changing the package-specific span should also invalidate the lockfile
@@ -711,8 +842,8 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ");
 
     let lock = context.read("uv.lock");
-    // idna 3.7 (absolute cutoff 2024-05-20 is after 3.7 release on 2024-04-11)
-    // typing-extensions 4.11.0 (relative cutoff 2024-04-17)
+    // idna 3.6 stays (existing version is preferred and still valid under the new constraint)
+    // typing-extensions 4.11.0 stays (existing version is preferred and still valid)
     assert_snapshot!(lock, @r#"
     version = 1
     revision = 3
@@ -726,11 +857,11 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
 
     [[package]]
     name = "idna"
-    version = "3.7"
+    version = "3.6"
     source = { registry = "https://pypi.org/simple" }
-    sdist = { url = "https://files.pythonhosted.org/packages/21/ed/f86a79a07470cb07819390452f178b3bef1d375f2ec021ecfc709fc7cf07/idna-3.7.tar.gz", hash = "sha256:028ff3aadf0609c1fd278d8ea3089299412a7a8b9bd005dd08b9f8285bcb5cfc", size = 189575, upload-time = "2024-04-11T03:34:43.276Z" }
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/e5/3e/741d8c82801c347547f8a2a06aa57dbb1992be9e948df2ea0eda2c8b79e8/idna-3.7-py3-none-any.whl", hash = "sha256:82fee1fc78add43492d3a1898bfa6d8a904cc97d8427f683ed8e798d07761aa0", size = 66836, upload-time = "2024-04-11T03:34:41.447Z" },
+        { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
     ]
 
     [[package]]
@@ -759,6 +890,8 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     "#);
 
     // Use a relative global value and absolute package value
+    // typing-extensions must downgrade because 4.11.0 (released 2024-04-05) is after the
+    // package-specific cutoff of 2024-04-01. idna stays at 3.6 (still valid under 2024-04-10).
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -774,7 +907,6 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to addition of exclude newer span `P3W`
     Resolved 3 packages in [TIME]
-    Updated idna v3.7 -> v3.6
     Updated typing-extensions v4.11.0 -> v4.10.0
     ");
 
@@ -1013,7 +1145,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to removal of exclude newer span
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context
