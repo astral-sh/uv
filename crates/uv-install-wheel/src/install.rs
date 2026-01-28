@@ -134,6 +134,41 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         trace!(?name, "No data");
     }
 
+    // Process LINKS file if present (PEP 778)
+    let links_path = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/LINKS"));
+    if links_path.exists() {
+        #[cfg(unix)]
+        {
+            use std::collections::HashSet;
+
+            use crate::links::{install_links, read_links_file, validate_links};
+
+            let mut links_file = File::open(&links_path)?;
+            let entries = read_links_file(&mut links_file)?;
+
+            if !entries.is_empty() {
+                // Build a set of existing files from the RECORD for validation
+                let existing_files: HashSet<_> = record
+                    .iter()
+                    .map(|e| std::path::PathBuf::from(&e.path))
+                    .collect();
+
+                validate_links(&entries, &existing_files)?;
+                let num_links = install_links(site_packages, &entries, &mut record)?;
+                trace!(?name, "Created {num_links} symlinks from LINKS file");
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tracing::warn!(
+                ?name,
+                "LINKS file found but symlinks are not supported on this platform"
+            );
+        }
+    }
+
     if installer_metadata {
         trace!(?name, "Writing installer metadata");
         write_installer_metadata(

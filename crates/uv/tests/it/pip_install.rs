@@ -14117,3 +14117,112 @@ fn abi_compatibility_on_freethreaded_python() {
      + multi-abi-package==1.0.0 (from file://[WORKSPACE]/test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl)
     ");
 }
+
+/// Install a wheel with a LINKS file that creates symlinks (PEP 778).
+#[test]
+#[cfg(unix)]
+fn install_wheel_with_links() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/links_package-0.1.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + links-package==0.1.0 (from file://[WORKSPACE]/test/links/links_package-0.1.0-py3-none-any.whl)
+    ");
+
+    // Verify the symlink was created
+    let link_path = context.site_packages().join("links_package/link.py");
+    assert!(
+        link_path.is_symlink(),
+        "Expected {link_path:?} to be a symlink"
+    );
+
+    // Verify it points to the right target
+    let target = fs::read_link(&link_path)?;
+    assert_eq!(target.to_string_lossy(), "links_package/real.py");
+
+    Ok(())
+}
+
+/// Install a wheel with cyclic LINKS should fail.
+#[test]
+#[cfg(unix)]
+fn install_wheel_with_links_cycle() {
+    let context = TestContext::new("3.12");
+
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/links_cycle-0.1.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: links_cycle-0.1.0-py3-none-any.whl (links-cycle==0.1.0 (from file://[WORKSPACE]/test/links/links_cycle-0.1.0-py3-none-any.whl))
+      Caused by: LINKS file contains cyclic symlink chain: links_cycle/a.py -> links_cycle/b.py -> links_cycle/a.py
+    ");
+}
+
+/// Install a wheel with path escape in LINKS should fail.
+#[test]
+#[cfg(unix)]
+fn install_wheel_with_links_escape() {
+    let context = TestContext::new("3.12");
+
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/links_escape-0.1.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: links_escape-0.1.0-py3-none-any.whl (links-escape==0.1.0 (from file://[WORKSPACE]/test/links/links_escape-0.1.0-py3-none-any.whl))
+      Caused by: LINKS path escapes package namespace: ../evil.py
+    ");
+}
+
+/// Install a wheel with dangling LINKS (target not in RECORD) should fail.
+#[test]
+#[cfg(unix)]
+fn install_wheel_with_links_dangling() {
+    let context = TestContext::new("3.12");
+
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/links_dangling-0.1.0-py3-none-any.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    error: Failed to install: links_dangling-0.1.0-py3-none-any.whl (links-dangling==0.1.0 (from file://[WORKSPACE]/test/links/links_dangling-0.1.0-py3-none-any.whl))
+      Caused by: LINKS symlink target does not exist: links_dangling/link.py -> links_dangling/nonexistent.py
+    ");
+}

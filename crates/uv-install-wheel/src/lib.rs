@@ -18,6 +18,7 @@ pub use wheel::{LibKind, WheelFile, read_record_file};
 
 mod install;
 mod linker;
+mod links;
 mod record;
 mod script;
 mod uninstall;
@@ -85,4 +86,24 @@ pub enum Error {
     LauncherError(#[from] uv_trampoline_builder::Error),
     #[error("Scripts must not use the reserved name {0}")]
     ReservedScriptName(String),
+    #[error("LINKS file has invalid format: {0}")]
+    LinksInvalidFormat(String),
+    #[error("LINKS path escapes package namespace: {0}")]
+    LinksPathEscape(String),
+    #[error("LINKS file contains cyclic symlink chain: {0}")]
+    LinksCycle(String),
+    #[error("LINKS symlink target does not exist: {link_source} -> {link_target}")]
+    LinksDangling {
+        link_source: String,
+        link_target: String,
+    },
+    #[error("Failed to create symlink {source} -> {target}")]
+    LinksSymlinkFailed {
+        source: String,
+        target: String,
+        #[source]
+        err: io::Error,
+    },
+    #[error("LINKS file found but symlinks are not supported on this platform")]
+    LinksNotSupported,
 }

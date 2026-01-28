@@ -35,6 +35,7 @@ pub enum PreviewFeature {
     MetadataJson = 1 << 20,
     GcsEndpoint = 1 << 21,
     AdjustUlimit = 1 << 22,
+    WheelSymlinks = 1 << 23,
 }
 
 impl PreviewFeature {
@@ -64,6 +65,7 @@ impl PreviewFeature {
             Self::MetadataJson => "metadata-json",
             Self::GcsEndpoint => "gcs-endpoint",
             Self::AdjustUlimit => "adjust-ulimit",
+            Self::WheelSymlinks => "wheel-symlinks",
         }
     }
 }
@@ -106,6 +108,7 @@ impl FromStr for PreviewFeature {
             "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
             "metadata-json" => Self::MetadataJson,
             "adjust-ulimit" => Self::AdjustUlimit,
+            "wheel-symlinks" => Self::WheelSymlinks,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -322,5 +325,6 @@ mod tests {
         assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
         assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
         assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
+        assert_eq!(PreviewFeature::WheelSymlinks.as_str(), "wheel-symlinks");
     }
 }
