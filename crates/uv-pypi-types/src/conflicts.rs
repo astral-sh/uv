@@ -678,6 +678,7 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
 /// Each item is a pair of an (optional) package and a corresponding extra or group name for that
 /// package.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct ConflictItemWire {
     #[serde(default)]
