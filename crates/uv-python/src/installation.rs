@@ -585,7 +585,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a minor versioned executable.
     pub fn executable_name_minor(&self) -> String {
         format!(
-            "python{maj}.{min}{var}{exe}",
+            "{name}{maj}.{min}{var}{exe}",
+            name = self.implementation.executable_name(),
             maj = self.major,
             min = self.minor,
             var = self.variant.executable_suffix(),
@@ -596,7 +597,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a major versioned executable.
     pub fn executable_name_major(&self) -> String {
         format!(
-            "python{maj}{var}{exe}",
+            "{name}{maj}{var}{exe}",
+            name = self.implementation.executable_name(),
             maj = self.major,
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
@@ -606,7 +608,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for an un-versioned executable.
     pub fn executable_name(&self) -> String {
         format!(
-            "python{var}{exe}",
+            "{name}{var}{exe}",
+            name = self.implementation.executable_name(),
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )
