@@ -44,6 +44,11 @@ impl Locks {
         }
     }
 
+    /// Check if a preview feature is enabled.
+    pub fn is_preview_enabled(&self, feature: PreviewFeature) -> bool {
+        self.preview.is_enabled(feature)
+    }
+
     /// Register which package installs which (top level) path.
     ///
     /// This is later used warn when different files at the same path exist in multiple packages.

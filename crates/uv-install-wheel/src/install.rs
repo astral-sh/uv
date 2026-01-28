@@ -112,6 +112,40 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         )?;
     }
 
+    // Process LINKS file before install_data (PEP 778).
+    let links_path = wheel
+        .as_ref()
+        .join(format!("{dist_info_prefix}.dist-info/LINKS"));
+    if links_path.exists() && locks.is_preview_enabled(uv_preview::PreviewFeature::WheelSymlinks) {
+        #[cfg(unix)]
+        {
+            use std::collections::HashSet;
+
+            use crate::links::{install_links, read_links_file, validate_links};
+
+            let mut links_file = File::open(&links_path)?;
+            let entries = read_links_file(&mut links_file)?;
+
+            if !entries.is_empty() {
+                let existing_files: HashSet<_> = record
+                    .iter()
+                    .map(|e| std::path::PathBuf::from(&e.path))
+                    .collect();
+
+                validate_links(&entries, &existing_files)?;
+                let num_links = install_links(site_packages, &entries, &mut record)?;
+                trace!(?name, "Created {num_links} symlinks from LINKS file");
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tracing::warn!(
+                ?name,
+                "LINKS file found but symlinks are not supported on this platform"
+            );
+        }
+    }
+
     // 2.a Unpacked archive includes distribution-1.0.dist-info/ and (if there is data) distribution-1.0.data/.
     // 2.b Move each subtree of distribution-1.0.data/ onto its destination path. Each subdirectory of distribution-1.0.data/ is a key into a dict of destination directories, such as distribution-1.0.data/(purelib|platlib|headers|scripts|data). The initially supported paths are taken from distutils.command.install.
     let data_dir = site_packages.join(format!("{dist_info_prefix}.data"));
@@ -132,41 +166,6 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         fs_err::remove_dir_all(data_dir)?;
     } else {
         trace!(?name, "No data");
-    }
-
-    // Process LINKS file if present (PEP 778)
-    let links_path = wheel
-        .as_ref()
-        .join(format!("{dist_info_prefix}.dist-info/LINKS"));
-    if links_path.exists() {
-        #[cfg(unix)]
-        {
-            use std::collections::HashSet;
-
-            use crate::links::{install_links, read_links_file, validate_links};
-
-            let mut links_file = File::open(&links_path)?;
-            let entries = read_links_file(&mut links_file)?;
-
-            if !entries.is_empty() {
-                // Build a set of existing files from the RECORD for validation
-                let existing_files: HashSet<_> = record
-                    .iter()
-                    .map(|e| std::path::PathBuf::from(&e.path))
-                    .collect();
-
-                validate_links(&entries, &existing_files)?;
-                let num_links = install_links(site_packages, &entries, &mut record)?;
-                trace!(?name, "Created {num_links} symlinks from LINKS file");
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            tracing::warn!(
-                ?name,
-                "LINKS file found but symlinks are not supported on this platform"
-            );
-        }
     }
 
     if installer_metadata {

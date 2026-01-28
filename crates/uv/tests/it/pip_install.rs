@@ -14129,6 +14129,8 @@ fn install_wheel_with_links() -> Result<()> {
         .join("test/links/links_package-0.1.0-py3-none-any.whl");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-symlinks")
         .arg(&wheel_path), @r"
     success: true
     exit_code: 0
@@ -14148,9 +14150,9 @@ fn install_wheel_with_links() -> Result<()> {
         "Expected {link_path:?} to be a symlink"
     );
 
-    // Verify it points to the right target
+    // Verify it points to the right target (relative path from symlink's parent to target)
     let target = fs::read_link(&link_path)?;
-    assert_eq!(target.to_string_lossy(), "links_package/real.py");
+    assert_eq!(target.to_string_lossy(), "real.py");
 
     Ok(())
 }
@@ -14166,6 +14168,8 @@ fn install_wheel_with_links_cycle() {
         .join("test/links/links_cycle-0.1.0-py3-none-any.whl");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-symlinks")
         .arg(&wheel_path), @r"
     success: false
     exit_code: 2
@@ -14190,6 +14194,8 @@ fn install_wheel_with_links_escape() {
         .join("test/links/links_escape-0.1.0-py3-none-any.whl");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-symlinks")
         .arg(&wheel_path), @r"
     success: false
     exit_code: 2
@@ -14214,6 +14220,8 @@ fn install_wheel_with_links_dangling() {
         .join("test/links/links_dangling-0.1.0-py3-none-any.whl");
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-symlinks")
         .arg(&wheel_path), @r"
     success: false
     exit_code: 2
