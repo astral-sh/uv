@@ -14,14 +14,15 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    ExtraBuildRequires, IndexCapabilities, InstalledDistKind, NameRequirementSpecification,
+    Requirement, RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
+use uv_pypi_types::{DirectUrl, VcsKind};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -116,6 +117,112 @@ pub(crate) async fn install(
     } else {
         cache
     };
+
+    // Git fast path: For git dependencies, check if the tool is already installed
+    // with the same commit as the remote. This avoids expensive package resolution.
+    // For GitHub repos: use GitHub API (faster, no git credentials needed)
+    // For other repos: use git ls-remote
+    if !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none() {
+        if let ToolRequest::Package {
+            target: Target::Unspecified(from_str),
+            ..
+        } = &request
+        {
+            // Check if this is a git URL
+            if from_str.starts_with("git+")
+                || from_str.contains("github.com")
+                || from_str.contains("gitlab")
+            {
+                // Try to parse the package name
+                if let Ok(package_name) = PackageName::from_str(&package) {
+                    // Check if the tool is already installed
+                    if let Ok(installed_tools) = InstalledTools::from_settings() {
+                        if let Ok(Some(environment)) =
+                            installed_tools.get_environment(&package_name, &cache)
+                        {
+                            // Get site packages to find installed git commit
+                            if let Ok(site_packages) =
+                                SitePackages::from_environment(environment.environment())
+                            {
+                                let installed = site_packages.get_packages(&package_name);
+                                if let Some(dist) = installed.first() {
+                                    if let InstalledDistKind::Url(url_dist) = &dist.kind {
+                                        if let DirectUrl::VcsUrl {
+                                            vcs_info,
+                                            url: installed_url,
+                                            ..
+                                        } = url_dist.direct_url.as_ref()
+                                        {
+                                            if vcs_info.vcs == VcsKind::Git {
+                                                if let Some(installed_commit) = &vcs_info.commit_id
+                                                {
+                                                    // Parse the git URL from the --from argument
+                                                    if let Ok(parsed_url) = url::Url::parse(
+                                                        from_str.trim_start_matches("git+"),
+                                                    ) {
+                                                        let safe_url =
+                                                            uv_redacted::DisplaySafeUrl::from(
+                                                                parsed_url,
+                                                            );
+                                                        if let Ok(git_url) =
+                                                            uv_git_types::GitUrl::try_from(safe_url)
+                                                        {
+                                                            // Check if repository URLs match
+                                                            if uv_cache_key::RepositoryUrl::parse(
+                                                                installed_url,
+                                                            )
+                                                            .is_ok_and(|installed_repo| {
+                                                                installed_repo
+                                                                    == uv_cache_key::RepositoryUrl::new(
+                                                                        git_url.repository(),
+                                                                    )
+                                                            }) {
+                                                                // Try to get the remote commit
+                                                                let remote_oid =
+                                                                    get_remote_git_commit(
+                                                                        &git_url,
+                                                                        &client_builder,
+                                                                    )
+                                                                    .await;
+
+                                                                if let Some(remote_oid) = remote_oid
+                                                                {
+                                                                    if remote_oid.as_str()
+                                                                        == installed_commit
+                                                                    {
+                                                                        debug!(
+                                                                            "Git fast path: remote commit {} matches installed, skipping resolution",
+                                                                            remote_oid
+                                                                        );
+                                                                        writeln!(
+                                                                            printer.stderr(),
+                                                                            "`{}` is already installed",
+                                                                            package.cyan()
+                                                                        )?;
+                                                                        return Ok(
+                                                                            ExitStatus::Success,
+                                                                        );
+                                                                    }
+                                                                    debug!(
+                                                                        "Git fast path: remote has new commit {} (installed: {})",
+                                                                        remote_oid, installed_commit
+                                                                    );
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Resolve the `--from` requirement.
     let requirement = match &request {
@@ -729,4 +836,254 @@ pub(crate) async fn install(
     )?;
 
     Ok(ExitStatus::Success)
+}
+
+/// Get the current remote commit for a Git URL.
+///
+/// Priority order:
+/// 1. GitHub repositories: GitHub API (fastest, no credentials needed for public repos)
+/// 2. GitLab repositories: GitLab API (faster than git, works with public repos)
+/// 3. All repositories: git ls-remote (fallback, may require credentials)
+async fn get_remote_git_commit(
+    git_url: &uv_git_types::GitUrl,
+    _client_builder: &BaseClientBuilder<'_>,
+) -> Option<uv_git_types::GitOid> {
+    let repo_url = git_url.repository();
+
+    // Check if this is a GitHub repository
+    if let Some(github_repo) = uv_git_types::GitHubRepository::parse(repo_url) {
+        // Try GitHub API first (unless disabled)
+        if std::env::var_os(uv_static::EnvVars::UV_NO_GITHUB_FAST_PATH).is_none() {
+            if let Some(oid) = try_github_api(&github_repo, git_url.reference()).await {
+                debug!(
+                    "GitHub API fast path resolved {} to {}",
+                    git_url.reference(),
+                    oid
+                );
+                return Some(oid);
+            }
+        }
+    }
+
+    // Check if this is a GitLab repository (gitlab.com or self-hosted)
+    if let Some(gitlab_repo) = uv_git_types::GitLabRepository::parse(repo_url) {
+        // Try GitLab API (unless disabled via same env var as GitHub for simplicity)
+        if std::env::var_os(uv_static::EnvVars::UV_NO_GITHUB_FAST_PATH).is_none() {
+            if let Some(oid) = try_gitlab_api(&gitlab_repo, git_url.reference()).await {
+                debug!(
+                    "GitLab API fast path resolved {} to {}",
+                    git_url.reference(),
+                    oid
+                );
+                return Some(oid);
+            }
+        }
+    }
+
+    // Fall back to git ls-remote (unless disabled)
+    if std::env::var_os(uv_static::EnvVars::UV_NO_GIT_LS_REMOTE_FAST_PATH).is_none() {
+        match uv_git::git_ls_remote(repo_url, git_url.reference(), false) {
+            Ok(Some(oid)) => {
+                debug!("git ls-remote resolved {} to {}", git_url.reference(), oid);
+                return Some(oid);
+            }
+            Ok(None) => {
+                debug!(
+                    "git ls-remote: reference type not supported for {}",
+                    git_url.reference()
+                );
+            }
+            Err(err) => {
+                debug!("git ls-remote failed: {}", err);
+            }
+        }
+    }
+
+    None
+}
+
+/// Try to resolve a Git reference using the GitHub API.
+async fn try_github_api(
+    github_repo: &uv_git_types::GitHubRepository<'_>,
+    reference: &uv_git_types::GitReference,
+) -> Option<uv_git_types::GitOid> {
+    use std::str::FromStr;
+    use uv_git_types::GitOid;
+
+    let rev = reference.as_rev();
+    let github_api_base_url = std::env::var(uv_static::EnvVars::UV_GITHUB_FAST_PATH_URL)
+        .unwrap_or_else(|_| "https://api.github.com/repos".to_owned());
+    let github_api_url = format!(
+        "{}/{}/{}/commits/{}",
+        github_api_base_url, github_repo.owner, github_repo.repo, rev
+    );
+
+    debug!("Querying GitHub API for commit at: {}", github_api_url);
+
+    // Use a simple reqwest client for the API call
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    else {
+        return None;
+    };
+
+    let response = match client
+        .get(&github_api_url)
+        .header("Accept", "application/vnd.github.3.sha")
+        .header(
+            "User-Agent",
+            format!(
+                "uv/{} (+https://github.com/astral-sh/uv)",
+                uv_version::version()
+            ),
+        )
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            debug!("GitHub API request failed: {}", err);
+            return None;
+        }
+    };
+
+    if !response.status().is_success() {
+        debug!(
+            "GitHub API request failed with status: {}",
+            response.status()
+        );
+        return None;
+    }
+
+    let Ok(text) = response.text().await else {
+        return None;
+    };
+
+    GitOid::from_str(text.trim()).ok()
+}
+
+/// Try to resolve a Git reference using the GitLab API.
+///
+/// Works with both gitlab.com and self-hosted GitLab instances.
+/// GitLab API endpoint: GET /api/v4/projects/:id/repository/commits/:sha
+///
+/// Authentication is supported via environment variables:
+/// - `GITLAB_TOKEN` or `GL_TOKEN`: Personal access token for gitlab.com
+/// - `GITLAB_TOKEN_<HOST>`: Token for specific self-hosted instance
+///   (e.g., `GITLAB_TOKEN_GITLAB_EXAMPLE_COM` for gitlab.example.com)
+async fn try_gitlab_api(
+    gitlab_repo: &uv_git_types::GitLabRepository<'_>,
+    reference: &uv_git_types::GitReference,
+) -> Option<uv_git_types::GitOid> {
+    use std::str::FromStr;
+    use uv_git_types::GitOid;
+
+    let rev = reference.as_rev();
+    let encoded_path = gitlab_repo.encoded_project_path();
+
+    // Construct the GitLab API URL
+    let gitlab_api_url = format!(
+        "https://{}/api/v4/projects/{}/repository/commits/{}",
+        gitlab_repo.host, encoded_path, rev
+    );
+
+    debug!("Querying GitLab API for commit at: {}", gitlab_api_url);
+
+    // Try to get GitLab token from environment
+    let token = get_gitlab_token(gitlab_repo.host);
+
+    // Use a simple reqwest client for the API call
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    else {
+        return None;
+    };
+
+    let mut request = client.get(&gitlab_api_url).header(
+        "User-Agent",
+        format!(
+            "uv/{} (+https://github.com/astral-sh/uv)",
+            uv_version::version()
+        ),
+    );
+
+    // Add authentication if token is available
+    if let Some(token) = &token {
+        debug!("Using GitLab token for authentication");
+        request = request.header("PRIVATE-TOKEN", token.as_str());
+    }
+
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(err) => {
+            debug!("GitLab API request failed: {}", err);
+            return None;
+        }
+    };
+
+    if !response.status().is_success() {
+        debug!(
+            "GitLab API request failed with status: {}",
+            response.status()
+        );
+        return None;
+    }
+
+    // GitLab returns JSON with commit info, we need to extract the "id" field
+    let Ok(text) = response.text().await else {
+        return None;
+    };
+
+    // Parse JSON to get the commit SHA
+    // Response format: {"id": "abc123...", "short_id": "abc123", ...}
+    let json: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(json) => json,
+        Err(err) => {
+            debug!("Failed to parse GitLab API response: {}", err);
+            return None;
+        }
+    };
+
+    let commit_id = json.get("id")?.as_str()?;
+    GitOid::from_str(commit_id).ok()
+}
+
+/// Get GitLab API token from environment variables.
+///
+/// Checks in order:
+/// 1. `GITLAB_TOKEN_<HOST>` - Host-specific token (e.g., `GITLAB_TOKEN_GITLAB_EXAMPLE_COM`)
+/// 2. `GITLAB_TOKEN` - General GitLab token
+/// 3. `GL_TOKEN` - Alternative GitLab token (used by glab CLI)
+fn get_gitlab_token(host: &str) -> Option<String> {
+    // Try host-specific token first
+    // Convert host to env var name: gitlab.example.com -> GITLAB_EXAMPLE_COM
+    let host_env_suffix = host.to_uppercase().replace(['.', '-'], "_");
+    let host_specific_var = format!("GITLAB_TOKEN_{host_env_suffix}");
+
+    if let Ok(token) = std::env::var(&host_specific_var) {
+        if !token.is_empty() {
+            debug!("Using GitLab token from {}", host_specific_var);
+            return Some(token);
+        }
+    }
+
+    // Try general GITLAB_TOKEN
+    if let Ok(token) = std::env::var("GITLAB_TOKEN") {
+        if !token.is_empty() {
+            debug!("Using GitLab token from GITLAB_TOKEN");
+            return Some(token);
+        }
+    }
+
+    // Try GL_TOKEN (glab CLI convention)
+    if let Ok(token) = std::env::var("GL_TOKEN") {
+        if !token.is_empty() {
+            debug!("Using GitLab token from GL_TOKEN");
+            return Some(token);
+        }
+    }
+
+    None
 }

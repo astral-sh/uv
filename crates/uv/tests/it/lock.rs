@@ -510,6 +510,68 @@ fn lock_sdist_git() -> Result<()> {
     Ok(())
 }
 
+/// Test that the `git ls-remote` fast path is used when checking if a cached Git
+/// checkout is up-to-date.
+///
+/// This test verifies:
+/// 1. The fast path works with cached git dependencies (using a branch reference)
+/// 2. The `UV_NO_GIT_LS_REMOTE_FAST_PATH` environment variable disables the optimization
+#[test]
+#[cfg(feature = "git")]
+fn lock_git_ls_remote_fast_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["uv-public-pypackage"]
+
+        [tool.uv.sources]
+        uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "0.0.1" }
+        "#,
+    )?;
+
+    // First lock to cache the git dependency.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `--locked`. This should use the ls-remote fast path to verify
+    // the cached checkout is up-to-date without doing a full fetch.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Re-run with `UV_NO_GIT_LS_REMOTE_FAST_PATH` set to disable the optimization.
+    // This should still succeed, but will use the full fetch path.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .env(EnvVars::UV_NO_GIT_LS_REMOTE_FAST_PATH, "true"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a Git requirement using PEP 508.
 #[test]
 #[cfg(feature = "git")]

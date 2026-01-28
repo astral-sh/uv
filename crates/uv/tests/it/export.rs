@@ -1358,7 +1358,17 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [PATH]
       ├─▶ failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
+      ╰─▶ Git authentication failed for `ssh://git@github.com/astral-test/uv-private-pypackage.git`. Ensure you have the correct credentials configured.
+
+          For HTTPS repositories:
+            - Check your Git credential helper: `git config --global credential.helper`
+            - Or use a personal access token in the URL
+
+          For SSH repositories:
+            - Ensure your SSH key is added: `ssh-add -l`
+            - Verify SSH access: `ssh -T git@<host>`
+
+          Original error: process didn't exit successfully: [GIT_COMMAND_ERROR]
           --- stderr
           Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
           git@github.com: Permission denied (publickey).
