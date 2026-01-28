@@ -9,7 +9,7 @@
 use std::convert::Infallible;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
-use std::process::{Child, Command};
+use std::process::Command;
 
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
@@ -38,17 +38,16 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
 
     let job = Job::new().map_err(|e| std::io::Error::other(e.to_string()))?;
 
-    // SAFETY: child.as_raw_handle() returns a valid process handle. The handle remains
-    // valid for the lifetime of `child`, and `job` will be dropped before `child`.
-    unsafe { job.assign_process(child_handle(&child)) }
+    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
+    unsafe { job.assign_process(HANDLE(child.as_raw_handle())) }
         .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     // Ignore control-C/control-Break/logout/etc.; the same event will be delivered
     // to the child, so we let them decide whether to exit or not.
     let _ = install_ctrl_handler();
 
-    // SAFETY: The handle is valid for the lifetime of `child`. INFINITE means wait forever.
-    let wait_result = unsafe { WaitForSingleObject(child_handle(&child), INFINITE) };
+    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
+    let wait_result = unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), INFINITE) };
     if wait_result != WAIT_OBJECT_0 {
         return Err(std::io::Error::other(format!(
             "WaitForSingleObject failed with result: {wait_result:?}"
@@ -56,18 +55,14 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
     }
 
     let mut exit_code = 0u32;
-    // SAFETY: The handle is valid for the lifetime of `child`, and exit_code points to valid memory.
-    unsafe { GetExitCodeProcess(child_handle(&child), &raw mut exit_code) }
+    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
+    unsafe { GetExitCodeProcess(HANDLE(child.as_raw_handle()), &raw mut exit_code) }
         .map_err(|e| std::io::Error::other(format!("Failed to get exit code: {e}")))?;
 
-    // Explicitly drop child to close the process handle before exiting.
+    // Close handles before exiting.
+    drop(job);
     drop(child);
 
     #[allow(clippy::exit, clippy::cast_possible_wrap)]
     std::process::exit(exit_code as i32)
-}
-
-/// Returns the process handle from a `Child`.
-fn child_handle(child: &Child) -> HANDLE {
-    HANDLE(child.as_raw_handle())
 }
