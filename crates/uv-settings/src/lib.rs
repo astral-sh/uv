@@ -654,12 +654,19 @@ impl EnvironmentOptions {
     pub fn new() -> Result<Self, Error> {
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let http_timeout = parse_integer_environment_variable(EnvVars::UV_HTTP_TIMEOUT)?
-            .or(parse_integer_environment_variable(
-                EnvVars::UV_REQUEST_TIMEOUT,
-            )?)
-            .or(parse_integer_environment_variable(EnvVars::HTTP_TIMEOUT)?)
-            .map(Duration::from_secs);
+        let http_timeout = parse_integer_environment_variable(
+            EnvVars::UV_HTTP_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?
+        .or(parse_integer_environment_variable(
+            EnvVars::UV_REQUEST_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?)
+        .or(parse_integer_environment_variable(
+            EnvVars::HTTP_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?)
+        .map(Duration::from_secs);
 
         Ok(Self {
             skip_wheel_filename_check: parse_boolish_environment_variable(
@@ -671,9 +678,15 @@ impl EnvironmentOptions {
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
             concurrency: Concurrency {
-                downloads: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_DOWNLOADS)?,
-                builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS)?,
-                installs: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_INSTALLS)?,
+                downloads: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_DOWNLOADS,
+                    None,
+                )?,
+                builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
+                installs: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
             },
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: parse_string_environment_variable(
@@ -690,12 +703,13 @@ impl EnvironmentOptions {
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
             upload_http_timeout: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
+                Some("value should be an integer number of seconds"),
             )?
             .map(Duration::from_secs)
             .or(http_timeout)
             .unwrap_or(Duration::from_mins(15)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
-            http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES)?
+            http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),
             #[cfg(feature = "tracing-durations-export")]
             tracing_durations_file: parse_path_environment_variable(
@@ -746,7 +760,10 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
     }
 }
 
-fn parse_integer_environment_variable<T>(name: &'static str) -> Result<Option<T>, Error>
+fn parse_integer_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
 where
     T: std::str::FromStr + Copy,
     <T as std::str::FromStr>::Err: std::fmt::Display,
@@ -776,7 +793,11 @@ where
             InvalidEnvironmentVariable {
                 name: name.to_string(),
                 value,
-                err: err.to_string(),
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
             },
         )),
     }
