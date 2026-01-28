@@ -12641,7 +12641,9 @@ dependencies = [
     "
     );
 
-    // Now sync with --exclude-newer-package to allow tqdm to use a newer version
+    // Now sync with --exclude-newer-package to allow tqdm to use a newer version.
+    // However, since existing lockfile versions are preferred and tqdm 4.64.0 is still valid
+    // under the new constraint, the version stays stable (no upgrade without --upgrade).
     uv_snapshot!(context.filters(), context
         .sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
@@ -12656,11 +12658,7 @@ dependencies = [
     ----- stderr -----
     Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     - tqdm==4.64.0
-     + tqdm==4.64.1
+    Audited [N] packages in [TIME]
     "
     );
 
@@ -12728,7 +12726,9 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
 "#,
     )?;
 
-    // Sync again with the package-specific override
+    // Sync again with the package-specific override.
+    // However, since existing lockfile versions are preferred and tqdm 4.64.0 is still valid
+    // under the new constraint, the version stays stable (no upgrade without --upgrade).
     uv_snapshot!(context.filters(), context
         .sync()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
@@ -12739,11 +12739,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
     ----- stderr -----
     Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     - tqdm==4.64.0
-     + tqdm==4.64.1
+    Audited [N] packages in [TIME]
     "
     );
 
