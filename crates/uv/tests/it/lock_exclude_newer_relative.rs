@@ -96,7 +96,8 @@ fn lock_exclude_newer_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
-        .arg("2 weeks"), @"
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -208,6 +209,123 @@ fn lock_exclude_newer_relative() -> Result<()> {
     Ok(())
 }
 
+/// Test that exclude-newer changes in either direction work correctly:
+/// - Getting OLDER (more restrictive): forces downgrade of invalid versions
+/// - Getting NEWER (less restrictive): keeps existing versions stable (use --upgrade to get newer)
+///
+/// Uses idna which has releases at:
+/// - 3.6: 2023-11-25
+/// - 3.7: 2024-04-11
+#[test]
+fn lock_exclude_newer_older_vs_newer() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+        "#,
+    )?;
+
+    // Start with a cutoff that allows idna 3.7 (released 2024-04-11)
+    // 2 weeks before 2024-05-01 is 2024-04-17, which is AFTER idna 3.7 release
+    let current_timestamp = "2024-05-01T00:00:00Z";
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 in lockfile"
+    );
+
+    // Now make exclude-newer OLDER (more restrictive): 3 weeks back from 2024-05-01 is 2024-04-10
+    // This is BEFORE idna 3.7 release (2024-04-11), so 3.7 becomes INVALID and must be replaced
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("3 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.7 -> v3.6
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 in lockfile after downgrade"
+    );
+
+    // Now make exclude-newer NEWER (less restrictive): back to 2 weeks (2024-04-17)
+    // This allows idna 3.7 again, but existing version (3.6) is still valid so it stays
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.6\""),
+        "Expected idna 3.6 to stay stable without --upgrade"
+    );
+
+    // With --upgrade, should now get idna 3.7 since the constraint allows it
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .arg("--exclude-newer")
+        .arg("2 weeks")
+        .arg("--upgrade"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Updated idna v3.6 -> v3.7
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(
+        lock.contains("version = \"3.7\""),
+        "Expected idna 3.7 after --upgrade"
+    );
+
+    Ok(())
+}
+
 /// Lock with a relative exclude-newer-package value.
 ///
 /// Uses idna which has releases at:
@@ -300,7 +418,8 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
-        .arg("idna=2 weeks"), @"
+        .arg("idna=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -663,7 +782,8 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
-        .arg("typing-extensions=2 weeks"), @"
+        .arg("typing-extensions=2 weeks")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1013,7 +1133,8 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stderr -----
     Ignoring existing lockfile due to removal of exclude newer span
       × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context
