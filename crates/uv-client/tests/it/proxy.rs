@@ -24,16 +24,9 @@ async fn http_proxy() -> Result<()> {
         .await;
 
     // Create a client with the proxy.
-    let client = BaseClientBuilder::new(
-        uv_client::Connectivity::Online,
-        false,
-        vec![],
-        uv_preview::Preview::default(),
-        std::time::Duration::from_secs(30),
-        3,
-    )
-    .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
-    .build();
+    let client = BaseClientBuilder::default()
+        .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
+        .build();
 
     // Make a request to the target.
     let response = client
@@ -71,17 +64,10 @@ async fn no_proxy() -> Result<()> {
     let target_host = target_server.address().ip().to_string();
 
     // Create a client with the proxy.
-    let client = BaseClientBuilder::new(
-        uv_client::Connectivity::Online,
-        false,
-        vec![],
-        uv_preview::Preview::default(),
-        std::time::Duration::from_secs(30),
-        3,
-    )
-    .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
-    .no_proxy(Some(vec![target_host]))
-    .build();
+    let client = BaseClientBuilder::default()
+        .http_proxy(Some(proxy_server.uri().parse::<ProxyUrl>()?))
+        .no_proxy(Some(vec![target_host]))
+        .build();
 
     // Make a request to the target.
     let response = client
