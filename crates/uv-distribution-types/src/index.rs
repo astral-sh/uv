@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -423,7 +424,112 @@ impl From<IndexUrl> for Index {
     }
 }
 
-impl FromStr for Index {
+/// A potentially unresolved index.
+///
+/// With `#[serde(untagged)]`, deserialization tries `Index` first (which requires `url`),
+/// then falls back to `UnresolvedIndex` (which only requires `name`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub enum IndexArg {
+    Resolved(Index),
+    Unresolved(UnresolvedIndex),
+}
+
+/// An unresolved index passed by the user by its name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct UnresolvedIndex {
+    pub name: IndexName,
+    #[serde(default)]
+    pub default: bool,
+}
+
+#[derive(Debug, Error)]
+#[error("Could not find an index named `{0}`")]
+pub struct ResolveIndexArgError(IndexName);
+
+impl IndexArg {
+    /// Parse an Index passed on the command line
+    pub fn from_cli(s: &str, default: bool) -> Result<Self, IndexSourceError> {
+        // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
+        if let Some((name, url)) = s.split_once('=') {
+            if !name.chars().any(|c| c == ':') {
+                let name = IndexName::from_str(name)?;
+                let url = IndexUrl::from_str(url)?;
+                return Ok(Self::Resolved(Index {
+                    name: Some(name),
+                    url,
+                    explicit: false,
+                    default,
+                    origin: Some(Origin::Cli),
+                    format: IndexFormat::Simple,
+                    publish_url: None,
+                    authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
+                    cache_control: None,
+                }));
+            }
+        }
+
+        // Consider if it could be just a name
+        if let Ok(name) = IndexName::from_str(s) {
+            return Ok(Self::Unresolved(UnresolvedIndex { name, default }));
+        }
+
+        // Otherwise, assume the source is a URL.
+        let url = IndexUrl::from_str(s)?;
+        Ok(Self::Resolved(Index {
+            name: None,
+            url,
+            explicit: false,
+            default,
+            origin: Some(Origin::Cli),
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
+        }))
+    }
+
+    /// Converts from `IndexArg` to `Option<Index>`.
+    ///
+    /// Useful when filtering out unresolved indices.
+    pub fn index(self) -> Option<Index> {
+        match self {
+            Self::Resolved(index) => Some(index),
+            Self::Unresolved(_) => None,
+        }
+    }
+
+    pub fn try_resolve<I>(self, indexes: I) -> Result<Index, ResolveIndexArgError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Index>,
+    {
+        match self {
+            Self::Resolved(index) => Ok(index),
+            Self::Unresolved(unresolved) => {
+                if let Some(index) = indexes
+                    .into_iter()
+                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved.name))
+                {
+                    Ok(Index {
+                        default: unresolved.default,
+                        origin: Some(Origin::Cli),
+                        ..index.borrow().clone()
+                    })
+                } else {
+                    Err(ResolveIndexArgError(unresolved.name))
+                }
+            }
+        }
+    }
+}
+
+impl FromStr for IndexArg {
     type Err = IndexSourceError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -432,7 +538,7 @@ impl FromStr for Index {
             if !name.chars().any(|c| c == ':') {
                 let name = IndexName::from_str(name)?;
                 let url = IndexUrl::from_str(url)?;
-                return Ok(Self {
+                return Ok(Self::Resolved(Index {
                     name: Some(name),
                     url,
                     explicit: false,
@@ -443,13 +549,13 @@ impl FromStr for Index {
                     authenticate: AuthPolicy::default(),
                     ignore_error_codes: None,
                     cache_control: None,
-                });
+                }));
             }
         }
 
         // Otherwise, assume the source is a URL.
         let url = IndexUrl::from_str(s)?;
-        Ok(Self {
+        Ok(Self::Resolved(Index {
             name: None,
             url,
             explicit: false,
@@ -460,7 +566,7 @@ impl FromStr for Index {
             authenticate: AuthPolicy::default(),
             ignore_error_codes: None,
             cache_control: None,
-        })
+        }))
     }
 }
 

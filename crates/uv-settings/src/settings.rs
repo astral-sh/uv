@@ -569,6 +569,21 @@ impl ResolverInstallerSchema {
             ..self
         })
     }
+
+    pub fn indexes(&self) -> impl Iterator<Item = Index> {
+        self.index
+            .iter()
+            .flatten()
+            .cloned()
+            .chain(
+                self.extra_index_url
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .map(Index::from),
+            )
+            .chain(self.index_url.iter().cloned().map(Index::from))
+    }
 }
 
 /// The JSON schema for the `[tool.uv]` section of a `pyproject.toml` file.
