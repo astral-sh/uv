@@ -620,7 +620,24 @@ impl RunSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
-        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Resolve no_sync from CLI, environment variable, and filesystem config.
+        let no_sync = if no_sync {
+            Flag::from_cli("no-sync")
+        } else {
+            let env_flag = resolve_flag(false, "no-sync", environment.no_sync);
+            if env_flag.is_enabled() {
+                env_flag
+            } else if filesystem
+                .as_ref()
+                .and_then(|fs| fs.globals.no_sync)
+                .unwrap_or(false)
+            {
+                Flag::from_config("no-sync")
+            } else {
+                Flag::disabled()
+            }
+        };
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -1940,7 +1957,24 @@ impl AddSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
-        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Resolve no_sync from CLI, environment variable, and filesystem config.
+        let no_sync = if no_sync {
+            Flag::from_cli("no-sync")
+        } else {
+            let env_flag = resolve_flag(false, "no-sync", environment.no_sync);
+            if env_flag.is_enabled() {
+                env_flag
+            } else if filesystem
+                .as_ref()
+                .and_then(|fs| fs.globals.no_sync)
+                .unwrap_or(false)
+            {
+                Flag::from_config("no-sync")
+            } else {
+                Flag::disabled()
+            }
+        };
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -2063,7 +2097,24 @@ impl RemoveSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
-        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Resolve no_sync from CLI, environment variable, and filesystem config.
+        let no_sync = if no_sync {
+            Flag::from_cli("no-sync")
+        } else {
+            let env_flag = resolve_flag(false, "no-sync", environment.no_sync);
+            if env_flag.is_enabled() {
+                env_flag
+            } else if filesystem
+                .as_ref()
+                .and_then(|fs| fs.globals.no_sync)
+                .unwrap_or(false)
+            {
+                Flag::from_config("no-sync")
+            } else {
+                Flag::disabled()
+            }
+        };
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);
@@ -2145,7 +2196,24 @@ impl VersionSettings {
         // Resolve flags from CLI and environment variables.
         let locked = resolve_flag(locked, "locked", environment.locked);
         let frozen = resolve_flag(frozen, "frozen", environment.frozen);
-        let no_sync = resolve_flag(no_sync, "no-sync", environment.no_sync);
+
+        // Resolve no_sync from CLI, environment variable, and filesystem config.
+        let no_sync = if no_sync {
+            Flag::from_cli("no-sync")
+        } else {
+            let env_flag = resolve_flag(false, "no-sync", environment.no_sync);
+            if env_flag.is_enabled() {
+                env_flag
+            } else if filesystem
+                .as_ref()
+                .and_then(|fs| fs.globals.no_sync)
+                .unwrap_or(false)
+            {
+                Flag::from_config("no-sync")
+            } else {
+                Flag::disabled()
+            }
+        };
 
         // Check for conflicts between locked and frozen.
         check_conflicts(locked, frozen);

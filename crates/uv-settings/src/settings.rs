@@ -359,6 +359,22 @@ pub struct GlobalOptions {
         "#
     )]
     pub allow_insecure_host: Option<Vec<TrustedHost>>,
+    /// Avoid syncing the project's environment with the project's dependencies.
+    ///
+    /// By default, `uv run`, `uv add`, `uv remove`, and `uv version` will
+    /// sync the project environment after resolving.
+    ///
+    /// When set to `true`, uv will skip syncing the project environment, even if changes have been
+    /// made to the project dependencies or lock file. This can be useful when you want to avoid
+    /// installing dependencies in environments where the dependencies are managed externally.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            no-sync = true
+        "#
+    )]
+    pub no_sync: Option<bool>,
 }
 
 /// Settings relevant to all installer operations.
@@ -2158,6 +2174,7 @@ pub struct OptionsWire {
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
     concurrent_installs: Option<NonZeroUsize>,
+    no_sync: Option<bool>,
 
     // #[serde(flatten)]
     // top_level: ResolverInstallerOptions
@@ -2260,6 +2277,7 @@ impl From<OptionsWire> for Options {
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
+            no_sync,
             index,
             index_url,
             extra_index_url,
@@ -2338,6 +2356,7 @@ impl From<OptionsWire> for Options {
                 no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
+                no_sync,
             },
             top_level: ResolverInstallerSchema {
                 index,

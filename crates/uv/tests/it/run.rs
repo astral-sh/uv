@@ -2492,6 +2492,134 @@ fn run_no_sync_env_var() -> Result<()> {
     Ok(())
 }
 
+/// Test that `no-sync = true` in `pyproject.toml` works for `uv run`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12429>
+#[test]
+fn run_no_sync_config() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.uv]
+        no-sync = true
+        "#,
+    )?;
+
+    // Running with `no-sync = true` in config should succeed, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.lock().assert().success();
+
+    // Running with `no-sync = true` in config should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// Test that `no-sync = true` in `uv.toml` works for `uv run`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12429>
+#[test]
+fn run_no_sync_uv_toml() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        no-sync = true
+        "#,
+    )?;
+
+    // Running with `no-sync = true` in uv.toml should succeed, even if the lockfile isn't present.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.lock().assert().success();
+
+    // Running with `no-sync = true` in uv.toml should not install any requirements.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    context.sync().assert().success();
+
+    // But it should have access to the installed packages.
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("-c").arg("import anyio; print(anyio.__name__)"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn run_empty_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
