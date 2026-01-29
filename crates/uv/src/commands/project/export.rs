@@ -331,8 +331,11 @@ pub(crate) async fn export(
         }
     });
 
-    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
-    if !matches!(format, ExportFormat::CycloneDX1_5) {
+    // PEP 751 and CycloneDX are multi-use formats that document all dependencies including conflicts.
+    if !matches!(
+        format,
+        ExportFormat::CycloneDX1_5 | ExportFormat::PylockToml
+    ) {
         detect_conflicts(&target, &extras, &groups)?;
     }
 
