@@ -1228,6 +1228,8 @@ fn retryable_on_request_failure(err: &(dyn Error + 'static)) -> Option<Retryable
                 io::ErrorKind::ConnectionReset,
                 // https://github.com/astral-sh/uv/issues/14699
                 io::ErrorKind::InvalidData,
+                // https://github.com/astral-sh/uv/issues/17697#issuecomment-3817060484
+                io::ErrorKind::TimedOut,
                 // https://github.com/astral-sh/uv/issues/9246
                 io::ErrorKind::UnexpectedEof,
             ];
