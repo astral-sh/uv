@@ -7,16 +7,44 @@
 //! See: <https://github.com/astral-sh/uv/issues/17492>
 
 use std::convert::Infallible;
-use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::{AsHandle, AsRawHandle, BorrowedHandle};
 use std::os::windows::process::CommandExt;
-use std::process::Command;
+use std::process::{Child, Command};
 
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
     CREATE_NO_WINDOW, GetExitCodeProcess, INFINITE, WaitForSingleObject,
 };
 
+use crate::job::JobError;
 use crate::{Job, install_ctrl_handler};
+
+/// A child process supervised by a [`Job`] object.
+///
+/// The [`BorrowedHandle`] ties the lifetime of the job to the child process,
+/// ensuring the job cannot outlive the child's process handle.
+struct SupervisedChild<'a> {
+    _job: Job,
+    handle: BorrowedHandle<'a>,
+}
+
+#[allow(unsafe_code)]
+impl<'a> SupervisedChild<'a> {
+    /// Creates a new supervised child by assigning it to a job object.
+    fn new(child: &'a Child) -> Result<Self, JobError> {
+        let job = Job::new()?;
+        let handle = child.as_handle();
+        // SAFETY: The borrowed handle is valid for `'a` because we hold a
+        // reference to `child`.
+        unsafe { job.assign_process(HANDLE(handle.as_raw_handle())) }?;
+        Ok(Self { _job: job, handle })
+    }
+
+    /// Returns the raw Windows `HANDLE` for the child process.
+    fn raw_handle(&self) -> HANDLE {
+        HANDLE(self.handle.as_raw_handle())
+    }
+}
 
 /// Spawns a child process using Job Objects to ensure proper cleanup.
 ///
@@ -36,18 +64,15 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
 
     let child = cmd.spawn()?;
 
-    let job = Job::new().map_err(|e| std::io::Error::other(e.to_string()))?;
-
-    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
-    unsafe { job.assign_process(HANDLE(child.as_raw_handle())) }
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let supervised =
+        SupervisedChild::new(&child).map_err(|e| std::io::Error::other(e.to_string()))?;
 
     // Ignore control-C/control-Break/logout/etc.; the same event will be delivered
     // to the child, so we let them decide whether to exit or not.
     let _ = install_ctrl_handler();
 
-    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
-    let wait_result = unsafe { WaitForSingleObject(HANDLE(child.as_raw_handle()), INFINITE) };
+    // SAFETY: The handle is valid because `supervised` borrows `child`.
+    let wait_result = unsafe { WaitForSingleObject(supervised.raw_handle(), INFINITE) };
     if wait_result != WAIT_OBJECT_0 {
         return Err(std::io::Error::other(format!(
             "WaitForSingleObject failed with result: {wait_result:?}"
@@ -55,13 +80,9 @@ pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Inf
     }
 
     let mut exit_code = 0u32;
-    // SAFETY: `child` is alive so `as_raw_handle()` returns a valid handle.
-    unsafe { GetExitCodeProcess(HANDLE(child.as_raw_handle()), &raw mut exit_code) }
+    // SAFETY: The handle is valid because `supervised` borrows `child`.
+    unsafe { GetExitCodeProcess(supervised.raw_handle(), &raw mut exit_code) }
         .map_err(|e| std::io::Error::other(format!("Failed to get exit code: {e}")))?;
-
-    // Close handles before exiting.
-    drop(job);
-    drop(child);
 
     #[allow(clippy::exit, clippy::cast_possible_wrap)]
     std::process::exit(exit_code as i32)
