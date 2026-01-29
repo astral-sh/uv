@@ -170,8 +170,8 @@ jobs:
         # Mapping of base image followed by a comma followed by one or more base tags (comma separated)
         # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
         image-mapping:
-          - alpine:3.22,alpine3.22,alpine
-          - alpine:3.21,alpine3.21
+          - alpine:3.23,alpine3.23,alpine
+          - alpine:3.22,alpine3.22
           - debian:trixie-slim,trixie-slim,debian-slim
           - buildpack-deps:trixie,trixie,debian
           - debian:bookworm-slim,bookworm-slim

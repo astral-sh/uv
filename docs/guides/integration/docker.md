@@ -38,11 +38,11 @@ The following distroless images are available:
 And the following derived images are available:
 
 <!-- prettier-ignore -->
-- Based on `alpine:3.22`:
+- Based on `alpine:3.23`:
     - `ghcr.io/astral-sh/uv:alpine`
+    - `ghcr.io/astral-sh/uv:alpine3.23`
+- Based on `alpine:3.22`:
     - `ghcr.io/astral-sh/uv:alpine3.22`
-- Based on `alpine:3.21`:
-    - `ghcr.io/astral-sh/uv:alpine3.21`
 - Based on `debian:trixie-slim`:
     - `ghcr.io/astral-sh/uv:debian-slim`
     - `ghcr.io/astral-sh/uv:trixie-slim`
@@ -55,12 +55,19 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
     - `ghcr.io/astral-sh/uv:python3.14-alpine`
+    - `ghcr.io/astral-sh/uv:python3.14-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
+    - `ghcr.io/astral-sh/uv:python3.13-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
+    - `ghcr.io/astral-sh/uv:python3.12-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
+    - `ghcr.io/astral-sh/uv:python3.11-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.10-alpine`
+    - `ghcr.io/astral-sh/uv:python3.10-alpine3.23`
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
+    - `ghcr.io/astral-sh/uv:python3.9-alpine3.22`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
+    - `ghcr.io/astral-sh/uv:python3.8-alpine3.20`
 - Based on `python3.x-trixie`:
     - `ghcr.io/astral-sh/uv:python3.14-trixie`
     - `ghcr.io/astral-sh/uv:python3.13-trixie`
