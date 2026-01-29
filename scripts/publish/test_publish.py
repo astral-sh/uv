@@ -541,7 +541,8 @@ def test_reupload_same_files(
         or output.count("already exists") != 0
     ):
         raise RuntimeError(
-            f"PyPI re-upload of the same files failed: "
+            f"PyPI re-upload of the same files failed for {plan.target} "
+            f"({plan.configuration.publish_url}): "
             f"{output.count('Uploading')} != {len(expected_filenames)}, "
             f"{output.count('already exists')} != 0\n"
             f"---\n{output}\n---"
@@ -608,7 +609,8 @@ def test_reupload_with_check_url(
         expected_filenames
     ):
         raise RuntimeError(
-            f"Re-upload with check URL failed: "
+            f"Re-upload with check URL failed for {plan.target} "
+            f"({plan.configuration.publish_url}): "
             f"{output.count('Uploading')} != 0, "
             f"{output.count('already exists')} != {len(expected_filenames)}\n"
             f"---\n{output}\n---"
@@ -666,7 +668,8 @@ def test_reupload_modified_files(
         or "Local file and index file do not match for" not in result.stderr
     ):
         raise RuntimeError(
-            f"Re-upload with mismatching files should not have been started: "
+            f"Re-upload with mismatching files should not have been started "
+            f"for {plan.target} ({plan.configuration.publish_url}): "
             f"Exit code {result.returncode}\n"
             f"---\n{result.stderr}\n---"
         )
