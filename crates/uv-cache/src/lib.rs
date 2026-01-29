@@ -1164,7 +1164,7 @@ pub enum CacheBucket {
 }
 
 impl CacheBucket {
-    fn to_str(self) -> &'static str {
+    pub fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
@@ -1311,6 +1311,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Python,
             Self::Binaries,
         ]
         .iter()
