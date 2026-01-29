@@ -105,8 +105,8 @@ explicit = true
 ```
 
 Named indexes referenced via `tool.uv.sources` must be defined within the project's `pyproject.toml`
-file; indexes provided via the command-line, environment variables, or user-level configuration will
-not be recognized.
+file; indexes provided via the command-line, environment variables, or the user's or system's
+`uv.toml` will not be recognized.
 
 If the project is a member of a workspace then named indexes will also be looked up within the
 workspace's `pyproject.toml`.
