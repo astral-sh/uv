@@ -3,6 +3,28 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.28
+
+Released on 2026-01-29.
+
+### Python
+
+- Update CPython to use [OpenSSL 3.5.5](https://github.com/openssl/openssl/releases/tag/openssl-3.5.5) which includes fixes for high severity CVEs ([python-build-standalone#960](https://github.com/astral-sh/python-build-standalone/pull/960))
+
+### Enhancements
+
+- Add support for Pyodide interpreter on Windows ([#17658](https://github.com/astral-sh/uv/pull/17658))
+- Warn if multiple indexes include `default = true` ([#17713](https://github.com/astral-sh/uv/pull/17713))
+- Skip uploads when validation reports 'Already uploaded' ([#17412](https://github.com/astral-sh/uv/pull/17412))
+
+### Configuration
+
+- Add a reflink alias for the "clone" link mode ([#17724](https://github.com/astral-sh/uv/pull/17724))
+
+### Bug fixes
+
+- Ensure `uv.exe` exits when `uvw.exe` or `uvx.exe` is killed ([#17500](https://github.com/astral-sh/uv/pull/17500))
+
 ## 0.9.27
 
 Released on 2026-01-26.
