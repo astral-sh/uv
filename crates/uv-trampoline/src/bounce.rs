@@ -1,5 +1,5 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{CString, c_void};
+use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
@@ -9,15 +9,8 @@ use windows::Win32::{
         CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
-    System::Console::{
-        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
-    },
+    System::Console::{GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle},
     System::Environment::GetCommandLineA,
-    System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
-    },
     System::LibraryLoader::{FindResourceW, LoadResource, LockResource, SizeofResource},
     System::Threading::{
         CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
@@ -29,7 +22,9 @@ use windows::Win32::{
         PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
-use windows::core::{BOOL, PSTR, s};
+use windows::core::{PSTR, s};
+
+use uv_windows::{Job, install_ctrl_handler};
 
 use uv_static::EnvVars;
 
@@ -263,39 +258,24 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     &arguments[offset..]
 }
 
-fn make_job_object() -> HANDLE {
-    let job = unsafe { CreateJobObjectA(None, None) }
-        .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
-    let mut job_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    let mut retlen = 0u32;
-    if unsafe {
-        QueryInformationJobObject(
-            Some(job),
-            JobObjectExtendedLimitInformation,
-            &mut job_info as *mut _ as *mut c_void,
-            size_of_val(&job_info) as u32,
-            Some(&mut retlen),
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information querying failed");
-    }
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
-    if unsafe {
-        SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            &job_info as *const _ as *const c_void,
-            size_of_val(&job_info) as u32,
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information setting failed");
-    }
-    job
+#[cold]
+fn print_job_error_and_exit(context: &str, err: uv_windows::JobError) -> ! {
+    let message = format!(
+        "(uv internal error) {}: {} (os error {})",
+        context,
+        err.message(),
+        err.code()
+    );
+    error_and_exit(&message);
+}
+
+#[cold]
+fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
+    let message = format!(
+        "(uv internal error) Control handler setting failed (os error {})",
+        err.code()
+    );
+    error_and_exit(&message);
 }
 
 fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
@@ -447,10 +427,13 @@ pub fn bounce(is_gui: bool) -> ! {
     unsafe { GetStartupInfoA(&mut si) }
 
     let child_handle = spawn_child(&si, child_cmdline);
-    let job = make_job_object();
+    let job = Job::new().unwrap_or_else(|e| {
+        print_job_error_and_exit("Job object setup failed", e);
+    });
 
-    if unsafe { AssignProcessToJobObject(job, child_handle) }.is_err() {
-        print_last_error_and_exit("Failed to assign child process to the job")
+    // SAFETY: child_handle is a valid process handle returned by spawn_child.
+    if let Err(e) = unsafe { job.assign_process(child_handle) } {
+        print_job_error_and_exit("Failed to assign child process to the job", e);
     }
 
     // (best effort) Close all the handles that we can
@@ -464,13 +447,9 @@ pub fn bounce(is_gui: bool) -> ! {
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
     // be delivered to the child, so we let them decide whether to exit or not.
-    unsafe extern "system" fn control_key_handler(_: u32) -> BOOL {
-        TRUE
+    if let Err(e) = install_ctrl_handler() {
+        print_ctrl_handler_error_and_exit(e);
     }
-    // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Control handler setting failed");
-    });
 
     if is_gui {
         clear_app_starting_state(child_handle);

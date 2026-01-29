@@ -74,6 +74,7 @@ uv-unix = { version = "0.0.16", path = "crates/uv-unix" }
 uv-version = { version = "0.9.27", path = "crates/uv-version" }
 uv-virtualenv = { version = "0.0.16", path = "crates/uv-virtualenv" }
 uv-warnings = { version = "0.0.16", path = "crates/uv-warnings" }
+uv-windows = { version = "0.0.16", path = "crates/uv-windows" }
 uv-workspace = { version = "0.0.16", path = "crates/uv-workspace" }
 
 ambient-id = { version = "0.0.7", default-features = false, features = ["astral-reqwest-middleware"] }
