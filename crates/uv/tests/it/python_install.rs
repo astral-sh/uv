@@ -57,7 +57,7 @@ fn python_install() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -65,7 +65,7 @@ fn python_install() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
         });
     }
@@ -476,7 +476,7 @@ fn python_install_minor() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[LATEST]-[PLATFORM]/bin/python3.11"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/bin/python3.11"
             );
         });
     } else if cfg!(windows) {
@@ -484,7 +484,7 @@ fn python_install_minor() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python), @"[TEMP_DIR]/managed/cpython-3.11-[PLATFORM]/python"
             );
         });
     }
@@ -1332,7 +1332,7 @@ fn python_install_debug() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1495,7 +1495,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/bin/python3.13
 
     ----- stderr -----
     ");
@@ -1504,7 +1504,7 @@ fn python_install_debug_freethreaded() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[LATEST]+freethreaded-[PLATFORM]/bin/python3.13t
+    [TEMP_DIR]/managed/cpython-3.13+freethreaded-[PLATFORM]/bin/python3.13t
 
     ----- stderr -----
     ");
@@ -1667,7 +1667,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1675,7 +1675,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
         });
 
@@ -1683,7 +1683,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/bin/python3.14"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14"
             );
         });
     } else if cfg!(windows) {
@@ -1691,7 +1691,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
         });
 
@@ -1699,7 +1699,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_minor_14), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
         });
 
@@ -1707,7 +1707,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/python"
             );
         });
     }
@@ -1767,7 +1767,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -1775,7 +1775,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
         });
 
@@ -1783,7 +1783,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/bin/python3.12"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/bin/python3.12"
             );
         });
     } else {
@@ -1791,7 +1791,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_major), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
         });
 
@@ -1799,7 +1799,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_minor_12), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
         });
 
@@ -1807,7 +1807,7 @@ fn python_install_default() {
             filters => context.filters(),
         }, {
             insta::assert_snapshot!(
-                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12.[LATEST]-[PLATFORM]/python"
+                read_link(&bin_python_default), @"[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/python"
             );
         });
     }
@@ -2499,7 +2499,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2509,7 +2509,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2518,7 +2518,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.15.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2538,7 +2538,7 @@ fn python_find_prerelease() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.[LATEST]-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");
@@ -2871,7 +2871,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.11-windows-x86-none/python
+    [TEMP_DIR]/managed/cpython-3.13-windows-x86-none/python
 
     ----- stderr -----
     ");
@@ -2882,7 +2882,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     exit_code: 0
     ----- stdout -----
     cpython-3.13.11-windows-x86_64-none    <download available>
-    cpython-3.13.11-windows-x86-none       managed/cpython-3.13.11-windows-x86-none/python
+    cpython-3.13.11-windows-x86-none       managed/cpython-3.13-windows-x86-none/python
 
     ----- stderr -----
     ");
@@ -2902,7 +2902,7 @@ fn python_install_emulated_windows_x86_on_x64() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.11-windows-x86_64-none/python
+    [TEMP_DIR]/managed/cpython-3.13-windows-x86_64-none/python
 
     ----- stderr -----
     ");
@@ -3624,7 +3624,7 @@ fn python_install_pyodide() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.2-[PLATFORM]/bin/python3.14
+    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/bin/python3.14
 
     ----- stderr -----
     ");
@@ -3681,7 +3681,7 @@ fn python_install_build_version() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.12-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     ");

@@ -27,6 +27,7 @@ pub(crate) async fn find(
     project_dir: &Path,
     request: Option<String>,
     show_version: bool,
+    resolve_links: bool,
     no_project: bool,
     no_config: bool,
     system: bool,
@@ -109,11 +110,12 @@ pub(crate) async fn find(
             python.interpreter().python_version()
         )?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(python.interpreter().sys_executable())?
+        } else {
+            std::path::absolute(python.interpreter().sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)
@@ -122,6 +124,7 @@ pub(crate) async fn find(
 pub(crate) async fn find_script(
     script: Pep723ItemRef<'_>,
     show_version: bool,
+    resolve_links: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -155,11 +158,12 @@ pub(crate) async fn find_script(
     if show_version {
         writeln!(printer.stdout(), "{}", interpreter.python_version())?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(interpreter.sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(interpreter.sys_executable())?
+        } else {
+            std::path::absolute(interpreter.sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)

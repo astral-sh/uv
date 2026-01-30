@@ -1381,7 +1381,7 @@ fn python_find_prerelease_version_specifiers() {
     context.python_install().arg("3.14.0rc3").assert().success();
 
     // `>=3.14` should allow pre-release versions
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1392,7 +1392,7 @@ fn python_find_prerelease_version_specifiers() {
     ");
 
     // `>3.14rc2` should not match rc2
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1412,7 +1412,7 @@ fn python_find_prerelease_version_specifiers() {
     ");
 
     // `>=3.14.0rc3` should match rc3
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14.0rc3"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14.0rc3").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1422,17 +1422,17 @@ fn python_find_prerelease_version_specifiers() {
     ");
 
     // `<3.14.0rc3` should match rc2
-    uv_snapshot!(context.filters(), context.python_find().arg("<3.14.0rc3"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.14.0rc3").arg("--resolve-links"), @"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
+    error: No interpreter found for Python <3.14.0rc3 in [PYTHON SOURCES]
     ");
 
     // `<=3.14.0rc3` should match rc3
-    uv_snapshot!(context.filters(), context.python_find().arg("<=3.14.0rc3"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("<=3.14.0rc3").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1445,7 +1445,7 @@ fn python_find_prerelease_version_specifiers() {
     context.python_install().arg("3.14.0").assert().success();
 
     // `>=3.14` should prefer stable
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1455,7 +1455,7 @@ fn python_find_prerelease_version_specifiers() {
     ");
 
     // `>3.14rc2` should prefer stable
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2").arg("--resolve-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1485,7 +1485,7 @@ fn python_find_prerelease_with_patch_request() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
     warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
