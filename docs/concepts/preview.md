@@ -75,6 +75,8 @@ The following preview features are available:
 - `workspace-metadata`: Allows using `uv workspace metadata`.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
+- `index-assume-name`: Allows `--index <param>` to assume that the parameter is an index name if it
+  looks like one regardless of the presence of a directory of the same name.
 
 ## Disabling preview features
 
