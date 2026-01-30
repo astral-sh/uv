@@ -2113,6 +2113,93 @@ mod test {
         );
     }
 
+    /// Regression test: the `and` operation on `MarkerTree` must fully
+    /// eliminate known-incompatible marker pairs like `os_name == 'nt'`
+    /// and `sys_platform == 'linux'`, even when one operand is a compound
+    /// disjunction containing both compatible and incompatible branches.
+    ///
+    /// When `os_name == 'nt'` is AND'ed with a fork marker like
+    /// `(sys_platform == 'linux' and ...) or (sys_platform != 'linux' and ...)`,
+    /// the `sys_platform == 'linux'` branch is contradictory with
+    /// `os_name == 'nt'` but was not being eliminated because the exclusion
+    /// check only fires when the entire result is contradictory. The
+    /// non-contradictory branch kept the overall node alive.
+    ///
+    /// This causes the resulting `MarkerTree` to be non-canonical: its
+    /// string serialization includes the dead branch, but re-parsing that
+    /// string correctly eliminates it, producing a different `MarkerTree`.
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/17747>
+    #[test]
+    fn marker_and_eliminates_partial_contradictions() {
+        // `os_name == 'nt' and sys_platform == 'linux'` is a known contradiction.
+        assert!(m("os_name == 'nt' and sys_platform == 'linux'").is_false());
+
+        // Build a compound fork marker with both linux and non-linux branches.
+        let dep_marker = m("os_name == 'nt'");
+        let fork_marker = m(
+            "(platform_machine != 'aarch64' and sys_platform == 'linux') \
+             or (sys_platform != 'darwin' and sys_platform != 'linux')",
+        );
+
+        // AND the dependency marker with the compound fork marker.
+        let mut result = dep_marker;
+        result.and(fork_marker);
+
+        // The result must be canonical: serializing and re-parsing should
+        // produce an identical MarkerTree. If the contradictory
+        // `os_name == 'nt' and sys_platform == 'linux'` subtree survives,
+        // the serialized form includes it but re-parsing eliminates it.
+        let expected =
+            m("os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'linux'");
+        assert_eq!(
+            result,
+            expected,
+            "AND should eliminate the contradictory sys_platform == 'linux' branch: \
+             got {:?}, expected {:?}",
+            result.try_to_string(),
+            expected.try_to_string(),
+        );
+    }
+
+    /// Same as above, but also exercises `simplify_python_versions` which
+    /// is part of the lock file round-trip path. When the compound fork
+    /// marker includes python version constraints, the non-canonical
+    /// subtree is carried through `simplify_python_versions` into the
+    /// simplified marker written to `uv.lock`. Deserializing the lock
+    /// file re-parses the marker string (which eliminates the dead
+    /// branch), producing a different `MarkerTree` and causing
+    /// `uv sync --locked` to fail with "lockfile needs to be updated".
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/17747>
+    #[test]
+    fn simplify_python_versions_preserves_exclusions() {
+        let dep_marker = m("os_name == 'nt'");
+        let fork_marker = m(
+            "(python_full_version >= '3.14' and platform_machine != 'aarch64' and sys_platform == 'linux') \
+             or (python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'linux')",
+        );
+
+        let mut combined = dep_marker;
+        combined.and(fork_marker);
+
+        // Simplify by assuming requires-python >= 3.14.
+        let simplified = combined.simplify_python_versions(
+            Bound::Included(Version::new([3, 14])).as_ref(),
+            Bound::Unbounded.as_ref(),
+        );
+
+        // The simplified marker must round-trip through string serialization.
+        if let Some(s) = simplified.try_to_string() {
+            let reparsed: MarkerTree = s.parse().unwrap();
+            assert_eq!(
+                simplified, reparsed,
+                "simplified marker should be canonical (round-trip stable): \
+                 serialized as {s:?}",
+            );
+        }
+    }
+
     #[test]
     fn release_only() {
         assert!(m("python_full_version > '3.10' or python_full_version <= '3.10'").is_true());
