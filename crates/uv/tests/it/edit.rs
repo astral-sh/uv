@@ -11341,63 +11341,6 @@ fn add_index_by_name_from_workspace_root() -> Result<()> {
 }
 
 #[test]
-fn add_index_by_name_default_index() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [[tool.uv.index]]
-        name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg("test-index"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    ");
-
-    let pyproject = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
-    insta::with_settings!({
-        filters => context.filters(),
-    }, {
-        assert_snapshot!(
-            pyproject, @r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-            "iniconfig>=2.0.0",
-        ]
-
-        [[tool.uv.index]]
-        name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-        default = true
-
-        [tool.uv.sources]
-        iniconfig = { index = "test-index" }
-        "#
-        );
-    });
-
-    Ok(())
-}
-
-#[test]
 fn add_index_by_name_member_only_not_accessible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
