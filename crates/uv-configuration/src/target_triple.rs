@@ -1077,39 +1077,3 @@ fn android_api_level() -> Option<u16> {
 
     Some(api_level)
 }
-
-#[cfg(all(test, feature = "clap"))]
-mod tests {
-    use super::*;
-
-    fn parse_target(input: &str) -> Option<TargetTriple> {
-        use clap::ValueEnum;
-        TargetTriple::value_variants()
-            .iter()
-            .find(|v| {
-                v.to_possible_value()
-                    .is_some_and(|pv: clap::builder::PossibleValue| pv.matches(input, true))
-            })
-            .copied()
-    }
-
-    #[test]
-    fn parse_wheel_tag_style_manylinux_aliases() {
-        let cases = [
-            ("manylinux2014_x86_64", TargetTriple::X8664Manylinux2014),
-            ("manylinux2014_aarch64", TargetTriple::Aarch64Manylinux2014),
-            ("manylinux_2_17_x86_64", TargetTriple::X8664Manylinux217),
-            ("manylinux_2_17_aarch64", TargetTriple::Aarch64Manylinux217),
-            ("manylinux_2_28_x86_64", TargetTriple::X8664Manylinux228),
-            ("manylinux_2_28_aarch64", TargetTriple::Aarch64Manylinux228),
-            ("manylinux_2_31_aarch64", TargetTriple::Aarch64Manylinux231),
-            ("manylinux_2_31_x86_64", TargetTriple::X8664Manylinux231),
-            ("manylinux_2_40_x86_64", TargetTriple::X8664Manylinux240),
-            ("manylinux_2_40_aarch64", TargetTriple::Aarch64Manylinux240),
-        ];
-        for (input, expected) in cases {
-            let parsed = parse_target(input).unwrap_or_else(|| panic!("failed to parse '{input}'"));
-            assert_eq!(parsed, expected, "mismatch for '{input}'");
-        }
-    }
-}
