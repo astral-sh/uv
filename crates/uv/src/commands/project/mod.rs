@@ -2677,19 +2677,27 @@ pub(crate) fn detect_conflicts(
             }
             let is_conflicting = match item.kind() {
                 // A `ConflictKind::Project` item represents the "base"
-                // package without any of the extras or groups from this
-                // conflict set. It is only considered active if none of
-                // the other extras/groups in the set are active.
+                // package without any of the extras from this conflict
+                // set. When the conflict set only involves a single
+                // package and an extra for that package is active,
+                // the project is deactivated — the user is selecting
+                // the extra's fork. This is not safe when the set spans
+                // multiple packages, as deactivating one project could
+                // allow conflicting cross-package deps through.
                 ConflictKind::Project => {
                     groups.prod()
-                        && !set.iter().any(|other| {
-                            !std::ptr::eq(item, other)
-                                && match other.kind() {
-                                    ConflictKind::Project => false,
-                                    ConflictKind::Extra(extra) => extras.contains(extra),
-                                    ConflictKind::Group(group) => groups.contains(group),
-                                }
-                        })
+                        && !{
+                            let all_same_package =
+                                set.iter().all(|s| s.package() == item.package());
+                            all_same_package
+                                && set.iter().any(|other| {
+                                    !std::ptr::eq(item, other)
+                                        && match other.kind() {
+                                            ConflictKind::Project | ConflictKind::Group(_) => false,
+                                            ConflictKind::Extra(extra) => extras.contains(extra),
+                                        }
+                                })
+                        }
                 }
                 ConflictKind::Extra(extra) => extras.contains(extra),
                 ConflictKind::Group(group1) => groups.contains(group1),

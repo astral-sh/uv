@@ -15413,9 +15413,9 @@ fn package_conflict_allows_extra_sync() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - sortedcontainers==2.4.0
      + sortedcontainers==2.3.0
-     ~ sortedcontainers==2.4.0
     ");
 
     Ok(())
