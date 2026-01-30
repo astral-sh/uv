@@ -1257,7 +1257,7 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<IndexArg>>, String> {
     }
     let mut indices = Vec::new();
     for token in input.split_whitespace() {
-        match IndexArg::from_cli(token, false) {
+        match IndexArg::from_cli(token) {
             Ok(index) => indices.push(Maybe::Some(index)),
             Err(e) => return Err(e.to_string()),
         }
@@ -1266,11 +1266,11 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<IndexArg>>, String> {
 }
 
 /// Parse a `--default-index` argument into an [`Index`], mapping the empty string to `None`.
-fn parse_default_index(input: &str) -> Result<Maybe<IndexArg>, String> {
+fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
     } else {
-        match IndexArg::from_cli(input, true) {
+        match Index::from_default_index(input) {
             Ok(index) => Ok(Maybe::Some(index)),
             Err(err) => Err(err.to_string()),
         }
@@ -6671,7 +6671,7 @@ pub struct IndexArgs {
         value_parser = parse_default_index,
         help_heading = "Index options"
     )]
-    pub default_index: Option<Maybe<IndexArg>>,
+    pub default_index: Option<Maybe<Index>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
     /// <https://pypi.org/simple>).

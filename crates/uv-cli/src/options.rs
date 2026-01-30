@@ -188,7 +188,7 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
 /// Resolve [`IndexArg`]s into [`Index`]es using indexes defined on the
 /// filesystem and combine the `default_index` and `index` into one vector.
 pub fn resolve_and_combine_indexes(
-    default_index: Option<Maybe<IndexArg>>,
+    default_index: Option<Maybe<Index>>,
     index: Option<Vec<Vec<Maybe<IndexArg>>>>,
     filesystem: Option<&FilesystemOptions>,
 ) -> Option<Vec<Index>> {
@@ -211,7 +211,6 @@ pub fn resolve_and_combine_indexes(
 
     let default_index = default_index
         .and_then(Maybe::into_option)
-        .map(resolve)
         .map(|default_index| vec![default_index]);
 
     let index = index.map(|index| {
