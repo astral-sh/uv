@@ -1878,12 +1878,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             WorkspaceCommand::Metadata(_args) => {
                 commands::metadata(&project_dir, globals.preview, printer).await
             }
-            WorkspaceCommand::Dir(args) => {
-                commands::dir(args.package, &project_dir, globals.preview, printer).await
-            }
-            WorkspaceCommand::List(args) => {
-                commands::list(&project_dir, args.paths, globals.preview, printer).await
-            }
+            WorkspaceCommand::Dir(args) => commands::dir(args.package, &project_dir, printer).await,
+            WorkspaceCommand::List(args) => commands::list(&project_dir, args.paths, printer).await,
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {
             BuildBackendCommand::BuildSdist { sdist_directory } => {
