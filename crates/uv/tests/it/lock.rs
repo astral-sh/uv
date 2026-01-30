@@ -18910,6 +18910,50 @@ fn lock_explicit_default_index() -> Result<()> {
     Ok(())
 }
 
+/// Error when an explicit index does not have a name.
+#[test]
+fn lock_unnamed_explicit_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 8, column 9
+        |
+      8 |         [[tool.uv.index]]
+        |         ^^^^^^^^^^^^^^^^^
+      An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+    "#);
+
+    Ok(())
+}
+
 #[test]
 fn lock_named_index() -> Result<()> {
     let context = TestContext::new("3.12");
