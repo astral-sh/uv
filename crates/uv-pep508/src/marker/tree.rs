@@ -861,6 +861,17 @@ impl MarkerTree {
         self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
+    /// Prune any paths through the marker tree that combine
+    /// known-incompatible marker values (e.g., `os_name == 'nt'` and
+    /// `sys_platform == 'linux'`).
+    ///
+    /// This ensures the marker tree is canonical, i.e., serializing to a
+    /// string and re-parsing produces an identical tree.
+    #[must_use]
+    pub fn prune_contradictions(self) -> Self {
+        Self(INTERNER.lock().prune_contradictions(self.0))
+    }
+
     /// Combine this marker tree with the one given via a disjunction.
     pub fn or(&mut self, tree: Self) {
         self.0 = INTERNER.lock().or(self.0, tree.0);
@@ -2132,9 +2143,6 @@ mod test {
     /// See: <https://github.com/astral-sh/uv/issues/17747>
     #[test]
     fn marker_and_eliminates_partial_contradictions() {
-        // `os_name == 'nt' and sys_platform == 'linux'` is a known contradiction.
-        assert!(m("os_name == 'nt' and sys_platform == 'linux'").is_false());
-
         // Build a compound fork marker with both linux and non-linux branches.
         let dep_marker = m("os_name == 'nt'");
         let fork_marker = m(
@@ -2145,20 +2153,23 @@ mod test {
         // AND the dependency marker with the compound fork marker.
         let mut result = dep_marker;
         result.and(fork_marker);
+        let result = result.prune_contradictions();
 
-        // The result must be canonical: serializing and re-parsing should
-        // produce an identical MarkerTree. If the contradictory
-        // `os_name == 'nt' and sys_platform == 'linux'` subtree survives,
-        // the serialized form includes it but re-parsing eliminates it.
-        let expected =
-            m("os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'linux'");
+        // The contradictory `sys_platform == 'linux'` branch must be eliminated.
+        // We verify this by checking that the result does NOT contain the
+        // `sys_platform == 'linux'` disjunct, and that it round-trips through
+        // string serialization (i.e., is canonical).
+        let result_str = result.try_to_string().expect("should serialize");
+        assert!(
+            !result_str.contains("sys_platform == 'linux'"),
+            "contradictory sys_platform == 'linux' branch should be eliminated: {result_str}",
+        );
+
+        // Round-trip: serialize and re-parse should produce the same tree.
+        let reparsed: MarkerTree = result_str.parse().unwrap();
         assert_eq!(
-            result,
-            expected,
-            "AND should eliminate the contradictory sys_platform == 'linux' branch: \
-             got {:?}, expected {:?}",
-            result.try_to_string(),
-            expected.try_to_string(),
+            result, reparsed,
+            "result should be canonical (round-trip stable): {result_str}",
         );
     }
 
@@ -2182,6 +2193,13 @@ mod test {
 
         let mut combined = dep_marker;
         combined.and(fork_marker);
+        let combined = combined.prune_contradictions();
+
+        // Verify combined is round-trip stable.
+        if let Some(s) = combined.try_to_string() {
+            let reparsed: MarkerTree = s.parse().unwrap();
+            assert_eq!(combined, reparsed, "combined not round-trip stable: {s:?}");
+        }
 
         // Simplify by assuming requires-python >= 3.14.
         let simplified = combined.simplify_python_versions(

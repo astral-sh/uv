@@ -428,6 +428,87 @@ impl InternerGuard<'_> {
         node
     }
 
+    /// Prune any paths through the BDD that combine known-incompatible
+    /// marker values (e.g., `os_name == 'nt' and sys_platform == 'linux'`).
+    ///
+    /// This should be called on the final result of an `and` operation
+    /// to ensure the marker tree is canonical (round-trip stable through
+    /// serialization and re-parsing).
+    pub(crate) fn prune_contradictions(&mut self, node: NodeId) -> NodeId {
+        if node.is_true() || node.is_false() {
+            return node;
+        }
+
+        let n = self.shared.node(node);
+        if !n.var.is_conflicting_variable() {
+            return node;
+        }
+
+        let exclusions = self.exclusions();
+        self.prune_exclusions(node, exclusions)
+    }
+
+    /// Walk the conflicting-variable levels of `node` and prune any subtree
+    /// whose path is entirely contained in the `exclusions` set.
+    ///
+    /// This walks `node` and `exclusions` in lockstep (both use the same
+    /// variable ordering). At each conflicting-variable level, it checks
+    /// each child: if that child combined with the exclusion constraint for
+    /// the same variable range is entirely contradictory, it maps the child
+    /// to `FALSE`. For non-conflicting variable levels, it stops recursing
+    /// since exclusions only involve conflicting variables.
+    fn prune_exclusions(&mut self, node: NodeId, exclusions: NodeId) -> NodeId {
+        // Terminal cases.
+        if node.is_true() || node.is_false() || exclusions.is_false() {
+            return node;
+        }
+
+        // If the entire node is within the exclusion set, prune it.
+        if self.disjointness(node, exclusions.not()) {
+            return NodeId::FALSE;
+        }
+
+        // If no part of this node overlaps with exclusions, keep it as-is.
+        if self.disjointness(node, exclusions) {
+            return node;
+        }
+
+        let n = self.shared.node(node);
+
+        // Only recurse through conflicting variable levels.
+        if !n.var.is_conflicting_variable() {
+            return node;
+        }
+
+        let e = self.shared.node(exclusions);
+
+        match n.var.cmp(&e.var) {
+            // Node variable is higher order than exclusion variable:
+            // recurse into each child of node with the full exclusion tree.
+            Ordering::Less => {
+                let var = n.var.clone();
+                let children = n
+                    .children
+                    .map(node, |child| self.prune_exclusions(child, exclusions));
+                self.create_node(var, children)
+            }
+            // Exclusion variable is higher order than node variable:
+            // this shouldn't normally happen since node should have all
+            // conflicting variables at the top. Conservatively return as-is.
+            Ordering::Greater => node,
+            // Same variable: walk children in parallel using `apply`.
+            Ordering::Equal => {
+                let var = n.var.clone();
+                let node_children = n.children.clone();
+                let excl_children = e.children.clone();
+                let children = node_children.apply(node, &excl_children, exclusions, |n, e| {
+                    self.prune_exclusions(n, e)
+                });
+                self.create_node(var, children)
+            }
+        }
+    }
+
     /// Returns `true` if there is no environment in which both marker trees can apply,
     /// i.e. their conjunction is always `false`.
     pub(crate) fn is_disjoint(&mut self, xi: NodeId, yi: NodeId) -> bool {
