@@ -586,7 +586,7 @@ impl PythonInstallationKey {
     pub fn executable_name_minor(&self) -> String {
         format!(
             "{name}{maj}.{min}{var}{exe}",
-            name = self.implementation.executable_name(),
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             min = self.minor,
             var = self.variant.executable_suffix(),
@@ -598,7 +598,7 @@ impl PythonInstallationKey {
     pub fn executable_name_major(&self) -> String {
         format!(
             "{name}{maj}{var}{exe}",
-            name = self.implementation.executable_name(),
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
@@ -609,7 +609,7 @@ impl PythonInstallationKey {
     pub fn executable_name(&self) -> String {
         format!(
             "{name}{var}{exe}",
-            name = self.implementation.executable_name(),
+            name = self.implementation().executable_install_name(),
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )

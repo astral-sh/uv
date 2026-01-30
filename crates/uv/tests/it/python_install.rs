@@ -3486,12 +3486,12 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     let bin_python = context
         .bin_dir
-        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
+        .child(format!("pyodide3.13{}", std::env::consts::EXE_SUFFIX));
 
     // The executable should be installed in the bin directory
     bin_python.assert(predicate::path::exists());
@@ -3562,7 +3562,7 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     context.python_uninstall().arg("--all").assert().success();
@@ -3575,7 +3575,7 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     // Find via `pyodide``
@@ -4254,7 +4254,7 @@ fn python_install_compile_bytecode_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     No compatible versions to bytecode compile (skipped 1)
     ");
 
