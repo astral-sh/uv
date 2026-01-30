@@ -2676,7 +2676,21 @@ pub(crate) fn detect_conflicts(
                 continue;
             }
             let is_conflicting = match item.kind() {
-                ConflictKind::Project => groups.prod(),
+                // A `ConflictKind::Project` item represents the "base"
+                // package without any of the extras or groups from this
+                // conflict set. It is only considered active if none of
+                // the other extras/groups in the set are active.
+                ConflictKind::Project => {
+                    groups.prod()
+                        && !set.iter().any(|other| {
+                            !std::ptr::eq(item, other)
+                                && match other.kind() {
+                                    ConflictKind::Project => false,
+                                    ConflictKind::Extra(extra) => extras.contains(extra),
+                                    ConflictKind::Group(group) => groups.contains(group),
+                                }
+                        })
+                }
                 ConflictKind::Extra(extra) => extras.contains(extra),
                 ConflictKind::Group(group1) => groups.contains(group1),
             };

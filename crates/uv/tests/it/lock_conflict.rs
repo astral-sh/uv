@@ -15347,3 +15347,76 @@ fn conflict_item_unknown_field() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that package-level conflicts allow `uv sync --extra` to succeed.
+///
+/// When a conflict set contains a bare package entry (i.e., `{ package = "..." }`)
+/// alongside an extra, the package entry represents the "base" resolution
+/// without that extra. Installing with the extra should not trigger a conflict
+/// error, since the user is choosing one side of the fork.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17744>
+#[test]
+fn package_conflict_allows_extra_sync() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers>=2.3.0"]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.3.0"]
+
+        [tool.uv]
+        conflicts = [
+            [
+              { extra = "extra1" },
+              { package = "project" },
+            ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Install without extras should succeed (base package fork).
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    // Install with the extra should also succeed (extra fork).
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + sortedcontainers==2.3.0
+     ~ sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
