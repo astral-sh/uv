@@ -623,9 +623,11 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
-    pub http_read_timeout: Duration,
     pub http_connect_timeout: Duration,
-    pub http_upload_timeout: Duration,
+    pub http_read_timeout: Duration,
+    /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
+    /// timeout.
+    pub http_read_timeout_upload: Duration,
     pub http_retries: u32,
     pub concurrency: Concurrency,
     #[cfg(feature = "tracing-durations-export")]
@@ -689,7 +691,7 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
-            http_upload_timeout: parse_integer_environment_variable(
+            http_read_timeout_upload: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
             )?
             .map(Duration::from_secs)

@@ -139,7 +139,7 @@ pub(crate) async fn publish(
         // Disable automatic redirect, as the streaming publish request is not cloneable.
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
-        .read_timeout(environment.http_upload_timeout)
+        .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .build();
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
@@ -153,7 +153,7 @@ pub(crate) async fn publish(
         .clone()
         .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .read_timeout(environment.http_upload_timeout)
+        .read_timeout(environment.http_read_timeout_upload)
         .connect_timeout(environment.http_connect_timeout)
         .build();
 
