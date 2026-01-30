@@ -960,7 +960,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["pip".to_owned(), "uninstall".to_owned()]),
                 args.dry_run,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -985,7 +984,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1019,7 +1017,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.prefix,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1043,7 +1040,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1075,7 +1071,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1096,7 +1091,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.python_platform.as_ref(),
                 &cache,
                 printer,
-                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -1617,7 +1611,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::ToolDirSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::tool_dir(args.bin, globals.preview, printer)?;
+            commands::tool_dir(args.bin, printer)?;
             Ok(ExitStatus::Success)
         }
         Commands::Python(PythonNamespace {
@@ -1646,7 +1640,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &client_builder.subcommand(vec!["python".to_owned(), "list".to_owned()]),
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -1726,14 +1719,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(
-                args.install_dir,
-                args.targets,
-                args.all,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1755,7 +1741,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             } else {
@@ -1771,7 +1756,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     &cache,
                     printer,
-                    globals.preview,
                 )
                 .await
             }
@@ -1798,7 +1782,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 client_builder.subcommand(vec!["python".to_owned(), "pin".to_owned()]),
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }
@@ -2009,7 +1992,6 @@ async fn run_project(
                 no_config,
                 &cache,
                 printer,
-                globals.preview,
             )
             .await
         }

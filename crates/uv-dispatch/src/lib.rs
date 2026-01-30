@@ -491,7 +491,6 @@ impl BuildContext for BuildDispatch<'_> {
             build_output,
             self.concurrency.builds,
             self.client.credentials_cache(),
-            self.preview,
         )
         .boxed_local()
         .await?;

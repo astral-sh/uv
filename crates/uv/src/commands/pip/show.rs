@@ -13,7 +13,6 @@ use uv_fs::Simplified;
 use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequest, Target,
 };
@@ -33,7 +32,6 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         {
@@ -53,7 +51,6 @@ pub(crate) fn pip_show(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     // Apply any `--target` or `--prefix` directories.

@@ -182,7 +182,6 @@ pub(crate) async fn pip_sync(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&installation, true, printer)?;
@@ -196,7 +195,6 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
             &cache,
-            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment

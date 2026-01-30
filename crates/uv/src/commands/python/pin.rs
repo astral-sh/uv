@@ -11,7 +11,6 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -40,7 +39,6 @@ pub(crate) async fn pin(
     client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
@@ -109,7 +107,6 @@ pub(crate) async fn pin(
                         python_preference,
                         &download_list,
                         cache,
-                        preview,
                     );
                 }
             }
@@ -136,7 +133,6 @@ pub(crate) async fn pin(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await
     {
@@ -274,7 +270,6 @@ fn warn_if_existing_pin_incompatible_with_project(
     python_preference: PythonPreference,
     downloads_list: &ManagedPythonDownloadList,
     cache: &Cache,
-    preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
@@ -300,7 +295,6 @@ fn warn_if_existing_pin_incompatible_with_project(
         python_preference,
         downloads_list,
         cache,
-        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();

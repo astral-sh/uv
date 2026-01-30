@@ -8,7 +8,6 @@ use uv_cache::Cache;
 use uv_configuration::TargetTriple;
 use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
 };
@@ -26,7 +25,6 @@ pub(crate) fn pip_check(
     python_platform: Option<&TargetTriple>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
@@ -36,7 +34,6 @@ pub(crate) fn pip_check(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
