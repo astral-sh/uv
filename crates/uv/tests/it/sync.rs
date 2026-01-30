@@ -12648,7 +12648,8 @@ dependencies = [
         .arg("--exclude-newer")
         .arg("2022-04-04T12:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("tqdm=2022-09-04T00:00:00Z"), @"
+        .arg("tqdm=2022-09-04T00:00:00Z")
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12731,7 +12732,8 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
     // Sync again with the package-specific override
     uv_snapshot!(context.filters(), context
         .sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
