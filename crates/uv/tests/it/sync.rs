@@ -1953,13 +1953,12 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -1967,13 +1966,12 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ");
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
@@ -1996,13 +1994,12 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -2065,13 +2062,12 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     // Confirm that `bad_child` fails if anyio is provided
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `bad-child @ file://[TEMP_DIR]/bad_child`
       ├─▶ The build backend returned an error
@@ -2101,13 +2097,12 @@ fn sync_extra_build_dependencies() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2194,13 +2189,12 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2301,13 +2295,12 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2376,13 +2369,12 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
     })?;
 
     // Running `uv sync` should succeed, as `anyio` is provided as a source
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2512,13 +2504,12 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -2532,13 +2523,12 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -2610,13 +2600,12 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
     })?;
 
     // Running `uv sync` should fail due to the unapplied source
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").arg("--refresh"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -2718,13 +2707,12 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -2748,7 +2736,6 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -2786,13 +2773,12 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -13650,13 +13636,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -13683,13 +13668,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -13703,36 +13687,18 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
-    ");
-
-    // With preview enabled, there's no warning
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--preview-features").arg("extra-build-dependencies")
-        .arg("--reinstall-package").arg("child")
-        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
@@ -13766,13 +13732,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // This should fail
     uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
@@ -13796,13 +13761,12 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         child = [{ requirement = "anyio>4", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `anyio>4`
     ");
@@ -13966,13 +13930,12 @@ fn reject_unmatched_runtime() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
       × Failed to download and build `source-distribution==0.0.3`
       ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
       help: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
@@ -14437,13 +14400,12 @@ fn match_runtime_optional() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved 3 packages in [TIME]
     Audited in [TIME]
     ");
@@ -14529,13 +14491,12 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     "#})?;
 
     // Running `uv sync` should rebuild the child package with the new build dependency.
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -14544,13 +14505,12 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
     ");
 
     // Running `uv sync` again should be a no-op.
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved 2 packages in [TIME]
     Audited 1 package in [TIME]
     ");
@@ -14570,13 +14530,12 @@ fn sync_extra_build_dependencies_cache() -> Result<()> {
         child = [{ requirement = "iniconfig>0", match-runtime = false }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]

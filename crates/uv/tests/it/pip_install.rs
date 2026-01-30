@@ -13002,13 +13002,12 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -13036,13 +13035,12 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ The build backend returned an error
@@ -13056,37 +13054,18 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features extra-build-dependencies` to disable this warning.
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
      - anyio==4.0.0
      + anyio==3.7.1
-     ~ child==0.1.0 (from file://[TEMP_DIR]/child)
-     ~ parent==0.1.0 (from file://[TEMP_DIR]/)
-    ");
-
-    // With preview enabled, there's no warning
-    uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--preview-features").arg("extra-build-dependencies")
-        .arg("--reinstall-package").arg("child")
-        .env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Uninstalled [N] packages in [TIME]
-    Installed [N] packages in [TIME]
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
      ~ parent==0.1.0 (from file://[TEMP_DIR]/)
     ");
