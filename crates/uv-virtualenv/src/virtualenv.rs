@@ -12,6 +12,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use uv_fs::{CWD, Simplified, cachedir};
+use uv_platform_tags::Os;
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
@@ -314,6 +315,12 @@ pub(crate) fn create(
                 create_link_to_executable(targetwt.as_path(), &executable_target)
                     .map_err(Error::Python)?;
             }
+        } else if matches!(interpreter.platform().os(), Os::Pyodide { .. }) {
+            // For Pyodide, link only `python.exe`.
+            // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            create_link_to_executable(target.as_path(), &executable_target)
+                .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(

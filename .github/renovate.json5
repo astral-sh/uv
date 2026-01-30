@@ -40,6 +40,13 @@
       enabled: false,
     },
     {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
+      enabled: false,
+    },
+    {
       // Create dedicated branches to update references to dependencies in the documentation.
       matchFileNames: ["docs/**/*.md"],
       commitMessageTopic: "documentation references to {{{depName}}}",

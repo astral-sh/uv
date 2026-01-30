@@ -15300,3 +15300,50 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
 
     Ok(())
 }
+
+/// This tests that typos in conflict item keys are rejected.
+///
+/// Using `name` instead of `package` should produce an error rather than being
+/// silently ignored.
+#[test]
+fn conflict_item_unknown_field() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [
+            [
+              { name = "foo", extra = "extra1" },
+              { extra = "extra2" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 10, column 17
+       |
+    10 |               { name = \"foo\", extra = \"extra1\" },
+       |                 ^^^^
+    unknown field `name`, expected one of `package`, `extra`, `group`
+    ");
+
+    Ok(())
+}

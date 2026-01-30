@@ -250,7 +250,9 @@ impl Locks {
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum LinkMode {
-    /// Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory.
+    /// Clone (i.e., copy-on-write or reflink) packages from the wheel into the `site-packages` directory.
+    #[serde(alias = "reflink")]
+    #[cfg_attr(feature = "clap", value(alias = "reflink"))]
     Clone,
     /// Copy packages from the wheel into the `site-packages` directory.
     Copy,

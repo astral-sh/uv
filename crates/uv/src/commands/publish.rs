@@ -239,7 +239,7 @@ pub(crate) async fn publish(
         let uploaded = if direct {
             if dry_run {
                 // For dry run, call validate since we won't call reserve.
-                uv_publish::validate(
+                let should_upload = uv_publish::validate(
                     &group.file,
                     &form_metadata,
                     &group.raw_filename,
@@ -249,6 +249,13 @@ pub(crate) async fn publish(
                     &credentials,
                 )
                 .await?;
+                if !should_upload {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        "File already exists, skipping".dimmed()
+                    )?;
+                }
                 continue;
             }
 
@@ -268,7 +275,7 @@ pub(crate) async fn publish(
             .await?
         } else {
             // Run validation checks on the file, but don't upload it (if possible).
-            uv_publish::validate(
+            let should_upload = uv_publish::validate(
                 &group.file,
                 &form_metadata,
                 &group.raw_filename,
@@ -283,20 +290,25 @@ pub(crate) async fn publish(
                 continue;
             }
 
-            let reporter = PublishReporter::single(printer);
-            upload(
-                &group,
-                &form_metadata,
-                &publish_url,
-                &upload_client,
-                retry_policy,
-                &credentials,
-                check_url_client.as_ref(),
-                &download_concurrency,
-                // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                Arc::new(reporter),
-            )
-            .await? // Filename and/or URL are already attached, if applicable.
+            // If validation indicates the file already exists, skip the upload.
+            if !should_upload {
+                false
+            } else {
+                let reporter = PublishReporter::single(printer);
+                upload(
+                    &group,
+                    &form_metadata,
+                    &publish_url,
+                    &upload_client,
+                    retry_policy,
+                    &credentials,
+                    check_url_client.as_ref(),
+                    &download_concurrency,
+                    // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                    Arc::new(reporter),
+                )
+                .await? // Filename and/or URL are already attached, if applicable.
+            }
         };
         info!("Upload succeeded");
 
