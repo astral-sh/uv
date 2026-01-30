@@ -38,6 +38,7 @@ pub enum PreviewFeature {
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
     PublishRequireNormalized = 1 << 25,
+    IndexAssumeName = 1 << 26,
 }
 
 impl PreviewFeature {
@@ -70,6 +71,7 @@ impl PreviewFeature {
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
             Self::PublishRequireNormalized => "publish-require-normalized",
+            Self::IndexAssumeName => "index-assume-name",
         }
     }
 }
@@ -115,6 +117,7 @@ impl FromStr for PreviewFeature {
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             "publish-require-normalized" => Self::PublishRequireNormalized,
+            "index-assume-name" => Self::IndexAssumeName,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -359,6 +362,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::PublishRequireNormalized.as_str(),
             "publish-require-normalized"
+        );
+        assert_eq!(
+            PreviewFeature::IndexAssumeName.as_str(),
+            "index-assume-name"
         );
     }
 }

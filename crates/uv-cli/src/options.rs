@@ -7,6 +7,7 @@ use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{
     ConfigSettings, Index, IndexArg, IndexArgStrategy, PackageConfigSettings, Requirement,
 };
+use uv_preview::{Preview, PreviewFeature};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{
     Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -193,6 +194,7 @@ pub fn resolve_and_combine_indexes(
     default_index: Option<Maybe<Index>>,
     index: Option<Vec<Vec<Maybe<IndexArg>>>>,
     filesystem: Option<&FilesystemOptions>,
+    preview: Preview,
 ) -> Option<Vec<Index>> {
     let filesystem_indexes: Vec<Index> = filesystem
         .map(|filesystem| filesystem.top_level.indexes())
@@ -200,9 +202,14 @@ pub fn resolve_and_combine_indexes(
         .flatten()
         .collect();
 
+    let strategy = if preview.is_enabled(PreviewFeature::IndexAssumeName) {
+        IndexArgStrategy::IgnoreDirectory
+    } else {
+        IndexArgStrategy::PreferDirectory
+    };
     let resolve = |index_arg: IndexArg| -> Index {
         #[allow(clippy::print_stderr, clippy::exit)]
-        match index_arg.try_resolve(&filesystem_indexes, IndexArgStrategy::PreferDirectory) {
+        match index_arg.try_resolve(&filesystem_indexes, strategy) {
             Ok(index) => index,
             Err(error) => {
                 eprintln!("error: {error}");
@@ -243,11 +250,15 @@ impl From<RefreshArgs> for Refresh {
 /// `*Args` types which contain [`uv_distribution_types::IndexArg`] elements and
 /// therefore need the filesystem options.
 pub trait Resolve<A>: Sized {
-    fn resolve(args: A, filesystem: Option<&FilesystemOptions>) -> Self;
+    fn resolve(args: A, filesystem: Option<&FilesystemOptions>, preview: Preview) -> Self;
 }
 
 impl Resolve<ResolverArgs> for PipOptions {
-    fn resolve(args: ResolverArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    fn resolve(
+        args: ResolverArgs,
+        filesystem: Option<&FilesystemOptions>,
+        preview: Preview,
+    ) -> Self {
         let ResolverArgs {
             index_args,
             upgrade,
@@ -297,13 +308,17 @@ impl Resolve<ResolverArgs> for PipOptions {
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::resolve(index_args, filesystem)
+            ..Self::resolve(index_args, filesystem, preview)
         }
     }
 }
 
 impl Resolve<InstallerArgs> for PipOptions {
-    fn resolve(args: InstallerArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    fn resolve(
+        args: InstallerArgs,
+        filesystem: Option<&FilesystemOptions>,
+        preview: Preview,
+    ) -> Self {
         let InstallerArgs {
             index_args,
             reinstall,
@@ -343,13 +358,17 @@ impl Resolve<InstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::resolve(index_args, filesystem)
+            ..Self::resolve(index_args, filesystem, preview)
         }
     }
 }
 
 impl Resolve<ResolverInstallerArgs> for PipOptions {
-    fn resolve(args: ResolverInstallerArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    fn resolve(
+        args: ResolverInstallerArgs,
+        filesystem: Option<&FilesystemOptions>,
+        preview: Preview,
+    ) -> Self {
         let ResolverInstallerArgs {
             index_args,
             upgrade,
@@ -407,13 +426,13 @@ impl Resolve<ResolverInstallerArgs> for PipOptions {
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
             no_sources_package: Some(no_sources_package),
-            ..Self::resolve(index_args, filesystem)
+            ..Self::resolve(index_args, filesystem, preview)
         }
     }
 }
 
 impl Resolve<FetchArgs> for PipOptions {
-    fn resolve(args: FetchArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    fn resolve(args: FetchArgs, filesystem: Option<&FilesystemOptions>, preview: Preview) -> Self {
         let FetchArgs {
             index_args,
             index_strategy,
@@ -425,13 +444,13 @@ impl Resolve<FetchArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             exclude_newer,
-            ..Self::resolve(index_args, filesystem)
+            ..Self::resolve(index_args, filesystem, preview)
         }
     }
 }
 
 impl Resolve<IndexArgs> for PipOptions {
-    fn resolve(args: IndexArgs, filesystem: Option<&FilesystemOptions>) -> Self {
+    fn resolve(args: IndexArgs, filesystem: Option<&FilesystemOptions>, preview: Preview) -> Self {
         let IndexArgs {
             default_index,
             index,
@@ -442,7 +461,7 @@ impl Resolve<IndexArgs> for PipOptions {
         } = args;
 
         Self {
-            index: resolve_and_combine_indexes(default_index, index, filesystem),
+            index: resolve_and_combine_indexes(default_index, index, filesystem, preview),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -467,6 +486,7 @@ pub fn resolver_options(
     resolver_args: ResolverArgs,
     build_args: BuildOptionsArgs,
     filesystem: Option<&FilesystemOptions>,
+    preview: Preview,
 ) -> ResolverOptions {
     let ResolverArgs {
         index_args,
@@ -501,7 +521,12 @@ pub fn resolver_options(
     } = build_args;
 
     ResolverOptions {
-        index: resolve_and_combine_indexes(index_args.default_index, index_args.index, filesystem),
+        index: resolve_and_combine_indexes(
+            index_args.default_index,
+            index_args.index,
+            filesystem,
+            preview,
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -567,6 +592,7 @@ pub fn resolver_installer_options(
     resolver_installer_args: ResolverInstallerArgs,
     build_args: BuildOptionsArgs,
     filesystem: Option<&FilesystemOptions>,
+    preview: Preview,
 ) -> ResolverInstallerOptions {
     let ResolverInstallerArgs {
         index_args,
@@ -606,7 +632,12 @@ pub fn resolver_installer_options(
     } = build_args;
 
     ResolverInstallerOptions {
-        index: resolve_and_combine_indexes(index_args.default_index, index_args.index, filesystem),
+        index: resolve_and_combine_indexes(
+            index_args.default_index,
+            index_args.index,
+            filesystem,
+            preview,
+        ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
