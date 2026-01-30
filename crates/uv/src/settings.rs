@@ -992,6 +992,7 @@ impl ToolUpgradeSettings {
             python_platform,
             upgrade,
             upgrade_package,
+            no_upgrade_package,
             index_args,
             all,
             reinstall,
@@ -1031,6 +1032,7 @@ impl ToolUpgradeSettings {
             upgrade: upgrade_package.is_empty(),
             no_upgrade: false,
             upgrade_package,
+            no_upgrade_package,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -3756,6 +3758,7 @@ impl PipSettings {
             no_sources_package,
             upgrade,
             upgrade_package,
+            no_upgrade_package,
             reinstall,
             reinstall_package,
             exclude_newer_package,
@@ -3786,6 +3789,7 @@ impl PipSettings {
             no_sources_package: top_level_no_sources_package,
             upgrade: top_level_upgrade,
             upgrade_package: top_level_upgrade_package,
+            no_upgrade_package: top_level_no_upgrade_package,
             reinstall: top_level_reinstall,
             reinstall_package: top_level_reinstall_package,
             no_build: top_level_no_build,
@@ -3835,6 +3839,7 @@ impl PipSettings {
         let no_sources_package = no_sources_package.combine(top_level_no_sources_package);
         let upgrade = upgrade.combine(top_level_upgrade);
         let upgrade_package = upgrade_package.combine(top_level_upgrade_package);
+        let no_upgrade_package = no_upgrade_package.combine(top_level_no_upgrade_package);
         let reinstall = reinstall.combine(top_level_reinstall);
         let reinstall_package = reinstall_package.combine(top_level_reinstall_package);
         let torch_backend = torch_backend.combine(top_level_torch_backend);
@@ -4005,6 +4010,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                args.no_upgrade_package.unwrap_or_default(),
             )
             .combine(Upgrade::from_args(
                 upgrade,
@@ -4013,6 +4019,7 @@ impl PipSettings {
                     .flatten()
                     .map(Requirement::from)
                     .collect(),
+                no_upgrade_package.unwrap_or_default(),
             ))
             .unwrap_or_default(),
             reinstall: Reinstall::from_args(

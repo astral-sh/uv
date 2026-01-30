@@ -58,6 +58,10 @@ pub async fn read_requirements_txt(
             .into_iter()
             .filter(|preference| !packages.contains_key(preference.name()))
             .collect(),
+        Upgrade::Exclude(exclusions) => preferences
+            .into_iter()
+            .filter(|preference| exclusions.contains(preference.name()))
+            .collect(),
     })
 }
 

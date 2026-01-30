@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use either::Either;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
@@ -142,28 +142,46 @@ pub enum Upgrade {
     /// Allow package upgrades for all packages, ignoring the existing lockfile.
     All,
 
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    Exclude(FxHashSet<PackageName>),
+
     /// Allow package upgrades, but only for the specified packages.
     Packages(FxHashMap<PackageName, Vec<Requirement>>),
 }
 
 impl Upgrade {
     /// Determine the upgrade selection strategy from the command-line arguments.
-    pub fn from_args(upgrade: Option<bool>, upgrade_package: Vec<Requirement>) -> Option<Self> {
+    pub fn from_args(
+        upgrade: Option<bool>,
+        upgrade_package: Vec<Requirement>,
+        no_upgrade_package: Vec<PackageName>,
+    ) -> Option<Self> {
         match upgrade {
-            Some(true) => Some(Self::All),
+            Some(true) => {
+                if no_upgrade_package.is_empty() {
+                    Some(Self::All)
+                } else {
+                    Some(Self::Exclude(no_upgrade_package.into_iter().collect()))
+                }
+            }
             // TODO(charlie): `--no-upgrade` with `--upgrade-package` should allow the specified
             // packages to be upgraded. Right now, `--upgrade-package` is silently ignored.
             Some(false) => Some(Self::None),
             None if upgrade_package.is_empty() => None,
-            None => Some(Self::Packages(upgrade_package.into_iter().fold(
-                FxHashMap::default(),
-                |mut map, requirement| {
-                    map.entry(requirement.name.clone())
-                        .or_default()
-                        .push(requirement);
-                    map
-                },
-            ))),
+            None => {
+                let exclusions: FxHashSet<_> = no_upgrade_package.into_iter().collect();
+                Some(Self::Packages(
+                    upgrade_package
+                        .into_iter()
+                        .filter(|req| !exclusions.contains(&req.name))
+                        .fold(FxHashMap::default(), |mut map, requirement| {
+                            map.entry(requirement.name.clone())
+                                .or_default()
+                                .push(requirement);
+                            map
+                        }),
+                ))
+            }
         }
     }
 
@@ -191,6 +209,7 @@ impl Upgrade {
         match self {
             Self::None => false,
             Self::All => true,
+            Self::Exclude(exclusions) => !exclusions.contains(package_name),
             Self::Packages(packages) => packages.contains_key(package_name),
         }
     }
@@ -215,7 +234,22 @@ impl Upgrade {
     pub fn combine(self, other: Self) -> Self {
         match self {
             // Setting `--upgrade` or `--no-upgrade` should clear previous `--upgrade-package` selections.
-            Self::All | Self::None => self,
+            Self::None => self,
+            Self::All => match other {
+                // Unless `--no-upgrade-package` was also enabled previously, then respect that.
+                Self::Exclude(other_exclusions) => Self::Exclude(other_exclusions),
+                _ => self,
+            },
+            // If `--upgrade` and `--no-upgrade-package` is set, it usually overrides any previous args.
+            Self::Exclude(self_exclusions) => match other {
+                // If those were both set previously, combine the exclusions.
+                Self::Exclude(other_exclusions) => {
+                    let mut combined = self_exclusions;
+                    combined.extend(other_exclusions);
+                    Self::Exclude(combined)
+                }
+                _ => Self::Exclude(self_exclusions),
+            },
             Self::Packages(self_packages) => match other {
                 // If `--upgrade` was enabled previously, `--upgrade-package` is subsumed by upgrading all packages.
                 Self::All => other,
@@ -229,6 +263,12 @@ impl Upgrade {
                     }
                     Self::Packages(combined)
                 }
+                // if `--upgrade` and `--no-upgrade-package` were enabled previously,
+                // then `--upgrade-package` should explicitly reenable that package
+                Self::Exclude(mut other_exclusions) => {
+                    other_exclusions.retain(|package| !self_packages.contains_key(package));
+                    Self::Exclude(other_exclusions)
+                }
             },
         }
     }
@@ -239,7 +279,7 @@ impl From<Upgrade> for Refresh {
     fn from(value: Upgrade) -> Self {
         match value {
             Upgrade::None => Self::None(Timestamp::now()),
-            Upgrade::All => Self::All(Timestamp::now()),
+            Upgrade::All | Upgrade::Exclude(_) => Self::All(Timestamp::now()),
             Upgrade::Packages(packages) => Self::Packages(
                 packages.into_keys().collect::<Vec<_>>(),
                 Vec::new(),
