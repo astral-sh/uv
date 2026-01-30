@@ -558,6 +558,13 @@ impl EnvVars {
     #[attr_added_in("0.3.4")]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// When set, reflink tests will fail instead of skipping when the filesystem
+    /// does not support reflink. Use together with `UV_INTERNAL__TEST_DIR` pointed
+    /// at a reflink-capable filesystem (e.g., btrfs, XFS, APFS).
+    #[attr_hidden]
+    #[attr_added_in("next release")]
+    pub const UV_INTERNAL__TEST_EXPECT_REFLINK: &'static str = "UV_INTERNAL__TEST_EXPECT_REFLINK";
+
     /// Used to force treating an interpreter as "managed" during tests.
     #[attr_hidden]
     #[attr_added_in("0.8.0")]

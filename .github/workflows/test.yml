@@ -77,6 +77,43 @@ jobs:
             --workspace \
             --profile ci-linux
 
+  cargo-test-linux-reflink:
+    timeout-minutes: 10
+    runs-on: depot-ubuntu-24.04-16
+    name: "cargo test reflink on linux (btrfs)"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: rui314/setup-mold@725a8794d15fc7563f59595bd9556495c0564878 # v1
+
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt-get install -y btrfs-progs
+          truncate -s 1G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Cargo test (reflink)"
+        env:
+          UV_INTERNAL__TEST_DIR: /btrfs
+          UV_INTERNAL__TEST_EXPECT_REFLINK: "1"
+          RUST_BACKTRACE: 1
+        run: |
+          cargo test \
+            --profile fast-build \
+            -p uv-fs --lib link
+
   cargo-test-macos:
     timeout-minutes: 20
     # Only run macOS tests on main without opt-in
@@ -114,6 +151,8 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
+          # macOS tmpdir is on APFS which supports reflink; ensure tests don't silently skip
+          UV_INTERNAL__TEST_EXPECT_REFLINK: "1"
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
