@@ -3738,14 +3738,14 @@ fn python_install_build_version_pypy() {
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
-        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.10.16 in [TIME]
-     + pypy-3.10.16-[PLATFORM] (python3.10)
+     + pypy-3.10.16-[PLATFORM] (pypy3.10)
     ");
 
     // A BUILD file should be present with the version
@@ -4275,14 +4275,14 @@ fn python_install_compile_bytecode_graalpy() {
         .with_python_download_cache();
 
     // Should work for graalpy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.12.0 in [TIME]
-     + graalpy-3.12.0-[PLATFORM] (python3.12)
+     + graalpy-3.12.0-[PLATFORM] (graalpy3.12)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
@@ -4298,14 +4298,14 @@ fn python_install_compile_bytecode_pypy() {
         .with_python_download_cache();
 
     // Should work for pypy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.11.13 in [TIME]
-     + pypy-3.11.13-[PLATFORM] (python3.11)
+     + pypy-3.11.13-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
