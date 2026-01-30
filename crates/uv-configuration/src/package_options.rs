@@ -234,9 +234,15 @@ impl Upgrade {
     pub fn combine(self, other: Self) -> Self {
         match self {
             // Setting `--upgrade` or `--no-upgrade` should clear previous `--upgrade-package` selections.
-            Self::All | Self::None => self,
+            Self::None => self,
+            Self::All => match other {
+                // Unless `--no-upgrade-package` was also enabled previously, then respect that.
+                Self::Exclude(other_exclusions) => Self::Exclude(other_exclusions),
+                _ => self,
+            },
+            // If `--upgrade` and `--no-upgrade-package` is set, it usually overrides any previous args.
             Self::Exclude(self_exclusions) => match other {
-                Self::None => Self::Exclude(self_exclusions),
+                // If those were both set previously, combine the exclusions.
                 Self::Exclude(other_exclusions) => {
                     let mut combined = self_exclusions;
                     combined.extend(other_exclusions);
@@ -257,7 +263,12 @@ impl Upgrade {
                     }
                     Self::Packages(combined)
                 }
-                Self::Exclude(other_exclusions) => Self::Exclude(other_exclusions),
+                // if `--upgrade` and `--no-upgrade-package` were enabled previously,
+                // then `--upgrade-package` should explicitly reenable that package
+                Self::Exclude(mut other_exclusions) => {
+                    other_exclusions.retain(|package| !self_packages.contains_key(package));
+                    Self::Exclude(other_exclusions)
+                },
             },
         }
     }
