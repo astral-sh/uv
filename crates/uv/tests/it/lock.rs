@@ -19250,6 +19250,49 @@ fn lock_repeat_named_index() -> Result<()> {
     Ok(())
 }
 
+/// If multiple indexes are marked as default within a single file, we should raise an error.
+#[test]
+fn lock_multiple_default_indexes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "first"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[tool.uv.index]]
+        name = "second"
+        url = "https://example.com"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    found multiple indexes with `default = true`; only one index may be marked as default
+    "###);
+
+    Ok(())
+}
+
 /// If a name is defined in both the workspace root and the member, prefer the index in the member.
 #[test]
 fn lock_repeat_named_index_member() -> Result<()> {
