@@ -19276,15 +19276,19 @@ fn lock_multiple_default_indexes() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: Found multiple indexes with `default = true`; only one index may be marked as default. This will become an error in the future.
-    Resolved 2 packages in [TIME]
-    ");
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 8, column 9
+      |
+    8 |         [[tool.uv.index]]
+      |         ^^^^^^^^^^^^^^^^^
+    found multiple indexes with `default = true`; only one index may be marked as default
+    "###);
 
     Ok(())
 }
