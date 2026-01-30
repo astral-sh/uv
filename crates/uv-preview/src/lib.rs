@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     ops::BitOr,
     str::FromStr,
 };
@@ -111,9 +111,16 @@ impl FromStr for PreviewFeature {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
     flags: BitFlags<PreviewFeature>,
+}
+
+impl Debug for Preview {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let flags: Vec<_> = self.flags.iter().collect();
+        f.debug_struct("Preview").field("flags", &flags).finish()
+    }
 }
 
 impl Preview {
