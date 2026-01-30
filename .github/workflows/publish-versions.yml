@@ -35,7 +35,7 @@ jobs:
       - name: "Update versions"
         env:
           PLAN: ${{ inputs.plan }}
-        run: printf '%s' "$PLAN" | uv run astral-versions/scripts/publish-version.py --format cargo-dist --output astral-versions/v1
+        run: printf '%s' "$PLAN" | uv run astral-versions/scripts/convert-cargo-dist-plan.py | uv run astral-versions/scripts/insert-versions.py --name uv
 
       - name: "Commit versions"
         working-directory: astral-versions
