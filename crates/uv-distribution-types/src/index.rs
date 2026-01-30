@@ -270,13 +270,13 @@ pub enum IndexFormat {
 }
 
 impl Index {
-    /// Initialize an [`Index`] from a pip-style `--index-url`.
-    pub fn from_index_url(url: IndexUrl) -> Self {
+    /// Initialize an [`Index`] from a url
+    pub fn new(url: IndexUrl) -> Self {
         Self {
-            url,
             name: None,
+            url,
             explicit: false,
-            default: true,
+            default: false,
             origin: None,
             format: IndexFormat::Simple,
             publish_url: None,
@@ -284,44 +284,78 @@ impl Index {
             ignore_error_codes: None,
             cache_control: None,
         }
+    }
+
+    /// Initialize an [`Index`] from a pip-style `--index-url`.
+    pub fn from_index_url(url: IndexUrl) -> Self {
+        Self::new(url).with_default()
     }
 
     /// Initialize an [`Index`] from a pip-style `--extra-index-url`.
     pub fn from_extra_index_url(url: IndexUrl) -> Self {
-        Self {
-            url,
-            name: None,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
-        }
+        Self::new(url)
     }
 
     /// Initialize an [`Index`] from a pip-style `--find-links`.
     pub fn from_find_links(url: IndexUrl) -> Self {
-        Self {
-            url,
-            name: None,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Flat,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
+        Self::new(url).with_format(IndexFormat::Flat)
+    }
+
+    /// Try to initialise an index from a name and url CLI argument
+    ///
+    /// Returns `Ok(None)` if `s` didn't appear to match the right format.
+    /// e.g.: `name=https://pypi.org/simple`
+    pub fn try_from_named_cli(s: &str) -> Result<Option<Self>, IndexSourceError> {
+        if let Some((name, url)) = s.split_once('=')
+            && !name.chars().any(|c| c == ':')
+        {
+            let name = IndexName::from_str(name)?;
+            let url = IndexUrl::from_str(url)?;
+            Ok(Some(
+                Self::new(url).with_name(name).with_origin(Origin::Cli),
+            ))
+        } else {
+            Ok(None)
         }
+    }
+
+    /// Parse a default index passed on the command line
+    pub fn from_default_index(s: &str) -> Result<Self, IndexSourceError> {
+        // See if it looks like a source prefixed with a name
+        if let Some(index) = Self::try_from_named_cli(s)? {
+            return Ok(index.with_default());
+        }
+
+        // Otherwise, assume the source is a URL.
+        let url = IndexUrl::from_str(s)?;
+        Ok(Self::new(url).with_origin(Origin::Cli).with_default())
+    }
+
+    /// Set the [`IndexName`] of the index.
+    #[must_use]
+    pub fn with_name(mut self, name: IndexName) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    /// Set the index as a default
+    #[must_use]
+    pub fn with_default(mut self) -> Self {
+        self.default = true;
+        self
     }
 
     /// Set the [`Origin`] of the index.
     #[must_use]
     pub fn with_origin(mut self, origin: Origin) -> Self {
         self.origin = Some(origin);
+        self
+    }
+
+    /// Set the [`IndexFormat`] of the index.
+    #[must_use]
+    pub fn with_format(mut self, format: IndexFormat) -> Self {
+        self.format = format;
         self
     }
 
@@ -433,17 +467,7 @@ impl From<IndexUrl> for Index {
 #[serde(untagged)]
 pub enum IndexArg {
     Resolved(Index),
-    Unresolved(UnresolvedIndex),
-}
-
-/// An unresolved index passed by the user by its name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(rename_all = "kebab-case")]
-pub struct UnresolvedIndex {
-    pub name: IndexName,
-    #[serde(default)]
-    pub default: bool,
+    Unresolved(IndexName),
 }
 
 #[derive(Debug, Error)]
@@ -451,50 +475,24 @@ pub struct UnresolvedIndex {
 pub struct ResolveIndexArgError(IndexName);
 
 impl IndexArg {
-    /// Parse an Index passed on the command line
-    pub fn from_cli(s: &str, default: bool) -> Result<Self, IndexSourceError> {
-        // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self::Resolved(Index {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default,
-                    origin: Some(Origin::Cli),
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                }));
-            }
+    /// Parse a non-default index passed on the command line
+    pub fn from_cli(s: &str) -> Result<Self, IndexSourceError> {
+        // See if it looks like a source prefixed with a name
+        if let Some(index) = Index::try_from_named_cli(s)? {
+            return Ok(Self::Resolved(index));
         }
 
         // Consider if it could be just a name
         if let Ok(name) = IndexName::from_str(s) {
-            return Ok(Self::Unresolved(UnresolvedIndex { name, default }));
+            return Ok(Self::Unresolved(name));
         }
 
         // Otherwise, assume the source is a URL.
         let url = IndexUrl::from_str(s)?;
-        Ok(Self::Resolved(Index {
-            name: None,
-            url,
-            explicit: false,
-            default,
-            origin: Some(Origin::Cli),
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
-        }))
+        Ok(Self::Resolved(Index::new(url).with_origin(Origin::Cli)))
     }
 
-    /// Converts from `IndexArg` to `Option<Index>`.
+    /// Converts from [`IndexArg`] to [`Option<Index>`].
     ///
     /// Useful when filtering out unresolved indices.
     pub fn index(self) -> Option<Index> {
@@ -504,6 +502,9 @@ impl IndexArg {
         }
     }
 
+    /// Attempt to look up the [`IndexArg`] in the passed list of indexes
+    ///
+    /// The origin is inherited from the index
     pub fn try_resolve<I>(self, indexes: I) -> Result<Index, ResolveIndexArgError>
     where
         I: IntoIterator,
@@ -514,59 +515,16 @@ impl IndexArg {
             Self::Unresolved(unresolved) => {
                 if let Some(index) = indexes
                     .into_iter()
-                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved.name))
+                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
                 {
                     Ok(Index {
-                        default: unresolved.default,
-                        origin: Some(Origin::Cli),
                         ..index.borrow().clone()
                     })
                 } else {
-                    Err(ResolveIndexArgError(unresolved.name))
+                    Err(ResolveIndexArgError(unresolved))
                 }
             }
         }
-    }
-}
-
-impl FromStr for IndexArg {
-    type Err = IndexSourceError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self::Resolved(Index {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default: false,
-                    origin: None,
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                }));
-            }
-        }
-
-        // Otherwise, assume the source is a URL.
-        let url = IndexUrl::from_str(s)?;
-        Ok(Self::Resolved(Index {
-            name: None,
-            url,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
-        }))
     }
 }
 
