@@ -447,6 +447,13 @@ pub(crate) fn create(
 
     // Add all the activate scripts for different shells
     for (name, template) in ACTIVATE_TEMPLATES {
+        // csh has no way to determine its own script location, so a relocatable
+        // activate.csh is not possible. Skip it entirely instead of generating a
+        // non-functional script.
+        if relocatable && *name == "activate.csh" {
+            continue;
+        }
+
         let path_sep = if cfg!(windows) { ";" } else { ":" };
 
         let relative_site_packages = [
@@ -477,9 +484,7 @@ pub(crate) fn create(
                     escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
                 )
             }
-            // Note:
-            // * relocatable activate scripts appear not to be possible in csh.
-            // * `activate.ps1` is already relocatable by default.
+            // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
 
