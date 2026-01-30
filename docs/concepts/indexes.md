@@ -50,6 +50,17 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
+Additionally, `--index` can reference a named index defined in a configuration file.
+
+Names are looked up in the project's `pyproject.toml`, then the workspace's `pyproject.toml` (if in
+a workspace), and finally the user's and system's `uv.toml` files.
+
+!!! note
+
+    In a future release, if the argument to `--index` looks like an index name, it will always be
+    treated as such and never as a directory path. This feature is available in
+    [preview](../preview.md).
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
