@@ -549,9 +549,9 @@ fn hardlink_wheel_files(
             Attempt::Initial => {
                 // Once https://github.com/rust-lang/rust/issues/86442 is stable, use that.
                 attempt = Attempt::Subsequent;
-                if let Err(err) = fs::hard_link(path, &out_path) {
-                    // If the file already exists, remove it and try again.
-                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                match hard_link_or_reset(path, &out_path) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
                             "File already exists (initial attempt), overwriting: {}",
                             out_path.display()
@@ -559,7 +559,7 @@ fn hardlink_wheel_files(
                         // Removing and recreating would lead to race conditions.
                         let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
-                        if fs::hard_link(path, &tempfile).is_ok() {
+                        if hard_link_or_reset(path, &tempfile).is_ok() {
                             fs_err::rename(&tempfile, &out_path)?;
                         } else {
                             debug!(
@@ -570,7 +570,8 @@ fn hardlink_wheel_files(
                             synchronized_copy(path, &out_path, locks)?;
                             attempt = Attempt::UseCopyFallback;
                         }
-                    } else {
+                    }
+                    Err(_) => {
                         debug!(
                             "Failed to hardlink `{}` to `{}`, attempting to copy files as a fallback",
                             out_path.display(),
@@ -582,9 +583,9 @@ fn hardlink_wheel_files(
                 }
             }
             Attempt::Subsequent => {
-                if let Err(err) = fs::hard_link(path, &out_path) {
-                    // If the file already exists, remove it and try again.
-                    if err.kind() == std::io::ErrorKind::AlreadyExists {
+                match hard_link_or_reset(path, &out_path) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                         debug!(
                             "File already exists (subsequent attempt), overwriting: {}",
                             out_path.display()
@@ -592,9 +593,10 @@ fn hardlink_wheel_files(
                         // Removing and recreating would lead to race conditions.
                         let tempdir = tempdir_in(&site_packages)?;
                         let tempfile = tempdir.path().join(entry.file_name());
-                        fs::hard_link(path, &tempfile)?;
+                        hard_link_or_reset(path, &tempfile)?;
                         fs_err::rename(&tempfile, &out_path)?;
-                    } else {
+                    }
+                    Err(err) => {
                         return Err(err.into());
                     }
                 }
@@ -732,6 +734,50 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 
     // Copy the file, which will also set its permissions.
     fs::copy(from, to)?;
+
+    Ok(())
+}
+
+/// Try to create a hard link, handling EMLINK/`ERROR_TOO_MANY_LINKS` by resetting the source file's inode.
+///
+/// When a file has too many hardlinks (e.g., 65000 on ext4, ~1024 on NTFS, 177 on AWS EFS),
+/// creating another hardlink fails with EMLINK (Unix) or `ERROR_TOO_MANY_LINKS` (Windows).
+/// This function handles that by copying the source file to break its hardlink chain,
+/// then retrying the hardlink.
+fn hard_link_or_reset(source: &Path, dest: &Path) -> io::Result<()> {
+    match fs::hard_link(source, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::TooManyLinks => {
+            warn_user_once!(
+                "Resetting cache entry due to too many hardlinks: {}",
+                source.user_display()
+            );
+            reset_file_inode(source)?;
+            fs::hard_link(source, dest)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Reset a file's inode by copying it to a temp file and renaming back.
+///
+/// This gives the file a new inode with nlink=1, breaking the hardlink
+/// chain with any previously linked files.
+fn reset_file_inode(path: &Path) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "path has no parent directory")
+    })?;
+    let tempdir = tempfile::tempdir_in(parent)?;
+    let temp_path = tempdir.path().join(
+        path.file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?,
+    );
+
+    // Copy to temp file
+    fs::copy(path, &temp_path)?;
+
+    // Atomic rename over original
+    fs::rename(&temp_path, path)?;
 
     Ok(())
 }
