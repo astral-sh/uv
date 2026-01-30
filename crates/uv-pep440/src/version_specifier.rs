@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
-use std::ops::Bound;
+use std::ops::{Bound, DerefMut};
 use std::str::FromStr;
 
+use crate::version::VersionDigit;
 use crate::{
     Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
 };
@@ -39,6 +40,12 @@ impl std::ops::Deref for VersionSpecifiers {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for VersionSpecifiers {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -126,6 +133,57 @@ impl VersionSpecifiers {
         specifiers.extend(VersionSpecifier::from_release_only_bounds((start, end)));
 
         Self::from_unsorted(specifiers)
+    }
+
+    /// Bump last constraint if it doesn't contain `latest`
+    pub fn bump_last(
+        &mut self,
+        latest: &Version,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) -> (bool, bool, Option<usize>, bool) {
+        match self.last_mut().filter(|last| !last.contains(latest)) {
+            Some(last) => {
+                let last_copy = last.clone();
+                let mut last_new = last.clone();
+                let (mut bumped, mut upgraded) = last_new.version.bump_to(latest, last.operator);
+                // Special case: unresolvable requirement has been downgraded to latest
+                // We need to change >2.0 to >=1.2 for latest 1.2.3 (EqualStar and >= stay untouched)
+                if bumped && last.operator == Operator::GreaterThan {
+                    last_new.operator = Operator::GreaterThanEqual; // Operator downgrade
+                    upgraded = false;
+                }
+                let old = last_copy.version.release();
+                let new = last_new.version.release();
+                let mut semver = bumped
+                    .then(|| old.semver_change(&new, last_new.operator))
+                    .flatten();
+                let mut skip = false;
+                if matches!(semver, Some(i) if i > 0 && allow.contains(&i)) {
+                    *last = last_new;
+                } else if bumped {
+                    bumped = false;
+                    upgraded = false;
+                    skip = skipped.add(semver.unwrap_or(0)); // Skip forbidden digits
+                    semver = None;
+                }
+                (bumped, upgraded, semver, skip)
+            }
+            _ => (false, false, None, false),
+        }
+    }
+
+    /// Remove trailing zeroes from all specifiers
+    #[must_use]
+    pub fn remove_zeroes(&self) -> Self {
+        Self::from_unsorted(
+            self.iter()
+                .map(|v| {
+                    VersionSpecifier::from_version(*v.operator(), v.version().remove_zeroes())
+                        .unwrap()
+                })
+                .collect(),
+        )
     }
 }
 
@@ -988,9 +1046,8 @@ impl std::fmt::Display for TildeVersionSpecifier<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, str::FromStr};
-
     use indoc::indoc;
+    use std::{cmp::Ordering, str::FromStr};
 
     use crate::LocalSegment;
 
@@ -2050,5 +2107,161 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"
         );
+    }
+
+    #[test]
+    fn test_bump_last() {
+        let success = [
+            (1, "1.2.3", "<1", "<2", 1), // upgrades
+            (0, "1.2.3", "<2", "", 0),
+            (0, "1.2.3", "<2.0", "", 0),
+            (0, "1.2.3", "<2.0.0", "", 0),
+            (1, "1.2.3", "<1.0", "<1.3", 1),
+            (2, "1.2.3", "<1.2", "<1.3", 1),
+            (1, "2.0.0", "<1.0", "<2.1", 1),
+            (0, "1.2.3", "<1.3", "", 0),
+            (1, "1.2.3", "<1.0.0", "<1.3.0", 1),
+            (2, "1.2.3", "<1.2.0", "<1.3.0", 1),
+            (2, "1.2.3", "<1.2.3", "<1.3.0", 1),
+            (0, "1.2.3", "<1.2.4", "", 0),
+            (0, "1.2.3", "<1.3.0", "", 0),
+            (4, "1.2.3.4", "<1.2.3.4", "<1.2.3.5", 1),
+            (1, "1.2.3", "<=1", "<=2", 1),
+            (2, "1.2.3", "<=1.0", "<=1.3", 1),
+            (2, "1.2.3", "<=1.2", "<=1.3", 1),
+            (2, "1.2.3", "<=1.0.0", "<=1.3.0", 1),
+            (2, "1.2.3", "<=1.2.0", "<=1.3.0", 1),
+            (3, "1.2.3", "<=1.2.2", "<=1.2.3", 1),
+            (4, "1.2.3.4", "<=1.2.3.3", "<=1.2.3.4", 1),
+            (1, "1.2.3", "~=0.9", "~=1.2", 1),
+            (1, "1.2.3", "~=0.9.1", "~=1.2.3", 1),
+            (0, "1.2.3", "~=1.0", "", 0),
+            (2, "1.2.3", "~=1.1.2", "~=1.2.3", 1),
+            (0, "1.2.3", "~=1.2.2", "", 0),
+            (1, "1.2.3", "==0.*", "==1.*", 1),
+            (2, "1.2.3", "==1.0.*", "==1.2.*", 1),
+            (2, "1.2.3", "==1.1.*", "==1.2.*", 1),
+            (1, "1.2.3", "==0.1.0", "==1.2.3", 1),
+            (1, "1.2.3", "==0.1.2", "==1.2.3", 1),
+            (4, "1.2.3.4", "==1.2.3.3", "==1.2.3.4", 1),
+            (0, "1.2.3", "<=1.2.3", "", 0),
+            (0, "1.2.3", "<=1.2.4", "", 0),
+            (1, "1.2.3", ">2", ">=1", 2), // downgrades
+            (1, "1.2.3", ">2.0", ">=1.2", 2),
+            (1, "1.2.3", ">2.0.0", ">=1.2.0", 2),
+            (1, "1.2.3", ">2.0.1", ">=1.2.3", 2),
+            (2, "1.2.3", ">1.3", ">=1.2", 2),
+            (2, "1.2.3", ">1.3.0", ">=1.2.0", 2),
+            (2, "1.2.3", ">1.3.1", ">=1.2.3", 2),
+            (3, "1.2.3", ">1.2.3", ">=1.2.3", 2), // operator "downgrade"
+            (3, "1.2.3", ">1.2.4", ">=1.2.3", 2),
+            (4, "1.2.3.4", ">1.2.3.4", ">=1.2.3.4", 2), // operator "downgrade"
+            (1, "1.2.3", ">=2", ">=1", 2),
+            (1, "1.2.3", ">=2.0", ">=1.2", 2),
+            (1, "1.2.3", ">=2.0.0", ">=1.2.0", 2),
+            (1, "1.2.3", ">=2.0.1", ">=1.2.3", 2),
+            (2, "1.2.3", ">=1.3", ">=1.2", 2),
+            (2, "1.2.3", ">=1.3.0", ">=1.2.0", 2),
+            (2, "1.2.3", ">=1.3.1", ">=1.2.3", 2),
+            (3, "1.2.3", ">=1.2.4", ">=1.2.3", 2),
+            (4, "1.2.3.4", ">=1.2.3.5", ">=1.2.3.4", 2),
+            (1, "1.2.3", "~=2.0", "~=1.2", 2),
+            (2, "1.2.3", "~=1.3", "~=1.2", 2),
+            (2, "1.2.3", "~=1.3.2", "~=1.2.3", 2),
+            (3, "1.2.3", "~=1.2.5", "~=1.2.3", 2),
+            (1, "1.2.3", "==2.*", "==1.*", 2),
+            (1, "1.2.3", "==2.0.*", "==1.2.*", 2),
+            (1, "1.2.3", "==2.1.*", "==1.2.*", 2),
+            (2, "1.2.3", "==1.3.*", "==1.2.*", 2),
+            (2, "1.2.3", "==1.3.0", "==1.2.3", 2),
+            (2, "1.2.3", "==1.3.2", "==1.2.3", 2),
+            (4, "1.2.3.4", "==1.2.3.5", "==1.2.3.4", 2),
+            (0, "1.2.3", ">1", "", 0), // unchanged
+            (0, "1.2.3", ">1.2", "", 0),
+            (0, "1.2.3", ">1.2.0", "", 0),
+            (0, "1.2.3", ">1.2.2", "", 0),
+            (0, "1.2.3.4", ">1.2.3.3", "", 0),
+            (0, "1.2.3", ">=1", "", 0),
+            (0, "1.2.3", ">=1.2", "", 0),
+            (0, "1.2.3", ">=1.2.0", "", 0),
+            (0, "1.2.3", ">=1.2.3", "", 0),
+            (0, "1.2.3.4", ">=1.2.3.4", "", 0),
+            (0, "1.2.3", "==1.*", "", 0),
+            (0, "1.2.3", "==1.2.*", "", 0),
+            (0, "1.2.3", "==1.2.3", "", 0),
+            (0, "1.2.3.4", "==1.2.3.*", "", 0),
+            (0, "1.2.3.4", "==1.2.3.4", "", 0),
+            (2, "0.1", "<0.1.0", "<0.2", 1), // irregular versions (i.e. pydantic 0.1)
+            (2, "0.1", ">0.1", ">=0.1", 2),  // irregular versions (i.e. pydantic 0.1)
+        ];
+        for (i, tuple) in success.iter().enumerate() {
+            #[allow(clippy::cast_possible_truncation)]
+            let current_line = line!() - (success.len() - i + 3) as u32;
+            let (semver, latest, old, new, upgrade) = tuple;
+            // if i != 0 { continue }
+            let mut modified = VersionSpecifiers::from_str(old).unwrap();
+            let old = VersionSpecifiers::from_str(old).unwrap();
+            let new = VersionSpecifiers::from_str(new).unwrap();
+            let latest = Version::from_str(latest).unwrap();
+            let mut skipped = VersionDigit::default();
+            let (bumped, upgraded, semver_change, _skip) =
+                modified.bump_last(&latest, &[1, 2, 3, 4], &mut skipped);
+            let should_bump = !new.to_string().is_empty();
+            let not = if should_bump { "not " } else { "" };
+            let semver_changed = semver_change.unwrap_or(0);
+            let testcase = format!("\nline {current_line}: {tuple:?}");
+            assert_eq!(
+                old.contains(&latest),
+                !bumped && !should_bump,
+                "[{i}]: test data incorrect: old {old} contains {latest} -> should not bump{testcase}"
+            );
+            assert!(
+                new.contains(&latest),
+                "[{i}]: test data incorrect: new {new} doesn't contain {latest} -> should bump{testcase}"
+            );
+            assert_eq!(
+                should_bump,
+                *upgrade != 0,
+                "[{i}]: {} and expected 0 (unchanged) but test data = {upgrade}{testcase}",
+                if should_bump {
+                    "should bump"
+                } else {
+                    "should not bump"
+                }
+            );
+            assert_eq!(
+                bumped, should_bump,
+                "[{i}]: did {not}bump {old} to {new} for {latest}{testcase}"
+            );
+            assert!(
+                skipped.is_empty(),
+                "[{i}]: skipped {skipped}: did not bump {old} to {new} {latest}{testcase}",
+            );
+            assert_eq!(
+                upgraded,
+                should_bump && *upgrade == 1,
+                "[{i}]: did not {} {old} to {new} for {latest}{testcase}",
+                if *upgrade == 1 {
+                    "upgrade"
+                } else {
+                    "downgrade"
+                }
+            );
+            if !should_bump {
+                assert_eq!(
+                    modified, old,
+                    "[{i}]: expected unchanged {old} but got {modified}{testcase}"
+                );
+                continue;
+            }
+            assert_eq!(
+                modified, new,
+                "[{i}]: expected {old} to become {new} but got {modified}{testcase}"
+            );
+            assert_eq!(
+                *semver, semver_changed,
+                "[{i}]: expected {old} -> {new} = semver {semver} but got {semver_changed}{testcase}"
+            );
+        }
     }
 }

@@ -1,20 +1,27 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-use std::{fmt, iter, mem};
+use std::{
+    fmt,
+    io::{self, Write},
+    iter, mem,
+};
 
 use itertools::Itertools;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
-    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
+    Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TableLike, TomlError,
+    Value,
 };
-
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Index;
+use uv_distribution_types::{Index, RequiresPython};
 use uv_fs::PortablePath;
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionDigit, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -259,6 +266,39 @@ pub enum DependencyTarget {
     PyProjectToml,
 }
 
+type UpgradeResult = (
+    usize,
+    String,
+    Requirement,
+    Requirement,
+    Version,
+    bool,
+    DependencyType,
+    Option<usize>,
+    Option<RequiresPython>,
+);
+
+type VersionedPackages = FxHashMap<Option<RequiresPython>, FxHashSet<PackageName>>;
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct PackageVersions {
+    versions: HashMap<PackageName, HashMap<Option<RequiresPython>, Version>>,
+}
+
+impl PackageVersions {
+    pub fn insert(&mut self, name: PackageName, version: Version, python: Option<RequiresPython>) {
+        self.versions
+            .entry(name)
+            .or_default()
+            .insert(python, version);
+    }
+
+    #[allow(clippy::ref_option)]
+    fn find(&self, name: &PackageName, python: &Option<RequiresPython>) -> Option<&Version> {
+        self.versions.get(name).and_then(|v| v.get(python))
+    }
+}
+
 impl PyProjectTomlMut {
     /// Initialize a [`PyProjectTomlMut`] from a [`str`].
     pub fn from_toml(raw: &str, target: DependencyTarget) -> Result<Self, Error> {
@@ -329,6 +369,13 @@ impl PyProjectTomlMut {
                 .transpose()?,
         };
         Ok(doc)
+    }
+
+    pub fn get_requires_python(&self) -> Option<&str> {
+        self.doc
+            .get("project")
+            .and_then(|project| project.get("requires-python"))
+            .and_then(|item| item.as_str())
     }
 
     /// Adds a dependency to `project.dependencies`.
@@ -1121,8 +1168,8 @@ impl PyProjectTomlMut {
     /// Returns all the places in this `pyproject.toml` that contain a dependency with the given
     /// name.
     ///
-    /// This method searches `project.dependencies`, `tool.uv.dev-dependencies`, and
-    /// `tool.uv.optional-dependencies`.
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
     pub fn find_dependency(
         &self,
         name: &PackageName,
@@ -1190,6 +1237,370 @@ impl PyProjectTomlMut {
         }
 
         types
+    }
+
+    /// Returns package names of all dependencies with version constraints, including requires-python.
+    ///
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
+    pub fn find_versioned_dependencies(&self) -> VersionedPackages {
+        let mut versioned_dependencies = FxHashMap::default();
+
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
+            // Check `project.dependencies`.
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
+                Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies, None);
+            }
+
+            // Check `project.optional-dependencies`.
+            if let Some(extras) = project
+                .get("optional-dependencies")
+                .and_then(Item::as_table)
+            {
+                for (extra, dependencies) in extras {
+                    let Some(dependencies) = dependencies.as_array() else {
+                        continue;
+                    };
+                    let Ok(_extra) = ExtraName::from_str(extra) else {
+                        continue;
+                    };
+                    Self::extract_names_if_versioned(
+                        &mut versioned_dependencies,
+                        dependencies,
+                        None,
+                    );
+                }
+            }
+        }
+
+        // Check `dependency-groups`.
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            let group_requires_python = self.get_uv_tool_dep_groups_requires_python();
+            for (group, dependencies) in groups {
+                let Ok(_group) = GroupName::from_str(group) else {
+                    continue;
+                };
+                let Some(dependencies) = dependencies.as_array() else {
+                    continue;
+                };
+                let requires_python = group_requires_python.get(&_group.to_string());
+                Self::extract_names_if_versioned(
+                    &mut versioned_dependencies,
+                    dependencies,
+                    requires_python,
+                );
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`.
+        if let Some(dependencies) = self
+            .doc
+            .get("tool")
+            .and_then(Item::as_table)
+            .and_then(|tool| tool.get("uv"))
+            .and_then(Item::as_table)
+            .and_then(|uv| uv.get("dev-dependencies"))
+            .and_then(Item::as_array)
+        {
+            Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies, None);
+        }
+
+        versioned_dependencies
+    }
+
+    fn extract_names_if_versioned(
+        packages: &mut VersionedPackages,
+        dependencies: &Array,
+        group_requires: Option<&RequiresPython>,
+    ) {
+        let mut found = FxHashMap::default();
+        for dep in dependencies {
+            let Some(req) = dep.as_str().and_then(try_parse_requirement) else {
+                continue;
+            };
+            // Skip requirements without version constraints
+            if req.version_or_url.is_none() {
+                continue;
+            }
+            found
+                .entry(group_requires)
+                .or_insert_with(FxHashSet::default)
+                .insert(req.name);
+        }
+        for (requires, names) in found {
+            packages.entry(requires.cloned()).or_default().extend(names);
+        }
+    }
+
+    /// Returns all dependencies in this `pyproject.toml`.
+    ///
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
+    pub fn upgrade_all_dependencies(
+        &mut self,
+        latest_versions: &PackageVersions,
+        tables: &[DependencyType],
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+        requires_python: &Option<RequiresPython>,
+    ) -> (Vec<UpgradeResult>, usize, usize) {
+        let mut all_upgrades = Vec::new();
+        let mut all_found = 0;
+        let mut all_skipped = 0;
+
+        // Check `project.dependencies`
+        if let Some(item) = tables
+            .contains(&DependencyType::Production)
+            .then(|| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("dependencies"))
+            })
+            .flatten()
+        {
+            let (found, count_skipped) = Self::replace_dependencies(
+                latest_versions,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Production,
+                allow,
+                skipped,
+                requires_python,
+            );
+            all_found += found;
+            all_skipped += count_skipped;
+        }
+
+        // Check `project.optional-dependencies`
+        if let Some(groups) = tables
+            .iter()
+            .find(|t| matches!(t, DependencyType::Optional(_)))
+            .and_then(|_| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("optional-dependencies"))
+                    .and_then(Item::as_table_like_mut)
+            })
+        {
+            for (extra, item) in groups
+                .iter_mut()
+                .map(|(key, value)| (ExtraName::from_str(key.get()).ok(), value))
+            {
+                if let Some(_extra) = extra {
+                    let (found, count_skipped) = Self::replace_dependencies(
+                        latest_versions,
+                        &mut all_upgrades,
+                        item,
+                        &DependencyType::Optional(_extra),
+                        allow,
+                        skipped,
+                        requires_python,
+                    );
+                    all_found += found;
+                    all_skipped += count_skipped;
+                }
+            }
+        }
+
+        // Check `dependency-groups`.
+        if tables.iter().any(|t| matches!(t, DependencyType::Group(_))) {
+            let group_requires_python = self.get_uv_tool_dep_groups_requires_python();
+            let dep_groups = self
+                .doc
+                .get_mut("dependency-groups")
+                .and_then(Item::as_table_like_mut);
+            if let Some(groups) = dep_groups {
+                for (group, item) in groups
+                    .iter_mut()
+                    .map(|(key, value)| (GroupName::from_str(key.get()).ok(), value))
+                {
+                    if let Some(_group) = group {
+                        let python = group_requires_python
+                            .get(&_group.to_string())
+                            .or(requires_python.as_ref());
+                        let (found, count_skipped) = Self::replace_dependencies(
+                            latest_versions,
+                            &mut all_upgrades,
+                            item,
+                            &DependencyType::Group(_group),
+                            allow,
+                            skipped,
+                            &python.cloned(),
+                        );
+                        all_found += found;
+                        all_skipped += count_skipped;
+                    }
+                }
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`
+        if let Some(item) = tables
+            .contains(&DependencyType::Dev)
+            .then(|| {
+                self.doc
+                    .get_mut("tool")
+                    .and_then(Item::as_table_mut)
+                    .and_then(|tool| tool.get_mut("uv"))
+                    .and_then(Item::as_table_mut)
+                    .and_then(|uv| uv.get_mut("dev-dependencies"))
+            })
+            .flatten()
+        {
+            let (found, count_skipped) = Self::replace_dependencies(
+                latest_versions,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Dev,
+                allow,
+                skipped,
+                requires_python,
+            );
+            all_found += found;
+            all_skipped += count_skipped;
+        }
+
+        (all_upgrades, all_found, all_skipped)
+    }
+
+    fn get_uv_tool_dep_groups_requires_python(&self) -> FxHashMap<String, RequiresPython> {
+        self.doc
+            .get("tool")
+            .and_then(Item::as_table_like)
+            .and_then(|tool| tool.get("uv").and_then(Item::as_table_like))
+            .and_then(|uv| uv.get("dependency-groups").and_then(Item::as_table_like))
+            .map(Self::map_requires_python)
+            .unwrap_or_default()
+    }
+
+    fn map_requires_python(groups: &dyn TableLike) -> FxHashMap<String, RequiresPython> {
+        groups
+            .get_values()
+            .iter()
+            .filter_map(|(keys, value)| {
+                value
+                    .as_inline_table()
+                    .and_then(|i| i.get("requires-python"))
+                    .and_then(|requires| {
+                        requires
+                            .as_str()
+                            .and_then(|v| VersionSpecifiers::from_str(v).ok())
+                    })
+                    .map(|specifiers| {
+                        (
+                            keys.iter().join("."),
+                            RequiresPython::from_specifiers(&specifiers),
+                        )
+                    })
+            })
+            .collect()
+    }
+
+    #[allow(clippy::ref_option)]
+    fn replace_dependencies(
+        latest_versions: &PackageVersions,
+        all_upgrades: &mut Vec<UpgradeResult>,
+        item: &mut Item,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+        requires_python: &Option<RequiresPython>,
+    ) -> (usize, usize) {
+        if let Some(dependencies) = item.as_array_mut().filter(|d| !d.is_empty()) {
+            return Self::replace_upgrades(
+                latest_versions,
+                all_upgrades,
+                dependencies,
+                dependency_type,
+                allow,
+                skipped,
+                requires_python,
+            );
+        }
+        (0, 0)
+    }
+
+    #[allow(clippy::ref_option)]
+    fn find_upgrades(
+        latest_versions: &PackageVersions,
+        dependencies: &mut Array,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+        requires_python: &Option<RequiresPython>,
+    ) -> (Vec<UpgradeResult>, usize, usize) {
+        let mut upgrades = Vec::new();
+        let mut count_skipped = 0;
+        let mut found = 0;
+        let error = format!("{}{}", "error".red().bold(), ":".bold());
+        for (i, dep) in dependencies.iter().enumerate() {
+            let Some(mut req) = dep.as_str().and_then(try_parse_requirement) else {
+                continue;
+            };
+            found += 1;
+            let old = req.clone();
+            // Skip requirements without version constraints
+            let Some(VersionOrUrl::VersionSpecifier(mut version_specifiers)) = req.version_or_url
+            else {
+                continue;
+            };
+            if let Some(upgrade) = latest_versions.find(&old.name, requires_python) {
+                let (bumped, upgraded, semver, skip) =
+                    version_specifiers.bump_last(upgrade, allow, skipped);
+                if bumped {
+                    req.version_or_url = Some(VersionOrUrl::VersionSpecifier(version_specifiers));
+                    upgrades.push((
+                        i,
+                        dep.as_str().unwrap().to_string(),
+                        old,
+                        req,
+                        upgrade.clone(),
+                        upgraded,
+                        dependency_type.clone(),
+                        semver,
+                        requires_python.clone(),
+                    ));
+                } else if skip {
+                    count_skipped += 1;
+                }
+            } else {
+                writeln!(
+                    io::stderr(),
+                    "{error} No latest found for {} {version_specifiers}",
+                    old.name
+                )
+                .expect("write to stderr failed");
+            }
+        }
+        (upgrades, found, count_skipped)
+    }
+
+    #[allow(clippy::ref_option)]
+    fn replace_upgrades(
+        latest_versions: &PackageVersions,
+        all_upgrades: &mut Vec<UpgradeResult>,
+        dependencies: &mut Array,
+        dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+        requires_python: &Option<RequiresPython>,
+    ) -> (usize, usize) {
+        let (upgrades, found, count_skipped) = Self::find_upgrades(
+            latest_versions,
+            dependencies,
+            dependency_type,
+            allow,
+            skipped,
+            requires_python,
+        );
+        for (i, _dep, _old, new, _upgrade, _upgraded, _, _, _) in &upgrades {
+            let string = new.to_string();
+            dependencies.replace(*i, toml_edit::Value::from(string));
+        }
+        all_upgrades.extend(upgrades);
+        (found, count_skipped)
     }
 
     pub fn version(&mut self) -> Result<Version, Error> {
@@ -1563,7 +1974,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     removed
 }
 
-/// Returns a `Vec` containing the all dependencies with the given name, along with their positions
+/// Returns a `Vec` containing all dependencies with the given name, along with their positions
 /// in the array.
 fn find_dependencies(
     name: &PackageName,
