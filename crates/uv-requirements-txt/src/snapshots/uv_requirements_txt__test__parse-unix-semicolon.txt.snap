@@ -2,21 +2,67 @@
 source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
 ---
-RequirementsTxtFileError {
-    file: "<REQUIREMENTS_DIR>/semicolon.txt",
-    error: Pep508 {
-        source: Pep508Error {
-            message: UrlError(
-                MissingExtensionPath(
-                    "./editable;python_version >= \"3.9\" and os_name == \"posix\"",
-                    Dist,
-                ),
+RequirementsTxt {
+    requirements: [],
+    constraints: [],
+    editables: [
+        RequirementEntry {
+            requirement: Unnamed(
+                UnnamedRequirement {
+                    url: VerbatimParsedUrl {
+                        parsed_url: Directory(
+                            ParsedDirectoryUrl {
+                                url: DisplaySafeUrl {
+                                    scheme: "file",
+                                    cannot_be_a_base: false,
+                                    username: "",
+                                    password: None,
+                                    host: None,
+                                    port: None,
+                                    path: "<REQUIREMENTS_DIR>/editable;python_version%20%3E=%20%223.9%22%20and%20os_name%20==%20%22posix%22",
+                                    query: None,
+                                    fragment: None,
+                                },
+                                install_path: "<REQUIREMENTS_DIR>/editable;python_version >= \"3.9\" and os_name == \"posix\"",
+                                editable: Some(
+                                    true,
+                                ),
+                                virtual: None,
+                            },
+                        ),
+                        verbatim: VerbatimUrl {
+                            url: DisplaySafeUrl {
+                                scheme: "file",
+                                cannot_be_a_base: false,
+                                username: "",
+                                password: None,
+                                host: None,
+                                port: None,
+                                path: "<REQUIREMENTS_DIR>/editable;python_version%20%3E=%20%223.9%22%20and%20os_name%20==%20%22posix%22",
+                                query: None,
+                                fragment: None,
+                            },
+                            given: Some(
+                                "./editable;python_version >= \"3.9\" and os_name == \"posix\"",
+                            ),
+                        },
+                    },
+                    extras: [],
+                    marker: true,
+                    origin: Some(
+                        File(
+                            "<REQUIREMENTS_DIR>/semicolon.txt",
+                        ),
+                    ),
+                },
             ),
-            start: 0,
-            len: 57,
-            input: "./editable;python_version >= \"3.9\" and os_name == \"posix\"",
+            hashes: [],
         },
-        start: 50,
-        end: 107,
-    },
+    ],
+    index_url: None,
+    extra_index_urls: [],
+    find_links: [],
+    no_index: false,
+    no_binary: None,
+    only_binary: None,
 }
