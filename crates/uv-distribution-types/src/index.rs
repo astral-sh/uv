@@ -533,13 +533,8 @@ impl From<IndexUrl> for Index {
 }
 
 /// A potentially unresolved index.
-///
-/// With `#[serde(untagged)]`, deserialization tries `Index` first (which requires `url`),
-/// then falls back to `UnresolvedIndex` (which only requires `name`).
 #[expect(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexArg {
     Resolved(Index),
     Unresolved(IndexName),
