@@ -195,6 +195,7 @@ pub enum PreviewFeature {
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
+    IndexAssumeName = 1 << 29,
 }
 
 impl PreviewFeature {
@@ -230,6 +231,7 @@ impl PreviewFeature {
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
+            Self::IndexAssumeName => "index-assume-name",
         }
     }
 }
@@ -278,6 +280,7 @@ impl FromStr for PreviewFeature {
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
+            "index-assume-name" => Self::IndexAssumeName,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -530,6 +533,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::IndexExcludeNewer.as_str(),
             "index-exclude-newer"
+        );
+        assert_eq!(
+            PreviewFeature::IndexAssumeName.as_str(),
+            "index-assume-name"
         );
     }
 
