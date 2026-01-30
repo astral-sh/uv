@@ -462,7 +462,9 @@ impl From<IndexUrl> for Index {
 /// A potentially unresolved index.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexArg {
+    /// A usable index (with a URL)
     Resolved(Index),
+    /// An index name which must be looked up
     Unresolved(IndexName),
 }
 
