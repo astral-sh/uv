@@ -6632,7 +6632,13 @@ pub struct IndexArgs {
     // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
     // value parsing mechanism, which processes one value at a time, in order to handle
     // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
-    #[arg(long, env = EnvVars::UV_INDEX, value_parser = parse_indices, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_INDEX,
+        hide_env_values = true,
+        value_parser = parse_indices,
+        help_heading = "Index options"
+    )]
     pub index: Option<Vec<Vec<Maybe<Index>>>>,
 
     /// The URL of the default package index (by default: <https://pypi.org/simple>).
@@ -6642,7 +6648,13 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--index` flag.
-    #[arg(long, env = EnvVars::UV_DEFAULT_INDEX, value_parser = parse_default_index, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_DEFAULT_INDEX,
+        hide_env_values = true,
+        value_parser = parse_default_index,
+        help_heading = "Index options"
+    )]
     pub default_index: Option<Maybe<Index>>,
 
     /// (Deprecated: use `--default-index` instead) The URL of the Python package index (by default:
@@ -6653,7 +6665,14 @@ pub struct IndexArgs {
     ///
     /// The index given by this flag is given lower priority than all other indexes specified via
     /// the `--extra-index-url` flag.
-    #[arg(long, short, env = EnvVars::UV_INDEX_URL, value_parser = parse_index_url, help_heading = "Index options")]
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_INDEX_URL,
+        hide_env_values = true,
+        value_parser = parse_index_url,
+        help_heading = "Index options"
+    )]
     pub index_url: Option<Maybe<PipIndex>>,
 
     /// (Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to
@@ -6665,7 +6684,14 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by `--index-url`
     /// (which defaults to PyPI). When multiple `--extra-index-url` flags are provided, earlier
     /// values take priority.
-    #[arg(long, env = EnvVars::UV_EXTRA_INDEX_URL, value_delimiter = ' ', value_parser = parse_extra_index_url, help_heading = "Index options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_EXTRA_INDEX_URL,
+        hide_env_values = true,
+        value_delimiter = ' ',
+        value_parser = parse_extra_index_url,
+        help_heading = "Index options"
+    )]
     pub extra_index_url: Option<Vec<Maybe<PipExtraIndex>>>,
 
     /// Locations to search for candidate distributions, in addition to those found in the registry
@@ -6680,6 +6706,7 @@ pub struct IndexArgs {
         long,
         short,
         env = EnvVars::UV_FIND_LINKS,
+        hide_env_values = true,
         value_delimiter = ',',
         value_parser = parse_find_links,
         help_heading = "Index options"
@@ -7564,11 +7591,23 @@ pub struct PublishArgs {
     pub index: Option<String>,
 
     /// The username for the upload.
-    #[arg(short, long, env = EnvVars::UV_PUBLISH_USERNAME, value_hint = ValueHint::Other)]
+    #[arg(
+        short,
+        long,
+        env = EnvVars::UV_PUBLISH_USERNAME,
+        hide_env_values = true,
+        value_hint = ValueHint::Other
+    )]
     pub username: Option<String>,
 
     /// The password for the upload.
-    #[arg(short, long, env = EnvVars::UV_PUBLISH_PASSWORD, value_hint = ValueHint::Other)]
+    #[arg(
+        short,
+        long,
+        env = EnvVars::UV_PUBLISH_PASSWORD,
+        hide_env_values = true,
+        value_hint = ValueHint::Other
+    )]
     pub password: Option<String>,
 
     /// The token for the upload.
@@ -7579,6 +7618,7 @@ pub struct PublishArgs {
         short,
         long,
         env = EnvVars::UV_PUBLISH_TOKEN,
+        hide_env_values = true,
         conflicts_with = "username",
         conflicts_with = "password",
         value_hint = ValueHint::Other,
@@ -7609,7 +7649,7 @@ pub struct PublishArgs {
     /// and index upload.
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
-    #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
+    #[arg(long, env = EnvVars::UV_PUBLISH_URL, hide_env_values = true)]
     pub publish_url: Option<DisplaySafeUrl>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
@@ -7626,7 +7666,7 @@ pub struct PublishArgs {
     /// pyx, the index URL can be inferred automatically from the publish URL.
     ///
     /// The index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).
-    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL)]
+    #[arg(long, env = EnvVars::UV_PUBLISH_CHECK_URL, hide_env_values = true)]
     pub check_url: Option<IndexUrl>,
 
     #[arg(long, hide = true)]
