@@ -6417,6 +6417,12 @@ pub struct PythonFindArgs {
     #[arg(long)]
     pub show_version: bool,
 
+    /// Resolve symlinks in the output path.
+    ///
+    /// When enabled, the output path will be canonicalized, resolving any symlinks.
+    #[arg(long)]
+    pub resolve_links: bool,
+
     /// URL pointing to JSON of custom Python installations.
     #[arg(long, value_hint = ValueHint::Other)]
     pub python_downloads_json_url: Option<String>,

@@ -1748,6 +1748,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::python_find_script(
                     (&script).into(),
                     args.show_version,
+                    args.resolve_links,
                     // TODO(zsol): is this the right thing to do here?
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
@@ -1763,6 +1764,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     &project_dir,
                     args.request,
                     args.show_version,
+                    args.resolve_links,
                     args.no_project,
                     cli.top_level.no_config,
                     args.system,
