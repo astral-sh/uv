@@ -68,8 +68,8 @@ uv-workspace = { workspace = true, features = ["clap"] }
 anstream = { workspace = true }
 anyhow = { workspace = true }
 axoupdater = { workspace = true, features = [
-  "github_releases",
-  "tokio",
+    "github_releases",
+    "tokio",
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
@@ -172,16 +172,16 @@ tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing
 
 # Features that only apply when running tests, no-ops otherwise.
 default-tests = [
-  "crates-io",
-  "git",
-  "git-lfs",
-  "pypi",
-  "r2",
-  "python",
-  "python-managed",
-  "python-eol",
-  "slow-tests",
-  "test-ecosystem"
+    "crates-io",
+    "git",
+    "git-lfs",
+    "pypi",
+    "r2",
+    "python",
+    "python-managed",
+    "python-eol",
+    "slow-tests",
+    "test-ecosystem"
 ]
 # Introduces a testing dependency on crates.io.
 crates-io = []
