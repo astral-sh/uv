@@ -1302,6 +1302,11 @@ fn verify_pyvenv_cfg_relocatable() {
     activate_nu.assert(predicates::str::contains(
         r"let virtual_env = (path self | path dirname | path dirname)",
     ));
+
+    // csh cannot determine its own script location, so activate.csh should not
+    // be generated when --relocatable is used.
+    let activate_csh = scripts.child("activate.csh");
+    activate_csh.assert(predicates::path::missing());
 }
 
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
