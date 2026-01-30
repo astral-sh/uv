@@ -83,7 +83,7 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     #[inline]
-    fn inner(&self) -> &VerbatimUrl {
+    pub(crate) fn inner(&self) -> &VerbatimUrl {
         match self {
             Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
         }
