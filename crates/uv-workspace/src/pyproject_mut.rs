@@ -1550,6 +1550,7 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
         .into_iter()
         .rev() // Reverse to preserve indices as we remove them.
         .filter_map(|(i, _)| {
+            prepare_comments_for_removal(deps, i);
             deps.remove(i)
                 .as_str()
                 .and_then(|req| Requirement::from_str(req).ok())
@@ -1559,7 +1560,6 @@ fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
     if !removed.is_empty() {
         reformat_array_multiline(deps);
     }
-
     removed
 }
 
@@ -1730,6 +1730,89 @@ fn reformat_array_multiline(deps: &mut Array) {
         rv
     });
     deps.set_trailing_comma(true);
+}
+
+/// Ensure that only inline comments for the i-th dependency are removed,
+/// while preserving the other comments.
+///
+/// toml-edit attaches comments after the comma to the next item in the array, even if they are
+/// end-of-line comments.
+fn prepare_comments_for_removal(deps: &mut Array, i: usize) {
+    /// Remove comments on the same line as the dependency to be removed,
+    /// while preserving the comments in lines following it.
+    fn remove_inline_comment(comment: &str) -> &str {
+        match comment.split_once('\n') {
+            // `deps_to_remove` and the next dependency are on the same line.
+            None => "",
+            // `deps_to_remove` has an inline comment and no comments beneath it.
+            // Without this branch, the resulting dependency TOML will have an extra layer of indentation.
+            Some((_inline, trailing)) if trailing.trim().is_empty() => "",
+            // `deps_to_remove` has an inline comment and multiple lines of comments beneath it.
+            Some((_inline, trailing)) => trailing,
+        }
+    }
+
+    let n_deps = deps.len();
+
+    let dep_to_remove = deps
+        .get_mut(i)
+        .unwrap_or_else(|| panic!("Index {i} into dependency array should be valid"));
+
+    // Get comments that directly precede `dep_to_remove`.
+    let prefix = dep_to_remove
+        .decor()
+        .prefix()
+        .and_then(|s| s.as_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            if cfg!(debug_assertions) {
+                panic!("The prefix should not be `None`, even when there are no characters");
+            } else {
+                String::new()
+            }
+        });
+
+    // Replace inline comment associated with `dep_to_remove` with preceding comments.
+    if i == n_deps - 1 {
+        let trailing_comment = match dep_to_remove
+            .decor()
+            .suffix()
+            .and_then(|s| s.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(ToOwned::to_owned)
+        {
+            // The trailing comment is part of the Array's `.trailing` field.
+            None => deps.trailing().as_str().unwrap().to_owned(),
+            // The dependency to be removed has no trailing comma and an inline comment under `.suffix`.
+            Some(suffix) => format!("{}{}", suffix, deps.trailing().as_str().unwrap().to_owned()),
+        };
+        let updated_comment = format!("{}{}", prefix, remove_inline_comment(&trailing_comment));
+        deps.set_trailing(updated_comment);
+    } else {
+        let following_decor = deps
+            .get_mut(i + 1)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Encountered invalid index {} when updating the suffix",
+                    i + 1
+                )
+            })
+            .decor_mut();
+
+        let trailing_comment = following_decor
+            .prefix()
+            .and_then(|s| s.as_str())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| {
+                if cfg!(debug_assertions) {
+                    panic!("The prefix should not be `None`, even when there are no characters");
+                } else {
+                    String::new()
+                }
+            });
+        let updated_comment = format!("{}{}", prefix, remove_inline_comment(&trailing_comment));
+        following_decor.set_prefix(updated_comment);
+    }
 }
 
 /// Split a requirement into the package name and its dependency specifiers.
