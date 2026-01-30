@@ -21,7 +21,7 @@ fn workspace_dir_simple() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+
     "
     );
 }
@@ -42,7 +42,7 @@ fn workspace_dir_specific_package() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+
     "
     );
 
@@ -54,7 +54,7 @@ fn workspace_dir_specific_package() {
     [TEMP_DIR]/foo/bar
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+
     "
     );
 }
@@ -80,7 +80,7 @@ fn workspace_metadata_from_member() -> Result<()> {
     [TEMP_DIR]/workspace
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
+
     "
     );
 
@@ -97,13 +97,12 @@ fn workspace_dir_package_doesnt_exist() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
     error: Package `bar` not found in workspace.
     "
     );
@@ -114,13 +113,12 @@ fn workspace_dir_package_doesnt_exist() {
 fn workspace_metadata_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_dir(), @"
+    uv_snapshot!(context.filters(), context.workspace_dir(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `uv workspace dir` command is experimental and may change without warning. Pass `--preview-features workspace-dir` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
     "
     );
