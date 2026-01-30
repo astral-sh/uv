@@ -489,3 +489,136 @@ fn format_version_option() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn format_version_constraints() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with version constraints - should find the latest version matching >=0.8.0
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=0.8.0").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.8.4
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_version_latest() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with --version latest - should fetch the latest version from the manifest
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg("latest").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.8.4
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_exclude_newer() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with a different --exclude-newer value than the default (2025-01-01)
+    // This verifies that the flag is respected for version resolution
+    uv_snapshot!(context.filters(), context.format().arg("--exclude-newer").arg("2026-01-01").arg("--version").arg("latest").arg("--show-version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ruff 0.14.10
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn format_no_matching_version() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    // Run format with impossible version constraints - should fail
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    error: Failed to find ruff version matching: >=999.0.0
+      Caused by: No version of ruff found matching: >=999.0.0
+    ");
+
+    Ok(())
+}
