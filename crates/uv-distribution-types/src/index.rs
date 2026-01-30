@@ -9,6 +9,7 @@ use url::Url;
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
+use uv_warnings::warn_user;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -465,6 +466,16 @@ pub enum IndexArg {
     Unresolved(IndexName),
 }
 
+/// The resolution strategy to use when an unresolved [`IndexArg`] could refer
+/// to both a directory and a named index.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IndexArgStrategy {
+    /// Pick the directory over the name and warn
+    PreferDirectory,
+    /// Pick the name and ignore the directory with no warning
+    IgnoreDirectory,
+}
+
 #[derive(Debug, Error)]
 #[error("Could not find an index named `{0}`")]
 pub struct ResolveIndexArgError(IndexName);
@@ -500,7 +511,11 @@ impl IndexArg {
     /// Attempt to look up the [`IndexArg`] in the passed list of indexes
     ///
     /// The origin is inherited from the index
-    pub fn try_resolve<I>(self, indexes: I) -> Result<Index, ResolveIndexArgError>
+    pub fn try_resolve<I>(
+        self,
+        indexes: I,
+        strategy: IndexArgStrategy,
+    ) -> Result<Index, ResolveIndexArgError>
     where
         I: IntoIterator,
         I::Item: Borrow<Index>,
@@ -512,9 +527,31 @@ impl IndexArg {
                     .into_iter()
                     .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
                 {
-                    Ok(Index {
-                        ..index.borrow().clone()
-                    })
+                    match strategy {
+                        IndexArgStrategy::PreferDirectory => {
+                            // If a directory of the same name exists, treat it as a directory but
+                            // warn the user of the impending changes.
+                            if let Ok(url @ IndexUrl::Path(_)) =
+                                IndexUrl::from_str(unresolved.as_ref())
+                                && let Ok(path) = url.inner().as_path()
+                                && path.is_dir()
+                            {
+                                if cfg!(windows) {
+                                    warn_user!(
+                                        "Relative paths passed to `--index` should be disambiguated from index names (use `.\\{unresolved}` or `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
+                                    );
+                                } else {
+                                    warn_user!(
+                                        "Relative paths passed to `--index` should be disambiguated from index names (use `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
+                                    );
+                                }
+                                Ok(Index::new(url.clone()).with_origin(Origin::Cli))
+                            } else {
+                                Ok(index.borrow().clone())
+                            }
+                        }
+                        IndexArgStrategy::IgnoreDirectory => Ok(index.borrow().clone()),
+                    }
                 } else {
                     Err(ResolveIndexArgError(unresolved))
                 }
