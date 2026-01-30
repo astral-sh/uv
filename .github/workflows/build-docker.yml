@@ -92,8 +92,9 @@ jobs:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
+      # Always login to GHCR so the base image can be pushed for use by extra images
       - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
-        if: ${{ needs.docker-plan.outputs.push == 'true' }}
+        if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -131,15 +132,19 @@ jobs:
             type=pep440,pattern={{ version }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ needs.docker-plan.outputs.tag }},enable=${{ needs.docker-plan.outputs.push }}
 
-      - name: Build and push by digest
+      # Always push a build-specific tag to GHCR so extra images can COPY from it.
+      # On release, the version tags are also pushed. On dry-run, only this tag is pushed.
+      - name: Build and push base image
         id: build
         uses: depot/build-push-action@9785b135c3c76c33db102e45be96a25ab55cd507 # v1.16.2
         with:
           project: 7hd4vdzmw5 # astral-sh/uv
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ needs.docker-plan.outputs.push }}
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/amd64,linux/arm64,linux/riscv64
+          push: ${{ needs.docker-plan.outputs.login }}
+          tags: |
+            ${{ needs.docker-plan.outputs.push == 'true' && steps.meta.outputs.tags || '' }}
+            ${{ env.UV_GHCR_IMAGE }}:sha-${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           # TODO(zanieb): Annotations are not supported by Depot yet and are ignored
           annotations: ${{ steps.meta.outputs.annotations }}
@@ -233,10 +238,17 @@ jobs:
           # Extract the image and tags from the matrix variable
           IFS=',' read -r BASE_IMAGE BASE_TAGS <<< "${{ matrix.image-mapping }}"
 
+          # Determine platform support: bookworm-based images don't have riscv64
+          if [[ "${BASE_IMAGE}" == *bookworm* ]]; then
+            echo "PLATFORMS=linux/amd64,linux/arm64" >> "$GITHUB_ENV"
+          else
+            echo "PLATFORMS=linux/amd64,linux/arm64,linux/riscv64" >> "$GITHUB_ENV"
+          fi
+
           # Generate Dockerfile content
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
-          COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
+          COPY --from=${UV_GHCR_IMAGE}:sha-${GITHUB_SHA} /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
@@ -286,7 +298,7 @@ jobs:
         with:
           context: .
           project: 7hd4vdzmw5 # astral-sh/uv
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.PLATFORMS }}
           push: ${{ needs.docker-plan.outputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
