@@ -537,7 +537,9 @@ impl From<IndexUrl> for Index {
 #[expect(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexArg {
+    /// A usable index (with a URL)
     Resolved(Index),
+    /// An index name which must be looked up
     Unresolved(IndexName),
 }
 
