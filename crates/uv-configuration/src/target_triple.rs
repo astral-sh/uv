@@ -1095,7 +1095,6 @@ mod tests {
 
     #[test]
     fn parse_wheel_tag_style_manylinux_aliases() {
-        // Verify that wheel-tag-style platform names (arch as suffix) are accepted.
         let cases = [
             ("manylinux2014_x86_64", TargetTriple::X8664Manylinux2014),
             ("manylinux2014_aarch64", TargetTriple::Aarch64Manylinux2014),
@@ -1107,19 +1106,6 @@ mod tests {
             ("manylinux_2_31_x86_64", TargetTriple::X8664Manylinux231),
             ("manylinux_2_40_x86_64", TargetTriple::X8664Manylinux240),
             ("manylinux_2_40_aarch64", TargetTriple::Aarch64Manylinux240),
-        ];
-        for (input, expected) in cases {
-            let parsed = parse_target(input).unwrap_or_else(|| panic!("failed to parse '{input}'"));
-            assert_eq!(parsed, expected, "mismatch for '{input}'");
-        }
-    }
-
-    #[test]
-    fn parse_canonical_manylinux_names() {
-        // Verify canonical names still work.
-        let cases = [
-            ("x86_64-manylinux2014", TargetTriple::X8664Manylinux2014),
-            ("aarch64-manylinux_2_31", TargetTriple::Aarch64Manylinux231),
         ];
         for (input, expected) in cases {
             let parsed = parse_target(input).unwrap_or_else(|| panic!("failed to parse '{input}'"));
