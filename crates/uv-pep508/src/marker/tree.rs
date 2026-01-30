@@ -861,15 +861,23 @@ impl MarkerTree {
         self.0 = INTERNER.lock().and(self.0, tree.0);
     }
 
-    /// Prune any paths through the marker tree that combine
-    /// known-incompatible marker values (e.g., `os_name == 'nt'` and
-    /// `sys_platform == 'linux'`).
+    /// Combine this marker tree with the one given via a conjunction,
+    /// then prune any partial contradictions involving known-incompatible
+    /// marker values (e.g., `os_name == 'nt' and sys_platform == 'linux'`).
     ///
-    /// This ensures the marker tree is canonical, i.e., serializing to a
-    /// string and re-parsing produces an identical tree.
+    /// This is more expensive than [`Self::and`] and should only be used
+    /// when the result must be canonical (i.e., round-trip stable through
+    /// string serialization), such as when writing to `uv.lock`.
+    pub fn and_canonicalized(&mut self, tree: Self) {
+        self.0 = INTERNER.lock().and_pruned(self.0, tree.0);
+    }
+
+    /// Prune any partial contradictions involving known-incompatible
+    /// marker values, ensuring the tree is canonical (round-trip stable
+    /// through string serialization and re-parsing).
     #[must_use]
-    pub fn prune_contradictions(self) -> Self {
-        Self(INTERNER.lock().prune_contradictions(self.0))
+    pub fn canonicalize(self) -> Self {
+        Self(INTERNER.lock().canonicalize(self.0))
     }
 
     /// Combine this marker tree with the one given via a disjunction.
@@ -2150,26 +2158,32 @@ mod test {
              or (sys_platform != 'darwin' and sys_platform != 'linux')",
         );
 
-        // AND the dependency marker with the compound fork marker.
-        let mut result = dep_marker;
-        result.and(fork_marker);
-        let result = result.prune_contradictions();
-
-        // The contradictory `sys_platform == 'linux'` branch must be eliminated.
-        // We verify this by checking that the result does NOT contain the
-        // `sys_platform == 'linux'` disjunct, and that it round-trips through
-        // string serialization (i.e., is canonical).
-        let result_str = result.try_to_string().expect("should serialize");
+        // `os_name == 'nt' and sys_platform == 'linux'` is a known contradiction.
+        // Note: plain `and()` doesn't detect partial contradictions;
+        // canonicalization is needed to prune them.
         assert!(
-            !result_str.contains("sys_platform == 'linux'"),
-            "contradictory sys_platform == 'linux' branch should be eliminated: {result_str}",
+            m("os_name == 'nt' and sys_platform == 'linux'")
+                .canonicalize()
+                .is_false()
         );
 
-        // Round-trip: serialize and re-parse should produce the same tree.
-        let reparsed: MarkerTree = result_str.parse().unwrap();
+        // AND the dependency marker with the compound fork marker,
+        // canonicalizing to prune contradictory branches.
+        let mut result = dep_marker;
+        result.and_canonicalized(fork_marker);
+
+        // The result must be canonical: serializing and re-parsing should
+        // produce an identical MarkerTree.
+        let expected = m(
+            "os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'ios' and sys_platform != 'linux'",
+        );
         assert_eq!(
-            result, reparsed,
-            "result should be canonical (round-trip stable): {result_str}",
+            result,
+            expected,
+            "AND should eliminate the contradictory sys_platform == 'linux' branch: \
+             got {:?}, expected {:?}",
+            result.try_to_string(),
+            expected.try_to_string(),
         );
     }
 
@@ -2192,8 +2206,7 @@ mod test {
         );
 
         let mut combined = dep_marker;
-        combined.and(fork_marker);
-        let combined = combined.prune_contradictions();
+        combined.and_canonicalized(fork_marker);
 
         // Verify combined is round-trip stable.
         if let Some(s) = combined.try_to_string() {
@@ -2216,6 +2229,48 @@ mod test {
                  serialized as {s:?}",
             );
         }
+    }
+
+    /// Test that pruning handles the case where the node's top
+    /// conflicting variable is lower-order than the exclusion tree's
+    /// top variable (`Ordering::Greater` in `prune_exclusions`).
+    ///
+    /// This happens when one operand has a conflicting variable (e.g.
+    /// `sys_platform`) but not a higher-order one (`os_name`), and the
+    /// other operand constrains `os_name`. The `and` result may have
+    /// `os_name` at the top with `sys_platform` children, and the
+    /// pruning must walk both levels correctly.
+    #[test]
+    fn prune_contradictions_with_variable_order_mismatch() {
+        // `os_name == 'posix' and sys_platform == 'win32'` is a known
+        // contradiction.
+        assert!(
+            m("os_name == 'posix' and sys_platform == 'win32'")
+                .canonicalize()
+                .is_false()
+        );
+
+        // AND'ing `os_name == 'nt'` (constrains os_name) with
+        // `sys_platform == 'win32' or sys_platform == 'linux'`
+        // (doesn't constrain os_name). The `sys_platform == 'linux'`
+        // branch contradicts `os_name == 'nt'`.
+        let mut result = m("os_name == 'nt'");
+        result.and_canonicalized(m("sys_platform == 'win32' or sys_platform == 'linux'"));
+
+        let expected = m("os_name == 'nt' and sys_platform == 'win32'");
+        assert_eq!(
+            result,
+            expected,
+            "should prune contradictory sys_platform == 'linux' branch: \
+             got {:?}, expected {:?}",
+            result.try_to_string(),
+            expected.try_to_string(),
+        );
+
+        // Verify round-trip stability.
+        let s = result.try_to_string().expect("should serialize");
+        let reparsed: MarkerTree = s.parse().unwrap();
+        assert_eq!(result, reparsed, "result should be round-trip stable: {s}");
     }
 
     #[test]

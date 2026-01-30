@@ -5110,7 +5110,7 @@ impl Dependency {
     ) -> Self {
         let simplified_marker = SimplifiedMarkerTree::new(
             requires_python,
-            complexified_marker.combined().prune_contradictions(),
+            complexified_marker.combined().canonicalize(),
         );
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
