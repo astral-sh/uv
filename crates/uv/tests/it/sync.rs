@@ -6713,21 +6713,85 @@ fn sync_active_project_environment() -> Result<()> {
         .child("bar")
         .assert(predicate::path::missing());
 
-    // Requesting another Python version will invalidate the environment
+    // Requesting another Python version will error with `--active`
     uv_snapshot!(context.filters(), context.sync()
         .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The project environment's Python version does not satisfy the request: `Python 3.12`. When using `--active`, uv does not attempt to recreate the environment.
+    ");
+
+    Ok(())
+}
+
+/// When `--active` is used and the active environment's Python version does not meet
+/// `requires-python`, uv should error instead of silently recreating the environment.
+///
+/// See: <https://github.com/astral-sh/uv/issues/15603>
+#[test]
+fn sync_active_incompatible_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    // Start with a project that accepts Python 3.11.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Create an active environment with Python 3.11.
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active").arg("-p").arg("3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Removed virtual environment at: foo
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: foo
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     ");
+
+    // Now tighten the Python requirement to >=3.12.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // `--active` should error because the environment's Python 3.11 doesn't meet `>=3.12`.
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The project environment's Python version does not satisfy the request: `Python >=3.12`. When using `--active`, uv does not attempt to recreate the environment.
+    ");
+
+    // The environment should not have been removed.
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
 
     Ok(())
 }
@@ -6805,7 +6869,7 @@ fn sync_active_script_environment() -> Result<()> {
     Audited 3 packages in [TIME]
     ");
 
-    // Requesting another Python version will invalidate the environment
+    // Requesting another Python version will error with `--active`
     uv_snapshot!(context.filters(), context.sync()
         .arg("--script")
         .arg("script.py")
@@ -6813,17 +6877,12 @@ fn sync_active_script_environment() -> Result<()> {
         .arg("--active")
         .arg("-p")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Updating script environment at: foo
-    Resolved 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    error: The script environment's Python version does not satisfy the request: `Python 3.12`. When using `--active`, uv does not attempt to recreate the environment.
     ");
 
     Ok(())
@@ -6984,7 +7043,7 @@ fn sync_active_script_environment_json() -> Result<()> {
     Audited 3 packages in [TIME]
     ");
 
-    // Requesting another Python version will invalidate the environment
+    // Requesting another Python version will error with `--active`
     uv_snapshot!(context.filters(), context.sync()
         .arg("--script").arg("script.py")
         .arg("--output-format").arg("json")
@@ -6992,55 +7051,12 @@ fn sync_active_script_environment_json() -> Result<()> {
         .arg("--active")
         .arg("-p")
         .arg("3.12"), @r#"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    {
-      "schema": {
-        "version": "preview"
-      },
-      "target": "script",
-      "script": {
-        "path": "[TEMP_DIR]/script.py"
-      },
-      "sync": {
-        "environment": {
-          "path": "[TEMP_DIR]/foo",
-          "python": {
-            "path": "[TEMP_DIR]/foo/[BIN]/python",
-            "version": "3.12.[X]",
-            "implementation": "cpython"
-          }
-        },
-        "action": "update",
-        "changes": [
-          {
-            "name": "anyio",
-            "version": "4.3.0",
-            "action": "installed"
-          },
-          {
-            "name": "idna",
-            "version": "3.6",
-            "action": "installed"
-          },
-          {
-            "name": "sniffio",
-            "version": "1.3.1",
-            "action": "installed"
-          }
-        ]
-      },
-      "lock": null,
-      "dry_run": false
-    }
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    error: The script environment's Python version does not satisfy the request: `Python 3.12`. When using `--active`, uv does not attempt to recreate the environment.
     "#);
 
     Ok(())

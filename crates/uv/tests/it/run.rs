@@ -4287,24 +4287,18 @@ fn run_active_project_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::is_dir());
 
-    // Requesting a different Python version should invalidate the environment
+    // Requesting a different Python version should error with `--active`
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("-p").arg("3.12")
         .arg("python").arg("--version")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Python 3.12.[X]
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Removed virtual environment at: foo
-    Creating virtual environment at: foo
-    Resolved 2 packages in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: The project environment's Python version does not satisfy the request: `Python 3.12`. When using `--active`, uv does not attempt to recreate the environment.
     ");
 
     Ok(())
@@ -4389,22 +4383,19 @@ fn run_active_script_environment() -> Result<()> {
         .child("foo")
         .assert(predicate::path::is_dir());
 
-    // Requesting a different Python version should invalidate the environment
+    // Requesting a different Python version should error with `--active`
     uv_snapshot!(context.filters(), context.run()
         .arg("--active")
         .arg("-p").arg("3.12")
         .arg("--script")
         .arg("main.py")
         .env(EnvVars::VIRTUAL_ENV, "foo"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Hello, world!
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    error: The script environment's Python version does not satisfy the request: `Python 3.12`. When using `--active`, uv does not attempt to recreate the environment.
     ");
 
     Ok(())
