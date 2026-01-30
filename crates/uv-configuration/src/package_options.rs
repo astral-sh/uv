@@ -268,7 +268,7 @@ impl Upgrade {
                 Self::Exclude(mut other_exclusions) => {
                     other_exclusions.retain(|package| !self_packages.contains_key(package));
                     Self::Exclude(other_exclusions)
-                },
+                }
             },
         }
     }
