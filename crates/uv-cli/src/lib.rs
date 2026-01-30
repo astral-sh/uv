@@ -3170,8 +3170,15 @@ pub struct VenvArgs {
     /// absolute paths), the entrypoints and scripts themselves will _not_ be relocatable. In other
     /// words, copying those entrypoints and scripts to a location outside the environment will not
     /// work, as they reference paths relative to the environment itself.
-    #[arg(long)]
+    #[arg(long, overrides_with("no_relocatable"))]
     pub relocatable: bool,
+
+    /// Don't make the virtual environment relocatable.
+    ///
+    /// Disables the default relocatable behavior when the `relocatable-envs-default` preview
+    /// feature is enabled.
+    #[arg(long, overrides_with("relocatable"), hide = true)]
+    pub no_relocatable: bool,
 
     #[command(flatten)]
     pub index_args: IndexArgs,

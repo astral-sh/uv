@@ -3347,6 +3347,7 @@ pub(crate) struct VenvSettings {
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
+    pub(crate) no_relocatable: bool,
     pub(crate) no_project: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3371,6 +3372,7 @@ impl VenvSettings {
             prompt,
             system_site_packages,
             relocatable,
+            no_relocatable,
             index_args,
             index_strategy,
             keyring_provider,
@@ -3396,6 +3398,7 @@ impl VenvSettings {
             system_site_packages,
             no_project,
             relocatable,
+            no_relocatable,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {

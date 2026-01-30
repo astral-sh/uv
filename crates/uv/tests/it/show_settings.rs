@@ -7979,8 +7979,8 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: BitFlags<PreviewFeature> {
-                bits: 0b11111111111111111111111,
-                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit,
+                bits: 0b111111111111111111111111,
+                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit | RelocatableEnvsDefault,
             },
         },
         python_preference: Managed,
@@ -8218,8 +8218,8 @@ fn preview_features() {
         show_settings: true,
         preview: Preview {
             flags: BitFlags<PreviewFeature> {
-                bits: 0b11111111111111111111111,
-                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit,
+                bits: 0b111111111111111111111111,
+                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit | RelocatableEnvsDefault,
             },
         },
         python_preference: Managed,

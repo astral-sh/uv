@@ -1304,6 +1304,55 @@ fn verify_pyvenv_cfg_relocatable() {
     ));
 }
 
+/// With `relocatable-envs-default` preview feature, venvs are relocatable by default.
+#[test]
+fn relocatable_envs_default_preview() {
+    let context = TestContext::new("3.12");
+
+    // Create a virtual environment with the preview feature enabled.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("relocatable-envs-default")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Relocatable flag is set by default under preview.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+}
+
+/// With `relocatable-envs-default` preview feature, `--no-relocatable` opts out.
+#[test]
+fn relocatable_envs_default_no_relocatable() {
+    let context = TestContext::new("3.12");
+
+    // Create a virtual environment with the preview feature but opt out.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("relocatable-envs-default")
+        .arg("--no-relocatable")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Relocatable flag is NOT set because of --no-relocatable.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable").not());
+}
+
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
 #[test]
 fn verify_nested_pyvenv_cfg() -> Result<()> {
