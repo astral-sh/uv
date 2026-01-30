@@ -693,7 +693,9 @@ impl TestContext {
     /// returns resolved symlink). This breaks some snapshot tests, since we _don't_ want to
     /// resolve symlinks for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        std::env::temp_dir()
+        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| std::env::temp_dir())
             .simple_canonicalize()
             .expect("failed to canonicalize temp dir")
             .join("uv")
