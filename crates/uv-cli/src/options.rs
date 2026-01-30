@@ -4,7 +4,9 @@ use anstream::eprintln;
 
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
-use uv_distribution_types::{ConfigSettings, Index, IndexArg, PackageConfigSettings, Requirement};
+use uv_distribution_types::{
+    ConfigSettings, Index, IndexArg, IndexArgStrategy, PackageConfigSettings, Requirement,
+};
 use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{
     Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
@@ -200,7 +202,7 @@ pub fn resolve_and_combine_indexes(
 
     let resolve = |index_arg: IndexArg| -> Index {
         #[allow(clippy::print_stderr, clippy::exit)]
-        match index_arg.try_resolve(&filesystem_indexes) {
+        match index_arg.try_resolve(&filesystem_indexes, IndexArgStrategy::PreferDirectory) {
             Ok(index) => index,
             Err(error) => {
                 eprintln!("error: {error}");
