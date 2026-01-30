@@ -13859,7 +13859,13 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     // (compatible host, incompatible host) x (compatible target, incompatible target)
 
     // A Python 3.13 host with a 3.13 implicit target works.
-    context.venv().arg("-p").arg("3.13").assert().success();
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.13")
+        .assert()
+        .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @"
     success: true
     exit_code: 0
@@ -13873,7 +13879,13 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ");
 
     // A Python 3.13 host with a 3.12 explicit target fails.
-    context.venv().arg("-p").arg("3.13").assert().success();
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.13")
+        .assert()
+        .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
     success: false
     exit_code: 1
@@ -13886,8 +13898,14 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ");
 
     // A python 3.12 host with a 3.13 explicit target works.
-    context.venv().arg("-p").arg("3.13").assert().success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @"
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.13")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13895,13 +13913,18 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ py313==0.1.0 (from file://[TEMP_DIR]/child)
+     + py313==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
     // A Python 3.13 host with a 3.12 explicit target fails.
-    context.venv().arg("-p").arg("3.13").assert().success();
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.13")
+        .assert()
+        .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
     success: false
     exit_code: 1
@@ -13936,7 +13959,13 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .touch()?;
 
     // A build host of 3.13 works.
-    context.venv().arg("-p").arg("3.13").assert().success();
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.13")
+        .assert()
+        .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
     success: true
     exit_code: 0
@@ -13950,7 +13979,13 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
     ");
 
     // A build host of 3.12 fails.
-    context.venv().arg("-p").arg("3.12").assert().success();
+    context
+        .venv()
+        .arg("--clear")
+        .arg("-p")
+        .arg("3.12")
+        .assert()
+        .success();
     uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
     success: false
     exit_code: 1
