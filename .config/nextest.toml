@@ -41,6 +41,10 @@ test-group = 'serial'
 filter = 'package(uv-keyring)'
 test-group = 'serial'
 
+[[profile.default.overrides]]
+filter = 'test(ssl_certs)'
+test-group = 'serial'
+
 [[profile.ci-windows.overrides]]
 platform = 'cfg(target_os = "windows")'
 filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
