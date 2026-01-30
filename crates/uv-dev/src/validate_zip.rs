@@ -24,7 +24,9 @@ pub(crate) async fn validate_zip(
 ) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init().await?;
     let client = RegistryClientBuilder::new(
-        BaseClientBuilder::default().timeout(environment.http_timeout),
+        BaseClientBuilder::default()
+            .read_timeout(environment.http_read_timeout)
+            .connect_timeout(environment.http_connect_timeout),
         cache,
     )
     .build();

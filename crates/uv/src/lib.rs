@@ -197,7 +197,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 settings.network_settings.native_tls,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
-                settings.network_settings.timeout,
+                settings.network_settings.read_timeout,
+                settings.network_settings.connect_timeout,
                 settings.network_settings.retries,
             )
             .http_proxy(settings.network_settings.http_proxy)
@@ -484,7 +485,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.network_settings.native_tls,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
-        globals.network_settings.timeout,
+        globals.network_settings.read_timeout,
+        globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
     .http_proxy(globals.network_settings.http_proxy.clone())

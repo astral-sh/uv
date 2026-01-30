@@ -183,7 +183,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         let client = builder.build();
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
@@ -196,7 +196,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -213,7 +213,7 @@ impl<'a> RegistryClientBuilder<'a> {
             .indexes(Indexes::from(&self.index_locations))
             .wrap_existing(existing);
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
@@ -226,7 +226,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -248,8 +248,8 @@ pub struct RegistryClient {
     cache: Cache,
     /// The connectivity mode to use.
     connectivity: Connectivity,
-    /// Configured client timeout, in seconds.
-    timeout: Duration,
+    /// Client HTTP read timeout.
+    read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
     /// The pyx token store to use for persistent credentials.
@@ -288,8 +288,8 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> Duration {
-        self.timeout
+    pub fn read_timeout(&self) -> Duration {
+        self.read_timeout
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1238,11 +1238,12 @@ impl RegistryClient {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.timeout().as_secs()
+                    self.read_timeout().as_secs()
                 ),
             )
         } else {
