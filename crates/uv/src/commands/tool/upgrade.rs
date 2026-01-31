@@ -16,7 +16,7 @@ use uv_pep440::{Operator, Version};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    PythonRequest, PythonRequestSource,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -86,11 +86,13 @@ pub(crate) async fn upgrade(
     let reporter = PythonDownloadReporter::single(printer);
 
     let python_request = python.as_deref().map(PythonRequest::parse);
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
 
     let interpreter = if python_request.is_some() {
         Some(
             PythonInstallation::find_or_download(
                 python_request.as_ref(),
+                request_source.as_ref(),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,

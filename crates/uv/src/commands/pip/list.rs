@@ -26,7 +26,9 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::PythonRequest;
-use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, PythonRequestSource, Target,
+};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -62,9 +64,12 @@ pub(crate) async fn pip_list(
         anyhow::bail!("`--outdated` cannot be used with `--format freeze`");
     }
 
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        request_source.as_ref(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,

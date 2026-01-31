@@ -33,8 +33,8 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
@@ -500,15 +500,21 @@ async fn build_package(
 
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
+    let mut request_source = interpreter_request
+        .as_ref()
+        .map(|_| PythonRequestSource::UserRequest);
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
-        interpreter_request = PythonVersionFile::discover(
+        if let Some(file) = PythonVersionFile::discover(
             source.directory(),
             &VersionFileDiscoveryOptions::default().with_no_config(no_config),
         )
         .await?
-        .and_then(PythonVersionFile::into_version);
+        {
+            request_source = Some(PythonRequestSource::DotPythonVersion(file.clone()));
+            interpreter_request = file.into_version();
+        }
     }
 
     // (3) `Requires-Python` in `pyproject.toml`
@@ -524,12 +530,16 @@ async fn build_package(
                         PythonVariant::Default,
                     ))
                 });
+            if interpreter_request.is_some() {
+                request_source = Some(PythonRequestSource::RequiresPython);
+            }
         }
     }
 
     // Locate the Python interpreter to use in the environment.
     let interpreter = PythonInstallation::find_or_download(
         interpreter_request.as_ref(),
+        request_source.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

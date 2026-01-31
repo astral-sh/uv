@@ -10,7 +10,8 @@ use uv_distribution_types::{Diagnostic, InstalledDist};
 use uv_installer::{SitePackages, SitePackagesDiagnostic};
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonVersion,
+    EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonRequestSource,
+    PythonVersion,
 };
 
 use crate::commands::pip::operations::report_target_environment;
@@ -30,9 +31,12 @@ pub(crate) fn pip_check(
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        request_source.as_ref(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
