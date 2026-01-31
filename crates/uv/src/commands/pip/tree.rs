@@ -22,7 +22,9 @@ use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_python::{
+    EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest, PythonRequestSource,
+};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
 
 use crate::commands::ExitStatus;
@@ -55,9 +57,12 @@ pub(crate) async fn pip_tree(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        request_source.as_ref(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,

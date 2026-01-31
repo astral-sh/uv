@@ -32,7 +32,7 @@ use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    PythonPreference, PythonRequest, PythonRequestSource,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -739,6 +739,7 @@ async fn get_or_create_environment(
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
+    let request_source = python.map(|_| PythonRequestSource::UserRequest);
 
     // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
     // -p/--python flag.
@@ -782,6 +783,7 @@ async fn get_or_create_environment(
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        request_source.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

@@ -26,7 +26,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion, Target,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVersion, Target,
 };
 use uv_requirements::{GroupsSpecification, RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -166,6 +166,8 @@ pub(crate) async fn pip_sync(
         }
     }
 
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
+
     // Detect the current Python interpreter.
     let environment = if target.is_some() || prefix.is_some() {
         let python_request = python.as_deref().map(PythonRequest::parse);
@@ -173,6 +175,7 @@ pub(crate) async fn pip_sync(
 
         let installation = PythonInstallation::find_or_download(
             python_request.as_ref(),
+            request_source.as_ref(),
             EnvironmentPreference::from_system_flag(system, false),
             python_preference.with_system_flag(system),
             python_downloads,
@@ -193,6 +196,7 @@ pub(crate) async fn pip_sync(
                 .as_deref()
                 .map(PythonRequest::parse)
                 .unwrap_or_default(),
+            request_source.as_ref(),
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
             &cache,

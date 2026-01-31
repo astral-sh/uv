@@ -11,7 +11,7 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_preview::Preview;
 
-use crate::discovery::find_python_installation;
+use crate::discovery::{PythonRequestSource, find_python_installation};
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
@@ -151,17 +151,23 @@ impl PythonEnvironment {
     /// instead.
     pub fn find(
         request: &PythonRequest,
+        request_source: Option<&PythonRequestSource>,
         preference: EnvironmentPreference,
         python_preference: PythonPreference,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            match find_python_installation(request, preference, python_preference, cache, preview)?
-            {
-                Ok(installation) => installation,
-                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-            };
+        let installation = match find_python_installation(
+            request,
+            request_source,
+            preference,
+            python_preference,
+            cache,
+            preview,
+        )? {
+            Ok(installation) => installation,
+            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+        };
         Ok(Self::from_installation(installation))
     }
 

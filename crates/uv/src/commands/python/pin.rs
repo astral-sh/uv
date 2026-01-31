@@ -14,7 +14,8 @@ use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
@@ -127,6 +128,7 @@ pub(crate) async fn pin(
 
     let python = match PythonInstallation::find_or_download(
         Some(&request),
+        Some(&PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -296,6 +298,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     // interpreter to check for compatibility on the current system.
     match PythonInstallation::find(
         pin,
+        Some(&PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         downloads_list,
