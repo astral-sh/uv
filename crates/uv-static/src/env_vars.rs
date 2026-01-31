@@ -307,6 +307,11 @@ impl EnvVars {
     #[attr_added_in("0.9.12")]
     pub const UV_PUBLISH_NO_ATTESTATIONS: &'static str = "UV_PUBLISH_NO_ATTESTATIONS";
 
+    /// Equivalent to the `--on-failure` command-line argument for `uv publish`. Controls behavior
+    /// when an upload fails.
+    #[attr_added_in("next release")]
+    pub const UV_PUBLISH_ON_FAILURE: &'static str = "UV_PUBLISH_ON_FAILURE";
+
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
     /// the environment.
     #[attr_added_in("0.4.18")]

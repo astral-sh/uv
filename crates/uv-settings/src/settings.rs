@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
-    RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl,
+    PublishFailureStrategy, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
+    TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
@@ -2209,6 +2210,7 @@ pub struct OptionsWire {
     publish_url: Option<DisplaySafeUrl>,
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
+    on_failure: Option<PublishFailureStrategy>,
 
     // #[serde(flatten)]
     // add: AddOptions
@@ -2306,6 +2308,7 @@ impl From<OptionsWire> for Options {
             publish_url,
             trusted_publishing,
             check_url,
+            on_failure,
             workspace,
             sources,
             default_groups,
@@ -2392,6 +2395,7 @@ impl From<OptionsWire> for Options {
                 publish_url,
                 trusted_publishing,
                 check_url,
+                on_failure,
             },
             add: AddOptions { add_bounds: bounds },
             workspace,
@@ -2456,6 +2460,21 @@ pub struct PublishOptions {
         "#
     )]
     pub check_url: Option<IndexUrl>,
+
+    /// Control behavior when an upload fails.
+    ///
+    /// - `stop-first`: Stop on the first failure.
+    /// - `keep-going`: Continue uploading all files, report errors at the end.
+    /// - `keep-going-after-success`: Continue only if at least one upload already succeeded
+    ///   (default).
+    #[option(
+        default = "\"keep-going-after-success\"",
+        value_type = "str",
+        example = r#"
+            on-failure = "stop-first"
+        "#
+    )]
+    pub on_failure: Option<PublishFailureStrategy>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
