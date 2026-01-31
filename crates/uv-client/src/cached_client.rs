@@ -20,18 +20,17 @@ use crate::{
     rkyvutil::OwnedArchive,
 };
 
-/// Extract problem details from an HTTP response if it has the correct content type
+/// Extract problem details from an HTTP response.
 ///
 /// Note: This consumes the response body, so it should only be called when there's an error status.
 async fn extract_problem_details(response: Response) -> Option<ProblemDetails> {
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|ct| ct.to_str().ok())
+        .map(ToString::to_string);
     match response.bytes().await {
-        Ok(bytes) => match serde_json::from_slice(&bytes) {
-            Ok(details) => Some(details),
-            Err(err) => {
-                warn!("Failed to parse problem details: {err}");
-                None
-            }
-        },
+        Ok(bytes) => ProblemDetails::try_from_response_body(&bytes, content_type.as_deref()),
         Err(err) => {
             warn!("Failed to read response body for problem details: {err}");
             None
@@ -549,18 +548,7 @@ impl CachedClient {
 
         // Check for HTTP error status and extract problem details if available
         if let Err(status_error) = response.error_for_status_ref() {
-            // Clone the response to extract problem details before the error consumes it
-            let problem_details = if response
-                .headers()
-                .get("content-type")
-                .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct == "application/problem+json")
-                .unwrap_or(false)
-            {
-                extract_problem_details(response).await
-            } else {
-                None
-            };
+            let problem_details = extract_problem_details(response).await;
             return Err(ErrorKind::from_reqwest_with_problem_details(
                 url.clone(),
                 status_error,
@@ -637,17 +625,7 @@ impl CachedClient {
             .map(|retries| retries.value());
 
         if let Err(status_error) = response.error_for_status_ref() {
-            let problem_details = if response
-                .headers()
-                .get("content-type")
-                .and_then(|ct| ct.to_str().ok())
-                .map(|ct| ct.starts_with("application/problem+json"))
-                .unwrap_or(false)
-            {
-                extract_problem_details(response).await
-            } else {
-                None
-            };
+            let problem_details = extract_problem_details(response).await;
             return Err(Error::new(
                 ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
                 retry_count.unwrap_or_default(),

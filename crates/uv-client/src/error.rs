@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
+use tracing::warn;
 
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
@@ -44,6 +45,27 @@ fn default_problem_type() -> String {
 }
 
 impl ProblemDetails {
+    /// Try to parse a response body as RFC 9457 Problem Details.
+    ///
+    /// Returns `None` if the content type is not a JSON type or if parsing fails.
+    pub fn try_from_response_body(body: &[u8], content_type: Option<&str>) -> Option<Self> {
+        let media_type = content_type?
+            .split(';')
+            .next()
+            .unwrap_or(content_type?)
+            .trim();
+        if media_type != "application/json" && media_type != "application/problem+json" {
+            return None;
+        }
+        match serde_json::from_slice(body) {
+            Ok(details) => Some(details),
+            Err(err) => {
+                warn!("Failed to parse problem details: {err}");
+                None
+            }
+        }
+    }
+
     /// Get a human-readable description of the problem
     pub fn description(&self) -> Option<String> {
         match self {

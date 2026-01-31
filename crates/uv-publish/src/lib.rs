@@ -130,6 +130,8 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("Server returned status code {0}. {1}")]
+    StatusProblemDetails(StatusCode, String),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
     )]
@@ -1450,6 +1452,19 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
         ));
     }
 
+    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
+    if let Some(problem) = uv_client::ProblemDetails::try_from_response_body(
+        upload_error.as_bytes(),
+        content_type.as_deref(),
+    ) {
+        if let Some(description) = problem.description() {
+            return Err(PublishSendError::StatusProblemDetails(
+                status_code,
+                description,
+            ));
+        }
+    }
+
     // Raced uploads of the same file are handled by the caller.
     Err(PublishSendError::Status(
         status_code,
@@ -1470,8 +1485,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
-        group_files, upload,
+        FormMetadata, PublishError, PublishSendError, Reporter, UploadDistribution,
+        build_upload_request, group_files, upload,
     };
     use tokio::sync::Semaphore;
     use uv_warnings::owo_colors::AnsiColors;
@@ -2170,6 +2185,51 @@ mod tests {
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
           Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
         "
+        );
+    }
+
+    #[test]
+    fn test_extract_error_message_pypi_json() {
+        let body = r#"{"message": "The server could not comply with the request since it is either malformed or otherwise incorrect.\n\n\nError: Use 'source' as Python version for an sdist.\n\n", "code": "400 Error: Use 'source' as Python version for an sdist.", "title": "Bad Request"}"#;
+        assert_eq!(
+            PublishSendError::extract_error_message(body.to_string(), Some("application/json")),
+            "400 Error: Use 'source' as Python version for an sdist."
+        );
+    }
+
+    #[test]
+    fn test_problem_details_from_response() {
+        let body = r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#;
+        let problem = uv_client::ProblemDetails::try_from_response_body(
+            body.as_bytes(),
+            Some("application/json"),
+        )
+        .expect("should parse problem details");
+        assert_eq!(
+            problem.description().unwrap(),
+            "Server message: Bad Request, Missing required field `name`"
+        );
+    }
+
+    #[test]
+    fn test_problem_details_problem_json_content_type() {
+        let body = r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Invalid `pyversion` for source release (expected: `source`)"}"#;
+        let problem = uv_client::ProblemDetails::try_from_response_body(
+            body.as_bytes(),
+            Some("application/problem+json"),
+        )
+        .expect("should parse problem details");
+        assert_eq!(
+            problem.description().unwrap(),
+            "Server message: Bad Request, Invalid `pyversion` for source release (expected: `source`)"
+        );
+    }
+
+    #[test]
+    fn test_problem_details_ignored_for_plain_text() {
+        assert!(
+            uv_client::ProblemDetails::try_from_response_body(b"Bad Request", Some("text/plain"),)
+                .is_none()
         );
     }
 }
