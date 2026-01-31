@@ -772,7 +772,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::IndexVersions(args),
-        }) => return Ok((ExitStatus::Success)),
+        }) => commands::pip_index_versions().await,
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
