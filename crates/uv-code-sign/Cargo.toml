@@ -1,0 +1,25 @@
+[package]
+name = "uv-code-sign"
+version = "0.0.17"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+uv-extract = { workspace = true }
+uv-install-wheel = { workspace = true }
+
+base64 = { workspace = true }
+csv = { workspace = true }
+fs-err = { workspace = true }
+goblin = { workspace = true }
+owo-colors = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }

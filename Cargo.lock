@@ -6173,6 +6173,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-code-sign"
+version = "0.0.17"
+dependencies = [
+ "base64 0.22.1",
+ "csv",
+ "fs-err",
+ "goblin",
+ "owo-colors",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uv-extract",
+ "uv-install-wheel",
+ "walkdir",
+ "zip",
+]
+
+[[package]]
 name = "uv-configuration"
 version = "0.0.27"
 dependencies = [
