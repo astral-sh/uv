@@ -53,8 +53,9 @@ Alternatively, you can add the transitive dependency to your `requirements.in` f
 specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
 
 In sum, uv needs to know upfront whether the resolver should accept pre-releases for a given
-package. `pip`, meanwhile, respects pre-release identifiers in transitive dependencies, and allows
+package. Meanwhile `pip`, respects pre-release identifiers in transitive dependencies, and allows
 pre-releases of transitive dependencies if no stable versions match the dependency requirements.
+Note: this behavior was made consistent in `pip` 26.0.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
