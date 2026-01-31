@@ -33,8 +33,8 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource, PythonVariant,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
@@ -510,10 +510,8 @@ async fn build_package(
     }
 
     // (1) Explicit request from user
-    let mut interpreter_request = python_request.map(PythonRequest::parse);
-    let mut request_source = interpreter_request
-        .as_ref()
-        .map(|_| PythonRequestSource::UserRequest);
+    let mut interpreter_request = python_request
+        .map(|p| PythonRequest::parse(p).with_source(PythonRequestSource::UserRequest));
 
     // (2) Request from `.python-version`
     if interpreter_request.is_none() {
@@ -523,8 +521,8 @@ async fn build_package(
         )
         .await?
         {
-            request_source = Some(PythonRequestSource::DotPythonVersion(file.clone()));
-            interpreter_request = file.into_version();
+            let source = PythonRequestSource::DotPythonVersion(file.clone());
+            interpreter_request = file.into_version().map(|r| r.with_source(source));
         }
     }
 
@@ -536,21 +534,18 @@ async fn build_package(
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
+                    PythonRequest::from(PythonRequestKind::Version(VersionRequest::Range(
                         specifiers.clone(),
                         PythonVariant::Default,
-                    ))
+                    )))
+                    .with_source(PythonRequestSource::RequiresPython)
                 });
-            if interpreter_request.is_some() {
-                request_source = Some(PythonRequestSource::RequiresPython);
-            }
         }
     }
 
     // Locate the Python interpreter to use in the environment.
     let interpreter = PythonInstallation::find_or_download(
         interpreter_request.as_ref(),
-        request_source.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

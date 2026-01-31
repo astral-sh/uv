@@ -675,9 +675,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await?;
 
+                let python_request = python_request.map(|r| r.with_source(source.clone()));
                 let interpreter = PythonInstallation::find_or_download(
                     python_request.as_ref(),
-                    Some(&source),
                     EnvironmentPreference::Any,
                     python_preference,
                     python_downloads,
@@ -904,10 +904,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
             let interpreter = {
                 // (1) Explicit request from user
-                let (python_request, request_source) = if let Some(request) = python.as_deref() {
-                    (
-                        Some(PythonRequest::parse(request)),
-                        Some(PythonRequestSource::UserRequest),
+                let python_request = if let Some(request) = python.as_deref() {
+                    Some(
+                        PythonRequest::parse(request).with_source(PythonRequestSource::UserRequest),
                     )
                 // (2) Request from `.python-version`
                 } else if let Some(file) = PythonVersionFile::discover(
@@ -917,14 +916,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await?
                 {
                     let source = PythonRequestSource::DotPythonVersion(file.clone());
-                    (file.into_version(), Some(source))
+                    file.into_version().map(|r| r.with_source(source))
                 } else {
-                    (None, None)
+                    None
                 };
 
                 let python = PythonInstallation::find_or_download(
                     python_request.as_ref(),
-                    request_source.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,

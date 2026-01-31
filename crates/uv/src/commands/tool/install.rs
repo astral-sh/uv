@@ -88,10 +88,10 @@ pub(crate) async fn install(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let (python_request, request_source) = if let Some(request) = python.as_deref() {
+    let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
         (
-            Some(PythonRequest::parse(request)),
-            Some(PythonRequestSource::UserRequest),
+            Some(PythonRequest::parse(request).with_source(PythonRequestSource::UserRequest)),
+            true,
         )
     } else {
         // Discover a global Python version pin, if no request was made
@@ -106,16 +106,14 @@ pub(crate) async fn install(
             )
             .await?
             .and_then(PythonVersionFile::into_version),
-            None,
+            false,
         )
     };
-    let explicit_python_request = request_source.is_some();
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
-        request_source.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

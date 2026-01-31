@@ -21,7 +21,8 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource, PythonVariant,
+    VersionRequest,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -130,16 +131,18 @@ pub(crate) async fn refine_interpreter(
         Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
     };
 
-    let requires_python_request = PythonRequest::Version(VersionRequest::Range(
+    let requires_python_request: PythonRequest = PythonRequestKind::Version(VersionRequest::Range(
         VersionSpecifiers::from_iter([lower_bound, upper_bound]),
         PythonVariant::default(),
-    ));
+    ))
+    .into();
+    let requires_python_request =
+        requires_python_request.with_source(PythonRequestSource::RequiresPython);
 
     debug!("Refining interpreter with: {requires_python_request}");
 
     let interpreter = PythonInstallation::find_or_download(
         Some(&requires_python_request),
-        Some(&PythonRequestSource::RequiresPython),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

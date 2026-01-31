@@ -8,7 +8,7 @@ use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_warnings::warn_user_once;
 
-use crate::PythonRequest;
+use crate::{PythonRequest, PythonRequestKind};
 
 /// The file name for Python version pins.
 pub static PYTHON_VERSION_FILENAME: &str = ".python-version";
@@ -175,7 +175,7 @@ impl PythonVersionFile {
                     .map(ToString::to_string)
                     .map(|version| PythonRequest::parse(&version))
                     .filter(|request| {
-                        if let PythonRequest::ExecutableName(name) = request {
+                        if let PythonRequestKind::ExecutableName(name) = request.kind() {
                             warn_user_once!(
                                 "Ignoring unsupported Python request `{name}` in version file: {}",
                                 path.display()
@@ -280,7 +280,7 @@ impl PythonVersionFile {
             &self.path,
             self.versions
                 .iter()
-                .map(PythonRequest::to_canonical_string)
+                .map(|r| r.to_canonical_string())
                 .join("\n")
                 .add("\n")
                 .as_bytes(),

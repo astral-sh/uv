@@ -45,15 +45,18 @@ pub(crate) async fn pip_uninstall(
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
 
-    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
-
     // Detect the current Python interpreter.
+    let python_request = python
+        .as_deref()
+        .map(PythonRequest::parse)
+        .unwrap_or_default();
+    let python_request = if python.is_some() {
+        python_request.with_source(PythonRequestSource::UserRequest)
+    } else {
+        python_request
+    };
     let environment = PythonEnvironment::find(
-        &python
-            .as_deref()
-            .map(PythonRequest::parse)
-            .unwrap_or_default(),
-        request_source.as_ref(),
+        &python_request,
         EnvironmentPreference::from_system_flag(system, true),
         PythonPreference::default().with_system_flag(system),
         &cache,

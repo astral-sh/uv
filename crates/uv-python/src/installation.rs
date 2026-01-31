@@ -16,7 +16,7 @@ use uv_platform::{Arch, Libc, Os, Platform};
 use uv_preview::Preview;
 
 use crate::discovery::{
-    EnvironmentPreference, PythonRequest, PythonRequestSource, find_best_python_installation,
+    EnvironmentPreference, PythonRequest, PythonRequestKind, find_best_python_installation,
     find_python_installation,
 };
 use crate::downloads::{
@@ -61,21 +61,14 @@ impl PythonInstallation {
     /// See [`find_installation`] for implementation details.
     pub fn find(
         request: &PythonRequest,
-        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(
-            request,
-            request_source,
-            environments,
-            preference,
-            cache,
-            preview,
-        )??;
+        let installation =
+            find_python_installation(request, environments, preference, cache, preview)??;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -84,7 +77,6 @@ impl PythonInstallation {
     /// cannot be satisfied, fallback to the best available Python installation.
     pub async fn find_best(
         request: &PythonRequest,
-        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -105,7 +97,6 @@ impl PythonInstallation {
             && client_builder.connectivity.is_online();
         let installation = find_best_python_installation(
             request,
-            request_source,
             environments,
             preference,
             downloads_enabled,
@@ -128,7 +119,6 @@ impl PythonInstallation {
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
     pub async fn find_or_download(
         request: Option<&PythonRequest>,
-        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -140,7 +130,8 @@ impl PythonInstallation {
         python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let request = request.unwrap_or(&PythonRequest::Default);
+        let default_request = PythonRequest::default();
+        let request = request.unwrap_or(&default_request);
 
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
@@ -152,7 +143,6 @@ impl PythonInstallation {
         // Search for the installation
         let err = match Self::find(
             request,
-            request_source,
             environments,
             preference,
             &download_list,
@@ -195,7 +185,10 @@ impl PythonInstallation {
             Ok(Err(downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    if matches!(
+                        request.kind(),
+                        PythonRequestKind::Default | PythonRequestKind::Any
+                    ) {
                         return Err(err);
                     }
                     return Err(err.with_missing_python_hint(
@@ -223,8 +216,8 @@ impl PythonInstallation {
 
         // If the download is available, but not usable, we attach a hint to the original error.
         if !downloads_enabled {
-            let for_request = match request {
-                PythonRequest::Default | PythonRequest::Any => String::new(),
+            let for_request = match request.kind() {
+                PythonRequestKind::Default | PythonRequestKind::Any => String::new(),
                 _ => format!(" for {request}"),
             };
 

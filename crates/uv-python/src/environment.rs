@@ -11,7 +11,7 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_preview::Preview;
 
-use crate::discovery::{PythonRequestSource, find_python_installation};
+use crate::discovery::{PythonRequestKind, find_python_installation};
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
@@ -96,7 +96,10 @@ impl fmt::Display for EnvironmentNotFound {
             EnvironmentPreference::OnlyVirtual => SearchType::Virtual,
         };
 
-        if matches!(self.request, PythonRequest::Default | PythonRequest::Any) {
+        if matches!(
+            self.request.kind(),
+            PythonRequestKind::Default | PythonRequestKind::Any
+        ) {
             write!(f, "No {search_type} found")?;
         } else {
             write!(f, "No {search_type} found for {}", self.request)?;
@@ -151,23 +154,17 @@ impl PythonEnvironment {
     /// instead.
     pub fn find(
         request: &PythonRequest,
-        request_source: Option<&PythonRequestSource>,
         preference: EnvironmentPreference,
         python_preference: PythonPreference,
         cache: &Cache,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation = match find_python_installation(
-            request,
-            request_source,
-            preference,
-            python_preference,
-            cache,
-            preview,
-        )? {
-            Ok(installation) => installation,
-            Err(err) => return Err(EnvironmentNotFound::from(err).into()),
-        };
+        let installation =
+            match find_python_installation(request, preference, python_preference, cache, preview)?
+            {
+                Ok(installation) => installation,
+                Err(err) => return Err(EnvironmentNotFound::from(err).into()),
+            };
         Ok(Self::from_installation(installation))
     }
 
@@ -184,7 +181,7 @@ impl PythonEnvironment {
             Ok(false) => {
                 return Err(Error::MissingEnvironment(EnvironmentNotFound {
                     preference: EnvironmentPreference::Any,
-                    request: PythonRequest::Directory(root.as_ref().to_owned()),
+                    request: PythonRequestKind::Directory(root.as_ref().to_owned()).into(),
                 }));
             }
             Err(err) => return Err(Error::Discovery(err.into())),

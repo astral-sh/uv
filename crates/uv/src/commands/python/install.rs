@@ -30,7 +30,7 @@ use uv_python::managed::{
 };
 use uv_python::{
     ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
+    PythonInstallationMinorVersionKey, PythonRequest, PythonRequestKind, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
@@ -359,7 +359,7 @@ async fn perform_install(
                 // Drop the patch and prerelease parts from the request
                 request = request.with_version(version.only_minor());
                 let install_request =
-                    InstallRequest::new(PythonRequest::Key(request), &download_list)?;
+                    InstallRequest::new(PythonRequestKind::Key(request).into(), &download_list)?;
                 minor_version_requests.insert(install_request);
             }
             minor_version_requests.into_iter().collect::<Vec<_>>()
@@ -386,9 +386,9 @@ async fn perform_install(
                 is_default_install = true;
                 vec![if reinstall {
                     // On bare `--reinstall`, reinstall all Python versions
-                    PythonRequest::Any
+                    PythonRequestKind::Any.into()
                 } else {
-                    PythonRequest::Default
+                    PythonRequestKind::Default.into()
                 }]
             })
             .into_iter()
@@ -425,8 +425,8 @@ async fn perform_install(
     let requested_minor_versions = requests
         .iter()
         .filter_map(|request| {
-            if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
-                request.python_request()
+            if let PythonRequestKind::Version(VersionRequest::MajorMinor(major, minor, ..)) =
+                request.python_request().kind()
             {
                 uv_pep440::Version::from_str(&format!("{major}.{minor}")).ok()
             } else {
@@ -478,10 +478,10 @@ async fn perform_install(
 
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
-                if matches!(&request.request, &PythonRequest::Any) {
+                if matches!(request.request.kind(), PythonRequestKind::Any) {
                     // Construct an install request matching the existing installation
                     match InstallRequest::new(
-                        PythonRequest::Key(installation.into()),
+                        PythonRequestKind::Key(installation.into()).into(),
                         &download_list,
                     ) {
                         Ok(request) => {
@@ -809,7 +809,7 @@ async fn perform_install(
                         .get(install_key)
                         .and_then(|requests| {
                             let all_non_explicit = requests.iter().all(|request| {
-                                if let PythonRequest::Key(key) = &request.request {
+                                if let PythonRequestKind::Key(key) = request.request.kind() {
                                     !matches!(key.arch(), Some(ArchRequest::Explicit(_)))
                                 } else {
                                     true

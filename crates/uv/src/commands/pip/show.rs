@@ -48,12 +48,15 @@ pub(crate) fn pip_show(
         return Ok(ExitStatus::Failure);
     }
 
-    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
-
     // Detect the current Python interpreter.
+    let python_request = python.map(PythonRequest::parse).unwrap_or_default();
+    let python_request = if python.is_some() {
+        python_request.with_source(PythonRequestSource::UserRequest)
+    } else {
+        python_request
+    };
     let environment = PythonEnvironment::find(
-        &python.map(PythonRequest::parse).unwrap_or_default(),
-        request_source.as_ref(),
+        &python_request,
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,

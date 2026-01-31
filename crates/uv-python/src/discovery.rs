@@ -44,11 +44,11 @@ use crate::virtualenv::{
 use crate::windows_registry::{WindowsPython, registry_pythons};
 use crate::{BrokenLink, Interpreter, PythonVersion, PythonVersionFile};
 
-/// A request to find a Python installation.
+/// The kind of a [`PythonRequest`].
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, Eq, Default)]
-pub enum PythonRequest {
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
+pub enum PythonRequestKind {
     /// An appropriate default Python installation
     ///
     /// This may skip some Python installations, such as pre-release versions or alternative
@@ -74,15 +74,59 @@ pub enum PythonRequest {
     Key(PythonDownloadRequest),
 }
 
-impl PartialEq for PythonRequest {
-    fn eq(&self, other: &Self) -> bool {
-        self.to_canonical_string() == other.to_canonical_string()
+/// A request to find a Python installation.
+///
+/// See [`PythonRequest::from_str`].
+#[derive(Debug, Clone, Default)]
+pub struct PythonRequest {
+    kind: PythonRequestKind,
+    source: Option<Box<PythonRequestSource>>,
+}
+
+impl PythonRequest {
+    /// Attach a [`PythonRequestSource`] to this request.
+    #[must_use]
+    pub fn with_source(mut self, source: PythonRequestSource) -> Self {
+        self.source = Some(Box::new(source));
+        self
+    }
+
+    /// Return the [`PythonRequestSource`] for this request, if any.
+    pub fn source(&self) -> Option<&PythonRequestSource> {
+        self.source.as_deref()
+    }
+
+    /// Return the [`PythonRequestKind`] for this request.
+    pub fn kind(&self) -> &PythonRequestKind {
+        &self.kind
     }
 }
 
+impl PartialEq for PythonRequest {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+impl Eq for PythonRequest {}
+
 impl std::hash::Hash for PythonRequest {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.to_canonical_string().hash(state);
+        self.kind.hash(state);
+    }
+}
+
+impl std::ops::Deref for PythonRequest {
+    type Target = PythonRequestKind;
+
+    fn deref(&self) -> &Self::Target {
+        &self.kind
+    }
+}
+
+impl From<PythonRequestKind> for PythonRequest {
+    fn from(kind: PythonRequestKind) -> Self {
+        Self { kind, source: None }
     }
 }
 
@@ -106,6 +150,26 @@ impl std::fmt::Display for PythonRequestSource {
             }
             Self::RequiresPython => write!(f, "`requires-python` metadata"),
         }
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for PythonRequestKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
+        Ok(PythonRequest::parse(&s).kind)
+    }
+}
+
+impl serde::Serialize for PythonRequestKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = self.to_canonical_string();
+        serializer.serialize_str(&s)
     }
 }
 
@@ -240,7 +304,6 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
     pub request: PythonRequest,
-    pub request_source: Option<Box<PythonRequestSource>>,
     pub python_preference: PythonPreference,
     pub environment_preference: EnvironmentPreference,
 }
@@ -1053,7 +1116,6 @@ fn python_installations_with_executable_name<'a>(
 /// Iterate over all Python installations that satisfy the given request.
 pub fn find_python_installations<'a>(
     request: &'a PythonRequest,
-    request_source: Option<&'a PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
@@ -1065,8 +1127,8 @@ pub fn find_python_installations<'a>(
     }
     .sources(request);
 
-    match request {
-        PythonRequest::File(path) => Box::new(iter::once({
+    match request.kind() {
+        PythonRequestKind::File(path) => Box::new(iter::once({
             if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
@@ -1074,7 +1136,6 @@ pub fn find_python_installations<'a>(
                     Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
-                            request_source: request_source.cloned().map(Box::new),
                             python_preference: preference,
                             environment_preference: environments,
                         }))
@@ -1093,7 +1154,7 @@ pub fn find_python_installations<'a>(
                 ))
             }
         })),
-        PythonRequest::Directory(path) => Box::new(iter::once({
+        PythonRequestKind::Directory(path) => Box::new(iter::once({
             if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
@@ -1101,7 +1162,6 @@ pub fn find_python_installations<'a>(
                     Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
-                            request_source: request_source.cloned().map(Box::new),
                             python_preference: preference,
                             environment_preference: environments,
                         }))
@@ -1120,7 +1180,7 @@ pub fn find_python_installations<'a>(
                 ))
             }
         })),
-        PythonRequest::ExecutableName(name) => {
+        PythonRequestKind::ExecutableName(name) => {
             if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
@@ -1142,7 +1202,7 @@ pub fn find_python_installations<'a>(
                 ))))
             }
         }
-        PythonRequest::Any => Box::new({
+        PythonRequestKind::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
             python_installations(
                 &VersionRequest::Any,
@@ -1155,7 +1215,7 @@ pub fn find_python_installations<'a>(
             )
             .map_ok(Ok)
         }),
-        PythonRequest::Default => Box::new({
+        PythonRequestKind::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
             python_installations(
                 &VersionRequest::Default,
@@ -1168,7 +1228,7 @@ pub fn find_python_installations<'a>(
             )
             .map_ok(Ok)
         }),
-        PythonRequest::Version(version) => {
+        PythonRequestKind::Version(version) => {
             if let Err(err) = version.check_supported() {
                 return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             }
@@ -1186,7 +1246,7 @@ pub fn find_python_installations<'a>(
                 .map_ok(Ok)
             })
         }
-        PythonRequest::Implementation(implementation) => Box::new({
+        PythonRequestKind::Implementation(implementation) => Box::new({
             debug!("Searching for a {request} interpreter in {sources}");
             python_installations(
                 &VersionRequest::Default,
@@ -1200,7 +1260,7 @@ pub fn find_python_installations<'a>(
             .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
             .map_ok(Ok)
         }),
-        PythonRequest::ImplementationVersion(implementation, version) => {
+        PythonRequestKind::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
                 return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             }
@@ -1221,7 +1281,7 @@ pub fn find_python_installations<'a>(
                 .map_ok(Ok)
             })
         }
-        PythonRequest::Key(request) => {
+        PythonRequestKind::Key(request) => {
             if let Some(version) = request.version() {
                 if let Err(err) = version.check_supported() {
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
@@ -1254,20 +1314,13 @@ pub fn find_python_installations<'a>(
 /// the error will raised instead of attempting further candidates.
 pub(crate) fn find_python_installation(
     request: &PythonRequest,
-    request_source: Option<&PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
     preview: Preview,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(
-        request,
-        request_source,
-        environments,
-        preference,
-        cache,
-        preview,
-    );
+    let installations =
+        find_python_installations(request, environments, preference, cache, preview);
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1395,7 +1448,6 @@ pub(crate) fn find_python_installation(
 
     Ok(Err(PythonNotFound {
         request: request.clone(),
-        request_source: request_source.cloned().map(Box::new),
         environment_preference: environments,
         python_preference: preference,
     }))
@@ -1417,7 +1469,6 @@ pub(crate) fn find_python_installation(
 #[instrument(skip_all, fields(request))]
 pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
-    request_source: Option<&PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     downloads_enabled: bool,
@@ -1435,23 +1486,29 @@ pub(crate) async fn find_best_python_installation(
 
     let mut previous_fetch_failed = false;
 
-    let request_without_patch = match request {
-        PythonRequest::Version(version) => {
+    let request_without_patch = match request.kind() {
+        PythonRequestKind::Version(version) => {
             if version.has_patch() {
-                Some(PythonRequest::Version(version.clone().without_patch()))
+                Some(PythonRequest::from(PythonRequestKind::Version(
+                    version.clone().without_patch(),
+                )))
             } else {
                 None
             }
         }
-        PythonRequest::ImplementationVersion(implementation, version) => Some(
-            PythonRequest::ImplementationVersion(*implementation, version.clone().without_patch()),
+        PythonRequestKind::ImplementationVersion(implementation, version) => Some(
+            PythonRequest::from(PythonRequestKind::ImplementationVersion(
+                *implementation,
+                version.clone().without_patch(),
+            )),
         ),
         _ => None,
     };
 
+    let default_request = PythonRequest::default();
     for (attempt, request) in iter::once(original_request)
         .chain(request_without_patch.iter())
-        .chain(iter::once(&PythonRequest::Default))
+        .chain(iter::once(&default_request))
         .enumerate()
     {
         debug!(
@@ -1462,14 +1519,7 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        // Only pass the request source for the original request, not for fallbacks
-        let source = if request == original_request {
-            request_source
-        } else {
-            None
-        };
-        let result =
-            find_python_installation(request, source, environments, preference, cache, preview);
+        let result = find_python_installation(request, environments, preference, cache, preview);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1521,7 +1571,10 @@ pub(crate) async fn find_best_python_installation(
                 // If the request was for the default or any version, propagate
                 // the error as nothing else we are about to do will help the
                 // situation.
-                if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                if matches!(
+                    request.kind(),
+                    PythonRequestKind::Default | PythonRequestKind::Any
+                ) {
                     return Err(error);
                 }
 
@@ -1547,12 +1600,14 @@ pub(crate) async fn find_best_python_installation(
         // iteration.
         //
         // The most recent find error therefore becomes a fatal one.
-        if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+        if matches!(
+            request.kind(),
+            PythonRequestKind::Default | PythonRequestKind::Any
+        ) {
             return Err(match error {
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
                     request: original_request.clone(),
-                    request_source: request_source.cloned().map(Box::new),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
@@ -1792,11 +1847,11 @@ impl PythonVariant {
         }
     }
 }
-impl PythonRequest {
+impl PythonRequestKind {
     /// Create a request from a string.
     ///
-    /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
-    /// [`PythonRequest::ExecutableName`].
+    /// This cannot fail, which means weird inputs will be parsed as [`PythonRequestKind::File`] or
+    /// [`PythonRequestKind::ExecutableName`].
     ///
     /// This is intended for parsing the argument to the `--python` flag. See also
     /// [`try_from_tool_name`][Self::try_from_tool_name] below.
@@ -2245,6 +2300,21 @@ impl PythonRequest {
         !request_range
             .intersection(&requires_python_range)
             .is_empty()
+    }
+}
+
+impl PythonRequest {
+    /// Create a request from a string.
+    ///
+    /// This cannot fail, which means weird inputs will be parsed as [`PythonRequestKind::File`] or
+    /// [`PythonRequestKind::ExecutableName`].
+    pub fn parse(value: &str) -> Self {
+        PythonRequestKind::parse(value).into()
+    }
+
+    /// Try to parse a tool name as a Python version, e.g. `uvx python311`.
+    pub fn try_from_tool_name(value: &str) -> Result<Option<Self>, Error> {
+        Ok(PythonRequestKind::try_from_tool_name(value)?.map(Into::into))
     }
 }
 
@@ -3398,7 +3468,7 @@ impl fmt::Display for VersionRequest {
     }
 }
 
-impl fmt::Display for PythonRequest {
+impl fmt::Display for PythonRequestKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Default => write!(f, "a default Python"),
@@ -3415,6 +3485,12 @@ impl fmt::Display for PythonRequest {
             }
             Self::Key(request) => write!(f, "{request}"),
         }
+    }
+}
+
+impl fmt::Display for PythonRequest {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.kind, f)
     }
 }
 
@@ -3545,17 +3621,17 @@ impl fmt::Display for PythonNotFound {
         }
         .sources(&self.request);
 
-        match self.request {
-            PythonRequest::Default | PythonRequest::Any => {
+        match self.request.kind() {
+            PythonRequestKind::Default | PythonRequestKind::Any => {
                 write!(f, "No interpreter found in {sources}")
             }
-            PythonRequest::File(_) => {
+            PythonRequestKind::File(_) => {
                 write!(f, "No interpreter found at {}", self.request)
             }
-            PythonRequest::Directory(_) => {
+            PythonRequestKind::Directory(_) => {
                 write!(f, "No interpreter found in {}", self.request)
             }
-            _ => match self.request_source.as_deref() {
+            _ => match self.request.source() {
                 None | Some(PythonRequestSource::UserRequest) => {
                     write!(f, "No interpreter found for {} in {sources}", self.request)
                 }
@@ -3634,7 +3710,7 @@ mod tests {
     use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
     use crate::{
-        discovery::{PythonRequest, VersionRequest},
+        discovery::{PythonRequest, PythonRequestKind, VersionRequest},
         downloads::{ArchRequest, PythonDownloadRequest},
         implementation::ImplementationName,
     };
@@ -3646,64 +3722,68 @@ mod tests {
 
     #[test]
     fn interpreter_request_from_str() {
-        assert_eq!(PythonRequest::parse("any"), PythonRequest::Any);
-        assert_eq!(PythonRequest::parse("default"), PythonRequest::Default);
+        assert_eq!(PythonRequest::parse("any"), PythonRequestKind::Any.into());
+        assert_eq!(
+            PythonRequest::parse("default"),
+            PythonRequestKind::Default.into()
+        );
         assert_eq!(
             PythonRequest::parse("3.12"),
-            PythonRequest::Version(VersionRequest::from_str("3.12").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str("3.12").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse(">=3.12"),
-            PythonRequest::Version(VersionRequest::from_str(">=3.12").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str(">=3.12").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse(">=3.12,<3.13"),
-            PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse(">=3.12,<3.13"),
-            PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap()).into()
         );
 
         assert_eq!(
             PythonRequest::parse("3.13.0a1"),
-            PythonRequest::Version(VersionRequest::from_str("3.13.0a1").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str("3.13.0a1").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse("3.13.0b5"),
-            PythonRequest::Version(VersionRequest::from_str("3.13.0b5").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str("3.13.0b5").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse("3.13.0rc1"),
-            PythonRequest::Version(VersionRequest::from_str("3.13.0rc1").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str("3.13.0rc1").unwrap()).into()
         );
         assert_eq!(
             PythonRequest::parse("3.13.1rc1"),
-            PythonRequest::ExecutableName("3.13.1rc1".to_string()),
+            PythonRequestKind::ExecutableName("3.13.1rc1".to_string()).into(),
             "Pre-release version requests require a patch version of zero"
         );
         assert_eq!(
             PythonRequest::parse("3rc1"),
-            PythonRequest::ExecutableName("3rc1".to_string()),
+            PythonRequestKind::ExecutableName("3rc1".to_string()).into(),
             "Pre-release version requests require a minor version"
         );
 
         assert_eq!(
             PythonRequest::parse("cpython"),
-            PythonRequest::Implementation(ImplementationName::CPython)
+            PythonRequestKind::Implementation(ImplementationName::CPython).into()
         );
 
         assert_eq!(
             PythonRequest::parse("cpython3.12.2"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::CPython,
                 VersionRequest::from_str("3.12.2").unwrap(),
             )
+            .into()
         );
 
         assert_eq!(
             PythonRequest::parse("cpython-3.13.2"),
-            PythonRequest::Key(PythonDownloadRequest {
+            PythonRequestKind::Key(PythonDownloadRequest {
                 version: Some(VersionRequest::MajorMinorPatch(
                     3,
                     13,
@@ -3717,10 +3797,11 @@ mod tests {
                 build: None,
                 prereleases: None
             })
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("cpython-3.13.2-macos-aarch64-none"),
-            PythonRequest::Key(PythonDownloadRequest {
+            PythonRequestKind::Key(PythonDownloadRequest {
                 version: Some(VersionRequest::MajorMinorPatch(
                     3,
                     13,
@@ -3737,10 +3818,11 @@ mod tests {
                 build: None,
                 prereleases: None
             })
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("any-3.13.2"),
-            PythonRequest::Key(PythonDownloadRequest {
+            PythonRequestKind::Key(PythonDownloadRequest {
                 version: Some(VersionRequest::MajorMinorPatch(
                     3,
                     13,
@@ -3754,10 +3836,11 @@ mod tests {
                 build: None,
                 prereleases: None
             })
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("any-3.13.2-any-aarch64"),
-            PythonRequest::Key(PythonDownloadRequest {
+            PythonRequestKind::Key(PythonDownloadRequest {
                 version: Some(VersionRequest::MajorMinorPatch(
                     3,
                     13,
@@ -3774,117 +3857,127 @@ mod tests {
                 build: None,
                 prereleases: None
             })
+            .into()
         );
 
         assert_eq!(
             PythonRequest::parse("pypy"),
-            PythonRequest::Implementation(ImplementationName::PyPy)
+            PythonRequestKind::Implementation(ImplementationName::PyPy).into()
         );
         assert_eq!(
             PythonRequest::parse("pp"),
-            PythonRequest::Implementation(ImplementationName::PyPy)
+            PythonRequestKind::Implementation(ImplementationName::PyPy).into()
         );
         assert_eq!(
             PythonRequest::parse("graalpy"),
-            PythonRequest::Implementation(ImplementationName::GraalPy)
+            PythonRequestKind::Implementation(ImplementationName::GraalPy).into()
         );
         assert_eq!(
             PythonRequest::parse("gp"),
-            PythonRequest::Implementation(ImplementationName::GraalPy)
+            PythonRequestKind::Implementation(ImplementationName::GraalPy).into()
         );
         assert_eq!(
             PythonRequest::parse("cp"),
-            PythonRequest::Implementation(ImplementationName::CPython)
+            PythonRequestKind::Implementation(ImplementationName::CPython).into()
         );
         assert_eq!(
             PythonRequest::parse("pypy3.10"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("pp310"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("graalpy3.10"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("gp310"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("cp38"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::CPython,
                 VersionRequest::from_str("3.8").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("pypy@3.10"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("pypy310"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("graalpy@3.10"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
         assert_eq!(
             PythonRequest::parse("graalpy310"),
-            PythonRequest::ImplementationVersion(
+            PythonRequestKind::ImplementationVersion(
                 ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap(),
             )
+            .into()
         );
 
         let tempdir = TempDir::new().unwrap();
         assert_eq!(
             PythonRequest::parse(tempdir.path().to_str().unwrap()),
-            PythonRequest::Directory(tempdir.path().to_path_buf()),
+            PythonRequestKind::Directory(tempdir.path().to_path_buf()).into(),
             "An existing directory is treated as a directory"
         );
         assert_eq!(
             PythonRequest::parse(tempdir.child("foo").path().to_str().unwrap()),
-            PythonRequest::File(tempdir.child("foo").path().to_path_buf()),
+            PythonRequestKind::File(tempdir.child("foo").path().to_path_buf()).into(),
             "A path that does not exist is treated as a file"
         );
         tempdir.child("bar").touch().unwrap();
         assert_eq!(
             PythonRequest::parse(tempdir.child("bar").path().to_str().unwrap()),
-            PythonRequest::File(tempdir.child("bar").path().to_path_buf()),
+            PythonRequestKind::File(tempdir.child("bar").path().to_path_buf()).into(),
             "An existing file is treated as a file"
         );
         assert_eq!(
             PythonRequest::parse("./foo"),
-            PythonRequest::File(PathBuf::from_str("./foo").unwrap()),
+            PythonRequestKind::File(PathBuf::from_str("./foo").unwrap()).into(),
             "A string with a file system separator is treated as a file"
         );
         assert_eq!(
             PythonRequest::parse("3.13t"),
-            PythonRequest::Version(VersionRequest::from_str("3.13t").unwrap())
+            PythonRequestKind::Version(VersionRequest::from_str("3.13t").unwrap()).into()
         );
     }
 
@@ -3894,7 +3987,7 @@ mod tests {
             python_preference: PythonPreference::System,
             environment_preference: EnvironmentPreference::OnlySystem,
         };
-        let sources = preferences.sources(&PythonRequest::Default);
+        let sources = preferences.sources(&PythonRequest::default());
 
         if cfg!(windows) {
             assert_eq!(sources, "search path, registry, or managed installations");
@@ -3909,7 +4002,7 @@ mod tests {
             python_preference: PythonPreference::OnlySystem,
             environment_preference: EnvironmentPreference::OnlySystem,
         };
-        let sources = preferences.sources(&PythonRequest::Default);
+        let sources = preferences.sources(&PythonRequest::default());
 
         if cfg!(windows) {
             assert_eq!(sources, "search path or registry");
@@ -3920,107 +4013,141 @@ mod tests {
 
     #[test]
     fn interpreter_request_to_canonical_string() {
-        assert_eq!(PythonRequest::Default.to_canonical_string(), "default");
-        assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
+        assert_eq!(PythonRequest::default().to_canonical_string(), "default");
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Any).to_canonical_string(),
+            "any"
+        );
+        assert_eq!(
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str("3.12").unwrap()
+            ))
+            .to_canonical_string(),
             "3.12"
         );
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str(">=3.12").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str(">=3.12").unwrap()
+            ))
+            .to_canonical_string(),
             ">=3.12"
         );
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str(">=3.12,<3.13").unwrap()
+            ))
+            .to_canonical_string(),
             ">=3.12, <3.13"
         );
 
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str("3.13.0a1").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str("3.13.0a1").unwrap()
+            ))
+            .to_canonical_string(),
             "3.13a1"
         );
 
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str("3.13.0b5").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str("3.13.0b5").unwrap()
+            ))
+            .to_canonical_string(),
             "3.13b5"
         );
 
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str("3.13.0rc1").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str("3.13.0rc1").unwrap()
+            ))
+            .to_canonical_string(),
             "3.13rc1"
         );
 
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str("313rc4").unwrap())
-                .to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str("313rc4").unwrap()
+            ))
+            .to_canonical_string(),
             "3.13rc4"
         );
 
         assert_eq!(
-            PythonRequest::ExecutableName("foo".to_string()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::ExecutableName("foo".to_string()))
+                .to_canonical_string(),
             "foo"
         );
         assert_eq!(
-            PythonRequest::Implementation(ImplementationName::CPython).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Implementation(
+                ImplementationName::CPython
+            ))
+            .to_canonical_string(),
             "cpython"
         );
         assert_eq!(
-            PythonRequest::ImplementationVersion(
+            PythonRequest::from(PythonRequestKind::ImplementationVersion(
                 ImplementationName::CPython,
                 VersionRequest::from_str("3.12.2").unwrap(),
-            )
+            ))
             .to_canonical_string(),
             "cpython@3.12.2"
         );
         assert_eq!(
-            PythonRequest::Implementation(ImplementationName::PyPy).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Implementation(ImplementationName::PyPy))
+                .to_canonical_string(),
             "pypy"
         );
         assert_eq!(
-            PythonRequest::ImplementationVersion(
+            PythonRequest::from(PythonRequestKind::ImplementationVersion(
                 ImplementationName::PyPy,
                 VersionRequest::from_str("3.10").unwrap(),
-            )
+            ))
             .to_canonical_string(),
             "pypy@3.10"
         );
         assert_eq!(
-            PythonRequest::Implementation(ImplementationName::GraalPy).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Implementation(
+                ImplementationName::GraalPy
+            ))
+            .to_canonical_string(),
             "graalpy"
         );
         assert_eq!(
-            PythonRequest::ImplementationVersion(
+            PythonRequest::from(PythonRequestKind::ImplementationVersion(
                 ImplementationName::GraalPy,
                 VersionRequest::from_str("3.10").unwrap(),
-            )
+            ))
             .to_canonical_string(),
             "graalpy@3.10"
         );
 
         let tempdir = TempDir::new().unwrap();
         assert_eq!(
-            PythonRequest::Directory(tempdir.path().to_path_buf()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::Directory(tempdir.path().to_path_buf()))
+                .to_canonical_string(),
             tempdir.path().to_str().unwrap(),
             "An existing directory is treated as a directory"
         );
         assert_eq!(
-            PythonRequest::File(tempdir.child("foo").path().to_path_buf()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::File(
+                tempdir.child("foo").path().to_path_buf()
+            ))
+            .to_canonical_string(),
             tempdir.child("foo").path().to_str().unwrap(),
             "A path that does not exist is treated as a file"
         );
         tempdir.child("bar").touch().unwrap();
         assert_eq!(
-            PythonRequest::File(tempdir.child("bar").path().to_path_buf()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::File(
+                tempdir.child("bar").path().to_path_buf()
+            ))
+            .to_canonical_string(),
             tempdir.child("bar").path().to_str().unwrap(),
             "An existing file is treated as a file"
         );
         assert_eq!(
-            PythonRequest::File(PathBuf::from_str("./foo").unwrap()).to_canonical_string(),
+            PythonRequest::from(PythonRequestKind::File(PathBuf::from_str("./foo").unwrap()))
+                .to_canonical_string(),
             "./foo",
             "A string with a file system separator is treated as a file"
         );
@@ -4189,14 +4316,14 @@ mod tests {
     #[test]
     fn executable_names_from_request() {
         fn case(request: &str, expected: &[&str]) {
-            let (implementation, version) = match PythonRequest::parse(request) {
-                PythonRequest::Any => (None, VersionRequest::Any),
-                PythonRequest::Default => (None, VersionRequest::Default),
-                PythonRequest::Version(version) => (None, version),
-                PythonRequest::ImplementationVersion(implementation, version) => {
+            let (implementation, version) = match PythonRequest::parse(request).kind().clone() {
+                PythonRequestKind::Any => (None, VersionRequest::Any),
+                PythonRequestKind::Default => (None, VersionRequest::Default),
+                PythonRequestKind::Version(version) => (None, version),
+                PythonRequestKind::ImplementationVersion(implementation, version) => {
                     (Some(implementation), version)
                 }
-                PythonRequest::Implementation(implementation) => {
+                PythonRequestKind::Implementation(implementation) => {
                     (Some(implementation), VersionRequest::Default)
                 }
                 result => {
@@ -4275,27 +4402,28 @@ mod tests {
     #[test]
     fn test_try_split_prefix_and_version() {
         assert!(matches!(
-            PythonRequest::try_split_prefix_and_version("prefix", "prefix"),
+            PythonRequestKind::try_split_prefix_and_version("prefix", "prefix"),
             Ok(None),
         ));
         assert!(matches!(
-            PythonRequest::try_split_prefix_and_version("prefix", "prefix3"),
+            PythonRequestKind::try_split_prefix_and_version("prefix", "prefix3"),
             Ok(Some(_)),
         ));
         assert!(matches!(
-            PythonRequest::try_split_prefix_and_version("prefix", "prefix@3"),
+            PythonRequestKind::try_split_prefix_and_version("prefix", "prefix@3"),
             Ok(Some(_)),
         ));
         assert!(matches!(
-            PythonRequest::try_split_prefix_and_version("prefix", "prefix3notaversion"),
+            PythonRequestKind::try_split_prefix_and_version("prefix", "prefix3notaversion"),
             Ok(None),
         ));
         // Version parsing errors are only raised if @ is present.
         assert!(
-            PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()
+            PythonRequestKind::try_split_prefix_and_version("prefix", "prefix@3notaversion")
+                .is_err()
         );
         // @ is not allowed if the prefix is empty.
-        assert!(PythonRequest::try_split_prefix_and_version("", "@3").is_err());
+        assert!(PythonRequestKind::try_split_prefix_and_version("", "@3").is_err());
     }
 
     #[test]
@@ -4382,40 +4510,53 @@ mod tests {
 
     #[test]
     fn python_request_as_pep440_version() {
-        // `PythonRequest::Any` and `PythonRequest::Default` return `None`
-        assert_eq!(PythonRequest::Any.as_pep440_version(), None);
-        assert_eq!(PythonRequest::Default.as_pep440_version(), None);
-
-        // `PythonRequest::Version` delegates to `VersionRequest`
+        // `PythonRequestKind::Any` and `PythonRequestKind::Default` return `None`
         assert_eq!(
-            PythonRequest::Version(VersionRequest::MajorMinor(3, 11, PythonVariant::Default))
-                .as_pep440_version(),
+            PythonRequest::from(PythonRequestKind::Any).as_pep440_version(),
+            None
+        );
+        assert_eq!(
+            PythonRequest::from(PythonRequestKind::Default).as_pep440_version(),
+            None
+        );
+
+        // `PythonRequestKind::Version` delegates to `VersionRequest`
+        assert_eq!(
+            PythonRequest::from(PythonRequestKind::Version(VersionRequest::MajorMinor(
+                3,
+                11,
+                PythonVariant::Default
+            )))
+            .as_pep440_version(),
             Some(Version::from_str("3.11").unwrap())
         );
 
-        // `PythonRequest::ImplementationVersion` extracts version
+        // `PythonRequestKind::ImplementationVersion` extracts version
         assert_eq!(
-            PythonRequest::ImplementationVersion(
+            PythonRequest::from(PythonRequestKind::ImplementationVersion(
                 ImplementationName::CPython,
                 VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default),
-            )
+            ))
             .as_pep440_version(),
             Some(Version::from_str("3.12.1").unwrap())
         );
 
-        // `PythonRequest::Implementation` returns `None` (no version)
+        // `PythonRequestKind::Implementation` returns `None` (no version)
         assert_eq!(
-            PythonRequest::Implementation(ImplementationName::CPython).as_pep440_version(),
+            PythonRequest::from(PythonRequestKind::Implementation(
+                ImplementationName::CPython
+            ))
+            .as_pep440_version(),
             None
         );
 
-        // `PythonRequest::Key` with version
+        // `PythonRequestKind::Key` with version
         assert_eq!(
             PythonRequest::parse("cpython-3.13.2").as_pep440_version(),
             Some(Version::from_str("3.13.2").unwrap())
         );
 
-        // `PythonRequest::Key` without version returns `None`
+        // `PythonRequestKind::Key` without version returns `None`
         assert_eq!(
             PythonRequest::parse("cpython-macos-aarch64-none").as_pep440_version(),
             None
@@ -4423,7 +4564,10 @@ mod tests {
 
         // Range versions return `None`
         assert_eq!(
-            PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
+            PythonRequest::from(PythonRequestKind::Version(
+                VersionRequest::from_str(">=3.10").unwrap()
+            ))
+            .as_pep440_version(),
             None
         );
     }
@@ -4478,11 +4622,19 @@ mod tests {
             RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
 
         // Requests without version constraints are always compatible
-        assert!(PythonRequest::Any.intersects_requires_python(&requires_python));
-        assert!(PythonRequest::Default.intersects_requires_python(&requires_python));
         assert!(
-            PythonRequest::Implementation(ImplementationName::CPython)
+            PythonRequest::from(PythonRequestKind::Any)
                 .intersects_requires_python(&requires_python)
+        );
+        assert!(
+            PythonRequest::from(PythonRequestKind::Default)
+                .intersects_requires_python(&requires_python)
+        );
+        assert!(
+            PythonRequest::from(PythonRequestKind::Implementation(
+                ImplementationName::CPython
+            ))
+            .intersects_requires_python(&requires_python)
         );
     }
 }

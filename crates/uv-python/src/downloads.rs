@@ -40,7 +40,7 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::managed::ManagedPythonInstallation;
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
-use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
+use crate::{Interpreter, PythonRequest, PythonRequestKind, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -378,26 +378,28 @@ impl PythonDownloadRequest {
     /// Returns [`None`] if the request kind is not compatible with a download, e.g., it is
     /// a request for a specific directory or executable name.
     pub fn from_request(request: &PythonRequest) -> Option<Self> {
-        match request {
-            PythonRequest::Version(version) => Some(Self::default().with_version(version.clone())),
-            PythonRequest::Implementation(implementation) => {
+        match request.kind() {
+            PythonRequestKind::Version(version) => {
+                Some(Self::default().with_version(version.clone()))
+            }
+            PythonRequestKind::Implementation(implementation) => {
                 Some(Self::default().with_implementation(*implementation))
             }
-            PythonRequest::ImplementationVersion(implementation, version) => Some(
+            PythonRequestKind::ImplementationVersion(implementation, version) => Some(
                 Self::default()
                     .with_implementation(*implementation)
                     .with_version(version.clone()),
             ),
-            PythonRequest::Key(request) => Some(request.clone()),
-            PythonRequest::Any => Some(Self {
-                prereleases: Some(true), // Explicitly allow pre-releases for PythonRequest::Any
+            PythonRequestKind::Key(request) => Some(request.clone()),
+            PythonRequestKind::Any => Some(Self {
+                prereleases: Some(true), // Explicitly allow pre-releases for PythonRequestKind::Any
                 ..Self::default()
             }),
-            PythonRequest::Default => Some(Self::default()),
+            PythonRequestKind::Default => Some(Self::default()),
             // We can't download a managed installation for these request kinds
-            PythonRequest::Directory(_)
-            | PythonRequest::ExecutableName(_)
-            | PythonRequest::File(_) => None,
+            PythonRequestKind::Directory(_)
+            | PythonRequestKind::ExecutableName(_)
+            | PythonRequestKind::File(_) => None,
         }
     }
 

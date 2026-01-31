@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
-    PythonPreference, PythonRequest, PythonRequestSource, PythonVersionFile,
+    PythonPreference, PythonRequest, PythonRequestKind, PythonRequestSource, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_settings::PythonInstallMirrors;
@@ -119,15 +119,15 @@ pub(crate) async fn pin(
     };
     let request = PythonRequest::parse(&request);
 
-    if let PythonRequest::ExecutableName(name) = request {
+    if let PythonRequestKind::ExecutableName(name) = request.kind() {
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
     let reporter = PythonDownloadReporter::single(printer);
 
+    let request = request.with_source(PythonRequestSource::UserRequest);
     let python = match PythonInstallation::find_or_download(
         Some(&request),
-        Some(&PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
@@ -272,9 +272,9 @@ fn warn_if_existing_pin_incompatible_with_project(
 
     // If there is not a version in the pinned request, attempt to resolve the pin into an
     // interpreter to check for compatibility on the current system.
+    let pin_with_source = pin.clone().with_source(PythonRequestSource::UserRequest);
     match PythonInstallation::find(
-        pin,
-        Some(&PythonRequestSource::UserRequest),
+        &pin_with_source,
         EnvironmentPreference::OnlySystem,
         python_preference,
         downloads_list,

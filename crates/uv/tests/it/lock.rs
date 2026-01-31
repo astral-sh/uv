@@ -5935,7 +5935,7 @@ fn lock_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.12 (from `requires-python` metadata) in [PYTHON SOURCES]
 
     hint: A managed Python download is available for Python >=3.12, but Python downloads are set to 'never'
     ");

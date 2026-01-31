@@ -16,7 +16,9 @@ use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
     ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
 };
-use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
+use uv_python::{
+    PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest, PythonRequestKind,
+};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -68,7 +70,7 @@ async fn do_uninstall(
     let start = std::time::Instant::now();
 
     let requests = if all {
-        vec![PythonRequest::Default]
+        vec![PythonRequestKind::Default.into()]
     } else {
         let targets = targets.into_iter().collect::<BTreeSet<_>>();
         targets
@@ -90,7 +92,12 @@ async fn do_uninstall(
     let installed_installations: Vec<_> = installations.find_all()?.collect();
     let mut matching_installations = BTreeSet::default();
     for (request, download_request) in requests.iter().zip(download_requests) {
-        if matches!(requests.as_slice(), [PythonRequest::Default]) {
+        if requests
+            .as_slice()
+            .first()
+            .is_some_and(|r| matches!(r.kind(), PythonRequestKind::Default))
+            && requests.len() == 1
+        {
             writeln!(printer.stderr(), "Searching for Python installations")?;
         } else {
             writeln!(
@@ -116,7 +123,12 @@ async fn do_uninstall(
                 );
             }
 
-            if matches!(requests.as_slice(), [PythonRequest::Default]) {
+            if requests
+                .as_slice()
+                .first()
+                .is_some_and(|r| matches!(r.kind(), PythonRequestKind::Default))
+                && requests.len() == 1
+            {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);
             }
