@@ -1478,7 +1478,12 @@ fn run_with_overlay_interpreter() -> Result<()> {
     ");
 
     // Switch to a relocatable virtual environment.
-    context.venv().arg("--relocatable").assert().success();
+    context
+        .venv()
+        .arg("--allow-existing")
+        .arg("--relocatable")
+        .assert()
+        .success();
 
     // Cleanup previous shutil
     fs_err::remove_file(context.temp_dir.child("main"))?;
@@ -1486,7 +1491,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1528,7 +1533,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
         filters => context.filters(),
     }, {
             assert_snapshot!(
-                context.read("main"), @r#"
+                context.read("main"), @r##"
             #![CACHE_DIR]/builds-v0/[TMP]/python
             # -*- coding: utf-8 -*-
             import sys
@@ -1539,7 +1544,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
                 elif sys.argv[0].endswith(".exe"):
                     sys.argv[0] = sys.argv[0][:-4]
                 sys.exit(main())
-            "#
+            "##
             );
         }
     );

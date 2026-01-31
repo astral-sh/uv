@@ -11,6 +11,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
+use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_preview::Preview;
@@ -19,9 +20,6 @@ use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
-use uv_warnings::warn_user_once;
-
-use crate::{Error, Prompt};
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -164,13 +162,12 @@ pub(crate) fn create(
                             fs_err::create_dir_all(&location)?;
                         }
                         Some(false) => return err,
-                        // When we don't have a TTY, warn that the behavior will change in the future
+                        // When we don't have a TTY, require `--clear` explicitly.
                         None => {
-                            warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
-                                location.user_display(),
-                                "--clear".green(),
-                            );
+                            return Err(Error::Exists {
+                                name,
+                                path: location.to_path_buf(),
+                            });
                         }
                     }
                 }
