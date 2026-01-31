@@ -20,6 +20,7 @@ ARG TARGETPLATFORM
 RUN case "$TARGETPLATFORM" in \
   "linux/arm64") echo "aarch64-unknown-linux-musl" > rust_target.txt ;; \
   "linux/amd64") echo "x86_64-unknown-linux-musl" > rust_target.txt ;; \
+  "linux/riscv64") echo "riscv64gc-unknown-linux-musl" > rust_target.txt ;; \
   *) exit 1 ;; \
   esac
 
