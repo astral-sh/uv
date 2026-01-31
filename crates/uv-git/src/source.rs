@@ -7,14 +7,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
+use uv_static::EnvVars;
+use uv_warnings::warn_user_once;
 
 use crate::GIT_STORE;
-use crate::git::{GitDatabase, GitRemote};
+use crate::git::{GitDatabase, GitRemote, git_ls_remote};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -119,6 +121,77 @@ impl GitSource {
                                 None,
                             ));
                         }
+                    }
+                }
+            }
+
+            // Try the ls-remote fast path: query the remote for the current commit hash
+            // without fetching any objects. This is much faster than a full fetch.
+            if !self.offline
+                && self.git.precise().is_none()
+                && std::env::var_os(EnvVars::UV_NO_GIT_LS_REMOTE_FAST_PATH).is_none()
+            {
+                match git_ls_remote(remote.as_ref(), self.git.reference(), self.disable_ssl) {
+                    Ok(Some(remote_oid)) => {
+                        // Check if we already have this commit in the cache.
+                        if let Some(db) = &maybe_db {
+                            if db.contains(remote_oid)
+                                && (!lfs_requested || db.contains_lfs_artifacts(remote_oid))
+                            {
+                                debug!(
+                                    "Remote unchanged via ls-remote, using cached Git source `{}`",
+                                    self.git.repository()
+                                );
+                                return Ok((
+                                    maybe_db
+                                        .unwrap()
+                                        .with_lfs_ready(lfs_requested.then_some(true)),
+                                    remote_oid,
+                                    None,
+                                ));
+                            }
+                        }
+                        // We have the remote commit hash but don't have it locally,
+                        // so we need to fetch. The hash can be used to optimize the fetch.
+                        debug!(
+                            "Remote has new commit {} via ls-remote, need to fetch",
+                            remote_oid
+                        );
+                    }
+                    Ok(None) => {
+                        // Reference type not supported by ls-remote fast path,
+                        // fall back to full fetch.
+                        debug!(
+                            "ls-remote fast path not available for reference type, falling back to fetch"
+                        );
+                    }
+                    Err(err) => {
+                        // ls-remote failed, warn and fall back to full fetch.
+                        let err_str = err.to_string();
+
+                        // Check if this is an authentication error
+                        if err_str.contains("authentication")
+                            || err_str.contains("Authentication")
+                            || err_str.contains("Permission denied")
+                            || err_str.contains("credentials")
+                        {
+                            warn_user_once!(
+                                "Git authentication failed for `{}`. \
+                                Check your credentials and try again. \
+                                Falling back to full fetch which may also fail.",
+                                self.git.repository()
+                            );
+                        } else {
+                            warn_user_once!(
+                                "git ls-remote failed for `{}`, falling back to full fetch",
+                                self.git.repository()
+                            );
+                        }
+
+                        warn!(
+                            "git ls-remote failed for `{}`: {err}",
+                            self.git.repository()
+                        );
                     }
                 }
             }

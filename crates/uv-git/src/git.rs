@@ -731,9 +731,58 @@ fn fetch_with_cli(
     // The output appears to be included in error messages by default.
     cmd.exec_with_output().map_err(|err| {
         let msg = err.to_string();
+
+        // Check for offline mode transport error
         if msg.contains("transport '") && msg.contains("' not allowed") && offline {
             return GitError::TransportNotAllowed.into();
         }
+
+        // Check for authentication/permission errors and provide helpful messages
+        if is_authentication_error(&msg) {
+            return anyhow::anyhow!(
+                "Git authentication failed for `{url}`. \
+                Ensure you have the correct credentials configured.\n\
+                \n\
+                For HTTPS repositories:\n  \
+                - Check your Git credential helper: `git config --global credential.helper`\n  \
+                - Or use a personal access token in the URL\n\
+                \n\
+                For SSH repositories:\n  \
+                - Ensure your SSH key is added: `ssh-add -l`\n  \
+                - Verify SSH access: `ssh -T git@<host>`\n\
+                \n\
+                Original error: {err}"
+            );
+        }
+
+        // Check for repository not found errors
+        if is_repository_not_found_error(&msg) {
+            return anyhow::anyhow!(
+                "Git repository not found: `{url}`.\n\
+                \n\
+                Please verify:\n  \
+                - The repository URL is correct\n  \
+                - You have access to the repository\n  \
+                - The repository exists and is not private (or you have credentials configured)\n\
+                \n\
+                Original error: {err}"
+            );
+        }
+
+        // Check for network/connectivity issues
+        if is_network_error(&msg) {
+            return anyhow::anyhow!(
+                "Failed to connect to Git remote `{url}`.\n\
+                \n\
+                Please check:\n  \
+                - Your network connection\n  \
+                - The repository URL is correct\n  \
+                - Any firewall or proxy settings\n\
+                \n\
+                Original error: {err}"
+            );
+        }
+
         err
     })?;
 
@@ -818,5 +867,321 @@ fn is_short_hash_of(rev: &str, oid: GitOid) -> bool {
     match long_hash.get(..rev.len()) {
         Some(truncated_long_hash) => truncated_long_hash.eq_ignore_ascii_case(rev),
         None => false,
+    }
+}
+
+/// Query the remote for the commit hash of a reference using `git ls-remote`.
+///
+/// This is a lightweight operation that only retrieves reference metadata without
+/// downloading any objects. It works with HTTPS, SSH, and file protocols.
+///
+/// Returns `Ok(Some(oid))` if the reference exists and was resolved.
+/// Returns `Ok(None)` if the reference type is ambiguous and cannot be queried directly.
+/// Returns `Err` if the git command fails.
+#[instrument(skip_all, fields(url = %url, reference = %reference))]
+pub fn git_ls_remote(
+    url: &Url,
+    reference: &GitReference,
+    disable_ssl: bool,
+) -> Result<Option<GitOid>> {
+    // Build the refspecs based on reference type
+    let Some(refspecs) = reference_to_refspecs(reference) else {
+        // For ambiguous refs (BranchOrTag, BranchOrTagOrCommit), we cannot
+        // efficiently query with ls-remote as we'd need multiple queries.
+        // Fall back to full fetch for these cases.
+        debug!("Skipping ls-remote for ambiguous reference: {reference}");
+        return Ok(None);
+    };
+
+    debug!("Running git ls-remote for {url} with refspecs {refspecs:?}");
+
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    cmd.arg("ls-remote");
+
+    // Disable interactive prompts
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+
+    if disable_ssl {
+        debug!("Disabling SSL verification for git ls-remote");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+
+    cmd.arg(url.as_str());
+    for refspec in &refspecs {
+        cmd.arg(refspec);
+    }
+
+    let output = match cmd.exec_with_output() {
+        Ok(output) => output,
+        Err(err) => {
+            let err_msg = err.to_string();
+
+            // Check for common authentication/permission error patterns
+            if is_authentication_error(&err_msg) || is_repository_not_found_error(&err_msg) {
+                return Err(err).with_context(|| {
+                    format!(
+                        "Git authentication failed for `{url}`. \
+                        Ensure you have the correct credentials configured. \
+                        For HTTPS: check your Git credential helper or use a personal access token. \
+                        For SSH: ensure your SSH key is added to the ssh-agent and authorized on the server."
+                    )
+                });
+            }
+
+            // Check for network/connectivity issues
+            if is_network_error(&err_msg) {
+                return Err(err).with_context(|| {
+                    format!(
+                        "Failed to connect to Git remote `{url}`. \
+                        Check your network connection and ensure the repository URL is correct."
+                    )
+                });
+            }
+
+            // Generic error
+            return Err(err).with_context(|| {
+                format!(
+                    "failed to run `git ls-remote` for {} {}",
+                    url,
+                    reference.as_rev()
+                )
+            });
+        }
+    };
+
+    // Parse the output: format is "<hash>\t<ref>\n" for each matching ref
+    let stdout =
+        String::from_utf8(output.stdout).context("git ls-remote output is not valid UTF-8")?;
+
+    // The output may be empty if the ref doesn't exist
+    if stdout.is_empty() {
+        debug!("git ls-remote returned no results for {refspecs:?}");
+        return Ok(None);
+    }
+
+    // Parse all lines and collect hash -> ref mappings
+    // For annotated tags, we prefer the peeled ref (ending with ^{}) which points to the commit
+    let mut result_oid: Option<GitOid> = None;
+    let mut found_peeled = false;
+
+    for line in stdout.lines() {
+        let mut parts = line.split('\t');
+        let Some(hash) = parts.next() else {
+            continue;
+        };
+        let Some(ref_name) = parts.next() else {
+            continue;
+        };
+
+        let hash = hash.trim();
+        let ref_name = ref_name.trim();
+
+        // Parse the hash
+        let Ok(oid) = hash.parse::<GitOid>() else {
+            continue;
+        };
+
+        // Prefer peeled refs (refs/tags/TAG^{}) for annotated tags
+        // These point to the actual commit, not the tag object
+        if ref_name.ends_with("^{}") {
+            debug!("git ls-remote found peeled ref {ref_name} -> {oid}");
+            result_oid = Some(oid);
+            found_peeled = true;
+        } else if !found_peeled {
+            // Use non-peeled ref only if we haven't found a peeled one
+            debug!("git ls-remote found ref {ref_name} -> {oid}");
+            result_oid = Some(oid);
+        }
+    }
+
+    if let Some(oid) = &result_oid {
+        debug!("git ls-remote resolved {refspecs:?} to {oid}");
+    }
+
+    Ok(result_oid)
+}
+
+/// Check if an error message indicates an authentication failure.
+fn is_authentication_error(msg: &str) -> bool {
+    msg.contains("Authentication failed")
+        || msg.contains("could not read Username")
+        || msg.contains("Permission denied")
+        || msg.contains("fatal: could not read Password")
+        || msg.contains("Host key verification failed")
+        || msg.contains("access denied")
+        || msg.contains("The requested URL returned error: 403")
+        || msg.contains("The requested URL returned error: 401")
+}
+
+/// Check if an error message indicates a repository not found error.
+fn is_repository_not_found_error(msg: &str) -> bool {
+    msg.contains("repository not found")
+        || msg.contains("Repository not found")
+        || msg.contains("does not appear to be a git repository")
+}
+
+/// Check if an error message indicates a network/connectivity error.
+fn is_network_error(msg: &str) -> bool {
+    msg.contains("Could not resolve host")
+        || msg.contains("Connection refused")
+        || msg.contains("Connection timed out")
+        || msg.contains("unable to access")
+        || msg.contains("Failed to connect")
+}
+
+/// Convert a [`GitReference`] to refspec strings for use with `git ls-remote`.
+///
+/// Returns `None` for ambiguous reference types that cannot be efficiently queried.
+/// For tags, returns both the tag ref and the peeled ref (for annotated tags).
+fn reference_to_refspecs(reference: &GitReference) -> Option<Vec<String>> {
+    match reference {
+        GitReference::Branch(branch) => Some(vec![format!("refs/heads/{branch}")]),
+        GitReference::Tag(tag) => {
+            // Query both the tag and its peeled version (for annotated tags).
+            // The peeled ref (refs/tags/TAG^{}) points to the actual commit,
+            // while the non-peeled ref may point to a tag object.
+            Some(vec![
+                format!("refs/tags/{tag}"),
+                format!("refs/tags/{}^{{}}", tag),
+            ])
+        }
+        GitReference::DefaultBranch => Some(vec!["HEAD".to_string()]),
+        GitReference::NamedRef(named_ref) => Some(vec![named_ref.clone()]),
+        GitReference::BranchOrTag(_) | GitReference::BranchOrTagOrCommit(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_authentication_error() {
+        // Should detect authentication errors
+        assert!(is_authentication_error(
+            "fatal: Authentication failed for 'https://github.com/org/repo'"
+        ));
+        assert!(is_authentication_error(
+            "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+        ));
+        assert!(is_authentication_error("Permission denied (publickey)."));
+        assert!(is_authentication_error(
+            "fatal: could not read Password for 'https://github.com': terminal prompts disabled"
+        ));
+        assert!(is_authentication_error("Host key verification failed."));
+        assert!(is_authentication_error("remote: access denied"));
+        assert!(is_authentication_error(
+            "The requested URL returned error: 403"
+        ));
+        assert!(is_authentication_error(
+            "The requested URL returned error: 401"
+        ));
+
+        // Should not detect non-auth errors
+        assert!(!is_authentication_error("fatal: repository not found"));
+        assert!(!is_authentication_error(
+            "Could not resolve host: github.com"
+        ));
+        assert!(!is_authentication_error("Connection refused"));
+    }
+
+    #[test]
+    fn test_is_repository_not_found_error() {
+        // Should detect repo not found errors
+        assert!(is_repository_not_found_error("ERROR: repository not found"));
+        assert!(is_repository_not_found_error("Repository not found."));
+        assert!(is_repository_not_found_error(
+            "fatal: 'https://github.com/org/repo' does not appear to be a git repository"
+        ));
+
+        // Should not detect other errors
+        assert!(!is_repository_not_found_error("Authentication failed"));
+        assert!(!is_repository_not_found_error("Connection refused"));
+    }
+
+    #[test]
+    fn test_is_network_error() {
+        // Should detect network errors
+        assert!(is_network_error(
+            "fatal: Could not resolve host: github.com"
+        ));
+        assert!(is_network_error("fatal: Connection refused"));
+        assert!(is_network_error("Connection timed out"));
+        assert!(is_network_error(
+            "fatal: unable to access 'https://github.com/org/repo/': Failed to connect"
+        ));
+        assert!(is_network_error("Failed to connect to github.com port 443"));
+
+        // Should not detect other errors
+        assert!(!is_network_error("Authentication failed"));
+        assert!(!is_network_error("repository not found"));
+    }
+
+    #[test]
+    fn test_reference_to_refspecs() {
+        // Branch reference
+        assert_eq!(
+            reference_to_refspecs(&GitReference::Branch("main".to_string())),
+            Some(vec!["refs/heads/main".to_string()])
+        );
+        assert_eq!(
+            reference_to_refspecs(&GitReference::Branch("feature/test".to_string())),
+            Some(vec!["refs/heads/feature/test".to_string()])
+        );
+
+        // Tag reference - should include both the tag and peeled version
+        assert_eq!(
+            reference_to_refspecs(&GitReference::Tag("v1.0.0".to_string())),
+            Some(vec![
+                "refs/tags/v1.0.0".to_string(),
+                "refs/tags/v1.0.0^{}".to_string()
+            ])
+        );
+
+        // Default branch (HEAD)
+        assert_eq!(
+            reference_to_refspecs(&GitReference::DefaultBranch),
+            Some(vec!["HEAD".to_string()])
+        );
+
+        // Named ref
+        assert_eq!(
+            reference_to_refspecs(&GitReference::NamedRef("refs/pull/123/head".to_string())),
+            Some(vec!["refs/pull/123/head".to_string()])
+        );
+
+        // Ambiguous references should return None
+        assert_eq!(
+            reference_to_refspecs(&GitReference::BranchOrTag("main".to_string())),
+            None
+        );
+        assert_eq!(
+            reference_to_refspecs(&GitReference::BranchOrTagOrCommit("abc123".to_string())),
+            None
+        );
+    }
+
+    #[test]
+    fn test_is_short_hash_of() {
+        let oid: GitOid = "4a23745badf5bf5ef7928f1e346e9986bd696d82".parse().unwrap();
+
+        // Valid short hashes
+        assert!(is_short_hash_of("4a23745", oid));
+        assert!(is_short_hash_of(
+            "4a23745badf5bf5ef7928f1e346e9986bd696d82",
+            oid
+        ));
+        assert!(is_short_hash_of("4A23745", oid)); // case insensitive
+
+        // Invalid short hashes
+        assert!(!is_short_hash_of("1234567", oid));
+        assert!(!is_short_hash_of(
+            "4a23745badf5bf5ef7928f1e346e9986bd696d82a",
+            oid
+        )); // too long
+
+        // Edge case: empty string technically matches (substring of length 0)
+        // This is the current behavior, though it's unlikely to be used in practice
+        assert!(is_short_hash_of("", oid));
     }
 }
