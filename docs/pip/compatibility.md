@@ -53,7 +53,7 @@ Alternatively, you can add the transitive dependency to your `requirements.in` f
 specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
 
 In sum, uv needs to know upfront whether the resolver should accept pre-releases for a given
-package. `pip`, meanwhile, respects pre-release identifiers in transitive dependencies, as well as
+package. `pip`, meanwhile, respects pre-release identifiers in transitive dependencies, and
 allows pre-releases of transitive dependencies if no stable versions are available.
 
 Pre-releases are
