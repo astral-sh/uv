@@ -11,3 +11,4 @@
 - PREFER let chains (`if let` combined with `&&`) over nested `if let` statements
 - NEVER update all dependencies in the lockfile and ALWAYS use `cargo update --precise` to make
   lockfile changes
+- NEVER assume clippy warnings are pre-existing, it is very rare that `main` has warnings
