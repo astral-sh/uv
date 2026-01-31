@@ -66,7 +66,7 @@ pub enum PublishError {
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
     ),
-    #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
     Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
@@ -126,9 +126,9 @@ pub enum PublishPrepareError {
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
     ReqwestMiddleware(#[source] reqwest_middleware::Error),
-    #[error("Upload failed with status {0}")]
+    #[error("Server returned status code {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}. Server says: {1}")]
+    #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
