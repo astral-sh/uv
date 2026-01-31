@@ -33,8 +33,8 @@ use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
     ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
     InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, PipCompileFormat,
-    ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
-    TrustedPublishing, Upgrade, VersionControlSystem,
+    ProjectBuildBackend, ProxyUrl, PublishFailureStrategy, Reinstall, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -4079,6 +4079,7 @@ pub(crate) struct PublishSettings {
     pub(crate) dry_run: bool,
     pub(crate) no_attestations: bool,
     pub(crate) direct: bool,
+    pub(crate) on_failure: PublishFailureStrategy,
 
     // Both CLI and configuration.
     pub(crate) publish_url: DisplaySafeUrl,
@@ -4103,6 +4104,7 @@ impl PublishSettings {
             publish_url,
             trusted_publishing,
             check_url,
+            on_failure,
         } = publish;
         let ResolverInstallerSchema {
             keyring_provider,
@@ -4126,6 +4128,7 @@ impl PublishSettings {
             dry_run: args.dry_run,
             no_attestations: args.no_attestations,
             direct: args.direct,
+            on_failure: args.on_failure.combine(on_failure).unwrap_or_default(),
             publish_url: args
                 .publish_url
                 .combine(publish_url)

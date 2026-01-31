@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
-use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_configuration::{KeyringProviderType, PublishFailureStrategy, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
@@ -41,6 +41,7 @@ pub(crate) async fn publish(
     dry_run: bool,
     no_attestations: bool,
     direct: bool,
+    on_failure: PublishFailureStrategy,
     preview: Preview,
     cache: &Cache,
     printer: Printer,
@@ -192,6 +193,9 @@ pub(crate) async fn publish(
         None
     };
 
+    let mut has_success = false;
+    let mut errors: Vec<(String, anyhow::Error)> = Vec::new();
+
     for group in groups {
         if let Some(check_url_client) = &check_url_client {
             if uv_publish::check_url(
@@ -236,7 +240,7 @@ pub(crate) async fn publish(
             .await
             .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
 
-        let uploaded = if direct {
+        let result = if direct {
             if dry_run {
                 // For dry run, call validate since we won't call reserve.
                 let should_upload = uv_publish::validate(
@@ -272,7 +276,7 @@ pub(crate) async fn publish(
                 // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
                 Arc::new(reporter),
             )
-            .await?
+            .await
         } else {
             // Run validation checks on the file, but don't upload it (if possible).
             let should_upload = uv_publish::validate(
@@ -292,7 +296,7 @@ pub(crate) async fn publish(
 
             // If validation indicates the file already exists, skip the upload.
             if !should_upload {
-                false
+                Ok(false)
             } else {
                 let reporter = PublishReporter::single(printer);
                 upload(
@@ -307,18 +311,59 @@ pub(crate) async fn publish(
                     // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
                     Arc::new(reporter),
                 )
-                .await? // Filename and/or URL are already attached, if applicable.
+                .await // Filename and/or URL are already attached, if applicable.
             }
         };
-        info!("Upload succeeded");
 
-        if !uploaded {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                "File already exists, skipping".dimmed()
-            )?;
+        match result {
+            Ok(uploaded) => {
+                has_success = true;
+                info!("Upload succeeded");
+
+                if !uploaded {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        "File already exists, skipping".dimmed()
+                    )?;
+                }
+            }
+            Err(err) => {
+                let should_stop = match on_failure {
+                    PublishFailureStrategy::StopFirst => true,
+                    PublishFailureStrategy::KeepGoing => false,
+                    PublishFailureStrategy::KeepGoingAfterSuccess => !has_success,
+                };
+
+                if should_stop {
+                    return Err(err.into());
+                }
+
+                let anyhow_err: anyhow::Error = err.into();
+                write_error_chain(
+                    anyhow_err.as_ref(),
+                    printer.stderr(),
+                    "error",
+                    AnsiColors::Red,
+                )?;
+                errors.push((group.filename.to_string(), anyhow_err));
+            }
         }
+    }
+
+    if !errors.is_empty() {
+        let count = errors.len();
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "{count} file{s} failed to publish",
+                s = if count == 1 { "" } else { "s" }
+            )
+            .bold()
+            .red()
+        )?;
+        return Ok(ExitStatus::Failure);
     }
 
     Ok(ExitStatus::Success)
