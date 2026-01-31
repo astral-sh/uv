@@ -2061,7 +2061,7 @@ pub struct PipSyncArgs {
 pub struct PipIndexVersionsArgs {
     /// The package to query for
     #[arg(required = true)]
-    pub package: PackageName, // TODO: Other options to follow in future
+    pub package_name: PackageName, // TODO: Other options to follow in future
 }
 
 #[derive(Args)]
