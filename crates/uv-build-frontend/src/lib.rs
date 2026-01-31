@@ -40,7 +40,6 @@ use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
@@ -293,7 +292,6 @@ impl SourceBuild {
         level: BuildOutput,
         concurrent_builds: usize,
         credentials_cache: &CredentialsCache,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
 
@@ -365,7 +363,6 @@ impl SourceBuild {
                 false,
                 false,
                 false,
-                preview,
             )?
         };
 

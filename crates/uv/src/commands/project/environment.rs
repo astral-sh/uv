@@ -191,7 +191,6 @@ impl CachedEnvironment {
             true,
             false,
             false,
-            preview,
         )?;
 
         sync_environment(

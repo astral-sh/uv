@@ -13,7 +13,6 @@ use uv_cache::Cache;
 use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
-use uv_preview::Preview;
 
 use crate::discovery::{
     EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
@@ -65,10 +64,8 @@ impl PythonInstallation {
         preference: PythonPreference,
         download_list: &ManagedPythonDownloadList,
         cache: &Cache,
-        preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_python_installation(request, environments, preference, cache, preview)??;
+        let installation = find_python_installation(request, environments, preference, cache)??;
         installation.warn_if_outdated_prerelease(request, download_list);
         Ok(installation)
     }
@@ -86,7 +83,6 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let retry_policy = client_builder.retry_policy();
         let client = client_builder.clone().retries(0).build();
@@ -107,7 +103,6 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            preview,
         )
         .await?;
         installation.warn_if_outdated_prerelease(request, &download_list);
@@ -128,7 +123,6 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
@@ -140,14 +134,7 @@ impl PythonInstallation {
             ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
 
         // Search for the installation
-        let err = match Self::find(
-            request,
-            environments,
-            preference,
-            &download_list,
-            cache,
-            preview,
-        ) {
+        let err = match Self::find(request, environments, preference, &download_list, cache) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
@@ -260,7 +247,6 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            preview,
         )
         .await?;
 
@@ -278,7 +264,6 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -321,7 +306,7 @@ impl PythonInstallation {
             .patch()
             .is_some_and(|p| p >= highest_patch)
         {
-            installed.ensure_minor_version_link(preview)?;
+            installed.ensure_minor_version_link()?;
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {

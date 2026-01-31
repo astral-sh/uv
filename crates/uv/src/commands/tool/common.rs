@@ -18,7 +18,6 @@ use uv_fs::replace_symlink;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, VersionRequest,
@@ -84,7 +83,6 @@ pub(crate) async fn refine_interpreter(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
-    preview: Preview,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
     let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
@@ -148,7 +146,6 @@ pub(crate) async fn refine_interpreter(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();

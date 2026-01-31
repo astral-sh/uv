@@ -455,7 +455,6 @@ async fn print_frozen_version(
         active,
         cache,
         printer,
-        preview,
     )
     .await?
     .into_interpreter();
@@ -565,7 +564,6 @@ async fn lock_and_sync(
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         .into_interpreter();
@@ -587,7 +585,6 @@ async fn lock_and_sync(
             cache,
             DryRun::Disabled,
             printer,
-            preview,
         )
         .await?
         .into_environment()?;

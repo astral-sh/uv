@@ -6,7 +6,6 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::downloads::ManagedPythonDownloadList;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
@@ -28,6 +27,7 @@ pub(crate) async fn find(
     project_dir: &Path,
     request: Option<String>,
     show_version: bool,
+    resolve_links: bool,
     no_project: bool,
     no_config: bool,
     system: bool,
@@ -36,7 +36,6 @@ pub(crate) async fn find(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -86,7 +85,6 @@ pub(crate) async fn find(
         python_preference,
         &download_list,
         cache,
-        preview,
     )?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
@@ -112,11 +110,12 @@ pub(crate) async fn find(
             python.interpreter().python_version()
         )?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(python.interpreter().sys_executable())?
+        } else {
+            std::path::absolute(python.interpreter().sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)
@@ -125,13 +124,13 @@ pub(crate) async fn find(
 pub(crate) async fn find_script(
     script: Pep723ItemRef<'_>,
     show_version: bool,
+    resolve_links: bool,
     client_builder: &BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -145,7 +144,6 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
-        preview,
     )
     .await
     {
@@ -160,11 +158,12 @@ pub(crate) async fn find_script(
     if show_version {
         writeln!(printer.stdout(), "{}", interpreter.python_version())?;
     } else {
-        writeln!(
-            printer.stdout(),
-            "{}",
-            std::path::absolute(interpreter.sys_executable())?.simplified_display()
-        )?;
+        let path = if resolve_links {
+            dunce::canonicalize(interpreter.sys_executable())?
+        } else {
+            std::path::absolute(interpreter.sys_executable())?
+        };
+        writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
     Ok(ExitStatus::Success)

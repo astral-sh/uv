@@ -248,7 +248,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &cache,
                 DryRun::Disabled,
                 printer,
-                preview,
             )
             .await?
             .into_environment()?;
@@ -396,7 +395,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -481,7 +479,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -498,7 +495,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
-                    preview,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -689,7 +685,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -717,7 +712,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
-                    preview,
                 )?
             } else {
                 // If we're not isolating the environment, reuse the base environment for the
@@ -736,7 +730,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -931,7 +924,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?;
 
@@ -954,7 +946,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
-                    preview,
                 )?;
                 venv.into_interpreter()
             } else {
@@ -1082,7 +1073,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 false,
                 false,
                 false,
-                preview,
             )
         })
         .transpose()?

@@ -12,7 +12,6 @@ use fs_err as fs;
 use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_preview::{Preview, PreviewFeature};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -560,8 +559,8 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
+    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
             minor_version_link.create_directory()?;
         }
         Ok(())
@@ -572,8 +571,8 @@ impl ManagedPythonInstallation {
     ///
     /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
     /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
+    pub fn update_minor_version_link(&self) -> Result<(), Error> {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
             if !minor_version_link.exists() {
                 return Ok(());
             }
@@ -774,11 +773,7 @@ impl PythonMinorVersionLink {
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
     /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
     /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
-    pub fn from_executable(
-        executable: &Path,
-        key: &PythonInstallationKey,
-        preview: Preview,
-    ) -> Option<Self> {
+    pub fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
             implementation.as_ref(),
@@ -828,24 +823,11 @@ impl PythonMinorVersionLink {
             symlink_executable,
             target_directory,
         };
-        // If preview mode is disabled, still return a `MinorVersionSymlink` for
-        // existing symlinks, allowing continued operations without the `--preview`
-        // flag after initial symlink directory installation.
-        if !preview.is_enabled(PreviewFeature::PythonUpgrade) && !minor_version_link.exists() {
-            return None;
-        }
         Some(minor_version_link)
     }
 
-    pub fn from_installation(
-        installation: &ManagedPythonInstallation,
-        preview: Preview,
-    ) -> Option<Self> {
-        Self::from_executable(
-            installation.executable(false).as_path(),
-            installation.key(),
-            preview,
-        )
+    pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {

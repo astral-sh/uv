@@ -20,7 +20,6 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
@@ -53,7 +52,6 @@ pub(crate) async fn pip_tree(
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
@@ -61,7 +59,6 @@ pub(crate) async fn pip_tree(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

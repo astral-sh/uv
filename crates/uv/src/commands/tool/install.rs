@@ -98,7 +98,6 @@ pub(crate) async fn install(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -622,7 +621,6 @@ pub(crate) async fn install(
                         python_preference,
                         python_downloads,
                         &cache,
-                        preview,
                     )
                     .await
                     .ok()
@@ -671,7 +669,7 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(package_name, interpreter, preview)?;
+        let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.

@@ -12,7 +12,6 @@ use uv_distribution_types::{Diagnostic, InstalledDistKind, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
-use uv_preview::Preview;
 use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
 
@@ -32,7 +31,6 @@ pub(crate) fn pip_freeze(
     paths: Option<Vec<PathBuf>>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
@@ -40,7 +38,6 @@ pub(crate) fn pip_freeze(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     // Apply any `--target` or `--prefix` directories.

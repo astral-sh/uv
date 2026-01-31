@@ -158,9 +158,6 @@ $ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 
 !!! important
 
-    Support for upgrading Python versions is in _preview_. This means the behavior is experimental
-    and subject to change.
-
     Upgrades are only supported for uv-managed Python versions.
 
     Upgrades are not currently supported for PyPy and GraalPy.
@@ -187,14 +184,8 @@ $ uv python upgrade
 After an upgrade, uv will prefer the new version, but will retain the existing version as it may
 still be used by virtual environments.
 
-If the Python version was installed with the `python-upgrade` [preview feature](./preview.md)
-enabled, e.g., `uv python install 3.12 --preview-features python-upgrade`, virtual environments
-using the Python version will be automatically upgraded to the new patch version.
-
-!!! note
-
-    If the virtual environment was created _before_ opting in to the preview mode, it will not be
-    included in the automatic upgrades.
+Virtual environments using the Python version will be automatically upgraded to the new patch
+version.
 
 If a virtual environment was created with an explicitly requested patch version, e.g.,
 `uv venv -p 3.10.8`, it will not be transparently upgraded to a new version.

@@ -33,6 +33,7 @@ use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
+use uv_python::managed::PythonMinorVersionLink;
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -900,13 +901,23 @@ pub(crate) fn report_target_environment(
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), Error> {
+    // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
+    // On Windows, junction points aren't resolved by the interpreter's `sys.prefix`, so we
+    // use the target directory from the minor-version link to display the actual installation.
+    let root = PythonMinorVersionLink::from_executable(
+        env.interpreter().sys_executable(),
+        &env.interpreter().key(),
+    )
+    .map(|link| link.target_directory)
+    .unwrap_or_else(|| env.root().to_path_buf());
+
     let message = format!(
         "Using Python {} environment at: {}",
         env.interpreter().python_version(),
-        env.root().user_display()
+        root.user_display()
     );
 
-    let Ok(target) = std::path::absolute(env.root()) else {
+    let Ok(target) = std::path::absolute(&root) else {
         debug!("{}", message);
         return Ok(());
     };

@@ -24,7 +24,6 @@ use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonPreference, Target};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
@@ -55,7 +54,6 @@ pub(crate) async fn pip_list(
     prefix: Option<Prefix>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -68,7 +66,6 @@ pub(crate) async fn pip_list(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     // Apply any `--target` or `--prefix` directories.
