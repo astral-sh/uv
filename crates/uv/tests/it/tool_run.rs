@@ -2659,22 +2659,33 @@ fn tool_run_verbatim_name() {
      + wheel==0.43.0
     ");
 
+    // With the single-executable fallback (matching pipx behavior), this now succeeds
+    // with a NOTE message since `change-wheel-version` provides exactly one executable.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("change-wheel-version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION] [--version VERSION]
+                                [--delete-old-wheel] [--allow-same-version]
+                                wheel
+
+    positional arguments:
+      wheel
+
+    options:
+      -h, --help            show this help message and exit
+      --local-version LOCAL_VERSION
+      --version VERSION
+      --delete-old-wheel
+      --allow-same-version
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
-    The following executables are available:
-    - change_wheel_version
-
-    Use `uv tool run --from change-wheel-version change_wheel_version` instead.
+    NOTE: running app 'change_wheel_version' from 'change-wheel-version'
     ");
 
     uv_snapshot!(context.filters(), context.tool_run()
