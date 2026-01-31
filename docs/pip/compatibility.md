@@ -55,7 +55,10 @@ specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that sp
 In sum, uv needs to know upfront whether the resolver should accept pre-releases for a given
 package. Meanwhile `pip`, respects pre-release identifiers in transitive dependencies, and allows
 pre-releases of transitive dependencies if no stable versions match the dependency requirements.
-Note: this behavior was made consistent in `pip` 26.0.
+
+!!! note
+
+    Prior to pip 26.0, this behavior was not consistent.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
