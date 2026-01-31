@@ -24,7 +24,8 @@ use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVersionFile,
+    VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -87,8 +88,11 @@ pub(crate) async fn install(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
-        (Some(PythonRequest::parse(request)), true)
+    let (python_request, request_source) = if let Some(request) = python.as_deref() {
+        (
+            Some(PythonRequest::parse(request)),
+            Some(PythonRequestSource::UserRequest),
+        )
     } else {
         // Discover a global Python version pin, if no request was made
         (
@@ -102,14 +106,16 @@ pub(crate) async fn install(
             )
             .await?
             .and_then(PythonVersionFile::into_version),
-            false,
+            None,
         )
     };
+    let explicit_python_request = request_source.is_some();
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        request_source.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

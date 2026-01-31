@@ -152,6 +152,7 @@ pub(crate) async fn list(
                 };
                 Some(find_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
+                None,
                 EnvironmentPreference::OnlySystem,
                 discovery_preference,
                 cache,

@@ -23,8 +23,8 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
@@ -369,9 +369,12 @@ async fn init_project(
     let reporter = PythonDownloadReporter::single(printer);
 
     // First, determine if there is an request for Python
-    let python_request = if let Some(request) = python {
+    let (python_request, request_source) = if let Some(request) = python {
         // (1) Explicit request from user
-        Some(PythonRequest::parse(&request))
+        (
+            Some(PythonRequest::parse(&request)),
+            Some(PythonRequestSource::UserRequest),
+        )
     } else if let Some(file) = PythonVersionFile::discover(
         path,
         &VersionFileDiscoveryOptions::default()
@@ -386,9 +389,10 @@ async fn init_project(
     .await?
     {
         // (2) Request from `.python-version`
-        file.into_version()
+        let source = PythonRequestSource::DotPythonVersion(file.clone());
+        (file.into_version(), Some(source))
     } else {
-        None
+        (None, None)
     };
 
     let (requires_python, python_pin) = determine_requires_python(
@@ -403,6 +407,7 @@ async fn init_project(
         workspace.as_ref(),
         &reporter,
         python_request,
+        request_source.as_ref(),
     )
     .await?;
 
@@ -509,6 +514,7 @@ async fn determine_requires_python(
     workspace: Option<&Workspace>,
     reporter: &PythonDownloadReporter,
     python_request: Option<PythonRequest>,
+    request_source: Option<&PythonRequestSource>,
 ) -> Result<(RequiresPython, Option<PythonRequest>)> {
     // Add a `requires-python` field to the `pyproject.toml` and return the corresponding interpreter.
     if let Some(python_request) = python_request {
@@ -560,6 +566,7 @@ async fn determine_requires_python(
                 let python_pin = if pin_python {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
+                        request_source,
                         EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
@@ -588,6 +595,7 @@ async fn determine_requires_python(
             python_request => {
                 let interpreter = PythonInstallation::find_or_download(
                     Some(python_request),
+                    request_source,
                     EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
@@ -661,6 +669,7 @@ async fn determine_requires_python(
         let python_pin = if pin_python {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
+                Some(&PythonRequestSource::RequiresPython),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
@@ -690,6 +699,7 @@ async fn determine_requires_python(
     } else {
         // (4) Default to the system Python
         let interpreter = PythonInstallation::find_or_download(
+            None,
             None,
             EnvironmentPreference::OnlySystem,
             python_preference,

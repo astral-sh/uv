@@ -34,7 +34,7 @@ use uv_python::PythonVersionFile;
 use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest,
+    PythonPreference, PythonRequest, PythonRequestSource,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -744,6 +744,7 @@ async fn get_or_create_environment(
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
+    let request_source = python.map(|_| PythonRequestSource::UserRequest);
 
     // Determine explicit Python version requests
     let explicit_python_request = python.map(PythonRequest::parse);
@@ -782,6 +783,7 @@ async fn get_or_create_environment(
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        request_source.as_ref(),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

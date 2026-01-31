@@ -21,7 +21,7 @@ use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, VersionRequest,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -139,6 +139,7 @@ pub(crate) async fn refine_interpreter(
 
     let interpreter = PythonInstallation::find_or_download(
         Some(&requires_python_request),
+        Some(&PythonRequestSource::RequiresPython),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,
