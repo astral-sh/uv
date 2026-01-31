@@ -13690,8 +13690,8 @@ fn install_with_system_interpreter() {
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.12 environment at: managed/cpython-3.12-[PLATFORM]
-    error: The interpreter at managed/cpython-3.12-[PLATFORM] is externally managed, and indicates the following:
+    Using Python 3.12.12 environment at: managed/cpython-3.12.12-[PLATFORM]
+    error: The interpreter at managed/cpython-3.12.12-[PLATFORM] is externally managed, and indicates the following:
 
       This Python installation is managed by uv and should not be modified.
 
