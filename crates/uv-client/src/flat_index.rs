@@ -185,7 +185,7 @@ impl<'a> FlatIndexClient<'a> {
             .header("Accept", "text/html")
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-        let parse_simple_response = |response: Response| {
+        let parse_simple_response = |response: Response, _retry_state| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.

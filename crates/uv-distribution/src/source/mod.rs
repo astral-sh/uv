@@ -12,7 +12,7 @@ use std::borrow::Cow;
 use std::ops::Bound;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
@@ -26,7 +26,7 @@ use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket, CacheEntry, CacheShard, Removal, WheelCache};
 use uv_cache_info::CacheInfo;
 use uv_client::{
-    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
+    CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient, RetryState,
 };
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
@@ -791,7 +791,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _retry_state: Arc<Mutex<RetryState>>| {
             async {
                 // At this point, we're seeing a new or updated source distribution. Initialize a
                 // new revision, to collect the source and built artifacts.
@@ -817,7 +817,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     req,
                     &cache_entry,
                     cache_control,
-                    download,
+                    &download,
                 )
             })
             .await
@@ -838,7 +838,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             Self::request(url.clone(), client)?,
                             &cache_entry,
                             cache_control,
-                            download,
+                            &download,
                         )
                         .await
                         .map_err(|err| match err {
@@ -2241,7 +2241,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
-        let download = |response| {
+        let download = |response, _retry_state: Arc<Mutex<RetryState>>| {
             async {
                 // Take the union of the requested and existing hash algorithms.
                 let algorithms = {
