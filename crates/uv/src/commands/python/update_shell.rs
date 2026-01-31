@@ -15,7 +15,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Ensure that the executable directory is in PATH.
-pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn update_shell(force: bool, printer: Printer) -> Result<ExitStatus> {
     let executable_directory = python_executable_dir()?;
     debug!(
         "Ensuring that the executable directory is in PATH: {}",
@@ -24,25 +24,44 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
 
     #[cfg(windows)]
     {
-        if uv_shell::windows::prepend_path(&executable_directory)? {
+        // Check if path is in PATH (read-only, doesn't mutate)
+        let is_in_path = uv_shell::windows::contains_path(&executable_directory)?;
+
+        if is_in_path && !force {
+            // Already in PATH and not forcing - exit early
+            writeln!(
+                printer.stderr(),
+                "Executable directory {} is already in PATH",
+                executable_directory.simplified_display().cyan()
+            )?;
+            return Ok(ExitStatus::Success);
+        }
+
+        if is_in_path && force {
+            // Already in PATH but forcing - remove it first, then prepend
+            uv_shell::windows::force_prepend_path(&executable_directory)?;
+
+            writeln!(
+                printer.stderr(),
+                "Force updated PATH to prioritize executable directory {}",
+                executable_directory.simplified_display().cyan()
+            )?;
+            writeln!(printer.stderr(), "Restart your shell to apply changes")?;
+        } else if !is_in_path {
+            // Not in PATH - normal prepend
+            uv_shell::windows::prepend_path(&executable_directory)?;
             writeln!(
                 printer.stderr(),
                 "Updated PATH to include executable directory {}",
                 executable_directory.simplified_display().cyan()
             )?;
             writeln!(printer.stderr(), "Restart your shell to apply changes")?;
-        } else {
-            writeln!(
-                printer.stderr(),
-                "Executable directory {} is already in PATH",
-                executable_directory.simplified_display().cyan()
-            )?;
         }
 
         return Ok(ExitStatus::Success);
     }
 
-    if Shell::contains_path(&executable_directory) {
+    if Shell::contains_path(&executable_directory) && !force {
         writeln!(
             printer.stderr(),
             "Executable directory {} is already in PATH",
@@ -82,35 +101,70 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
         // Search for the command in the file, to avoid redundant updates.
         match fs_err::tokio::read_to_string(&file).await {
             Ok(contents) => {
-                if contents
+                // Check if command already exists
+                let command_exists = contents
                     .lines()
                     .map(str::trim)
                     .filter(|line| !line.starts_with('#'))
-                    .any(|line| line.contains(&command))
-                {
-                    debug!(
-                        "Skipping already-updated configuration file: {}",
-                        file.simplified_display()
-                    );
-                    continue;
+                    .any(|line| line.contains(&command));
+
+                if command_exists {
+                    if force {
+                        // With --force: Remove old entry and add it again at the end (ensures first priority)
+                        let new_contents: String = contents
+                            .lines()
+                            .filter(|line| {
+                                let trimmed = line.trim();
+                                // Remove old # uv comments and lines containing the command
+                                !(trimmed == "# uv"
+                                    || (!trimmed.starts_with('#') && trimmed.contains(&command)))
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        // Add the command at the end to ensure it's executed last (first in PATH)
+                        let final_contents = format!("{new_contents}\n# uv\n{command}\n");
+
+                        fs_err::tokio::OpenOptions::new()
+                            .create(true)
+                            .truncate(true)
+                            .write(true)
+                            .open(&file)
+                            .await?
+                            .write_all(final_contents.as_bytes())
+                            .await?;
+
+                        writeln!(
+                            printer.stderr(),
+                            "Force updated configuration file: {}",
+                            file.simplified_display().cyan()
+                        )?;
+                        updated = true;
+                    } else {
+                        // Without --force: Skip if already exists
+                        debug!(
+                            "Skipping already-updated configuration file: {}",
+                            file.simplified_display()
+                        );
+                    }
+                } else {
+                    // Command doesn't exist: Add it normally
+                    fs_err::tokio::OpenOptions::new()
+                        .create(true)
+                        .truncate(true)
+                        .write(true)
+                        .open(&file)
+                        .await?
+                        .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
+                        .await?;
+
+                    writeln!(
+                        printer.stderr(),
+                        "Updated configuration file: {}",
+                        file.simplified_display().cyan()
+                    )?;
+                    updated = true;
                 }
-
-                // Append the command to the file.
-                fs_err::tokio::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(&file)
-                    .await?
-                    .write_all(format!("{contents}\n# uv\n{command}\n").as_bytes())
-                    .await?;
-
-                writeln!(
-                    printer.stderr(),
-                    "Updated configuration file: {}",
-                    file.simplified_display().cyan()
-                )?;
-                updated = true;
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 // Ensure that the directory containing the file exists.
