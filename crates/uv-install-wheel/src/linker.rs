@@ -12,23 +12,19 @@ use walkdir::WalkDir;
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_fs::link::{LinkLocks, LinkOptions};
+use uv_fs::link::{CopyLocks, LinkOptions, OnExistingDirectory, link_dir};
 use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 
 use crate::Error;
 
-// Re-export LinkMode from uv_fs for backwards compatibility
 pub use uv_fs::link::LinkMode;
 
 /// Shared state for concurrent wheel installations.
-///
-/// Tracks which packages install which paths (for conflict detection) and
-/// provides directory-level locking to prevent concurrent write corruption.
 #[derive(Debug, Default)]
 pub struct InstallState {
     /// Directory-level locks to prevent concurrent write corruption.
-    locks: LinkLocks,
+    locks: CopyLocks,
     /// Top level files and directories in site-packages, stored as relative path, and wheels they
     /// are from, with the absolute paths in the unpacked wheel.
     site_packages_paths: Mutex<FxHashMap<PathBuf, BTreeSet<(WheelFilename, PathBuf)>>>,
@@ -40,14 +36,14 @@ impl InstallState {
     /// Create a new `InstallState` with the given preview settings.
     pub fn new(preview: Preview) -> Self {
         Self {
-            locks: LinkLocks::new(),
+            locks: CopyLocks::default(),
             site_packages_paths: Mutex::new(FxHashMap::default()),
             preview,
         }
     }
 
-    /// Get the underlying directory locks for use with `uv_fs::link` functions.
-    pub fn locks(&self) -> &LinkLocks {
+    /// Get the underlying copy locks for use with [`uv_fs::link::link_dir`] functions.
+    pub fn copy_locks(&self) -> &CopyLocks {
         &self.locks
     }
 
@@ -252,52 +248,40 @@ impl InstallState {
     }
 }
 
-/// Extension trait to add wheel-specific methods to `LinkMode`.
-pub trait LinkModeExt {
-    /// Extract a wheel by linking all of its files into site packages.
-    fn link_wheel_files(
-        self,
-        site_packages: impl AsRef<Path>,
-        wheel: impl AsRef<Path>,
-        state: &InstallState,
-        filename: &WheelFilename,
-    ) -> Result<usize, Error>;
-}
+/// Extract a wheel by linking all of its files into site packages.
+///
+/// Returns the number of files extracted.
+#[instrument(skip_all)]
+pub fn link_wheel_files(
+    link_mode: LinkMode,
+    site_packages: impl AsRef<Path>,
+    wheel: impl AsRef<Path>,
+    state: &InstallState,
+    filename: &WheelFilename,
+) -> Result<usize, Error> {
+    let wheel = wheel.as_ref();
+    let site_packages = site_packages.as_ref();
+    let count = register_installed_paths(wheel, state, filename)?;
 
-impl LinkModeExt for LinkMode {
-    #[instrument(skip_all)]
-    fn link_wheel_files(
-        self,
-        site_packages: impl AsRef<Path>,
-        wheel: impl AsRef<Path>,
-        state: &InstallState,
-        filename: &WheelFilename,
-    ) -> Result<usize, Error> {
-        let wheel = wheel.as_ref();
-        let site_packages = site_packages.as_ref();
-        let count = register_installed_paths(wheel, state, filename)?;
+    // The `RECORD` file is modified during installation, so it needs a real
+    // copy rather than a link back to the cache.
+    let options = LinkOptions::new(link_mode)
+        .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
+        .with_copy_locks(state.copy_locks())
+        .with_on_existing_directory(OnExistingDirectory::Merge);
+    let used_link_mode = link_dir(wheel, site_packages, &options)?;
 
-        // The `RECORD` file is modified during installation, so it needs a real
-        // copy rather than a link back to the cache.
-        let options = LinkOptions::default()
-            .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
-            .with_locks(state.locks())
-            .with_merge_directories(true)
-            .with_warn_on_fallback(self != Self::Copy);
-        let actual = self.link_dir(wheel, site_packages, &options)?;
-
-        if actual == Self::Clone {
-            // The directory mtime is not updated when cloning and the mtime is
-            // used by CPython's import mechanisms to determine if it should look
-            // for new packages in a directory. Force an update so packages are
-            // importable without manual cache invalidation.
-            //
-            // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
-            update_site_packages_mtime(site_packages);
-        }
-
-        Ok(count)
+    if used_link_mode == LinkMode::Clone {
+        // The directory mtime is not updated when cloning and the mtime is
+        // used by CPython's import mechanisms to determine if it should look
+        // for new packages in a directory. Force an update so packages are
+        // importable without manual cache invalidation.
+        //
+        // <https://github.com/python/cpython/blob/8336cb2b6f428246803b02a4e97fce49d0bb1e09/Lib/importlib/_bootstrap_external.py#L1601>
+        update_site_packages_mtime(site_packages);
     }
+
+    Ok(count)
 }
 
 /// Update the mtime of the site-packages directory to the current time.
