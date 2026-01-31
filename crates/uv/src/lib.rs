@@ -771,6 +771,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .await
         }
         Commands::Pip(PipNamespace {
+            command: PipCommand::IndexVersions(args),
+        }) => return Ok((ExitStatus::Success)),
+        Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
         }) => {
             args.compat_args.validate()?;

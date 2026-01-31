@@ -966,6 +966,12 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Sync(Box<PipSyncArgs>),
+    /// Use pip index
+    #[command(
+        after_help = "Use `uv help pip index versions` for more details.",
+        after_long_help = ""
+    )]
+    IndexVersions(PipIndexVersionsArgs),
     /// Install packages into an environment.
     #[command(
         after_help = "Use `uv help pip install` for more details.",
@@ -2049,6 +2055,13 @@ pub struct PipSyncArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
+}
+
+#[derive(Args)]
+pub struct PipIndexVersionsArgs {
+    /// The package to query for
+    #[arg(required = true)]
+    pub package: PackageName, // TODO: Other options to follow in future
 }
 
 #[derive(Args)]
