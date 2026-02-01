@@ -3486,12 +3486,12 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     let bin_python = context
         .bin_dir
-        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
+        .child(format!("pyodide3.13{}", std::env::consts::EXE_SUFFIX));
 
     // The executable should be installed in the bin directory
     bin_python.assert(predicate::path::exists());
@@ -3562,7 +3562,7 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     context.python_uninstall().arg("--all").assert().success();
@@ -3575,7 +3575,7 @@ fn python_install_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     ");
 
     // Find via `pyodide``
@@ -3738,14 +3738,14 @@ fn python_install_build_version_pypy() {
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
-        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.10.16 in [TIME]
-     + pypy-3.10.16-[PLATFORM] (python3.10)
+     + pypy-3.10.16-[PLATFORM] (pypy3.10)
     ");
 
     // A BUILD file should be present with the version
@@ -4254,7 +4254,7 @@ fn python_install_compile_bytecode_pyodide() {
 
     ----- stderr -----
     Installed Python 3.13.2 in [TIME]
-     + pyodide-3.13.2-emscripten-wasm32-musl (python3.13)
+     + pyodide-3.13.2-emscripten-wasm32-musl (pyodide3.13)
     No compatible versions to bytecode compile (skipped 1)
     ");
 
@@ -4275,14 +4275,14 @@ fn python_install_compile_bytecode_graalpy() {
         .with_python_download_cache();
 
     // Should work for graalpy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.12.0 in [TIME]
-     + graalpy-3.12.0-[PLATFORM] (python3.12)
+     + graalpy-3.12.0-[PLATFORM] (graalpy3.12)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }
@@ -4298,14 +4298,14 @@ fn python_install_compile_bytecode_pypy() {
         .with_python_download_cache();
 
     // Should work for pypy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Installed Python 3.11.13 in [TIME]
-     + pypy-3.11.13-[PLATFORM] (python3.11)
+     + pypy-3.11.13-[PLATFORM] (pypy3.11)
     Bytecode compiled [COUNT] files in [TIME]
     ");
 }

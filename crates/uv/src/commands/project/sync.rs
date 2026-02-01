@@ -32,7 +32,7 @@ use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, Re
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -638,15 +638,6 @@ pub(super) async fn do_sync(
         build_options,
         sources,
     } = settings;
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
 
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {

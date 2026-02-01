@@ -21,7 +21,7 @@ fn workspace_list_simple() {
     foo
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -32,7 +32,7 @@ fn workspace_list_simple() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -59,7 +59,7 @@ fn workspace_list_root_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -88,7 +88,7 @@ fn workspace_list_virtual_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -119,7 +119,7 @@ fn workspace_list_from_member() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -160,7 +160,7 @@ fn workspace_list_multiple_members() {
     pkg-c
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -173,7 +173,7 @@ fn workspace_list_multiple_members() {
     [TEMP_DIR]/pkg-a/pkg-c
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -194,7 +194,7 @@ fn workspace_list_single_project() {
     my-project
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -219,7 +219,7 @@ fn workspace_list_with_excluded() -> Result<()> {
     albatross
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -231,13 +231,12 @@ fn workspace_list_with_excluded() -> Result<()> {
 fn workspace_list_no_project() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_list(), @"
+    uv_snapshot!(context.filters(), context.workspace_list(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
     "
     );

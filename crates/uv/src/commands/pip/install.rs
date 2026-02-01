@@ -37,7 +37,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::HashStrategy;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -105,15 +105,6 @@ pub(crate) async fn pip_install(
     preview: Preview,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
-
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
 

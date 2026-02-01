@@ -472,15 +472,6 @@ async fn do_lock(
         torch_backend: _,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::ExtraBuildDependencies
-        );
-    }
-
     // Collect the requirements, etc.
     let members = target.members();
     let packages = target.packages();

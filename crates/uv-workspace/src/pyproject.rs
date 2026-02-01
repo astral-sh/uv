@@ -35,7 +35,6 @@ use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_warnings::warn_user_once;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -300,11 +299,9 @@ where
             }
             if index.default {
                 if seen_default {
-                    warn_user_once!(
-                        "Found multiple indexes with `default = true`; \
-                        only one index may be marked as default. \
-                        This will become an error in the future.",
-                    );
+                    return Err(serde::de::Error::custom(
+                        "found multiple indexes with `default = true`; only one index may be marked as default",
+                    ));
                 }
                 seen_default = true;
             }

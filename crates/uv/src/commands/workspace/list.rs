@@ -5,27 +5,13 @@ use anyhow::Result;
 
 use owo_colors::OwoColorize;
 use uv_fs::Simplified;
-use uv_preview::{Preview, PreviewFeature};
-use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List workspace members
-pub(crate) async fn list(
-    project_dir: &Path,
-    paths: bool,
-    preview: Preview,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeature::WorkspaceList) {
-        warn_user!(
-            "The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::WorkspaceList
-        );
-    }
-
+pub(crate) async fn list(project_dir: &Path, paths: bool, printer: Printer) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let workspace =
         Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
