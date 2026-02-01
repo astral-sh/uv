@@ -2072,6 +2072,36 @@ pub struct PipIndexVersionsArgs {
     // Structured JSON output
     #[arg(long)]
     pub json: bool,
+
+    /// The Python interpreter that should be checked for the package.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+
+    /// List packages in the system Python environment.
+    ///
+    /// Disables discovery of virtual environments.
+    ///
+    /// See `uv help python` for details on Python discovery.
+    #[arg(
+        long,
+        env = EnvVars::UV_SYSTEM_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]

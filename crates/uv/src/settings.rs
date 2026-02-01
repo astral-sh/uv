@@ -2783,7 +2783,10 @@ impl PipIndexVersionsSettings {
             package_name,
             prerelease,
             json,
+            python,
             fetch,
+            system,
+            no_system,
         } = args;
 
         Self {
@@ -2792,6 +2795,8 @@ impl PipIndexVersionsSettings {
             json,
             settings: PipSettings::combine(
                 PipOptions {
+                    python: python.and_then(Maybe::into_option),
+                    system: flag(system, no_system, "system"),
                     ..PipOptions::from(fetch)
                 },
                 filesystem,

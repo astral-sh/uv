@@ -4,12 +4,15 @@ use rkyv::rancor::Error;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{IndexCapabilities, IndexLocations};
+use uv_distribution_types::{IndexCapabilities, IndexLocations, InstalledDist};
+use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_preview::Preview;
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::PrereleaseMode;
 
-use crate::commands::ExitStatus;
+use crate::commands::{ExitStatus, pip::operations::report_target_environment};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum};
 
 /// do pip index versions but with uv
@@ -17,12 +20,41 @@ pub(crate) async fn pip_index_versions(
     package_name: PackageName,
     prerelease: bool,
     json: bool,
+    python: Option<&str>,
     client_builder: &BaseClientBuilder<'_>,
     cache: Cache,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    system: bool,
+    preview: Preview,
     // TODO: take more arguments for the client and query
 ) -> Result<ExitStatus> {
+    // Detect the current Python interpreter.
+    let environment = PythonEnvironment::find(
+        &python.map(PythonRequest::parse).unwrap_or_default(),
+        EnvironmentPreference::from_system_flag(system, false),
+        PythonPreference::default().with_system_flag(system),
+        &cache,
+        preview,
+    )?;
+
+    // Uncomment once the printer is passed through.
+    // report_target_environment(&environment, &cache, printer)?;
+
+    // Build the installed index.
+    let site_packages = SitePackages::from_environment(&environment)?;
+
+    let installed = site_packages.get_packages(&package_name);
+    let installed_version: Option<&Version>;
+    if installed.is_empty() {
+        installed_version = None;
+        println!("No installed versions of {} found", package_name);
+    } else {
+        // TODO: don't assume the first version is the right one.
+        installed_version = Some(installed[0].version());
+        println!("Installed version: {}", installed_version.unwrap());
+    }
+
     let client = RegistryClientBuilder::new(client_builder.clone(), cache)
         .index_locations(index_locations)
         .index_strategy(index_strategy)
@@ -73,7 +105,11 @@ pub(crate) async fn pip_index_versions(
                 false => {
                     println!("{} ({})", package_name.as_str(), max_version.to_string());
                     print!("Available versions: ");
-                    println!("{}", versions.iter().format(", "))
+                    println!("{}", versions.iter().format(", "));
+                    if installed_version.is_some() {
+                        println!("INSTALLED: {}", installed_version.unwrap());
+                        println!("LATEST: {}", max_version);
+                    }
                 }
                 true => {
                     unimplemented!("This is next on my list!")

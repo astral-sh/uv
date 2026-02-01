@@ -784,10 +784,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.package_name,
                 args.prerelease,
                 args.json,
+                args.settings.python.as_deref(),
                 &client_builder,
                 cache,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.system,
+                globals.preview,
                 // TODO: more args to the index query
             )
             .await
