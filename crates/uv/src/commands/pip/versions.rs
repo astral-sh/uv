@@ -87,7 +87,7 @@ pub(crate) async fn pip_index_versions(
     match metadata_format {
         uv_client::MetadataFormat::Flat(_) => return Ok(ExitStatus::Error), // TODO: handle flat metadata
         uv_client::MetadataFormat::Simple(archived_metadata) => {
-            let versions: Vec<Version> = archived_metadata
+            let mut versions: Vec<Version> = archived_metadata
                 .iter()
                 .map(|archived_metadatum| {
                     rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum).unwrap() // TODO: don't unwrap, do this properly
@@ -98,8 +98,10 @@ pub(crate) async fn pip_index_versions(
                     _ => unreachable!("The only possible PrereleaseModes are Allow and Disallow"),
                 })
                 .map(|metadatum| metadatum.version)
-                // TODO: we need to ensure they are in descending order
                 .collect();
+
+            versions.sort();
+            versions.reverse();
 
             let max_version = versions.iter().max().unwrap(); // TODO: this panics when there are no versions - the simple_detail.is_empty() above doesn't prevent this.
 
