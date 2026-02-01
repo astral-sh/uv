@@ -789,6 +789,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                globals.concurrency,
                 args.settings.system,
                 printer,
                 globals.preview,

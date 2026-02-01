@@ -6,8 +6,8 @@ use serde::Serialize;
 use std::fmt::Write;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
-use uv_configuration::IndexStrategy;
-use uv_distribution_types::{IndexCapabilities, IndexLocations, InstalledDist};
+use uv_configuration::{Concurrency, IndexStrategy};
+use uv_distribution_types::{IndexCapabilities, IndexLocations};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -28,6 +28,7 @@ pub(crate) async fn pip_index_versions(
     cache: Cache,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    concurrency: Concurrency,
     system: bool,
     printer: Printer,
     preview: Preview,
@@ -72,7 +73,7 @@ pub(crate) async fn pip_index_versions(
             &package_name,
             None,
             &IndexCapabilities::default(),
-            &Semaphore::new(1),
+            &Semaphore::new(concurrency.downloads),
         )
         .await?;
 
