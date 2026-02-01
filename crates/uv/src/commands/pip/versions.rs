@@ -16,6 +16,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum}
 pub(crate) async fn pip_index_versions(
     package_name: PackageName,
     prerelease: bool,
+    json: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: Cache,
     index_locations: IndexLocations,
@@ -68,9 +69,16 @@ pub(crate) async fn pip_index_versions(
 
             let max_version = versions.iter().max().unwrap(); // TODO: this panics when there are no versions - the simple_detail.is_empty() above doesn't prevent this.
 
-            println!("{} ({})", package_name.as_str(), max_version.to_string());
-            print!("Available versions: ");
-            println!("{}", versions.iter().format(", "))
+            match json {
+                false => {
+                    println!("{} ({})", package_name.as_str(), max_version.to_string());
+                    print!("Available versions: ");
+                    println!("{}", versions.iter().format(", "))
+                }
+                true => {
+                    unimplemented!("This is next on my list!")
+                }
+            }
         }
     }
 

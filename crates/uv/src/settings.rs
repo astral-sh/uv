@@ -14,11 +14,11 @@ use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
     GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
-    PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
-    PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
-    PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs, SyncFormat, ToolDirArgs,
-    ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs, VersionArgs,
-    VersionBumpSpec, VersionFormat,
+    PipIndexVersionsArgs, PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs,
+    PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat,
+    PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs, SyncArgs,
+    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, VenvArgs, VersionArgs, VersionBumpSpec, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, FormatArgs, PublishArgs, PythonDirArgs,
@@ -2755,6 +2755,44 @@ impl PipSyncSettings {
                     group: Some(group),
                     torch_backend,
                     ..PipOptions::from(installer)
+                },
+                filesystem,
+                environment,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `pip index versions` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct PipIndexVersionsSettings {
+    pub(crate) package_name: PackageName,
+    pub(crate) prerelease: bool,
+    pub(crate) json: bool,
+    pub(crate) settings: PipSettings,
+}
+
+impl PipIndexVersionsSettings {
+    /// Resolve the [`PipIndexVersionsSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: PipIndexVersionsArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let PipIndexVersionsArgs {
+            package_name,
+            prerelease,
+            json,
+            fetch,
+        } = args;
+
+        Self {
+            package_name,
+            prerelease,
+            json,
+            settings: PipSettings::combine(
+                PipOptions {
+                    ..PipOptions::from(fetch)
                 },
                 filesystem,
                 environment,

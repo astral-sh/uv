@@ -56,8 +56,8 @@ use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
+    PipIndexVersionsSettings, PipInstallSettings, PipListSettings, PipShowSettings,
+    PipSyncSettings, PipUninstallSettings, PublishSettings,
 };
 
 pub(crate) mod child;
@@ -774,9 +774,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::IndexVersions(args),
         }) => {
+            let mut args = PipIndexVersionsSettings::resolve(args, filesystem, environment);
+
+            show_settings!(args);
+
             commands::pip_index_versions(
                 args.package_name,
                 args.prerelease,
+                args.json,
                 &client_builder,
                 cache.clone(),
                 IndexLocations::default(),

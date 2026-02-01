@@ -2065,6 +2065,13 @@ pub struct PipIndexVersionsArgs {
 
     #[arg(long)]
     pub prerelease: bool,
+
+    #[command(flatten)]
+    pub fetch: FetchArgs,
+
+    // Structured JSON output
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args)]
