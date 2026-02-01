@@ -134,7 +134,7 @@ pub(crate) async fn pip_index_versions(
                     };
                     writeln!(
                         printer.stdout(),
-                        "{:}",
+                        "{}",
                         serde_json::to_string(&output).unwrap()
                     )?;
                 }
@@ -150,5 +150,6 @@ struct PipIndexVersionsJsonOutput {
     name: String,
     versions: Vec<Version>,
     latest: Version,
+    #[serde(skip_serializing_if = "Option::is_none")]
     installed_version: Option<Version>,
 }
