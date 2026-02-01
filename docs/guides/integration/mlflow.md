@@ -13,7 +13,7 @@ seamlessly with MLflow to provide fast, reproducible dependency management for M
 
 !!! note
 
-    MLflow's uv integration requires MLflow version 2.20 or later.
+    MLflow's uv integration requires MLflow version 3.10 or later.
 
 ## Automatic dependency inference
 
@@ -149,7 +149,7 @@ Use dependency groups to keep training-only packages out of your inference envir
 # pyproject.toml
 [project]
 dependencies = [
-    "mlflow>=2.20",
+    "mlflow>=3.10",
     "scikit-learn>=1.0",
 ]
 
