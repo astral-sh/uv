@@ -226,7 +226,7 @@ pub(crate) async fn publish(
                     Ok(true) => {
                         writeln!(
                             printer.stderr(),
-                            "File {} already exists, skipping",
+                            "File `{}` already exists, skipping",
                             group.filename
                         )?;
                         return Ok(());
@@ -309,7 +309,11 @@ pub(crate) async fn publish(
                                 writeln!(
                                     printer.stderr(),
                                     "{}",
-                                    "File already exists, skipping".dimmed()
+                                    format_args!(
+                                        "File `{}` already exists, skipping",
+                                        group.filename
+                                    )
+                                    .dimmed()
                                 )?;
                             }
                         }
@@ -401,7 +405,7 @@ pub(crate) async fn publish(
                 writeln!(
                     printer.stderr(),
                     "{}",
-                    "File already exists, skipping".dimmed()
+                    format_args!("File `{}` already exists, skipping", group.filename).dimmed()
                 )?;
             }
             Ok(())
