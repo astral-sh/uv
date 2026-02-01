@@ -259,7 +259,9 @@ pub(crate) async fn publish(
                     group.filename,
                     format!("({bytes:.1}{unit})").dimmed()
                 )?;
-            } else {
+            } else if publish_concurrency == 1 {
+                // With concurrent uploads, the progress bar already indicates
+                // which file is being uploaded, so skip the per-file message.
                 writeln!(
                     printer.stderr(),
                     "{} {} {}",
