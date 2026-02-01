@@ -19,7 +19,7 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
+    CachedDist, Diagnostic, Dist, FindLinksStrategy, InstalledDist, InstalledVersion, LocalDist,
     NameRequirementSpecification, Requirement, ResolutionDiagnostic, UnresolvedRequirement,
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
@@ -125,6 +125,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
+    find_links_strategy: FindLinksStrategy,
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
     concurrency: Concurrency,
@@ -352,6 +353,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             conflicts,
             tags,
             flat_index,
+            find_links_strategy,
             index,
             hasher,
             build_dispatch,

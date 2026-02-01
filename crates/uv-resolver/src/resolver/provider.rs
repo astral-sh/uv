@@ -4,8 +4,8 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
-    RequiresPython,
+    Dist, FindLinksStrategy, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist,
+    RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -112,6 +112,8 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     fetcher: DistributionDatabase<'a, Context>,
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
+    /// The strategy for ordering find-links relative to regular indexes.
+    find_links_strategy: FindLinksStrategy,
     tags: Option<Tags>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
@@ -126,6 +128,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
     pub fn new(
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
+        find_links_strategy: FindLinksStrategy,
         tags: Option<&'a Tags>,
         requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
@@ -137,6 +140,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         Self {
             fetcher,
             flat_index: flat_index.clone(),
+            find_links_strategy,
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
@@ -155,6 +159,9 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         package_name: &'io PackageName,
         index: Option<&'io IndexMetadata>,
     ) -> PackageVersionsResult {
+        // If a package is pinned to an explicit index, ignore any `--find-links` entries.
+        let flat_index = index.is_none().then_some(&self.flat_index);
+
         let result = self
             .fetcher
             .client()
@@ -168,12 +175,17 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             })
             .await;
 
-        // If a package is pinned to an explicit index, ignore any `--find-links` entries.
-        let flat_index = index.is_none().then_some(&self.flat_index);
+        // Only merge find-links into index responses when using `Merge` strategy.
+        // For `First` and `Last`, find-links are kept separate from index results.
+        let merge_flat_index = if self.find_links_strategy == FindLinksStrategy::Merge {
+            flat_index
+        } else {
+            None
+        };
 
         match result {
-            Ok(results) => Ok(VersionsResponse::Found(
-                results
+            Ok(results) => {
+                let mut version_maps: Vec<VersionMap> = results
                     .into_iter()
                     .map(|(index, metadata)| match metadata {
                         MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
@@ -185,7 +197,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.allowed_yanks,
                             &self.hasher,
                             Some(&self.exclude_newer),
-                            flat_index
+                            merge_flat_index
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),
                             self.build_options,
@@ -197,8 +209,35 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             self.build_options,
                         ),
                     })
-                    .collect(),
-            )),
+                    .collect();
+
+                // When not merging, add find-links as a separate VersionMap.
+                // The position determines priority relative to index results,
+                // consistent with `--index-strategy`: with `first-index` (default),
+                // the first VersionMap with any match wins; with `unsafe-best-match`,
+                // all maps are kmerged and position breaks ties on equal versions.
+                if let Some(flat_dists) = merge_flat_index
+                    .is_none()
+                    .then(|| {
+                        flat_index
+                            .and_then(|flat_index| flat_index.get(package_name))
+                            .cloned()
+                    })
+                    .flatten()
+                {
+                    match self.find_links_strategy {
+                        FindLinksStrategy::First => {
+                            version_maps.insert(0, VersionMap::from(flat_dists));
+                        }
+                        FindLinksStrategy::Last => {
+                            version_maps.push(VersionMap::from(flat_dists));
+                        }
+                        FindLinksStrategy::Merge => {}
+                    }
+                }
+
+                Ok(VersionsResponse::Found(version_maps))
+            }
             Err(err) => match err.kind() {
                 uv_client::ErrorKind::RemotePackageNotFound(_) => {
                     if let Some(flat_index) = flat_index

@@ -15,8 +15,8 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Origin,
-    PackageConfigSettings, Resolution,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, FindLinksStrategy, Index,
+    IndexLocations, Origin, PackageConfigSettings, Resolution,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -298,6 +298,7 @@ pub(crate) async fn pip_sync(
             .map(|index| index.with_origin(Origin::RequirementsTxt))
             .collect(),
         no_index,
+        FindLinksStrategy::default(),
     );
 
     // Determine the PyTorch backend.
@@ -493,6 +494,7 @@ pub(crate) async fn pip_sync(
             Conflicts::empty(),
             &client,
             &flat_index,
+            index_locations.find_links_strategy(),
             state.index(),
             &build_dispatch,
             concurrency,
