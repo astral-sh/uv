@@ -52,6 +52,17 @@ impl Printer {
         }
     }
 
+    /// Return the [`Stderr`] for this printer, including in quiet mode.
+    pub(crate) fn stderr_important(self) -> Stderr {
+        match self {
+            Self::Silent => Stderr::Disabled,
+            Self::Quiet => Stderr::Enabled,
+            Self::Default => Stderr::Enabled,
+            Self::Verbose => Stderr::Enabled,
+            Self::NoProgress => Stderr::Enabled,
+        }
+    }
+
     /// Return the [`Stderr`] for this printer.
     pub(crate) fn stderr(self) -> Stderr {
         match self {
