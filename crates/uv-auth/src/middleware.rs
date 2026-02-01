@@ -15,7 +15,7 @@ use uv_warnings::owo_colors::OwoColorize;
 
 use crate::credentials::Authentication;
 use crate::providers::{GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider};
-use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxJwt, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
@@ -770,7 +770,41 @@ impl AuthMiddleware {
                             *token_state = TokenState::Initialized(generated.clone());
                             generated
                         }
-                        TokenState::Initialized(ref tokens) => tokens.clone(),
+                        TokenState::Initialized(ref tokens) => {
+                            // Check if the cached token is still fresh.
+                            if let Some(token) = tokens {
+                                let is_fresh = PyxJwt::decode(token)
+                                    .ok()
+                                    .and_then(|jwt| jwt.exp)
+                                    .and_then(|exp| jiff::Timestamp::from_second(exp).ok())
+                                    .is_some_and(|exp| {
+                                        exp >= jiff::Timestamp::now()
+                                            + std::time::Duration::from_secs(DEFAULT_TOLERANCE_SECS)
+                                    });
+                                if is_fresh {
+                                    tokens.clone()
+                                } else {
+                                    trace!(
+                                        "Cached token expired or expiring soon, refreshing for {url}"
+                                    );
+                                    let refreshed = match token_store
+                                        .access_token(base_client, DEFAULT_TOLERANCE_SECS)
+                                        .await
+                                    {
+                                        Ok(Some(new_token)) => Some(new_token),
+                                        Ok(None) => None,
+                                        Err(err) => {
+                                            warn!("Failed to refresh access token: {err}");
+                                            tokens.clone()
+                                        }
+                                    };
+                                    *token_state = TokenState::Initialized(refreshed.clone());
+                                    refreshed
+                                }
+                            } else {
+                                None
+                            }
+                        }
                     };
 
                     let credentials = token.map(|token| {
