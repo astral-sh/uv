@@ -125,9 +125,19 @@ mlflow.pyfunc.log_model(
 )
 ```
 
+## Disabling uv integration
+
+If you need to fall back to MLflow's default import-based dependency inference, disable uv
+auto-detection entirely:
+
+```bash
+export MLFLOW_UV_AUTO_DETECT=false
+```
+
 ## Disabling uv file logging
 
-For large projects where logging uv files as artifacts is not desired, disable it with:
+For large projects where logging uv files as artifacts is not desired (but you still want uv-based
+dependency inference), disable file logging:
 
 ```bash
 export MLFLOW_LOG_UV_FILES=false
