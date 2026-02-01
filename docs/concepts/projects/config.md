@@ -276,7 +276,10 @@ This will ensure that `deepspeed` is built with the same version of `torch` that
 project environment.
 
 Similarly, to build `flash-attn` with `torch` as an additional build dependency, include the
-following in your `pyproject.toml`:
+following in your `pyproject.toml`.
+
+We strongly recommend **explicitly pinning** both `torch` and `flash-attn` to known compatible
+versions. This ensures that `uv` selects a combination for which a pre-built wheel exists.
 
 ```toml title="pyproject.toml"
 [project]
@@ -285,22 +288,25 @@ version = "0.1.0"
 description = "..."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["flash-attn", "torch"]
+dependencies = [
+    "flash-attn==2.8.3",
+    "torch==2.9.0"
+]
 
 [tool.uv.extra-build-dependencies]
 flash-attn = [{ requirement = "torch", match-runtime = true }]
 
-[tool.uv.extra-build-variables]
-flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
 ```
 
-!!! note
+!!! warning
 
-    The `FLASH_ATTENTION_SKIP_CUDA_BUILD` environment variable ensures that `flash-attn` is installed
-    from a compatible, pre-built wheel, rather than attempting to build it from source, which requires
-    access to the CUDA development toolkit. If the CUDA toolkit is not available, the environment variable
-    can be omitted, and `flash-attn` will be installed from a pre-built wheel if one is available for the
-    current platform, Python version, and PyTorch version.
+    `flash-attn` will automatically attempt to download a pre-built wheel if one matches the installed
+    PyTorch version.
+
+    Do **not** set the `FLASH_ATTENTION_SKIP_CUDA_BUILD` environment variable unless absolutely
+    necessary. While it disables local compilation, it can lead to a **silent failure** if a matching
+    wheel is not found: `setup.py` will skip the CUDA extension compilation and install a non-functional
+    (hollow) Python package.
 
 Similarly, [`deep_gemm`](https://github.com/deepseek-ai/DeepGEMM) follows the same pattern:
 
