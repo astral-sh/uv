@@ -1,5 +1,5 @@
 use crate::printer::Printer;
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use itertools::Itertools;
 use rkyv::rancor::Error;
 use serde::Serialize;
@@ -90,7 +90,8 @@ pub(crate) async fn pip_index_versions(
             let mut versions: Vec<Version> = archived_metadata
                 .iter()
                 .map(|archived_metadatum| {
-                    rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum).unwrap() // TODO: don't unwrap, do this properly
+                    rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum)
+                        .expect("archived version files always deserializes")
                 })
                 .filter(|metadatum| match prerelease_mode {
                     PrereleaseMode::Allow => true,
@@ -103,7 +104,17 @@ pub(crate) async fn pip_index_versions(
             versions.sort();
             versions.reverse();
 
-            let max_version = versions.iter().max().unwrap(); // TODO: this panics when there are no versions - the simple_detail.is_empty() above doesn't prevent this.
+            let max_version = match versions.iter().max() {
+                None => {
+                    writeln!(
+                        printer.stderr(),
+                        "ERROR: No matching distribution found for {}",
+                        package_name.as_str()
+                    )?;
+                    return Ok(ExitStatus::Failure);
+                }
+                Some(max_version) => max_version,
+            };
 
             match json {
                 false => {
@@ -115,12 +126,9 @@ pub(crate) async fn pip_index_versions(
                     )?;
                     write!(printer.stdout(), "Available versions: ")?;
                     writeln!(printer.stdout(), "{}", versions.iter().format(", "))?;
-                    if installed_version.is_some() {
-                        writeln!(
-                            printer.stdout(),
-                            "INSTALLED: {}",
-                            installed_version.unwrap()
-                        )?;
+
+                    if let Some(installed_version) = installed_version {
+                        writeln!(printer.stdout(), "INSTALLED: {}", installed_version)?;
                         writeln!(printer.stdout(), "LATEST: {}", max_version)?;
                     }
                 }
@@ -131,11 +139,7 @@ pub(crate) async fn pip_index_versions(
                         latest: max_version,
                         installed_version,
                     };
-                    writeln!(
-                        printer.stdout(),
-                        "{}",
-                        serde_json::to_string(&output).unwrap()
-                    )?;
+                    writeln!(printer.stdout(), "{}", serde_json::to_string(&output)?)?;
                 }
             }
         }
