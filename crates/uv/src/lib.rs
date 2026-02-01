@@ -20,7 +20,6 @@ use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument, trace};
-use uv_distribution_types::IndexLocations;
 
 #[cfg(not(feature = "self-update"))]
 use crate::install_source::InstallSource;
@@ -35,7 +34,7 @@ use uv_cli::{
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
 use uv_client::BaseClientBuilder;
-use uv_configuration::{IndexStrategy, min_stack_size};
+use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
@@ -774,18 +773,21 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Pip(PipNamespace {
             command: PipCommand::IndexVersions(args),
         }) => {
-            let mut args = PipIndexVersionsSettings::resolve(args, filesystem, environment);
+            let args = PipIndexVersionsSettings::resolve(args, filesystem, environment);
 
             show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
 
             commands::pip_index_versions(
                 args.package_name,
                 args.prerelease,
                 args.json,
                 &client_builder,
-                cache.clone(),
-                IndexLocations::default(),
-                IndexStrategy::default(),
+                cache,
+                args.settings.index_locations,
+                args.settings.index_strategy,
                 // TODO: more args to the index query
             )
             .await
