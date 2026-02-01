@@ -776,6 +776,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::pip_index_versions(
                 args.package_name,
+                args.prerelease,
                 &client_builder,
                 cache.clone(),
                 IndexLocations::default(),

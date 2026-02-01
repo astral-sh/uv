@@ -2062,6 +2062,9 @@ pub struct PipIndexVersionsArgs {
     /// The package to query for
     #[arg(required = true)]
     pub package_name: PackageName, // TODO: Other options to follow in future
+
+    #[arg(long)]
+    pub prerelease: bool,
 }
 
 #[derive(Args)]

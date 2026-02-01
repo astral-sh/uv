@@ -7,6 +7,7 @@ use uv_configuration::IndexStrategy;
 use uv_distribution_types::{IndexCapabilities, IndexLocations};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_resolver::PrereleaseMode;
 
 use crate::commands::ExitStatus;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum};
@@ -14,6 +15,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum}
 /// do pip index versions but with uv
 pub(crate) async fn pip_index_versions(
     package_name: PackageName,
+    prerelease: bool,
     client_builder: &BaseClientBuilder<'_>,
     cache: Cache,
     index_locations: IndexLocations,
@@ -24,6 +26,12 @@ pub(crate) async fn pip_index_versions(
         .index_locations(index_locations)
         .index_strategy(index_strategy)
         .build();
+
+    let prerelease_mode = if prerelease {
+        PrereleaseMode::Allow
+    } else {
+        PrereleaseMode::Disallow
+    };
 
     let simple_detail = client
         .simple_detail(
@@ -49,6 +57,7 @@ pub(crate) async fn pip_index_versions(
                 .map(|archived_metadatum| {
                     rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum).unwrap() // TODO: don't unwrap, do this properly
                 })
+                .filter(|metadatum| true) // TODO: filter based on prerelease mode
                 .map(|metadatum| metadatum.version)
                 // TODO: we need to ensure they are in descending order
                 .collect();
