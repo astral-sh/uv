@@ -1,11 +1,12 @@
 use anyhow::Result;
+use itertools::Itertools;
 use rkyv::rancor::Error;
 use tokio::sync::Semaphore;
-use uv_auth::KeyringProvider;
 use uv_cache::Cache;
 use uv_configuration::IndexStrategy;
 use uv_distribution_types::{IndexCapabilities, IndexLocations};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 
 use crate::commands::ExitStatus;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum};
@@ -43,12 +44,20 @@ pub(crate) async fn pip_index_versions(
     match metadata_format {
         uv_client::MetadataFormat::Flat(_) => return Ok(ExitStatus::Error), // TODO: handle flat metadata
         uv_client::MetadataFormat::Simple(archived_metadata) => {
-            for version_datum in archived_metadata.iter() {
-                let version =
-                    rkyv::deserialize::<SimpleDetailMetadatum, Error>(version_datum).unwrap(); // TODO: don't unwrap, do this properly
+            let versions: Vec<Version> = archived_metadata
+                .iter()
+                .map(|archived_metadatum| {
+                    rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum).unwrap() // TODO: don't unwrap, do this properly
+                })
+                .map(|metadatum| metadatum.version)
+                // TODO: we need to ensure they are in descending order
+                .collect();
 
-                println!("Version: {:#?}\n\n", version);
-            }
+            let max_version = versions.iter().max().unwrap();
+
+            println!("{} ({})", package_name.as_str(), max_version.to_string());
+            print!("Available versions: ");
+            println!("{}", versions.iter().format(", "))
         }
     }
 
