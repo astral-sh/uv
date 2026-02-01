@@ -203,6 +203,11 @@ pub(crate) async fn publish(
 
     let error_count = AtomicUsize::new(0);
 
+    // Create a shared reporter for concurrent uploads so that progress bars are
+    // coordinated under a single `MultiProgress` and status messages can be
+    // printed above them via `reporter.println()`.
+    let reporter = Arc::new(PublishReporter::single(printer));
+
     // Each task returns Ok(()) for success/skip, Err for fatal errors (non-dry-run only).
     let publish_one = |group: uv_publish::UploadDistribution| {
         let check_url_client = &check_url_client;
@@ -213,6 +218,7 @@ pub(crate) async fn publish(
         let s3_client = &s3_client;
         let credentials = &credentials;
         let error_count = &error_count;
+        let reporter = &reporter;
         async move {
             if let Some(check_url_client) = check_url_client {
                 match uv_publish::check_url(
@@ -224,23 +230,20 @@ pub(crate) async fn publish(
                 .await
                 {
                     Ok(true) => {
-                        writeln!(
-                            printer.stderr(),
+                        reporter.println(format!(
                             "File `{}` already exists, skipping",
                             group.filename
-                        )?;
+                        ))?;
                         return Ok(());
                     }
                     Ok(false) => {}
                     Err(err) => {
                         if dry_run {
                             let err: anyhow::Error = err.into();
-                            write_error_chain(
-                                err.as_ref(),
-                                printer.stderr(),
-                                "error",
-                                AnsiColors::Red,
-                            )?;
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
                             error_count.fetch_add(1, Ordering::Relaxed);
                             return Ok(());
                         }
@@ -252,45 +255,41 @@ pub(crate) async fn publish(
             let size = fs_err::metadata(&group.file)?.len();
             let (bytes, unit) = human_readable_bytes(size);
             if dry_run {
-                writeln!(
-                    printer.stderr(),
+                reporter.println(format!(
                     "{} {} {}",
                     "Checking".bold().cyan(),
                     group.filename,
                     format!("({bytes:.1}{unit})").dimmed()
-                )?;
+                ))?;
             } else if publish_concurrency == 1 {
                 // With concurrent uploads, the progress bar already indicates
                 // which file is being uploaded, so skip the per-file message.
-                writeln!(
-                    printer.stderr(),
+                reporter.println(format!(
                     "{} {} {}",
                     "Uploading".bold().green(),
                     group.filename,
                     format!("({bytes:.1}{unit})").dimmed()
-                )?;
+                ))?;
             }
 
             // Collect the metadata for the file.
-            let form_metadata =
-                match FormMetadata::read_from_file(&group.file, &group.filename).await {
-                    Ok(metadata) => metadata,
-                    Err(err) => {
-                        let err: anyhow::Error =
-                            PublishError::PublishPrepare(group.file.clone(), Box::new(err)).into();
-                        if dry_run {
-                            write_error_chain(
-                                err.as_ref(),
-                                printer.stderr(),
-                                "error",
-                                AnsiColors::Red,
-                            )?;
-                            error_count.fetch_add(1, Ordering::Relaxed);
-                            return Ok(());
-                        }
-                        return Err(err);
+            let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
+                .await
+            {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    let err: anyhow::Error =
+                        PublishError::PublishPrepare(group.file.clone(), Box::new(err)).into();
+                    if dry_run {
+                        let mut buf = String::new();
+                        let _ = write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                        reporter.println(buf.trim_end())?;
+                        error_count.fetch_add(1, Ordering::Relaxed);
+                        return Ok(());
                     }
-                };
+                    return Err(err);
+                }
+            };
 
             let uploaded = if direct {
                 if dry_run {
@@ -308,25 +307,22 @@ pub(crate) async fn publish(
                     {
                         Ok(should_upload) => {
                             if !should_upload {
-                                writeln!(
-                                    printer.stderr(),
+                                reporter.println(format!(
                                     "{}",
                                     format_args!(
                                         "File `{}` already exists, skipping",
                                         group.filename
                                     )
                                     .dimmed()
-                                )?;
+                                ))?;
                             }
                         }
                         Err(err) => {
                             let err: anyhow::Error = err.into();
-                            write_error_chain(
-                                err.as_ref(),
-                                printer.stderr(),
-                                "error",
-                                AnsiColors::Red,
-                            )?;
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
                             error_count.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -334,7 +330,6 @@ pub(crate) async fn publish(
                 }
 
                 debug!("Using two-phase upload (direct mode)");
-                let reporter = PublishReporter::single(printer);
                 upload_two_phase(
                     &group,
                     &form_metadata,
@@ -344,7 +339,7 @@ pub(crate) async fn publish(
                     retry_policy,
                     credentials,
                     // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                    Arc::new(reporter),
+                    Arc::clone(reporter),
                 )
                 .await?
             } else {
@@ -369,7 +364,6 @@ pub(crate) async fn publish(
                         if !should_upload {
                             false
                         } else {
-                            let reporter = PublishReporter::single(printer);
                             upload(
                                 &group,
                                 &form_metadata,
@@ -380,7 +374,7 @@ pub(crate) async fn publish(
                                 check_url_client.as_ref(),
                                 download_concurrency,
                                 // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                                Arc::new(reporter),
+                                Arc::clone(reporter),
                             )
                             .await? // Filename and/or URL are already attached, if applicable.
                         }
@@ -388,12 +382,10 @@ pub(crate) async fn publish(
                     Err(err) => {
                         if dry_run {
                             let err: anyhow::Error = err.into();
-                            write_error_chain(
-                                err.as_ref(),
-                                printer.stderr(),
-                                "error",
-                                AnsiColors::Red,
-                            )?;
+                            let mut buf = String::new();
+                            let _ =
+                                write_error_chain(err.as_ref(), &mut buf, "error", AnsiColors::Red);
+                            reporter.println(buf.trim_end())?;
                             error_count.fetch_add(1, Ordering::Relaxed);
                             return Ok(());
                         }
@@ -404,11 +396,10 @@ pub(crate) async fn publish(
             info!("Upload succeeded");
 
             if !uploaded {
-                writeln!(
-                    printer.stderr(),
+                reporter.println(format!(
                     "{}",
                     format_args!("File `{}` already exists, skipping", group.filename).dimmed()
-                )?;
+                ))?;
             }
             Ok(())
         }
