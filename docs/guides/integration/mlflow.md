@@ -113,14 +113,27 @@ jobs:
 
 The `--frozen` flag ensures CI uses exactly the same dependencies as your local environment.
 
-## Disabling uv integration
+## Monorepo support
 
-If you need to fall back to MLflow's default import-based dependency inference, you can disable uv
-detection:
+For monorepos where `uv.lock` is not in the current working directory, use the `uv_lock` parameter:
+
+```python
+mlflow.pyfunc.log_model(
+    artifact_path="model",
+    python_model=my_model,
+    uv_lock="../uv.lock",  # Path to lock file
+)
+```
+
+## Disabling uv file logging
+
+For large projects where logging uv files as artifacts is not desired, disable it with:
 
 ```bash
-export MLFLOW_UV_AUTO_DETECT=false
+export MLFLOW_LOG_UV_FILES=false
 ```
+
+MLflow will still use uv for dependency inference but won't copy the lock files as artifacts.
 
 ## Best practices
 
@@ -161,12 +174,8 @@ train = [
 ]
 ```
 
-Then log models without the training group:
-
-```bash
-export MLFLOW_UV_ONLY_GROUPS=""  # Exclude all groups, use only core dependencies
-uv run python log_model.py
-```
+By default, MLflow only exports the core project dependencies from `[project].dependencies`. Custom
+groups like `train` are not included unless you explicitly set `MLFLOW_UV_GROUPS="train"`.
 
 ## Troubleshooting
 
@@ -187,9 +196,9 @@ This shows exactly what MLflow will capture.
 
 ### Environment variable not taking effect
 
-Environment variables must be set before importing MLflow:
+Environment variables must be set before running your script:
 
 ```bash
-export MLFLOW_UV_GROUPS="dev"
-python -c "import mlflow; mlflow.pyfunc.log_model(...)"
+export MLFLOW_UV_GROUPS="serving"
+python train.py
 ```
