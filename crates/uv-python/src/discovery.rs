@@ -285,8 +285,9 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>()
--> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>(
+    preview: Preview,
+) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -296,8 +297,8 @@ fn python_executables_from_virtual_environments<'a>()
     .flatten();
 
     // N.B. we prefer the conda environment over discovered virtual environments
-    let from_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Child)
+    let from_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Child, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -524,15 +525,15 @@ fn python_executables<'a>(
     .flatten();
 
     // Check if the base conda environment is active
-    let from_base_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Base)
+    let from_base_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Base, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments();
+    let from_virtual_environments = python_executables_from_virtual_environments(preview);
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference, preview);
 
