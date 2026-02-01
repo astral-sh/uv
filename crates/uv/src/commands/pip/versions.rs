@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rkyv::rancor::Error;
 use tokio::sync::Semaphore;
 use uv_auth::KeyringProvider;
 use uv_cache::Cache;
@@ -7,7 +8,7 @@ use uv_distribution_types::{IndexCapabilities, IndexLocations};
 use uv_normalize::PackageName;
 
 use crate::commands::ExitStatus;
-use uv_client::{BaseClientBuilder, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, RegistryClientBuilder, SimpleDetailMetadatum};
 
 /// do pip index versions but with uv
 pub(crate) async fn pip_index_versions(
@@ -43,8 +44,10 @@ pub(crate) async fn pip_index_versions(
         uv_client::MetadataFormat::Flat(_) => return Ok(ExitStatus::Error), // TODO: handle flat metadata
         uv_client::MetadataFormat::Simple(archived_metadata) => {
             for version_datum in archived_metadata.iter() {
-                // TODO: unarchive the metadata so we can actually understand the output
-                println!("Version: {:?}", version_datum.version);
+                let version =
+                    rkyv::deserialize::<SimpleDetailMetadatum, Error>(version_datum).unwrap(); // TODO: don't unwrap, do this properly
+
+                println!("Version: {:#?}\n\n", version);
             }
         }
     }
