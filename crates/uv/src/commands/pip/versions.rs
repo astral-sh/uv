@@ -48,14 +48,15 @@ pub(crate) async fn pip_index_versions(
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    let installed = site_packages.get_packages(&package_name);
-    let installed_version: Option<Version>;
-    if installed.is_empty() {
-        installed_version = None;
+    let installed_packages = site_packages.get_packages(&package_name);
+
+    let installed_version = if installed_packages.is_empty() {
+        None
     } else {
-        // TODO: don't assume the first version is the right one.
-        installed_version = Some(installed[0].version().to_owned());
-    }
+        // TODO: how do we know which one to pick if multiple are installed?
+        //  what does it mean to have multiple installed?
+        Some(installed_packages[0].version().to_owned())
+    };
 
     let client = RegistryClientBuilder::new(client_builder.clone(), cache)
         .index_locations(index_locations)
@@ -77,11 +78,14 @@ pub(crate) async fn pip_index_versions(
         )
         .await?;
 
+    // TODO: when could this be empty?
+    //  if the package doesn't exist we get an error before this point
     if simple_detail.is_empty() {
-        println!("No versions found");
+        writeln!(printer.stderr(), "No data returned from indexes")?;
         return Ok(ExitStatus::Failure);
     }
 
+    // TODO: we should handle multiple index urls here by flattening the results
     let (_index_url, metadata_format) = &simple_detail[0];
 
     match metadata_format {
