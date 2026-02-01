@@ -127,9 +127,8 @@ pub(crate) async fn pip_index_versions(
                 true => {
                     let output = PipIndexVersionsJsonOutput {
                         name: package_name.to_string(),
-                        // TODO: why do I need to own these?
-                        versions: versions.to_owned(),
-                        latest: max_version.to_owned(),
+                        versions: &versions,
+                        latest: max_version,
                         installed_version,
                     };
                     writeln!(
@@ -146,10 +145,10 @@ pub(crate) async fn pip_index_versions(
 }
 
 #[derive(Serialize, Debug)]
-struct PipIndexVersionsJsonOutput {
+struct PipIndexVersionsJsonOutput<'a> {
     name: String,
-    versions: Vec<Version>,
-    latest: Version,
+    versions: &'a Vec<Version>,
+    latest: &'a Version,
     #[serde(skip_serializing_if = "Option::is_none")]
     installed_version: Option<Version>,
 }
