@@ -165,8 +165,9 @@ pub(crate) async fn publish(
         concurrency.uploads
     };
     debug!("Using publish concurrency of {publish_concurrency}");
-    // Allow concurrent check-url lookups to match publish concurrency.
-    let download_concurrency = Arc::new(Semaphore::new(publish_concurrency));
+    // The check-url step fetches the Simple API page, same as resolution, so
+    // use the standard download concurrency rather than the upload limit.
+    let download_concurrency = Arc::new(Semaphore::new(concurrency.downloads));
 
     // Load credentials.
     let (publish_url, credentials) = gather_credentials(
