@@ -2161,7 +2161,7 @@ fn venv_included_in_sdist() -> Result<()> {
         .child("pyproject.toml")
         .write_str(pyproject_toml)?;
 
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // context.filters()
     uv_snapshot!(context.filters(), context.build(), @"

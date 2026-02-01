@@ -1,5 +1,5 @@
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -20,6 +20,13 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
+    #[error("A {name} already exists at `{}`. Use `--clear` to replace it", path.display())]
+    Exists {
+        /// The type of environment (e.g., "virtual environment").
+        name: &'static str,
+        /// The path to the existing environment.
+        path: PathBuf,
+    },
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
