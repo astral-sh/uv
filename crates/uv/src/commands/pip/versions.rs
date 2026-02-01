@@ -57,12 +57,16 @@ pub(crate) async fn pip_index_versions(
                 .map(|archived_metadatum| {
                     rkyv::deserialize::<SimpleDetailMetadatum, Error>(archived_metadatum).unwrap() // TODO: don't unwrap, do this properly
                 })
-                .filter(|metadatum| true) // TODO: filter based on prerelease mode
+                .filter(|metadatum| match prerelease_mode {
+                    PrereleaseMode::Allow => true,
+                    PrereleaseMode::Disallow => !metadatum.version.is_pre(),
+                    _ => unreachable!("The only possible PrereleaseModes are Allow and Disallow"),
+                })
                 .map(|metadatum| metadatum.version)
                 // TODO: we need to ensure they are in descending order
                 .collect();
 
-            let max_version = versions.iter().max().unwrap();
+            let max_version = versions.iter().max().unwrap(); // TODO: this panics when there are no versions - the simple_detail.is_empty() above doesn't prevent this.
 
             println!("{} ({})", package_name.as_str(), max_version.to_string());
             print!("Available versions: ");
