@@ -1,6 +1,7 @@
 use anyhow::Result;
 use itertools::Itertools;
 use rkyv::rancor::Error;
+use serde::Serialize;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
 use uv_configuration::IndexStrategy;
@@ -45,14 +46,13 @@ pub(crate) async fn pip_index_versions(
     let site_packages = SitePackages::from_environment(&environment)?;
 
     let installed = site_packages.get_packages(&package_name);
-    let installed_version: Option<&Version>;
+    let installed_version: Option<Version>;
     if installed.is_empty() {
         installed_version = None;
         println!("No installed versions of {} found", package_name);
     } else {
         // TODO: don't assume the first version is the right one.
-        installed_version = Some(installed[0].version());
-        println!("Installed version: {}", installed_version.unwrap());
+        installed_version = Some(installed[0].version().to_owned());
     }
 
     let client = RegistryClientBuilder::new(client_builder.clone(), cache)
@@ -112,11 +112,26 @@ pub(crate) async fn pip_index_versions(
                     }
                 }
                 true => {
-                    unimplemented!("This is next on my list!")
+                    let output = PipIndexVersionsJsonOutput {
+                        name: package_name.to_string(),
+                        // TODO: why do I need to own these?
+                        versions: versions.to_owned(),
+                        latest: max_version.to_owned(),
+                        installed_version,
+                    };
+                    println!("{:}", serde_json::to_string(&output).unwrap());
                 }
             }
         }
     }
 
     return Ok(ExitStatus::Success);
+}
+
+#[derive(Serialize, Debug)]
+struct PipIndexVersionsJsonOutput {
+    name: String,
+    versions: Vec<Version>,
+    latest: Version,
+    installed_version: Option<Version>,
 }
