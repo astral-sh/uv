@@ -1,7 +1,9 @@
+use crate::printer::Printer;
 use anyhow::Result;
 use itertools::Itertools;
 use rkyv::rancor::Error;
 use serde::Serialize;
+use std::fmt::Write;
 use tokio::sync::Semaphore;
 use uv_cache::Cache;
 use uv_configuration::IndexStrategy;
@@ -27,6 +29,7 @@ pub(crate) async fn pip_index_versions(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     system: bool,
+    printer: Printer,
     preview: Preview,
     // TODO: take more arguments for the client and query
 ) -> Result<ExitStatus> {
@@ -39,8 +42,7 @@ pub(crate) async fn pip_index_versions(
         preview,
     )?;
 
-    // Uncomment once the printer is passed through.
-    // report_target_environment(&environment, &cache, printer)?;
+    report_target_environment(&environment, &cache, printer)?;
 
     // Build the installed index.
     let site_packages = SitePackages::from_environment(&environment)?;
@@ -49,7 +51,6 @@ pub(crate) async fn pip_index_versions(
     let installed_version: Option<Version>;
     if installed.is_empty() {
         installed_version = None;
-        println!("No installed versions of {} found", package_name);
     } else {
         // TODO: don't assume the first version is the right one.
         installed_version = Some(installed[0].version().to_owned());
@@ -103,12 +104,21 @@ pub(crate) async fn pip_index_versions(
 
             match json {
                 false => {
-                    println!("{} ({})", package_name.as_str(), max_version.to_string());
-                    print!("Available versions: ");
-                    println!("{}", versions.iter().format(", "));
+                    writeln!(
+                        printer.stdout(),
+                        "{} ({})",
+                        package_name.as_str(),
+                        max_version.to_string()
+                    )?;
+                    write!(printer.stdout(), "Available versions: ")?;
+                    writeln!(printer.stdout(), "{}", versions.iter().format(", "))?;
                     if installed_version.is_some() {
-                        println!("INSTALLED: {}", installed_version.unwrap());
-                        println!("LATEST: {}", max_version);
+                        writeln!(
+                            printer.stdout(),
+                            "INSTALLED: {}",
+                            installed_version.unwrap()
+                        )?;
+                        writeln!(printer.stdout(), "LATEST: {}", max_version)?;
                     }
                 }
                 true => {
@@ -119,7 +129,11 @@ pub(crate) async fn pip_index_versions(
                         latest: max_version.to_owned(),
                         installed_version,
                     };
-                    println!("{:}", serde_json::to_string(&output).unwrap());
+                    writeln!(
+                        printer.stdout(),
+                        "{:}",
+                        serde_json::to_string(&output).unwrap()
+                    )?;
                 }
             }
         }

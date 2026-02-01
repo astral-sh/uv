@@ -790,6 +790,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.index_locations,
                 args.settings.index_strategy,
                 args.settings.system,
+                printer,
                 globals.preview,
                 // TODO: more args to the index query
             )
