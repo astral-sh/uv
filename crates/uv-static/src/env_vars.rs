@@ -367,6 +367,17 @@ impl EnvVars {
     #[attr_added_in("0.1.45")]
     pub const UV_CONCURRENT_INSTALLS: &'static str = "UV_CONCURRENT_INSTALLS";
 
+    /// Sets the maximum number of concurrent publish uploads that uv will
+    /// perform at any given time.
+    #[attr_added_in("next release")]
+    pub const UV_CONCURRENT_UPLOADS: &'static str = "UV_CONCURRENT_UPLOADS";
+
+    /// Sets the maximum number of concurrent pyx wheel validations that uv will
+    /// perform at any given time during `uv publish --dry-run` with direct mode.
+    #[attr_added_in("next release")]
+    pub const UV_CONCURRENT_PYX_WHEEL_VALIDATIONS: &'static str =
+        "UV_CONCURRENT_PYX_WHEEL_VALIDATIONS";
+
     /// Equivalent to the `--no-progress` command-line argument. Disables all progress output. For
     /// example, spinners and progress bars.
     #[attr_added_in("0.2.28")]

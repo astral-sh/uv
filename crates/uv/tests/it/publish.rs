@@ -502,7 +502,7 @@ async fn read_index_credential_env_vars_for_check_url() {
 
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
-    File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    File `astral_test_private-0.1.0-py3-none-any.whl` already exists, skipping
     "
     );
 }

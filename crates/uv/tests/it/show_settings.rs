@@ -73,6 +73,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -278,6 +280,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -484,6 +488,8 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -722,6 +728,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -929,6 +937,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -1112,6 +1122,8 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -1344,6 +1356,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -1584,6 +1598,8 @@ fn resolve_index_url() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -1882,6 +1898,8 @@ fn resolve_find_links() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -2111,6 +2129,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -2299,6 +2319,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -2537,6 +2559,8 @@ fn resolve_top_level() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -2798,6 +2822,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -2976,6 +3002,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -3154,6 +3182,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -3334,6 +3364,8 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -3533,6 +3565,8 @@ fn resolve_tool() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -3727,6 +3761,8 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -3939,6 +3975,8 @@ fn resolve_both() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -4190,6 +4228,8 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -4520,6 +4560,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -4825,6 +4867,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -5006,6 +5050,8 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -5206,6 +5252,8 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -5398,6 +5446,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -5638,6 +5688,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -5884,6 +5936,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -6125,6 +6179,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -6373,6 +6429,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -6614,6 +6672,8 @@ fn index_priority() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -6868,6 +6928,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7039,6 +7101,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7208,6 +7272,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7379,6 +7445,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7548,6 +7616,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7718,6 +7788,8 @@ fn verify_hashes() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -7903,6 +7975,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8044,6 +8118,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8161,6 +8237,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8302,6 +8380,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8422,6 +8502,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8544,6 +8626,8 @@ fn preview_features() {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8682,6 +8766,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -8861,6 +8947,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9063,6 +9151,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9240,6 +9330,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9411,6 +9503,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9583,6 +9677,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9820,6 +9916,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -9942,6 +10040,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10087,6 +10187,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10207,6 +10309,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10317,6 +10421,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10428,6 +10534,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10603,6 +10711,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
@@ -10777,6 +10887,8 @@ fn build_isolation_override() -> anyhow::Result<()> {
             downloads: 50,
             builds: 16,
             installs: 8,
+            uploads: 1,
+            pyx_wheel_validations: 32,
         },
         show_settings: true,
         preview: Preview {
