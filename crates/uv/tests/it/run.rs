@@ -1478,7 +1478,12 @@ fn run_with_overlay_interpreter() -> Result<()> {
     ");
 
     // Switch to a relocatable virtual environment.
-    context.venv().arg("--relocatable").assert().success();
+    context
+        .venv()
+        .arg("--allow-existing")
+        .arg("--relocatable")
+        .assert()
+        .success();
 
     // Cleanup previous shutil
     fs_err::remove_file(context.temp_dir.child("main"))?;
