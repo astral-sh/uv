@@ -146,14 +146,17 @@ fn make_child_cmdline() -> CString {
                 // be correctly detected when using trampolines.
                 std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
-                // If this is not a virtual environment and `PYTHONHOME` has
-                // not been set, then set `PYTHONHOME` to the parent directory of
-                // the executable. This ensures that the correct installation
-                // directories are added to `sys.path` when running with a junction
-                // trampoline.
-                let python_home_set =
-                    std::env::var(EnvVars::PYTHONHOME).is_ok_and(|home| !home.is_empty());
-                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                // If this is not a virtual environment, set `PYTHONHOME` to
+                // the parent directory of the executable. This ensures that
+                // the correct installation directories are added to `sys.path`
+                // when running with a junction trampoline.
+                //
+                // We always set this (overwriting any inherited value) because
+                // when one Python version spawns another via subprocess, the
+                // child would otherwise inherit an incorrect `PYTHONHOME`
+                // pointing to the parent Python's installation, causing stdlib
+                // version mismatches.
+                if !is_virtualenv(python_exe.as_path()) {
                     std::env::set_var(
                         EnvVars::PYTHONHOME,
                         python_exe
