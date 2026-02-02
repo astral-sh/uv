@@ -46,7 +46,7 @@ use crate::{BrokenSymlink, Interpreter, PythonVersion};
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
+#[derive(Debug, Clone, Eq, Default)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -71,6 +71,18 @@ pub enum PythonRequest {
     /// A request for a specific Python installation key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to managed Python downloads.
     Key(PythonDownloadRequest),
+}
+
+impl PartialEq for PythonRequest {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_canonical_string() == other.to_canonical_string()
+    }
+}
+
+impl std::hash::Hash for PythonRequest {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.to_canonical_string().hash(state);
+    }
 }
 
 impl<'a> serde::Deserialize<'a> for PythonRequest {
