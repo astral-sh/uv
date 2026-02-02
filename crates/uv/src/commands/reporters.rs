@@ -695,6 +695,25 @@ impl PublishReporter {
     }
 }
 
+impl PublishReporter {
+    /// Print a message above the progress bars.
+    ///
+    /// When progress bars are visible, uses `MultiProgress::println` to insert
+    /// the message above them. Otherwise, falls back to writing directly to
+    /// stderr (matching the pattern used elsewhere in the reporter).
+    pub(crate) fn println(&self, msg: impl AsRef<str>) -> std::io::Result<()> {
+        match &self.reporter.mode {
+            ProgressMode::Multi { multi_progress, .. } if !multi_progress.is_hidden() => {
+                multi_progress.println(msg)?;
+            }
+            _ => {
+                let _ = writeln!(self.reporter.printer.stderr(), "{}", msg.as_ref());
+            }
+        }
+        Ok(())
+    }
+}
+
 impl uv_publish::Reporter for PublishReporter {
     fn on_progress(&self, _name: &str, id: usize) {
         self.reporter.on_download_complete(id);
