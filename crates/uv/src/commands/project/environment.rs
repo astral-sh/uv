@@ -11,11 +11,13 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
+use uv_cache_info::Timestamp;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
-use uv_distribution_types::{Name, Resolution};
+use uv_distribution_types::{BuiltDist, Dist, Name, Resolution, ResolvedDist, SourceDist};
 use uv_fs::PythonExt;
+use uv_normalize::PackageName;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
 
@@ -107,6 +109,43 @@ impl From<CachedEnvironment> for PythonEnvironment {
 }
 
 impl CachedEnvironment {
+    /// Extract file timestamps for local (path-based) distributions.
+    /// Returns a sorted vector of (package name, timestamp) pairs for stable hashing.
+    ///
+    /// Only tracks timestamps for actual files (wheels and source archives), not directories,
+    /// since directory timestamps change frequently for reasons unrelated to content changes.
+    fn local_distribution_timestamps(
+        resolution: &Resolution,
+    ) -> Vec<(PackageName, Option<Timestamp>)> {
+        let mut timestamps = Vec::new();
+
+        for dist in resolution.distributions() {
+            if let ResolvedDist::Installable { dist, .. } = dist {
+                let timestamp = match dist.as_ref() {
+                    Dist::Built(BuiltDist::Path(path_dist)) => {
+                        // Extract timestamp from local wheel file
+                        Timestamp::from_path(&path_dist.install_path).ok()
+                    }
+                    Dist::Source(SourceDist::Path(path_dist)) => {
+                        // Extract timestamp from local source archive
+                        Timestamp::from_path(&path_dist.install_path).ok()
+                    }
+                    // Don't track directory timestamps - they change too frequently
+                    // for reasons unrelated to content (e.g., listing contents).
+                    _ => None,
+                };
+
+                if timestamp.is_some() {
+                    timestamps.push((dist.name().clone(), timestamp));
+                }
+            }
+        }
+
+        // Sort for stable hashing
+        timestamps.sort_by(|a, b| a.0.cmp(&b.0));
+        timestamps
+    }
+
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
         spec: EnvironmentSpecification<'_>,
@@ -146,13 +185,20 @@ impl CachedEnvironment {
         );
 
         // Hash the resolution by hashing the generated lockfile.
-        // TODO(charlie): If the resolution contains any mutable metadata (like a path or URL
-        // dependency), skip this step.
+        // For local (path-based) distributions, also include file modification times
+        // to detect when files are rebuilt at the same path.
         let resolution_hash = {
             let mut distributions = resolution.distributions().collect::<Vec<_>>();
             distributions.sort_unstable_by_key(|dist| dist.name());
             hash_digest(&distributions)
         };
+
+        // Extract timestamps for local distributions and include in the hash
+        let local_timestamps = Self::local_distribution_timestamps(&resolution);
+        let timestamp_hash = hash_digest(&local_timestamps);
+
+        // Combine resolution hash with timestamp hash for the final cache key
+        let combined_hash = hash_digest(&(resolution_hash, timestamp_hash));
 
         // Construct a hash for the environment.
         //
@@ -172,7 +218,7 @@ impl CachedEnvironment {
             cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, combined_hash);
 
         if let Ok(root) = cache.resolve_link(cache_entry.path()) {
             if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
