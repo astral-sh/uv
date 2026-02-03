@@ -739,9 +739,9 @@ async fn perform_install(
         ) {
             // During an upgrade, update existing symlinks but avoid
             // creating new ones.
-            installation.update_minor_version_link(preview)?;
+            installation.update_minor_version_link()?;
         } else {
-            installation.ensure_minor_version_link(preview)?;
+            installation.ensure_minor_version_link()?;
         }
     }
 
@@ -1015,7 +1015,7 @@ fn create_bin_links(
         }
         let executable = if upgradeable {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 minor_version_link.symlink_executable.clone()
             } else {

@@ -66,7 +66,7 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: Preview,
+    _preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -241,7 +241,7 @@ async fn do_uninstall(
         .iter()
         .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
     {
-        installation.update_minor_version_link(preview)?;
+        installation.update_minor_version_link()?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory
@@ -249,7 +249,7 @@ async fn do_uninstall(
     for installation in &matching_installations {
         if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 if minor_version_link.exists() {
                     let result = if cfg!(windows) {

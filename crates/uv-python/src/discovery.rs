@@ -356,7 +356,6 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
-    preview: Preview,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
@@ -411,7 +410,6 @@ fn python_executables_from_installed<'a>(
                                 .then(|| {
                                     PythonMinorVersionLink::from_installation(
                                         &installation,
-                                        preview,
                                     )
                                     .filter(PythonMinorVersionLink::exists)
                                     .map(
@@ -547,7 +545,7 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments(preview);
     let from_installed =
-        python_executables_from_installed(version, implementation, platform, preference, preview);
+        python_executables_from_installed(version, implementation, platform, preference);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -1542,7 +1540,6 @@ pub(crate) async fn find_best_python_installation(
                     reporter,
                     python_install_mirror,
                     pypy_install_mirror,
-                    preview,
                 )
                 .await
                 .map(Some),

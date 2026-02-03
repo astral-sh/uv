@@ -26,7 +26,6 @@ use tokio::io::AsyncWriteExt;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::managed::ManagedPythonInstallations;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
@@ -1888,7 +1887,6 @@ pub fn python_installations_for_versions(
                 PythonPreference::Managed,
                 download_list,
                 &cache,
-                Preview::default(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {

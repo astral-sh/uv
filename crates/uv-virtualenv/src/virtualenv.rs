@@ -14,7 +14,6 @@ use tracing::{debug, trace};
 use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
-use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
@@ -57,7 +56,6 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: Preview,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -206,11 +204,9 @@ pub(crate) fn create(
 
     let mut using_minor_version_link = false;
     let executable_target = if upgradeable && interpreter.is_standalone() {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
-            base_python.as_path(),
-            &interpreter.key(),
-            preview,
-        ) {
+        if let Some(minor_version_link) =
+            PythonMinorVersionLink::from_executable(base_python.as_path(), &interpreter.key())
+        {
             if !minor_version_link.exists() {
                 base_python.clone()
             } else {
@@ -236,7 +232,7 @@ pub(crate) fn create(
     };
 
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    // In preview mode, for standalone interpreters, this `home` value will include a
+    // For standalone interpreters, this `home` value will include a
     // symlink directory on Unix or junction on Windows to enable transparent Python patch
     // upgrades.
     let python_home = executable_target

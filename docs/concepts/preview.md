@@ -51,11 +51,6 @@ can use `uv pip install` with a `pylock.toml` file without additional configurat
 specifying the `pylock.toml` file indicates you want to use the feature. However, a warning will be
 displayed that the feature is in preview. The preview feature can be enabled to silence the warning.
 
-Other preview features change behavior without changes to your use of uv. For example, when the
-`python-upgrade` feature is enabled, the default behavior of `uv python install` changes to allow uv
-to upgrade Python versions transparently. This feature requires enabling the preview flag for proper
-usage.
-
 ## Available preview features
 
 The following preview features are available:
@@ -67,8 +62,6 @@ The following preview features are available:
 - `pylock`: Allows installing from `pylock.toml` files.
 - `python-install-default`: Allows
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-- `python-upgrade`: Allows
-  [transparent Python version upgrades](./python-versions.md#upgrading-python-versions).
 - `format`: Allows using `uv format`.
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
