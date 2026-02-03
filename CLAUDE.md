@@ -12,3 +12,4 @@
 - NEVER update all dependencies in the lockfile and ALWAYS use `cargo update --precise` to make
   lockfile changes
 - NEVER assume clippy warnings are pre-existing, it is very rare that `main` has warnings
+- ALWAYS read and copy the style of similar tests when adding new cases
