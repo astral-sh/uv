@@ -15,7 +15,9 @@ use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
 use uv_pypi_types::Scheme;
-use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
+use uv_python::managed::{
+    ManagedPythonInstallation, PythonMinorVersionLink, create_link_to_executable,
+};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
@@ -203,9 +205,10 @@ pub(crate) fn create(
     fs_err::write(location.join(".gitignore"), "*")?;
 
     let mut using_minor_version_link = false;
-    let executable_target = if upgradeable && interpreter.is_standalone() {
+    let executable_target = if upgradeable {
         if let Some(minor_version_link) =
-            PythonMinorVersionLink::from_executable(base_python.as_path(), &interpreter.key())
+            ManagedPythonInstallation::try_from_interpreter(interpreter)
+                .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
         {
             if !minor_version_link.exists() {
                 base_python.clone()

@@ -1537,6 +1537,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 globals.installer_metadata,
                 globals.concurrency,
+                cli.top_level.no_config,
                 cache,
                 printer,
                 globals.preview,
@@ -1726,14 +1727,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(
-                args.install_dir,
-                args.targets,
-                args.all,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),

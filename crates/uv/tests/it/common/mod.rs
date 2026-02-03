@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str::FromStr;
 use std::{env, io};
+use uv_preview::Preview;
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use assert_cmd::assert::{Assert, OutputAssertExt};
@@ -1887,6 +1888,7 @@ pub fn python_installations_for_versions(
                 PythonPreference::Managed,
                 download_list,
                 &cache,
+                Preview::default(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {

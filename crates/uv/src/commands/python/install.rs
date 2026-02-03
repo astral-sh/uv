@@ -318,15 +318,6 @@ async fn perform_install(
         );
     }
 
-    if let PythonUpgrade::Enabled(source @ PythonUpgradeSource::Upgrade) = upgrade {
-        if !preview.is_enabled(PreviewFeature::PythonUpgrade) {
-            warn_user!(
-                "`{source}` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-                PreviewFeature::PythonUpgrade
-            );
-        }
-    }
-
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }

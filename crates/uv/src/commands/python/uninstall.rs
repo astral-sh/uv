@@ -12,7 +12,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
 
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{
     ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
@@ -30,14 +29,13 @@ pub(crate) async fn uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
 
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer, preview).await?;
+    do_uninstall(&installations, targets, all, printer).await?;
 
     // Clean up any empty directories.
     if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
@@ -66,7 +64,6 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
-    _preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
