@@ -256,6 +256,7 @@ pub enum PreviewFeature {
     Audit = 1 << 26,
     ProjectDirectoryMustExist = 1 << 27,
     IndexExcludeNewer = 1 << 28,
+    PackagedInit = 1 << 29,
 }
 
 impl PreviewFeature {
@@ -291,6 +292,7 @@ impl PreviewFeature {
             Self::Audit => "audit",
             Self::ProjectDirectoryMustExist => "project-directory-must-exist",
             Self::IndexExcludeNewer => "index-exclude-newer",
+            Self::PackagedInit => "packaged-init",
         }
     }
 }
@@ -339,6 +341,7 @@ impl FromStr for PreviewFeature {
             "audit" => Self::Audit,
             "project-directory-must-exist" => Self::ProjectDirectoryMustExist,
             "index-exclude-newer" => Self::IndexExcludeNewer,
+            "packaged-init" => Self::PackagedInit,
             _ => return Err(PreviewFeatureParseError),
         })
     }
