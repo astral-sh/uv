@@ -3335,7 +3335,7 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib` or `--build-backend`.
+    /// This is the default behavior, the option exists for backwards compatibility.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
@@ -3377,7 +3377,7 @@ pub struct InitArgs {
     ///
     /// By default, adds a requirement on the system Python version; use `--python` to specify an
     /// alternative Python version requirement.
-    #[arg(long, conflicts_with_all=["app", "lib", "package", "build_backend", "description"])]
+    #[arg(long, conflicts_with_all=["app", "lib", "package", "no_package", "virtual", "build_backend", "description"])]
     pub r#script: bool,
 
     /// Set the project description.
