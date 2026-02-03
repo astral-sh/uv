@@ -136,7 +136,7 @@ pub(crate) async fn list(
             PythonListKinds::Installed | PythonListKinds::Default => {
                 Some(find_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
-                EnvironmentPreference::OnlySystem,
+                EnvironmentPreference::Any,
                 python_preference,
                 cache,
                 preview,
