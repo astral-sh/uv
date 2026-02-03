@@ -146,20 +146,35 @@ fn make_child_cmdline() -> CString {
                 // be correctly detected when using trampolines.
                 std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
-                // If this is not a virtual environment and `PYTHONHOME` has
-                // not been set, then set `PYTHONHOME` to the parent directory of
-                // the executable. This ensures that the correct installation
-                // directories are added to `sys.path` when running with a junction
-                // trampoline.
-                let python_home_set =
-                    std::env::var(EnvVars::PYTHONHOME).is_ok_and(|home| !home.is_empty());
-                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
-                    std::env::set_var(
-                        EnvVars::PYTHONHOME,
-                        python_exe
+                // If this is not a virtual environment, set `PYTHONHOME` to
+                // the parent directory of the executable. This ensures that
+                // the correct installation directories are added to `sys.path`
+                // when running with a junction trampoline.
+                //
+                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
+                // whether `PYTHONHOME` was set by uv. This allows us to:
+                // - Override inherited `PYTHONHOME` from parent Python processes
+                // - Preserve user-defined `PYTHONHOME` values
+                if !is_virtualenv(python_exe.as_path()) {
+                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
+                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
+
+                    // Only set `PYTHONHOME` if:
+                    // - It's not set, OR
+                    // - It was set by uv (marker matches current `PYTHONHOME`)
+                    let should_override = match (&python_home, &marker) {
+                        (None, _) => true,
+                        (Some(home), Some(m)) if home == m => true,
+                        _ => false,
+                    };
+
+                    if should_override {
+                        let home = python_exe
                             .parent()
-                            .expect("Python executable should have a parent directory"),
-                    );
+                            .expect("Python executable should have a parent directory");
+                        std::env::set_var(EnvVars::PYTHONHOME, home);
+                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
+                    }
                 }
             }
         }
