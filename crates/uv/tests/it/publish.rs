@@ -8,9 +8,10 @@ use sha2::{Digest, Sha256};
 use std::env::current_dir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 use wiremock::matchers::{basic_auth, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 fn dummy_wheel() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -609,6 +610,205 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+fn dummy_wheel_2() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("test/links/ok-2.0.0-py3-none-any.whl")
+}
+
+/// With `--on-failure stop-first`, the first upload failure stops the process.
+#[tokio::test]
+async fn on_failure_stop_first() {
+    let context = TestContext::new("3.12");
+    let server = MockServer::start().await;
+
+    // Upload fails with 403.
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "pass"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--on-failure")
+        .arg("stop-first")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg(dummy_wheel()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Upload failed with status code 403 Forbidden. Server says: forbidden
+    "
+    );
+}
+
+/// With `--on-failure keep-going`, all files are attempted even after failures.
+#[tokio::test]
+async fn on_failure_keep_going() {
+    let context = TestContext::new("3.12");
+    let server = MockServer::start().await;
+
+    // All uploads fail with 403.
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "pass"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--on-failure")
+        .arg("keep-going")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg(dummy_wheel())
+        .arg(dummy_wheel_2()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Uploading ok-2.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `[WORKSPACE]/test/links/ok-2.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Upload failed with status code 403 Forbidden. Server says: forbidden
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Upload failed with status code 403 Forbidden. Server says: forbidden
+    2 files failed to publish
+    "
+    );
+}
+
+/// With `--on-failure keep-going-after-success` (default), failures stop if no prior success.
+#[tokio::test]
+async fn on_failure_keep_going_after_success_no_prior_success() {
+    let context = TestContext::new("3.12");
+    let server = MockServer::start().await;
+
+    // Upload fails with 403.
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "pass"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+        .mount(&server)
+        .await;
+
+    // Default behavior (no --on-failure flag) — stops on first error since no prior success.
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg(dummy_wheel()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Upload failed with status code 403 Forbidden. Server says: forbidden
+    "
+    );
+}
+
+/// Custom responder that returns 200 for the first N requests, then 403.
+struct SucceedThenFail {
+    counter: AtomicUsize,
+    succeed_count: usize,
+}
+
+impl SucceedThenFail {
+    fn new(succeed_count: usize) -> Self {
+        Self {
+            counter: AtomicUsize::new(0),
+            succeed_count,
+        }
+    }
+}
+
+impl Respond for SucceedThenFail {
+    fn respond(&self, _request: &Request) -> ResponseTemplate {
+        let n = self.counter.fetch_add(1, Ordering::SeqCst);
+        if n < self.succeed_count {
+            ResponseTemplate::new(200)
+        } else {
+            ResponseTemplate::new(403).set_body_string("forbidden")
+        }
+    }
+}
+
+/// With `--on-failure keep-going-after-success`, continue after failure if a previous upload
+/// succeeded.
+#[tokio::test]
+async fn on_failure_keep_going_after_success_with_prior_success() {
+    let context = TestContext::new("3.12");
+    let server = MockServer::start().await;
+
+    // First upload succeeds, subsequent uploads fail.
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .and(basic_auth("user", "pass"))
+        .respond_with(SucceedThenFail::new(1))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--username")
+        .arg("user")
+        .arg("--password")
+        .arg("pass")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg("--on-failure")
+        .arg("keep-going-after-success")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .arg(dummy_wheel())
+        .arg(dummy_wheel_2()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 2 files to http://[LOCALHOST]/upload
+    Uploading ok-2.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish `[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl` to http://[LOCALHOST]/upload
+      Caused by: Upload failed with status code 403 Forbidden. Server says: forbidden
+    1 file failed to publish
     "
     );
 }

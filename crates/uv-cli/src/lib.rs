@@ -15,7 +15,8 @@ use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PipCompileFormat,
-    ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
+    ProjectBuildBackend, PublishFailureStrategy, TargetTriple, TrustedHost, TrustedPublishing,
+    VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
@@ -7692,6 +7693,15 @@ pub struct PublishArgs {
     /// that uploads files directly to storage, bypassing the registry's upload endpoint.
     #[arg(long, hide = true)]
     pub direct: bool,
+
+    /// Control behavior when an upload fails.
+    ///
+    /// - `stop-first`: Stop on the first failure.
+    /// - `keep-going`: Continue uploading all files, report errors at the end.
+    /// - `keep-going-after-success`: Continue only if at least one upload already succeeded
+    ///   (default).
+    #[arg(long, value_enum, env = EnvVars::UV_PUBLISH_ON_FAILURE)]
+    pub on_failure: Option<PublishFailureStrategy>,
 }
 
 #[derive(Args)]
