@@ -10,7 +10,7 @@ use crate::commands::project::{
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
-use uv_cache::{Cache, CacheBucket};
+use uv_cache::{Cache, CacheBucket, Freshness};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
@@ -174,10 +174,13 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                return Ok(Self(environment));
-            }
+        if cache
+            .freshness(&cache_entry, None, None)
+            .is_ok_and(Freshness::is_fresh)
+            && let Ok(root) = cache.resolve_link(cache_entry.path())
+            && let Ok(environment) = PythonEnvironment::from_root(root, cache)
+        {
+            return Ok(Self(environment));
         }
 
         // Create the environment in the cache, then relocate it to its content-addressed location.
