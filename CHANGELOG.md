@@ -3,6 +3,44 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.29
+
+Released on 2026-02-03.
+
+### Python
+
+- Update to Pyodide 0.29.3 ([#17730](https://github.com/astral-sh/uv/pull/17730))
+
+### Enhancements
+
+- Add wheel-tag-style aliases for manylinux platform names ([#17750](https://github.com/astral-sh/uv/pull/17750))
+- Hint on `uv version --bump dev` similar to pre-release bumps ([#17796](https://github.com/astral-sh/uv/pull/17796))
+- Improve display of RFC 9457 Problem Detail responses in `uv publish` server errors ([#17787](https://github.com/astral-sh/uv/pull/17787))
+- Improve the wording of publish errors during dry-run ([#17782](https://github.com/astral-sh/uv/pull/17782))
+- Set backoff to 10 retries ([#17816](https://github.com/astral-sh/uv/pull/17816))
+- Add properties to synthentic and project roots in Cyclone DX exports ([#17820](https://github.com/astral-sh/uv/pull/17820))
+- Identify the invidividual clients in `uv publish` trace logs ([#17784](https://github.com/astral-sh/uv/pull/17784))
+
+### Preview features
+
+- Remove special casing for `base` and `default` conda environment names ([#17758](https://github.com/astral-sh/uv/pull/17758))
+
+### Bug fixes
+
+- Fix `PYTHONHOME` inheritance when spawning different Python versions ([#17821](https://github.com/astral-sh/uv/pull/17821))
+- Fix wheel rejections on freethreading+debug builds ([#17812](https://github.com/astral-sh/uv/pull/17812))
+- Pad with zeros during comparisons in `EqualStar` and `NotEqualStar` operators ([#17751](https://github.com/astral-sh/uv/pull/17751))
+- Reject unknown field names in conflict declarations ([#17727](https://github.com/astral-sh/uv/pull/17727))
+- Fix panics in `system-configuration` in sandboxes ([#17829](https://github.com/astral-sh/uv/pull/17829))
+
+### Documentation
+
+- Update pip pre-release compatibility information ([#17788](https://github.com/astral-sh/uv/pull/17788))
+
+### Security
+
+- Hide a subset of environment variable values in `--help` ([#17745](https://github.com/astral-sh/uv/pull/17745))
+
 ## 0.9.28
 
 Released on 2026-01-29.

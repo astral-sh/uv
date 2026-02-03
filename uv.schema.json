@@ -1693,7 +1693,8 @@
           ],
           "default": null
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the\nschema format does not allow specifying the package name (or will make it\noptional in the future), where as the in-memory format needs the package\nname.",
