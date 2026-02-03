@@ -22,8 +22,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement,
+    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Origin,
+    Requirement, RequirementSource, UnresolvedRequirement,
 };
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
@@ -679,7 +679,9 @@ pub(crate) async fn add(
         let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
-            toml.add_index(index)?;
+            if !matches!(index.origin, Some(Origin::Project)) {
+                toml.add_index(index)?;
+            }
         }
     }
 
