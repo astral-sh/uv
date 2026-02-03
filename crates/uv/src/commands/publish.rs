@@ -195,22 +195,35 @@ pub(crate) async fn publish(
         None
     };
 
+    let mut error_count: usize = 0;
+
     for group in groups {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(
+            match uv_publish::check_url(
                 check_url_client,
                 &group.file,
                 &group.filename,
                 &download_concurrency,
             )
-            .await?
+            .await
             {
-                writeln!(
-                    printer.stderr(),
-                    "File {} already exists, skipping",
-                    group.filename
-                )?;
-                continue;
+                Ok(true) => {
+                    writeln!(
+                        printer.stderr(),
+                        "File {} already exists, skipping",
+                        group.filename
+                    )?;
+                    continue;
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    if dry_run {
+                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
+                }
             }
         }
 
@@ -235,14 +248,25 @@ pub(crate) async fn publish(
         }
 
         // Collect the metadata for the file.
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
+        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
             .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+        {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if dry_run {
+                    write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                    error_count += 1;
+                    continue;
+                }
+                return Err(err.into());
+            }
+        };
 
         let uploaded = if direct {
             if dry_run {
                 // For dry run, call validate since we won't call reserve.
-                let should_upload = uv_publish::validate(
+                match uv_publish::validate(
                     &group.file,
                     &form_metadata,
                     &group.raw_filename,
@@ -251,13 +275,27 @@ pub(crate) async fn publish(
                     &upload_client,
                     &credentials,
                 )
-                .await?;
-                if !should_upload {
-                    writeln!(
-                        printer.stderr(),
-                        "{}",
-                        "File already exists, skipping".dimmed()
-                    )?;
+                .await
+                {
+                    Ok(should_upload) => {
+                        if !should_upload {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                "File already exists, skipping".dimmed()
+                            )?;
+                        }
+                    }
+                    Err(err) => {
+                        let err: anyhow::Error = err.into();
+                        write_error_chain(
+                            err.as_ref(),
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                        )?;
+                        error_count += 1;
+                    }
                 }
                 continue;
             }
@@ -278,7 +316,7 @@ pub(crate) async fn publish(
             .await?
         } else {
             // Run validation checks on the file, but don't upload it (if possible).
-            let should_upload = uv_publish::validate(
+            match uv_publish::validate(
                 &group.file,
                 &form_metadata,
                 &group.raw_filename,
@@ -287,30 +325,47 @@ pub(crate) async fn publish(
                 &upload_client,
                 &credentials,
             )
-            .await?;
+            .await
+            {
+                Ok(should_upload) => {
+                    if dry_run {
+                        continue;
+                    }
 
-            if dry_run {
-                continue;
-            }
-
-            // If validation indicates the file already exists, skip the upload.
-            if !should_upload {
-                false
-            } else {
-                let reporter = PublishReporter::single(printer);
-                upload(
-                    &group,
-                    &form_metadata,
-                    &publish_url,
-                    &upload_client,
-                    retry_policy,
-                    &credentials,
-                    check_url_client.as_ref(),
-                    &download_concurrency,
-                    // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                    Arc::new(reporter),
-                )
-                .await? // Filename and/or URL are already attached, if applicable.
+                    // If validation indicates the file already exists, skip the upload.
+                    if !should_upload {
+                        false
+                    } else {
+                        let reporter = PublishReporter::single(printer);
+                        upload(
+                            &group,
+                            &form_metadata,
+                            &publish_url,
+                            &upload_client,
+                            retry_policy,
+                            &credentials,
+                            check_url_client.as_ref(),
+                            &download_concurrency,
+                            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                            Arc::new(reporter),
+                        )
+                        .await? // Filename and/or URL are already attached, if applicable.
+                    }
+                }
+                Err(err) => {
+                    if dry_run {
+                        let err: anyhow::Error = err.into();
+                        write_error_chain(
+                            err.as_ref(),
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                        )?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
+                }
             }
         };
         info!("Upload succeeded");
@@ -322,6 +377,12 @@ pub(crate) async fn publish(
                 "File already exists, skipping".dimmed()
             )?;
         }
+    }
+
+    if error_count > 0 {
+        let failed = if error_count == 1 { "file" } else { "files" };
+        writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+        return Ok(ExitStatus::Failure);
     }
 
     Ok(ExitStatus::Success)

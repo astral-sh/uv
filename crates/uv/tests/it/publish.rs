@@ -684,3 +684,44 @@ async fn upload_error_problem_details() {
     "
     );
 }
+
+/// Test that `--dry-run` checks all files and reports all errors instead of
+/// stopping at the first failure.
+#[test]
+fn dry_run_reports_all_errors() {
+    let context = TestContext::new("3.12");
+
+    // Create two fake wheel files that will fail metadata reading.
+    let wheel_a = context.temp_dir.child("a-1.0.0-py3-none-any.whl");
+    wheel_a.touch().unwrap();
+    let wheel_b = context.temp_dir.child("b-1.0.0-py3-none-any.whl");
+    wheel_b.touch().unwrap();
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--dry-run")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/")
+        .arg("--token")
+        .arg("dummy")
+        .arg(wheel_a.path())
+        .arg(wheel_b.path()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Checking 2 files against https://test.pypi.org/legacy/
+    Checking a-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish: `a-1.0.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    Checking b-1.0.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish: `b-1.0.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    Found issues with 2 files
+    "
+    );
+}
