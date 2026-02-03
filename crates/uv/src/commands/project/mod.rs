@@ -1177,11 +1177,6 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        // Helper to parse a concrete version from the request (non-range) for compatibility check
-        fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-            request.as_pep440_version()
-        }
-
         let requires_python = workspace
             .map(|workspace| find_requires_python(workspace, groups))
             .transpose()?
@@ -1203,29 +1198,28 @@ impl WorkspacePython {
         .await?
         {
             // (2) Request from `.python-version`
+            let dot_source = PythonRequestSource::DotPythonVersion(file.clone());
+            let result = (dot_source, file.version().cloned());
+
             // If the discovered version file is a GLOBAL pin and it conflicts with the
             // project's `requires-python`, ignore the pin and fall back to the project
             // requirement instead of erroring.
-            let dot_source = PythonRequestSource::DotPythonVersion(file.clone());
-            let mut result = (dot_source, file.version().cloned());
-
-            if file.is_global() {
-                if let (Some(req), Some(rp)) = (result.1.as_ref(), requires_python.as_ref()) {
-                    if let Some(ver) = pep440_version_from_request(req) {
-                        if !rp.contains(&ver) {
-                            // Incompatible global pin; ignore it and use project's requires-python
-                            result = (
-                                PythonRequestSource::RequiresPython,
-                                Some(PythonRequest::Version(VersionRequest::Range(
-                                    rp.specifiers().clone(),
-                                    PythonVariant::Default,
-                                ))),
-                            );
-                        }
-                    }
-                }
+            if file.is_global()
+                && let Some(req) = result.1.as_ref()
+                && let Some(rp) = requires_python.as_ref()
+                && let Some(ver) = req.as_pep440_version()
+                && !rp.contains(&ver)
+            {
+                (
+                    PythonRequestSource::RequiresPython,
+                    Some(PythonRequest::Version(VersionRequest::Range(
+                        rp.specifiers().clone(),
+                        PythonVariant::Default,
+                    ))),
+                )
+            } else {
+                result
             }
-            result
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python

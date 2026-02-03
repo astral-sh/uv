@@ -156,7 +156,7 @@ pub(crate) async fn pin(
     };
 
     if let Some(virtual_project) = &virtual_project {
-        if let Some(request_version) = pep440_version_from_request(&request) {
+        if let Some(request_version) = request.as_pep440_version() {
             assert_pin_compatible_with_project(
                 &Pin {
                     request: &request,
@@ -243,10 +243,6 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
-fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-    request.as_pep440_version()
-}
-
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
 fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
@@ -257,7 +253,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
-    if let Some(pin_version) = pep440_version_from_request(pin) {
+    if let Some(pin_version) = pin.as_pep440_version() {
         if let Err(err) = assert_pin_compatible_with_project(
             &Pin {
                 request: pin,
