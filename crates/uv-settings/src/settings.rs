@@ -8,8 +8,8 @@ use uv_configuration::{
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
-    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -178,6 +178,16 @@ impl Options {
             pip: self.pip.map(|pip| pip.relative_to(root_dir)).transpose()?,
             ..self
         })
+    }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            top_level: self.top_level.with_origin(origin),
+            pip: self.pip.map(|pip| pip.with_origin(origin)),
+            ..self
+        }
     }
 }
 
@@ -568,6 +578,20 @@ impl ResolverInstallerSchema {
                 .transpose()?,
             ..self
         })
+    }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            index: self.index.map(|index| {
+                index
+                    .into_iter()
+                    .map(|index| index.with_origin(origin))
+                    .collect()
+            }),
+            ..self
+        }
     }
 
     pub fn indexes(&self) -> impl Iterator<Item = Index> {
@@ -1950,6 +1974,20 @@ impl PipOptions {
                 .transpose()?,
             ..self
         })
+    }
+
+    /// Set the origin for all contained indexes.
+    #[must_use]
+    pub fn with_origin(self, origin: Origin) -> Self {
+        Self {
+            index: self.index.map(|index| {
+                index
+                    .into_iter()
+                    .map(|index| index.with_origin(origin))
+                    .collect()
+            }),
+            ..self
+        }
     }
 }
 
