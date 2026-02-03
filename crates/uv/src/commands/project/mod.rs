@@ -1196,30 +1196,22 @@ impl WorkspacePython {
                 .with_no_config(no_config),
         )
         .await?
-        {
-            // (2) Request from `.python-version`
-            let dot_source = PythonRequestSource::DotPythonVersion(file.clone());
-            let result = (dot_source, file.version().cloned());
-
-            // If the discovered version file is a GLOBAL pin and it conflicts with the
-            // project's `requires-python`, ignore the pin and fall back to the project
-            // requirement instead of erroring.
-            if file.is_global()
-                && let Some(req) = result.1.as_ref()
-                && let Some(rp) = requires_python.as_ref()
-                && let Some(ver) = req.as_pep440_version()
-                && !rp.contains(&ver)
-            {
-                (
-                    PythonRequestSource::RequiresPython,
-                    Some(PythonRequest::Version(VersionRequest::Range(
-                        rp.specifiers().clone(),
-                        PythonVariant::Default,
-                    ))),
-                )
-            } else {
-                result
+        .filter(|file| {
+            // Ignore global version files that are incompatible with requires-python
+            if !file.is_global() {
+                return true;
             }
+            match (file.version(), requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => request
+                    .as_pep440_version()
+                    .is_none_or(|version| requires_python.contains(&version)),
+                _ => true,
+            }
+        }) {
+            // (2) Request from `.python-version`
+            let source = PythonRequestSource::DotPythonVersion(file.clone());
+            let request = file.version().cloned();
+            (source, request)
         } else {
             // (3) `requires-python` in `pyproject.toml`
             let request = requires_python
