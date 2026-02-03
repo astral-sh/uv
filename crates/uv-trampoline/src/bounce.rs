@@ -151,18 +151,30 @@ fn make_child_cmdline() -> CString {
                 // the correct installation directories are added to `sys.path`
                 // when running with a junction trampoline.
                 //
-                // We always set this (overwriting any inherited value) because
-                // when one Python version spawns another via subprocess, the
-                // child would otherwise inherit an incorrect `PYTHONHOME`
-                // pointing to the parent Python's installation, causing stdlib
-                // version mismatches.
+                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
+                // whether `PYTHONHOME` was set by uv. This allows us to:
+                // - Override inherited `PYTHONHOME` from parent Python processes
+                // - Preserve user-defined `PYTHONHOME` values
                 if !is_virtualenv(python_exe.as_path()) {
-                    std::env::set_var(
-                        EnvVars::PYTHONHOME,
-                        python_exe
+                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
+                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
+
+                    // Only set `PYTHONHOME` if:
+                    // - It's not set, OR
+                    // - It was set by uv (marker matches current `PYTHONHOME`)
+                    let should_override = match (&python_home, &marker) {
+                        (None, _) => true,
+                        (Some(home), Some(m)) if home == m => true,
+                        _ => false,
+                    };
+
+                    if should_override {
+                        let home = python_exe
                             .parent()
-                            .expect("Python executable should have a parent directory"),
-                    );
+                            .expect("Python executable should have a parent directory");
+                        std::env::set_var(EnvVars::PYTHONHOME, home);
+                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
+                    }
                 }
             }
         }
