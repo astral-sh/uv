@@ -571,7 +571,7 @@ impl EnvVars {
     /// Marker variable to track whether `PYTHONHOME` was set by uv.
     /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.9.29")]
     pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
 
     /// Path to system-level configuration directory on Unix systems.
