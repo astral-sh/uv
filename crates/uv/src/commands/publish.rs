@@ -140,12 +140,14 @@ pub(crate) async fn publish(
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
+        .client_name("upload")
         .build();
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
     // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .client_name("oidc")
         .build();
     // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
     let s3_client = client_builder
@@ -153,6 +155,7 @@ pub(crate) async fn publish(
         .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .timeout(environment.upload_http_timeout)
+        .client_name("s3")
         .build();
 
     let retry_policy = client_builder.retry_policy();
