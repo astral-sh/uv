@@ -9017,6 +9017,52 @@ fn sync_python_version() -> Result<()> {
     Ok(())
 }
 
+/// Test that a global `.python-version` pin that conflicts with the project's
+/// `requires-python` is ignored, falling back to the project's requirement.
+#[test]
+fn sync_ignores_incompatible_global_python_version() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.10", "3.11"]);
+
+    // Create a global pin before creating the project (to avoid pin compatibility check)
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.10`
+
+    ----- stderr -----
+    ");
+
+    // Now create a project that requires a different Python version
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
