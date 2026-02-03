@@ -53,6 +53,20 @@ pub const DEFAULT_RETRIES: u32 = 3;
 /// This is the default used by [`reqwest`].
 pub const DEFAULT_MAX_REDIRECTS: u32 = 10;
 
+/// The maximum time between two reads.
+pub const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The maximum time to connect to a server.
+///
+/// This value is set lower to fail relatively quickly when the index is unreachable or down.
+pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Total duration an upload may take.
+///
+/// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
+/// timeout on the entire upload.
+pub const DEFAULT_UPLOAD_TIMEOUT: Duration = Duration::from_mins(15);
+
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum AuthIntegration {
@@ -82,7 +96,8 @@ pub struct BaseClientBuilder<'a> {
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
     indexes: Indexes,
-    timeout: Duration,
+    read_timeout: Duration,
+    connect_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
@@ -151,7 +166,8 @@ impl Default for BaseClientBuilder<'_> {
             auth_integration: AuthIntegration::default(),
             credentials_cache: Arc::new(CredentialsCache::default()),
             indexes: Indexes::new(),
-            timeout: Duration::from_secs(30),
+            read_timeout: DEFAULT_READ_TIMEOUT,
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
             extra_middleware: None,
             proxies: vec![],
             http_proxy: None,
@@ -172,7 +188,8 @@ impl<'a> BaseClientBuilder<'a> {
         native_tls: bool,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
-        timeout: Duration,
+        read_timeout: Duration,
+        connect_timeout: Duration,
         retries: u32,
     ) -> Self {
         Self {
@@ -181,7 +198,8 @@ impl<'a> BaseClientBuilder<'a> {
             native_tls,
             retries,
             connectivity,
-            timeout,
+            read_timeout,
+            connect_timeout,
             ..Self::default()
         }
     }
@@ -258,8 +276,14 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
+    pub fn read_timeout(mut self, read_timeout: Duration) -> Self {
+        self.read_timeout = read_timeout;
+        self
+    }
+
+    #[must_use]
+    pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
+        self.connect_timeout = connect_timeout;
         self
     }
 
@@ -355,20 +379,27 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     pub fn build(&self) -> BaseClient {
-        let timeout = self.timeout;
         if let Some(name) = self.client_name {
             debug!(
-                "Using request timeout of {}s for {name} client",
-                timeout.as_secs()
+                "Using request connect timeout of {}s and read timeout of {}s for {} client",
+                self.connect_timeout.as_secs(),
+                self.read_timeout.as_secs(),
+                name
             );
         } else {
-            debug!("Using request timeout of {}s", timeout.as_secs());
+            debug!(
+                "Using request connect timeout of {}s and read timeout of {}s",
+                self.connect_timeout.as_secs(),
+                self.read_timeout.as_secs()
+            );
         }
 
         // Use the custom client if provided, otherwise create a new one
         let (raw_client, raw_dangerous_client) = match &self.custom_client {
             Some(client) => (client.clone(), client.clone()),
-            None => self.create_secure_and_insecure_clients(timeout),
+            None => {
+                self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)
+            }
         };
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -391,7 +422,8 @@ impl<'a> BaseClientBuilder<'a> {
             raw_client,
             dangerous_client,
             raw_dangerous_client,
-            timeout,
+            read_timeout: self.read_timeout,
+            connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
         }
     }
@@ -418,12 +450,17 @@ impl<'a> BaseClientBuilder<'a> {
             dangerous_client,
             raw_client: existing.raw_client.clone(),
             raw_dangerous_client: existing.raw_dangerous_client.clone(),
-            timeout: existing.timeout,
+            read_timeout: existing.read_timeout,
+            connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
         }
     }
 
-    fn create_secure_and_insecure_clients(&self, timeout: Duration) -> (Client, Client) {
+    fn create_secure_and_insecure_clients(
+        &self,
+        read_timeout: Duration,
+        connect_timeout: Duration,
+    ) -> (Client, Client) {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -516,7 +553,8 @@ impl<'a> BaseClientBuilder<'a> {
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
             &user_agent_string,
-            timeout,
+            read_timeout,
+            connect_timeout,
             ssl_cert_file_exists,
             ssl_cert_dir_exists,
             Security::Secure,
@@ -526,7 +564,8 @@ impl<'a> BaseClientBuilder<'a> {
         // Create an insecure client that accepts invalid certificates.
         let raw_dangerous_client = self.create_client(
             &user_agent_string,
-            timeout,
+            read_timeout,
+            connect_timeout,
             ssl_cert_file_exists,
             ssl_cert_dir_exists,
             Security::Insecure,
@@ -539,7 +578,8 @@ impl<'a> BaseClientBuilder<'a> {
     fn create_client(
         &self,
         user_agent: &str,
-        timeout: Duration,
+        read_timeout: Duration,
+        connect_timeout: Duration,
         ssl_cert_file_exists: bool,
         ssl_cert_dir_exists: bool,
         security: Security,
@@ -550,7 +590,8 @@ impl<'a> BaseClientBuilder<'a> {
             .http1_title_case_headers()
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
-            .read_timeout(timeout)
+            .read_timeout(read_timeout)
+            .connect_timeout(connect_timeout)
             .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
@@ -709,8 +750,10 @@ pub struct BaseClient {
     raw_dangerous_client: Client,
     /// The connectivity mode to use.
     connectivity: Connectivity,
-    /// Configured client timeout, in seconds.
-    timeout: Duration,
+    /// Configured client read timeout.
+    read_timeout: Duration,
+    /// Configured client connect timeout.
+    connect_timeout: Duration,
     /// Hosts that are trusted to use the insecure client.
     allow_insecure_host: Vec<TrustedHost>,
     /// The number of retries to attempt on transient errors.
@@ -750,9 +793,14 @@ impl BaseClient {
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
-    /// The configured client timeout, in seconds.
-    pub fn timeout(&self) -> Duration {
-        self.timeout
+    /// The configured client read timeout.
+    pub fn read_timeout(&self) -> Duration {
+        self.read_timeout
+    }
+
+    /// The configured client connect timeout.
+    pub fn connect_timeout(&self) -> Duration {
+        self.connect_timeout
     }
 
     /// The configured connectivity mode.

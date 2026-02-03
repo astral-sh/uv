@@ -1,4 +1,6 @@
 use std::io;
+use std::net::TcpListener;
+use std::time::{Duration, Instant};
 
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use http::StatusCode;
@@ -922,5 +924,40 @@ async fn proxy_schemeless_url_in_uv_toml() {
     assert!(
         !has_received_requests(&target_server).await,
         "Target should NOT have been called directly when proxy is configured"
+    );
+}
+
+#[test]
+fn connect_timeout() {
+    let context = TestContext::new("3.12");
+
+    // Create a server that just times out.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let server = listener.local_addr().unwrap().to_string();
+
+    let start = Instant::now();
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(format!("https://{server}"))
+        .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `https://[LOCALHOST]/tqdm/`
+      Caused by: error sending request for url (https://[LOCALHOST]/tqdm/)
+      Caused by: client error (Connect)
+      Caused by: operation timed out
+    ");
+
+    // Assumption: There's less than 2s overhead for this test and startup.
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "Test with 1s connect timeout took too long"
     );
 }
