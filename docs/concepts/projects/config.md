@@ -161,18 +161,18 @@ however, uv will still respect explicit attempts to build the project such as in
 
 !!! note "Virtual projects require static metadata"
 
-    When using `package = false` for virtual projects, ensure that project metadata is static 
-    rather than dynamic. If your `pyproject.toml` includes `dynamic = ["version"]`, uv will 
+    When using `package = false` for virtual projects, ensure that project metadata is static
+    rather than dynamic. If your `pyproject.toml` includes `dynamic = ["version"]`, uv will
     still attempt to build the project to determine the version, which can cause build errors.
-    
+
     Instead, specify a static version:
-    
+
     ```toml
     [project]
     name = "my-project"
     version = "0.1.0"  # Static version instead of dynamic = ["version"]
     # ... other fields
-    
+
     [tool.uv]
     package = false
     ```
