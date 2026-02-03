@@ -6665,6 +6665,7 @@ dependencies = [
 name = "uv-platform-tags"
 version = "0.0.18"
 dependencies = [
+ "bitflags 2.10.0",
  "insta",
  "memchr",
  "rkyv",

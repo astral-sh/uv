@@ -589,10 +589,15 @@ fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> O
                 .iter()
                 .map(|tag| match tag {
                     AbiTag::CPython {
-                        gil_disabled: false,
+                        modifier,
                         python_version: (major, minor),
                     } => {
-                        format!("the CPython {}.{} ABI (`{}`)", major, minor, tag.cyan())
+                        format!(
+                            "the CPython {}.{}{modifier} ABI (`{}`)",
+                            major,
+                            minor,
+                            tag.cyan()
+                        )
                     }
                     AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
                     _ => {

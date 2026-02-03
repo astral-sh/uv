@@ -164,7 +164,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v5");
+    let wheels = context.cache_dir.child("wheels-v6");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context

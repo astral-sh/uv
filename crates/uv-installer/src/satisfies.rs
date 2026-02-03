@@ -462,10 +462,10 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
                 .abi_tags()
                 .map(|tag| match tag {
                     AbiTag::CPython {
-                        gil_disabled: false,
+                        modifier,
                         python_version: (major, minor),
                     } => {
-                        format!("the CPython {major}.{minor} ABI (`{tag}`)")
+                        format!("the CPython {major}.{minor}{modifier} ABI (`{tag}`)")
                     }
                     AbiTag::Abi3 => format!("the stable ABI (`{tag}`)"),
                     _ => {

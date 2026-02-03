@@ -1,4 +1,4 @@
-pub use abi_tag::{AbiTag, ParseAbiTagError};
+pub use abi_tag::{AbiTag, CPythonAbiModifiers, ParseAbiTagError};
 pub use language_tag::{LanguageTag, ParseLanguageTagError};
 pub use platform::{Arch, Os, Platform, PlatformError};
 pub use platform_tag::{ParsePlatformTagError, PlatformTag};

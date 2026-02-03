@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-small-str = { workspace = true }
 
+bitflags = { workspace = true }
 memchr = { workspace = true }
 rkyv = { workspace = true}
 rustc-hash = { workspace = true }

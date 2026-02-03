@@ -211,10 +211,12 @@ mod tests {
                             ),
                         },
                         abi_tag: CPython {
-                            gil_disabled: false,
                             python_version: (
                                 3,
                                 9,
+                            ),
+                            modifier: CPythonAbiModifiers(
+                                0,
                             ),
                         },
                         platform_tag: Linux {
@@ -250,10 +252,12 @@ mod tests {
                         ],
                         abi_tag: [
                             CPython {
-                                gil_disabled: false,
                                 python_version: (
                                     3,
                                     12,
+                                ),
+                                modifier: CPythonAbiModifiers(
+                                    0,
                                 ),
                             },
                         ],
@@ -423,17 +427,21 @@ mod tests {
                 ],
                 abi_tag: [
                     CPython {
-                        gil_disabled: false,
                         python_version: (
                             3,
                             9,
                         ),
+                        modifier: CPythonAbiModifiers(
+                            0,
+                        ),
                     },
                     CPython {
-                        gil_disabled: false,
                         python_version: (
                             3,
                             10,
+                        ),
+                        modifier: CPythonAbiModifiers(
+                            0,
                         ),
                     },
                 ],
