@@ -9,7 +9,7 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
     PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
     VERSION, cyclonedx_json,
 };

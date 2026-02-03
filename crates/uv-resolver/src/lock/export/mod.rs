@@ -17,6 +17,7 @@ use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{Reachable, marker_reachability};
 use crate::lock::LockErrorKind;
+pub use crate::lock::export::metadata::Metadata;
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
@@ -24,6 +25,7 @@ use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, LockError, Package};
 
 pub mod cyclonedx_json;
+mod metadata;
 mod pylock_toml;
 mod requirements_txt;
 

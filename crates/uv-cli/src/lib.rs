@@ -7884,7 +7884,7 @@ pub enum WorkspaceCommand {
     /// View metadata about the current workspace.
     ///
     /// The output of this command is not yet stable.
-    Metadata(MetadataArgs),
+    Metadata(Box<MetadataArgs>),
     /// Display the path of a workspace member.
     ///
     /// By default, the path to the workspace root directory is displayed.
@@ -7898,9 +7898,73 @@ pub enum WorkspaceCommand {
     #[command(hide = true)]
     List(WorkspaceListArgs),
 }
+#[derive(Args)]
+pub struct MetadataArgs {
+    /// Check if the lockfile is up-to-date.
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--locked`.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["check_exists", "upgrade"], overrides_with = "check")]
+    pub check: bool,
 
-#[derive(Args, Debug)]
-pub struct MetadataArgs;
+    /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
+    ///
+    /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
+    /// missing or needs to be updated, uv will exit with an error.
+    ///
+    /// Equivalent to `--check`.
+    #[arg(long, conflicts_with_all = ["check_exists", "upgrade"], hide = true)]
+    pub locked: bool,
+
+    /// Assert that a `uv.lock` exists without checking if it is up-to-date [env: UV_FROZEN=]
+    ///
+    /// Equivalent to `--frozen`.
+    #[arg(long, alias = "frozen", conflicts_with_all = ["check", "locked"])]
+    pub check_exists: bool,
+
+    /// Perform a dry run, without writing the lockfile.
+    ///
+    /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
+    /// changes, but will not write the lockfile to disk.
+    #[arg(
+        long,
+        conflicts_with = "check_exists",
+        conflicts_with = "check",
+        conflicts_with = "locked"
+    )]
+    pub dry_run: bool,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use during resolution.
+    ///
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum Python version if
+    /// `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+}
 
 #[derive(Args, Debug)]
 pub struct WorkspaceDirArgs {
