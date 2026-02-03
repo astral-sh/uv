@@ -14,7 +14,9 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_preview::Preview;
 use uv_python::PythonPreference;
-use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
+use uv_python::{
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonRequestSource, Target,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -34,9 +36,12 @@ pub(crate) fn pip_freeze(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let request_source = python.as_ref().map(|_| PythonRequestSource::UserRequest);
+
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        request_source.as_ref(),
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,

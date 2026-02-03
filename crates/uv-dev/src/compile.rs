@@ -25,6 +25,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
     } else {
         let interpreter = PythonEnvironment::find(
             &PythonRequest::default(),
+            None,
             EnvironmentPreference::OnlyVirtual,
             PythonPreference::default(),
             &cache,

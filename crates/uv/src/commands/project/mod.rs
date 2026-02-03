@@ -31,8 +31,9 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonSource, PythonVariant,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest, satisfies_python_preference,
+    PythonInstallation, PythonPreference, PythonRequest, PythonRequestSource, PythonSource,
+    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    satisfies_python_preference,
 };
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -770,6 +771,7 @@ impl ScriptInterpreter {
 
         let interpreter = PythonInstallation::find_or_download(
             python_request.as_ref(),
+            Some(&source),
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
@@ -1052,6 +1054,7 @@ impl ProjectInterpreter {
         // Locate the Python interpreter to use in the environment.
         let python = PythonInstallation::find_or_download(
             python_request.as_ref(),
+            Some(&source),
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
@@ -1130,28 +1133,6 @@ pub(crate) enum RequiresPythonSource {
     Script,
     /// From a `pyproject.toml` in a workspace.
     Project,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum PythonRequestSource {
-    /// The request was provided by the user.
-    UserRequest,
-    /// The request was inferred from a `.python-version` or `.python-versions` file.
-    DotPythonVersion(PythonVersionFile),
-    /// The request was inferred from a `pyproject.toml` file.
-    RequiresPython,
-}
-
-impl std::fmt::Display for PythonRequestSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UserRequest => write!(f, "explicit request"),
-            Self::DotPythonVersion(file) => {
-                write!(f, "version file at `{}`", file.path().user_display())
-            }
-            Self::RequiresPython => write!(f, "`requires-python` metadata"),
-        }
-    }
 }
 
 /// The resolved Python request and requirement for a [`Workspace`].
@@ -2584,27 +2565,32 @@ pub(crate) async fn init_script_python_requirement(
     reporter: &PythonDownloadReporter,
     preview: Preview,
 ) -> anyhow::Result<RequiresPython> {
-    let python_request = if let Some(request) = python {
+    let (python_request, request_source) = if let Some(request) = python {
         // (1) Explicit request from user
-        Some(PythonRequest::parse(request))
-    } else if let (false, Some(request)) = (
+        (
+            Some(PythonRequest::parse(request)),
+            Some(PythonRequestSource::UserRequest),
+        )
+    } else if let (false, Some(file)) = (
         no_pin_python,
         PythonVersionFile::discover(
             directory,
             &VersionFileDiscoveryOptions::default().with_no_config(no_config),
         )
-        .await?
-        .and_then(PythonVersionFile::into_version),
+        .await?,
     ) {
         // (2) Request from `.python-version`
-        Some(request)
+        let source = PythonRequestSource::DotPythonVersion(file.clone());
+        let request = file.into_version();
+        (request, Some(source))
     } else {
         // (3) No explicit request
-        None
+        (None, None)
     };
 
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        request_source.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

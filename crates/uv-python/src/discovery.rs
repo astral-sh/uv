@@ -41,7 +41,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion, PythonVersionFile};
 
 /// A request to find a Python installation.
 ///
@@ -71,6 +71,29 @@ pub enum PythonRequest {
     /// A request for a specific Python installation key e.g. `cpython-3.12-x86_64-linux-gnu`
     /// Generally these refer to managed Python downloads.
     Key(PythonDownloadRequest),
+}
+
+/// The source of a [`PythonRequest`].
+#[derive(Debug, Clone)]
+pub enum PythonRequestSource {
+    /// The request was provided by the user.
+    UserRequest,
+    /// The request was inferred from a `.python-version` or `.python-versions` file.
+    DotPythonVersion(PythonVersionFile),
+    /// The request was inferred from a `pyproject.toml` file.
+    RequiresPython,
+}
+
+impl std::fmt::Display for PythonRequestSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserRequest => write!(f, "explicit request"),
+            Self::DotPythonVersion(file) => {
+                write!(f, "version file at `{}`", file.path().user_display())
+            }
+            Self::RequiresPython => write!(f, "`requires-python` metadata"),
+        }
+    }
 }
 
 impl<'a> serde::Deserialize<'a> for PythonRequest {
@@ -204,6 +227,7 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
     pub request: PythonRequest,
+    pub request_source: Option<Box<PythonRequestSource>>,
     pub python_preference: PythonPreference,
     pub environment_preference: EnvironmentPreference,
 }
@@ -1102,6 +1126,7 @@ fn python_interpreters_with_executable_name<'a>(
 /// Iterate over all Python installations that satisfy the given request.
 pub fn find_python_installations<'a>(
     request: &'a PythonRequest,
+    request_source: Option<&'a PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
@@ -1122,6 +1147,7 @@ pub fn find_python_installations<'a>(
                     Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
+                            request_source: request_source.cloned().map(Box::new),
                             python_preference: preference,
                             environment_preference: environments,
                         }))
@@ -1148,6 +1174,7 @@ pub fn find_python_installations<'a>(
                     Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
+                            request_source: request_source.cloned().map(Box::new),
                             python_preference: preference,
                             environment_preference: environments,
                         }))
@@ -1298,13 +1325,20 @@ pub fn find_python_installations<'a>(
 /// the error will raised instead of attempting further candidates.
 pub(crate) fn find_python_installation(
     request: &PythonRequest,
+    request_source: Option<&PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
     preview: Preview,
 ) -> Result<FindPythonResult, Error> {
-    let installations =
-        find_python_installations(request, environments, preference, cache, preview);
+    let installations = find_python_installations(
+        request,
+        request_source,
+        environments,
+        preference,
+        cache,
+        preview,
+    );
     let mut first_prerelease = None;
     let mut first_debug = None;
     let mut first_managed = None;
@@ -1434,6 +1468,7 @@ pub(crate) fn find_python_installation(
 
     Ok(Err(PythonNotFound {
         request: request.clone(),
+        request_source: request_source.cloned().map(Box::new),
         environment_preference: environments,
         python_preference: preference,
     }))
@@ -1455,6 +1490,7 @@ pub(crate) fn find_python_installation(
 #[instrument(skip_all, fields(request))]
 pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
+    request_source: Option<&PythonRequestSource>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     downloads_enabled: bool,
@@ -1499,7 +1535,14 @@ pub(crate) async fn find_best_python_installation(
                 String::new()
             }
         );
-        let result = find_python_installation(request, environments, preference, cache, preview);
+        // Only pass the request source for the original request, not for fallbacks
+        let source = if request == original_request {
+            request_source
+        } else {
+            None
+        };
+        let result =
+            find_python_installation(request, source, environments, preference, cache, preview);
         let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1587,6 +1630,7 @@ pub(crate) async fn find_best_python_installation(
                 crate::Error::MissingPython(err, _) => PythonNotFound {
                     // Use a more general error in this case since we looked for multiple versions
                     request: original_request.clone(),
+                    request_source: request_source.cloned().map(Box::new),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
@@ -3388,9 +3432,18 @@ impl fmt::Display for PythonNotFound {
             PythonRequest::Directory(_) => {
                 write!(f, "No interpreter found in {}", self.request)
             }
-            _ => {
-                write!(f, "No interpreter found for {} in {sources}", self.request)
-            }
+            _ => match self.request_source.as_deref() {
+                None | Some(PythonRequestSource::UserRequest) => {
+                    write!(f, "No interpreter found for {} in {sources}", self.request)
+                }
+                Some(request_source) => {
+                    write!(
+                        f,
+                        "No interpreter found for {} (from {request_source}) in {sources}",
+                        self.request
+                    )
+                }
+            },
         }
     }
 }
