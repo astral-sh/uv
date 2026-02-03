@@ -218,13 +218,7 @@ pub(crate) async fn publish(
                 Ok(false) => {}
                 Err(err) => {
                     if dry_run {
-                        let err: anyhow::Error = err.into();
-                        write_error_chain(
-                            err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
-                        )?;
+                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
                         error_count += 1;
                         continue;
                     }
@@ -254,17 +248,18 @@ pub(crate) async fn publish(
         }
 
         // Collect the metadata for the file.
-        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename).await {
+        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
+            .await
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+        {
             Ok(metadata) => metadata,
             Err(err) => {
-                let err: anyhow::Error =
-                    PublishError::PublishPrepare(group.file.clone(), Box::new(err)).into();
                 if dry_run {
-                    write_error_chain(err.as_ref(), printer.stderr(), "error", AnsiColors::Red)?;
+                    write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
                     error_count += 1;
                     continue;
                 }
-                return Err(err);
+                return Err(err.into());
             }
         };
 
