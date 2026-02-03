@@ -119,7 +119,7 @@ pub struct TestContext {
     extra_env: Vec<(OsString, OsString)>,
 
     #[allow(dead_code)]
-    _root: tempfile::TempDir,
+    _root: Option<tempfile::TempDir>,
 }
 
 impl TestContext {
@@ -903,8 +903,18 @@ impl TestContext {
             "archive-v$1/[HASH]".to_string(),
         ));
 
+        // When running in CI, we leave the temporary directories around because they can be
+        // expensive to delete and the machine is disposable.
+        let root_path = ChildPath::new(root.path());
+        let root = if env::var_os(EnvVars::CI).is_some() {
+            let _ = root.into_path();
+            None
+        } else {
+            Some(root)
+        };
+
         Self {
-            root: ChildPath::new(root.path()),
+            root: root_path,
             temp_dir,
             cache_dir,
             python_dir,
