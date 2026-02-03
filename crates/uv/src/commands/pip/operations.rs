@@ -904,12 +904,19 @@ pub(crate) fn report_target_environment(
     // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
     // On Windows, junction points aren't resolved by the interpreter's `sys.prefix`, so we
     // use the target directory from the minor-version link to display the actual installation.
-    let root = PythonMinorVersionLink::from_executable(
-        env.interpreter().sys_executable(),
-        &env.interpreter().key(),
-    )
-    .map(|link| link.target_directory)
-    .unwrap_or_else(|| env.root().to_path_buf());
+    // This only applies to managed (standalone) installations.
+    let root = env
+        .interpreter()
+        .is_standalone()
+        .then(|| {
+            PythonMinorVersionLink::from_executable(
+                env.interpreter().sys_executable(),
+                &env.interpreter().key(),
+            )
+            .map(|link| link.target_directory)
+        })
+        .flatten()
+        .unwrap_or_else(|| env.root().to_path_buf());
 
     let message = format!(
         "Using Python {} environment at: {}",
