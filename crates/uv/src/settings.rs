@@ -245,7 +245,8 @@ pub(crate) struct NetworkSettings {
     pub(crate) https_proxy: Option<ProxyUrl>,
     pub(crate) no_proxy: Option<Vec<String>>,
     pub(crate) allow_insecure_host: Vec<TrustedHost>,
-    pub(crate) timeout: Duration,
+    pub(crate) read_timeout: Duration,
+    pub(crate) connect_timeout: Duration,
     pub(crate) retries: u32,
 }
 
@@ -323,7 +324,8 @@ impl NetworkSettings {
             https_proxy,
             no_proxy,
             allow_insecure_host,
-            timeout: environment.http_timeout,
+            read_timeout: environment.http_read_timeout,
+            connect_timeout: environment.http_connect_timeout,
             retries: environment.http_retries,
         }
     }
