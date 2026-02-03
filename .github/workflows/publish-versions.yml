@@ -52,7 +52,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
         run: |
-          pull_request_title="Update versions for $VERSION"
+          pull_request_title="Add uv $VERSION"
 
           gh pr list --state open --json title --jq ".[] | select(.title == \"$pull_request_title\") | .number" | \
             xargs -I {} gh pr close {}
