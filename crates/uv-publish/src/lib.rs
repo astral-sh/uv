@@ -1453,20 +1453,15 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
     }
 
     // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
-    if content_type
-        .as_deref()
-        .is_some_and(|ct| ct == uv_client::ProblemDetails::CONTENT_TYPE)
-    {
-        if let Some(problem) =
+    if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
+        && let Some(problem) =
             uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
-        {
-            if let Some(description) = problem.description() {
-                return Err(PublishSendError::StatusProblemDetails(
-                    status_code,
-                    description,
-                ));
-            }
-        }
+        && let Some(description) = problem.description()
+    {
+        return Err(PublishSendError::StatusProblemDetails(
+            status_code,
+            description,
+        ));
     }
 
     // Raced uploads of the same file are handled by the caller.
