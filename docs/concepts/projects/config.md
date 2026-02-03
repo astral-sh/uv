@@ -159,6 +159,24 @@ Setting `tool.uv.package = false` will force a project package _not_ to be built
 the project environment. uv will ignore a declared build system when interacting with the project;
 however, uv will still respect explicit attempts to build the project such as invoking `uv build`.
 
+!!! note "Virtual projects require static metadata"
+
+    When using `package = false` for virtual projects, ensure that project metadata is static 
+    rather than dynamic. If your `pyproject.toml` includes `dynamic = ["version"]`, uv will 
+    still attempt to build the project to determine the version, which can cause build errors.
+    
+    Instead, specify a static version:
+    
+    ```toml
+    [project]
+    name = "my-project"
+    version = "0.1.0"  # Static version instead of dynamic = ["version"]
+    # ... other fields
+    
+    [tool.uv]
+    package = false
+    ```
+
 ## Project environment path
 
 The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the project virtual
