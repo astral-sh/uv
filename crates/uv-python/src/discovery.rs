@@ -2810,9 +2810,6 @@ impl VersionRequest {
                     interpreter.python_minor(),
                     interpreter.python_patch(),
                 ) == (*major, *minor, *patch)
-                    // When a patch version is included, we treat it as a request for a stable
-                    // release
-                    && interpreter.python_version().pre().is_none()
                     && variant.matches_interpreter(interpreter)
             }
             Self::Range(specifiers, variant) => {
@@ -2937,9 +2934,6 @@ impl VersionRequest {
             }
             Self::MajorMinorPatch(self_major, self_minor, self_patch, _) => {
                 (*self_major, *self_minor, *self_patch) == (major, minor, patch)
-                    // When a patch version is included, we treat it as a request for a stable
-                    // release
-                    && prerelease.is_none()
             }
             Self::Range(specifiers, _) => specifiers.contains(
                 &Version::new([u64::from(major), u64::from(minor), u64::from(patch)])
