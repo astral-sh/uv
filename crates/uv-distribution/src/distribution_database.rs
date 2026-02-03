@@ -93,7 +93,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    "Failed to download distribution due to network timeout (current value: {}s). Try increasing `UV_HTTP_TIMEOUT` to a larger integer value (in seconds), e.g., `UV_HTTP_TIMEOUT=60`.",
                     self.client.unmanaged.timeout().as_secs()
                 ),
             )
