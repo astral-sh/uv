@@ -11288,10 +11288,6 @@ fn add_index_by_name_from_workspace_root() -> Result<()> {
 
         [tool.uv.sources]
         iniconfig = { index = "test-index" }
-
-        [[tool.uv.index]]
-        name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
         "#
         );
     });
@@ -11436,14 +11432,15 @@ async fn add_index_by_name_child_shadows_parent() -> Result<()> {
     "#})?;
 
     uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index").current_dir(&child_dir), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Request failed after 3 retries
-      Caused by: Failed to fetch: `http://[LOCALHOST]/iniconfig/`
-      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/iniconfig/)
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     //let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
