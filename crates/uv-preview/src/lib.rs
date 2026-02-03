@@ -2,11 +2,34 @@ use std::{
     fmt::{Debug, Display, Formatter},
     ops::BitOr,
     str::FromStr,
+    sync::OnceLock,
 };
 
 use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
 use uv_warnings::warn_user_once;
+
+static PREVIEW: OnceLock<Preview> = OnceLock::new();
+
+/// Initialize the global preview configuration.
+///
+/// This should be called once at startup with the resolved preview settings.
+#[expect(clippy::result_unit_err)]
+pub fn init(preview: Preview) -> Result<(), ()> {
+    PREVIEW.set(preview).map_err(|_| ())
+}
+
+/// Get the current global preview configuration.
+///
+/// Returns the default (disabled) preview if not initialized.
+pub fn get() -> Preview {
+    *PREVIEW.get_or_init(Preview::default)
+}
+
+/// Check if a specific preview feature is enabled globally.
+pub fn is_enabled(flag: PreviewFeature) -> bool {
+    get().is_enabled(flag)
+}
 
 #[bitflags]
 #[repr(u32)]

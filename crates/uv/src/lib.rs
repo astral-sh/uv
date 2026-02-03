@@ -385,6 +385,10 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
 
+    // Set the global preview configuration.
+    uv_preview::init(globals.preview)
+        .map_err(|()| anyhow::anyhow!("Preview is already initialized"))?;
+
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
