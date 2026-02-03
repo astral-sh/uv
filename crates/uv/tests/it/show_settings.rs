@@ -2910,6 +2910,7 @@ fn preview_features() {
     +            MalwareCheck,
     +            VenvSafeClear,
     +            Check,
+    +            PackagedInit,
     +        ],
          },
          python_preference: Managed,

@@ -256,6 +256,7 @@ pub enum PreviewFeature {
     MalwareCheck = 1 << 31,
     VenvSafeClear = 1 << 32,
     Check = 1 << 33,
+    PackagedInit = 1 << 34,
 }
 
 impl PreviewFeature {
@@ -296,6 +297,7 @@ impl PreviewFeature {
             Self::MalwareCheck => "malware-check",
             Self::VenvSafeClear => "venv-safe-clear",
             Self::Check => "check-command",
+            Self::PackagedInit => "packaged-init",
         }
     }
 }
@@ -349,6 +351,7 @@ impl FromStr for PreviewFeature {
             "malware-check" => Self::MalwareCheck,
             "venv-safe-clear" => Self::VenvSafeClear,
             "check" | "check-command" => Self::Check,
+            "packaged-init" => Self::PackagedInit,
             _ => return Err(PreviewFeatureParseError),
         })
     }
