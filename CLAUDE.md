@@ -13,3 +13,4 @@
   lockfile changes
 - NEVER assume clippy warnings are pre-existing, it is very rare that `main` has warnings
 - ALWAYS read and copy the style of similar tests when adding new cases
+- PREFER top-level imports over local imports or fully qualified names
