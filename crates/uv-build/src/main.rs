@@ -1,6 +1,9 @@
 use std::env;
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
+use uv_preview::Preview;
+use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 use anyhow::{Context, Result, bail};
 use tracing_subscriber::filter::LevelFilter;
@@ -37,6 +40,23 @@ fn main() -> Result<()> {
         .to_str()
         .context("Invalid non-UTF8 command")?
         .to_string();
+
+    // Ad-hoc preview features parsing due to a lack of clap CLI in uv-build.
+    let preview = if parse_boolish_environment_variable(EnvVars::UV_PREVIEW)?.unwrap_or(false) {
+        Preview::all()
+    } else if let Some(preview_features) = env::var_os(EnvVars::UV_PREVIEW_FEATURES) {
+        let preview_features = preview_features
+            .to_str()
+            .with_context(|| format!("Invalid UTF-8 in `{}`", EnvVars::UV_PREVIEW_FEATURES))?;
+        Preview::from_str(preview_features).with_context(|| {
+            format!(
+                "Invalid preview features list in `{}`",
+                EnvVars::UV_PREVIEW_FEATURES
+            )
+        })?
+    } else {
+        Preview::default()
+    };
     match command.as_str() {
         "build-sdist" => {
             let sdist_directory = PathBuf::from(args.next().context("Missing sdist directory")?);
@@ -44,6 +64,7 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &sdist_directory,
                 uv_version::version(),
+                false,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -56,6 +77,8 @@ fn main() -> Result<()> {
                 &wheel_directory,
                 metadata_directory.as_deref(),
                 uv_version::version(),
+                false,
+                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -68,6 +91,8 @@ fn main() -> Result<()> {
                 &wheel_directory,
                 metadata_directory.as_deref(),
                 uv_version::version(),
+                false,
+                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -78,6 +103,7 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
+                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
@@ -88,6 +114,7 @@ fn main() -> Result<()> {
                 &env::current_dir()?,
                 &wheel_directory,
                 uv_version::version(),
+                preview,
             )?;
             // Tell the build frontend about the name of the artifact we built
             writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;

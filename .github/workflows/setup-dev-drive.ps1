@@ -24,7 +24,7 @@ if ($env:DEPOT_RUNNER -eq "1") {
     # Create VHD and configure drive using diskpart
     $vhdPath = "C:\uv_dev_drive.vhdx"
     @"
-create vdisk file="$vhdPath" maximum=20480 type=expandable
+create vdisk file="$vhdPath" maximum=25600 type=expandable
 attach vdisk
 create partition primary
 active
@@ -41,9 +41,9 @@ assign letter=V
     Write-Output "Using existing drive at D:"
     $Drive = "D:"
 } else {
-	# The size (20 GB) is chosen empirically to be large enough for our
+	# The size (25 GB) is chosen empirically to be large enough for our
 	# workflows; larger drives can take longer to set up.
-	$Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
+	$Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 25GB |
 						Mount-VHD -Passthru |
 						Initialize-Disk -Passthru |
 						New-Partition -AssignDriveLetter -UseMaximumSize |

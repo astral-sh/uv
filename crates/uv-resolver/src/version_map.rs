@@ -4,9 +4,10 @@ use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
 use pubgrub::Ranges;
+use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -17,12 +18,12 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
-use uv_pypi_types::{HashDigest, Yanked};
+use uv_pypi_types::{HashDigest, ResolutionMetadata, Yanked};
 use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{ExcludeNewer, ExcludeNewerTimestamp, yanks::AllowedYanks};
+use crate::{ExcludeNewer, ExcludeNewerValue, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -43,7 +44,7 @@ impl VersionMap {
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
     pub(crate) fn from_simple_metadata(
-        simple_metadata: OwnedArchive<SimpleMetadata>,
+        simple_metadata: OwnedArchive<SimpleDetailMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
@@ -57,12 +58,25 @@ impl VersionMap {
         let mut stable = false;
         let mut local = false;
         let mut map = BTreeMap::new();
+        let mut core_metadata = FxHashMap::default();
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
+            // Deserialize the version.
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
+
+            // Deserialize the metadata.
+            let core_metadatum =
+                rkyv::deserialize::<Option<ResolutionMetadata>, rkyv::rancor::Error>(
+                    &datum.metadata,
+                )
+                .expect("archived metadata always deserializes");
+            if let Some(core_metadatum) = core_metadatum {
+                core_metadata.insert(version.clone(), core_metadatum);
+            }
+
             stable |= version.is_stable();
             local |= version.is_local();
             map.insert(
@@ -104,6 +118,7 @@ impl VersionMap {
                 map,
                 stable,
                 local,
+                core_metadata,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
@@ -138,6 +153,14 @@ impl VersionMap {
 
         Self {
             inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+        }
+    }
+
+    /// Return the [`ResolutionMetadata`] for the given version, if any.
+    pub fn get_metadata(&self, version: &Version) -> Option<&ResolutionMetadata> {
+        match self.inner {
+            VersionMapInner::Eager(_) => None,
+            VersionMapInner::Lazy(ref lazy) => lazy.core_metadata.get(version),
         }
     }
 
@@ -310,7 +333,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///
@@ -319,7 +342,7 @@ enum VersionMapInner {
     Eager(VersionMapEager),
     /// Some distributions might be fully materialized (i.e., by initializing
     /// a `VersionMap` with a `FlatDistributions`), but some distributions
-    /// might still be in their "raw" `SimpleMetadata` format. In this case, a
+    /// might still be in their "raw" `SimpleDetailMetadata` format. In this case, a
     /// `PrioritizedDist` isn't actually created in memory until the
     /// specific version has been requested.
     Lazy(VersionMapLazy),
@@ -340,7 +363,7 @@ struct VersionMapEager {
 ///
 /// The idea here is that some packages have a lot of versions published, and
 /// needing to materialize a full `VersionMap` with all corresponding metadata
-/// for every version in memory is expensive. Since a `SimpleMetadata` can be
+/// for every version in memory is expensive. Since a `SimpleDetailMetadata` can be
 /// materialized with very little cost (via `rkyv` in the warm cached case),
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
@@ -352,9 +375,11 @@ struct VersionMapLazy {
     stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
+    /// The pre-populated metadata for each version.
+    core_metadata: FxHashMap<Version, ResolutionMetadata>,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
-    simple_metadata: OwnedArchive<SimpleMetadata>,
+    simple_metadata: OwnedArchive<SimpleDetailMetadata>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.
@@ -365,7 +390,7 @@ struct VersionMapLazy {
     /// in the current environment.
     tags: Option<Tags>,
     /// Whether files newer than this timestamp should be excluded or not.
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     /// Which yanked versions are allowed
     allowed_yanks: AllowedYanks,
     /// The hashes of allowed distributions.
@@ -613,7 +638,7 @@ enum LazyPrioritizedDist {
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
     /// Represents a lazily constructed distribution from an index into a
-    /// `VersionFiles` from `SimpleMetadata`.
+    /// `VersionFiles` from `SimpleDetailMetadata`.
     OnlySimple(SimplePrioritizedDist),
     /// Combines the above. This occurs when we have data from both a flat
     /// distribution and a simple distribution.
@@ -626,7 +651,7 @@ enum LazyPrioritizedDist {
 /// Represents a lazily initialized `PrioritizedDist`.
 #[derive(Debug)]
 struct SimplePrioritizedDist {
-    /// An offset into `SimpleMetadata` corresponding to a `SimpleMetadatum`.
+    /// An offset into `SimpleDetailMetadata` corresponding to a `SimpleMetadatum`.
     /// This provides access to a `VersionFiles` that is used to construct a
     /// `PrioritizedDist`.
     datum_index: usize,

@@ -1,5 +1,4 @@
 use serde::{Serialize, Serializer};
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -85,7 +84,7 @@ impl<'de> serde::de::Deserialize<'de> for Identifier {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

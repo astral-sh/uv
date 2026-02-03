@@ -32,15 +32,18 @@ impl IndexCacheControl {
 
     /// Return the default files cache control headers for the given index URL, if applicable.
     pub fn artifact_cache_control(url: &Url) -> Option<&'static str> {
-        if url
-            .host_str()
-            .is_some_and(|host| host.ends_with("pytorch.org"))
-        {
+        let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
+            host.eq_ignore_ascii_case("download.pytorch.org")
+                || host.eq_ignore_ascii_case("pypi.nvidia.com")
+        });
+        if dominated_by_pytorch_or_nvidia {
             // Some wheels in the PyTorch registry were accidentally uploaded with `no-cache,no-store,must-revalidate`.
             // The PyTorch team plans to correct this in the future, but in the meantime we override
             // the cache control headers to allow caching of static files.
             //
             // See: https://github.com/pytorch/pytorch/pull/149218
+            //
+            // The same issue applies to files hosted on `pypi.nvidia.com`.
             Some("max-age=365000000, immutable, public")
         } else {
             None
@@ -48,7 +51,7 @@ impl IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -154,6 +157,92 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub cache_control: Option<IndexCacheControl>,
+}
+
+impl PartialEq for Index {
+    fn eq(&self, other: &Self) -> bool {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        *url == other.url
+            && *name == other.name
+            && *explicit == other.explicit
+            && *default == other.default
+            && *format == other.format
+            && *publish_url == other.publish_url
+            && *authenticate == other.authenticate
+            && *ignore_error_codes == other.ignore_error_codes
+            && *cache_control == other.cache_control
+    }
+}
+
+impl Eq for Index {}
+
+impl PartialOrd for Index {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Index {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.cmp(&other.url)
+            .then_with(|| name.cmp(&other.name))
+            .then_with(|| explicit.cmp(&other.explicit))
+            .then_with(|| default.cmp(&other.default))
+            .then_with(|| format.cmp(&other.format))
+            .then_with(|| publish_url.cmp(&other.publish_url))
+            .then_with(|| authenticate.cmp(&other.authenticate))
+            .then_with(|| ignore_error_codes.cmp(&other.ignore_error_codes))
+            .then_with(|| cache_control.cmp(&other.cache_control))
+    }
+}
+
+impl std::hash::Hash for Index {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            name,
+            url,
+            explicit,
+            default,
+            origin: _,
+            format,
+            publish_url,
+            authenticate,
+            ignore_error_codes,
+            cache_control,
+        } = self;
+        url.hash(state);
+        name.hash(state);
+        explicit.hash(state);
+        default.hash(state);
+        format.hash(state);
+        publish_url.hash(state);
+        authenticate.hash(state);
+        ignore_error_codes.hash(state);
+        cache_control.hash(state);
+    }
 }
 
 #[derive(

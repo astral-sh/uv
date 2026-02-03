@@ -91,9 +91,10 @@ uv does not cede control of the process to the spawned command in order to provi
 messages on failure. Consequently, uv is responsible for forwarding some signals to the child
 process the requested command runs in.
 
-On Unix systems, uv will forward SIGINT and SIGTERM to the child process. Since terminals send
-SIGINT to the foreground process group on Ctrl-C, uv will only forward a SIGINT to the child process
-if it is sent more than once or the child process group differs from uv's.
+On Unix systems, uv will forward most signals (with the exception of SIGKILL, SIGCHLD, SIGIO, and
+SIGPOLL) to the child process. Since terminals send SIGINT to the foreground process group on
+Ctrl-C, uv will only forward a SIGINT to the child process if it is sent more than once or the child
+process group differs from uv's.
 
 On Windows, these concepts do not apply and uv ignores Ctrl-C events, deferring handling to the
 child process so it can exit cleanly.

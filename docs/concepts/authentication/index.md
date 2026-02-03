@@ -4,6 +4,7 @@ Authentication is required when working with private repositories or package ind
 
 Learn more about authentication in uv:
 
+- [Using the `uv auth` CLI](./cli.md)
 - [HTTP authentication](./http.md)
 - [Git authentication](./git.md)
 - [TLS certificates](./certificates.md)

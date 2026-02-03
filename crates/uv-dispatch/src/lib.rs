@@ -16,9 +16,7 @@ use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
-use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, Reinstall, SourceStrategy,
-};
+use uv_configuration::{BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Reinstall};
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
@@ -28,7 +26,7 @@ use uv_distribution_types::{
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
-use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
+use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -99,7 +97,7 @@ pub struct BuildDispatch<'a> {
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    sources: SourceStrategy,
+    sources: NoSources,
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
@@ -125,7 +123,7 @@ impl<'a> BuildDispatch<'a> {
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: ExcludeNewer,
-        sources: SourceStrategy,
+        sources: NoSources,
         workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: Preview,
@@ -218,8 +216,8 @@ impl BuildContext for BuildDispatch<'_> {
         self.config_settings_package
     }
 
-    fn sources(&self) -> SourceStrategy {
-        self.sources
+    fn sources(&self) -> &NoSources {
+        &self.sources
     }
 
     fn locations(&self) -> &IndexLocations {
@@ -316,6 +314,7 @@ impl BuildContext for BuildDispatch<'_> {
             extraneous: _,
         } = Planner::new(resolution).build(
             site_packages,
+            InstallationStrategy::Permissive,
             &Reinstall::default(),
             self.build_options,
             self.hasher,
@@ -413,7 +412,7 @@ impl BuildContext for BuildDispatch<'_> {
         install_path: &'data Path,
         version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
-        sources: SourceStrategy,
+        sources: &'data NoSources,
         build_kind: BuildKind,
         build_output: BuildOutput,
         mut build_stack: BuildStack,
@@ -481,7 +480,7 @@ impl BuildContext for BuildDispatch<'_> {
             self.source_build_context.clone(),
             version_id,
             self.index_locations,
-            sources,
+            sources.clone(),
             self.workspace_cache(),
             config_settings,
             self.build_isolation,
@@ -491,6 +490,7 @@ impl BuildContext for BuildDispatch<'_> {
             environment_variables,
             build_output,
             self.concurrency.builds,
+            self.client.credentials_cache(),
             self.preview,
         )
         .boxed_local()
@@ -503,6 +503,7 @@ impl BuildContext for BuildDispatch<'_> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         output_dir: &'data Path,
+        sources: NoSources,
         build_kind: BuildKind,
         version_id: Option<&'data str>,
     ) -> Result<Option<DistFilename>, BuildDispatchError> {
@@ -523,6 +524,7 @@ impl BuildContext for BuildDispatch<'_> {
         debug!("Performing direct build for {identifier}");
 
         let output_dir = output_dir.to_path_buf();
+        let preview = self.preview;
         let filename = tokio::task::spawn_blocking(move || -> Result<_> {
             let filename = match build_kind {
                 BuildKind::Wheel => {
@@ -531,6 +533,8 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         None,
                         uv_version::version(),
+                        sources.is_none(),
+                        preview,
                     )?;
                     DistFilename::WheelFilename(wheel)
                 }
@@ -539,6 +543,7 @@ impl BuildContext for BuildDispatch<'_> {
                         &source_tree,
                         &output_dir,
                         uv_version::version(),
+                        sources.is_none(),
                     )?;
                     DistFilename::SourceDistFilename(source_dist)
                 }
@@ -548,6 +553,8 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         None,
                         uv_version::version(),
+                        sources.is_none(),
+                        preview,
                     )?;
                     DistFilename::WheelFilename(wheel)
                 }

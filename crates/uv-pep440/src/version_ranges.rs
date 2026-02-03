@@ -57,12 +57,30 @@ impl From<VersionSpecifier> for Ranges<Version> {
                 Self::from_range_bounds(version..upper)
             }
             Operator::LessThan => {
+                // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
+                // pre-release of the specified version unless the specified version is itself a
+                // pre-release."
                 if version.any_prerelease() {
+                    // If V is a pre-release, we allow pre-releases of the same version.
                     Self::strictly_lower_than(version)
+                } else if let Some(post) = version.post() {
+                    // If V is a post-release (e.g., `<0.12.0.post2`), we want to:
+                    // - Exclude pre-releases of the base version (e.g., `0.12.0a1`)
+                    // - Include the final release (e.g., `0.12.0`)
+                    // - Include earlier post-releases (e.g., `0.12.0.post1`)
+                    //
+                    // The range is: `(-∞, base.min0) ∪ [base, V.post)`
+                    // where `base` is the version without the post-release component.
+                    let base = version.clone().with_post(None);
+                    // Everything below the base version's pre-releases
+                    let lower = Self::strictly_lower_than(base.clone().with_min(Some(0)));
+                    // From base (inclusive) up to but not including V
+                    let upper = Self::from_range_bounds(base..version.with_post(Some(post)));
+                    lower.union(&upper)
                 } else {
-                    // Per PEP 440: "The exclusive ordered comparison <V MUST NOT allow a
-                    // pre-release of the specified version unless the specified version is itself a
-                    // pre-release."
+                    // V is not a pre-release or post-release, so exclude pre-releases of the
+                    // specified version by using a "min" sentinel that sorts before all
+                    // pre-releases.
                     Self::strictly_lower_than(version.with_min(Some(0)))
                 }
             }
@@ -474,5 +492,133 @@ impl Deref for UpperBound {
 impl From<UpperBound> for Bound<Version> {
     fn from(bound: UpperBound) -> Self {
         bound.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test that `<V.postN` excludes pre-releases of the base version but includes
+    /// earlier post-releases and the final release.
+    ///
+    /// See: <https://github.com/astral-sh/uv/issues/16868>
+    #[test]
+    fn less_than_post_release() {
+        let specifier: VersionSpecifier = "<0.12.0.post2".parse().unwrap();
+        let range = Ranges::<Version>::from(specifier);
+
+        // Should include versions less than base release.
+        let v = "0.11.0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.11.0");
+
+        // Should exclude pre-releases of the base release.
+        let v = "0.12.0a1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+
+        let v = "0.12.0b1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0b1");
+
+        let v = "0.12.0rc1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0rc1");
+
+        let v = "0.12.0.dev0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.dev0");
+
+        // Should also exclude post-releases of pre-releases.
+        let v = "0.12.0a1.post1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0a1.post1");
+
+        let v = "0.12.0b1.post1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0b1.post1");
+
+        // Should include the final release.
+        let v = "0.12.0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.12.0");
+
+        // Should include earlier post-releases.
+        let v = "0.12.0.post1".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.12.0.post1");
+
+        // Should exclude the specified post-release.
+        let v = "0.12.0.post2".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post2");
+
+        // Should exclude later versions.
+        let v = "0.13.0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.13.0");
+    }
+
+    /// Test that `<V` (non-post-release) correctly excludes pre-releases.
+    #[test]
+    fn less_than_final_release() {
+        let specifier: VersionSpecifier = "<0.12.0".parse().unwrap();
+        let range = Ranges::<Version>::from(specifier);
+
+        // Should include versions less than base release.
+        let v = "0.11.0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.11.0");
+
+        // Should exclude pre-releases of the specified version.
+        let v = "0.12.0a1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+
+        let v = "0.12.0.dev0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.dev0");
+
+        // Should exclude the specified version.
+        let v = "0.12.0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0");
+
+        // Should exclude post-releases of the specified version.
+        let v = "0.12.0.post1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post1");
+    }
+
+    /// Test that `<V.preN` allows earlier pre-releases of the same version.
+    #[test]
+    fn less_than_pre_release() {
+        let specifier: VersionSpecifier = "<0.12.0b1".parse().unwrap();
+        let range = Ranges::<Version>::from(specifier);
+
+        // Should include earlier pre-releases.
+        let v = "0.12.0a1".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.12.0a1");
+
+        let v = "0.12.0.dev0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.12.0.dev0");
+
+        // Should exclude the specified pre-release and later.
+        let v = "0.12.0b1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0b1");
+
+        let v = "0.12.0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0");
+    }
+
+    /// Test the edge case where `<V.post0` still includes the final release.
+    #[test]
+    fn less_than_post_zero() {
+        let specifier: VersionSpecifier = "<0.12.0.post0".parse().unwrap();
+        let range = Ranges::<Version>::from(specifier);
+
+        // Should include versions less than base release.
+        let v = "0.11.0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.11.0");
+
+        // Should exclude pre-releases of the base release.
+        let v = "0.12.0a1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+
+        // Should include the final release (0.12.0 < 0.12.0.post0).
+        let v = "0.12.0".parse::<Version>().unwrap();
+        assert!(range.contains(&v), "should include 0.12.0");
+
+        // Should exclude post0 and later.
+        let v = "0.12.0.post0".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post0");
+
+        let v = "0.12.0.post1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post1");
     }
 }

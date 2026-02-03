@@ -49,6 +49,14 @@ fn {{module_name}}() -> Result<()> {
         {{#root.requires_python}}
         requires-python = "{{.}}"
         {{/root.requires_python}}
+        {{#resolver_options.has_required_environments}}
+        [tool.uv]
+        required-environments = [
+          {{#resolver_options.required_environments}}
+          '''{{.}}''',
+          {{/resolver_options.required_environments}}
+        ]
+        {{/resolver_options.has_required_environments}}
         "###
     )?;
 

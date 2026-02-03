@@ -3,6 +3,8 @@
 
 pub(crate) mod common;
 
+mod auth;
+
 mod branching_urls;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -12,10 +14,16 @@ mod build;
 mod build_backend;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
+mod cache;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
 mod cache_clean;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod cache_prune;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod cache_size;
 
 #[cfg(all(feature = "python", feature = "pypi", feature = "test-ecosystem"))]
 mod ecosystem;
@@ -39,6 +47,9 @@ mod lock;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod lock_conflict;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
+mod lock_exclude_newer_relative;
 
 mod lock_scenarios;
 
@@ -67,6 +78,7 @@ mod pip_show;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod pip_sync;
 
+mod pip_debug;
 mod pip_tree;
 mod pip_uninstall;
 
@@ -136,3 +148,6 @@ mod workflow;
 
 mod extract;
 mod workspace;
+mod workspace_dir;
+mod workspace_list;
+mod workspace_metadata;

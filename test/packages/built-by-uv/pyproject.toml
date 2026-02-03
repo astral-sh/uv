@@ -1,0 +1,28 @@
+[project]
+name = "built-by-uv"
+version = "0.1.0"
+description = "A package to be built with the uv build backend that uses all features exposed by the build backend"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["anyio>=4,<5"]
+license-files = ["LICENSE*", "third-party-licenses/*"]
+
+[project.scripts]
+say-hi = "built_by_uv.cli:hello"
+
+[tool.uv.build-backend]
+# A file we need for the source dist -> wheel step, but not in the wheel itself (currently unused)
+source-include = ["data/build-script.py"]
+# A temporary or generated file we want to ignore
+source-exclude = ["/src/built_by_uv/not-packaged.txt"]
+# Headers are build-only
+wheel-exclude = ["build-*.h"]
+
+[tool.uv.build-backend.data]
+scripts = "scripts"
+data = "assets"
+headers = "header"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.10.0"]
+build-backend = "uv_build"

@@ -6,7 +6,7 @@ use thiserror::Error;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{OnExisting, remove_virtualenv};
+pub use virtualenv::{OnExisting, RemovalReason, remove_virtualenv};
 
 mod virtualenv;
 
@@ -46,7 +46,7 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,

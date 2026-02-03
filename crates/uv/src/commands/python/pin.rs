@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -22,10 +23,9 @@ use crate::commands::{
     ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
 };
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Pin to a specific Python version.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pin(
     project_dir: &Path,
     request: Option<String>,
@@ -36,7 +36,7 @@ pub(crate) async fn pin(
     global: bool,
     rm: bool,
     install_mirrors: PythonInstallMirrors,
-    network_settings: NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -96,10 +96,17 @@ pub(crate) async fn pin(
             for pin in file.versions() {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
                 if let Some(virtual_project) = &virtual_project {
+                    let client = client_builder.clone().retries(0).build();
+                    let download_list = ManagedPythonDownloadList::new(
+                        &client,
+                        install_mirrors.python_downloads_json_url.as_deref(),
+                    )
+                    .await?;
                     warn_if_existing_pin_incompatible_with_project(
                         pin,
                         virtual_project,
                         python_preference,
+                        &download_list,
                         cache,
                         preview,
                     );
@@ -115,11 +122,6 @@ pub(crate) async fn pin(
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
     let reporter = PythonDownloadReporter::single(printer);
 
     let python = match PythonInstallation::find_or_download(
@@ -250,6 +252,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
+    downloads_list: &ManagedPythonDownloadList,
     cache: &Cache,
     preview: Preview,
 ) {
@@ -275,6 +278,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
+        downloads_list,
         cache,
         preview,
     ) {

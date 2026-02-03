@@ -22,18 +22,20 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use uv_build_backend::BuildBackendSettings;
-use uv_distribution_types::{ExtraBuildVariables, Index, IndexName, RequirementSource};
+use uv_configuration::GitLfsSetting;
+use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user_once;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -275,10 +277,11 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// Validates that index names in the `tool.uv.index` field are unique.
+/// Validates the `tool.uv.index` field.
 ///
-/// This custom deserializer function checks for duplicate index names
-/// and returns an error if any duplicates are found.
+/// This custom deserializer function checks for:
+/// - Duplicate index names
+/// - Multiple indexes marked as default
 fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -286,6 +289,7 @@ where
     let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
     if let Some(indexes) = indexes.as_ref() {
         let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        let mut seen_default = false;
         for index in indexes {
             if let Some(name) = index.name.as_ref() {
                 if !seen_names.insert(name) {
@@ -293,6 +297,16 @@ where
                         "duplicate index name `{name}`"
                     )));
                 }
+            }
+            if index.default {
+                if seen_default {
+                    warn_user_once!(
+                        "Found multiple indexes with `default = true`; \
+                        only one index may be marked as default. \
+                        This will become an error in the future.",
+                    );
+                }
+                seen_default = true;
             }
         }
     }
@@ -428,35 +442,6 @@ pub struct ToolUv {
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,
 
-    /// Additional build dependencies for packages.
-    ///
-    /// This allows extending the PEP 517 build environment for the project's dependencies with
-    /// additional packages. This is useful for packages that assume the presence of packages, like,
-    /// `pip`, and do not declare them as build dependencies.
-    #[option(
-        default = "[]",
-        value_type = "dict",
-        example = r#"
-            [tool.uv.extra-build-dependencies]
-            pytest = ["pip"]
-        "#
-    )]
-    pub extra_build_dependencies: Option<ExtraBuildDependencies>,
-
-    /// Extra environment variables to set when building certain packages.
-    ///
-    /// Environment variables will be added to the environment when building the
-    /// specified packages.
-    #[option(
-        default = r#"{}"#,
-        value_type = r#"dict[str, dict[str, str]]"#,
-        example = r#"
-            [tool.uv.extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
-        "#
-    )]
-    pub extra_build_variables: Option<ExtraBuildVariables>,
-
     /// The project's development dependencies.
     ///
     /// Development dependencies will be installed by default in `uv run` and `uv sync`, but will
@@ -517,6 +502,37 @@ pub struct ToolUv {
         "#
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
+    /// Dependencies to exclude when resolving the project's dependencies.
+    ///
+    /// Excludes are used to prevent a package from being selected during resolution,
+    /// regardless of whether it's requested by any other package. When a package is excluded,
+    /// it will be omitted from the dependency list entirely.
+    ///
+    /// Including a package as an exclusion will prevent it from being installed, even if
+    /// it's requested by transitive dependencies. This can be useful for removing optional
+    /// dependencies or working around packages with broken dependencies.
+    ///
+    /// !!! note
+    ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
+    ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    ///     workspace members or `uv.toml` files.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Exclude Werkzeug from being installed, even if transitive dependencies request it.
+            exclude-dependencies = ["werkzeug"]
+        "#
+    )]
+    pub exclude_dependencies: Option<Vec<PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///
@@ -785,7 +801,7 @@ pub enum ExtraBuildDependencyWire {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     deny_unknown_fields,
-    try_from = "ExtraBuildDependencyWire",
+    from = "ExtraBuildDependencyWire",
     into = "ExtraBuildDependencyWire"
 )]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -800,38 +816,19 @@ impl From<ExtraBuildDependency> for uv_pep508::Requirement<VerbatimParsedUrl> {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum ExtraBuildDependencyError {
-    #[error("Dependencies marked with `match-runtime = true` cannot include version specifiers")]
-    VersionSpecifiersNotAllowed,
-    #[error("Dependencies marked with `match-runtime = true` cannot include URL constraints")]
-    UrlNotAllowed,
-}
-
-impl TryFrom<ExtraBuildDependencyWire> for ExtraBuildDependency {
-    type Error = ExtraBuildDependencyError;
-
-    fn try_from(wire: ExtraBuildDependencyWire) -> Result<Self, ExtraBuildDependencyError> {
+impl From<ExtraBuildDependencyWire> for ExtraBuildDependency {
+    fn from(wire: ExtraBuildDependencyWire) -> Self {
         match wire {
-            ExtraBuildDependencyWire::Unannotated(requirement) => Ok(Self {
+            ExtraBuildDependencyWire::Unannotated(requirement) => Self {
                 requirement,
                 match_runtime: false,
-            }),
+            },
             ExtraBuildDependencyWire::Annotated {
                 requirement,
                 match_runtime,
-            } => match requirement.version_or_url {
-                // If `match-runtime = true`, reject additional constraints.
-                Some(VersionOrUrl::VersionSpecifier(..)) if match_runtime => {
-                    Err(ExtraBuildDependencyError::VersionSpecifiersNotAllowed)
-                }
-                Some(VersionOrUrl::Url(..)) if match_runtime => {
-                    Err(ExtraBuildDependencyError::UrlNotAllowed)
-                }
-                _ => Ok(Self {
-                    requirement,
-                    match_runtime,
-                }),
+            } => Self {
+                requirement,
+                match_runtime,
             },
         }
     }
@@ -1025,7 +1022,6 @@ impl IntoIterator for Sources {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
-#[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),
@@ -1139,6 +1135,8 @@ pub enum Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        /// Whether to use Git LFS when cloning the repository.
+        lfs: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1209,6 +1207,8 @@ pub enum Source {
         /// When set to `false`, the package will be fetched from the remote index, rather than
         /// included as a workspace package.
         workspace: bool,
+        /// Whether the package should be installed as editable. Defaults to `true`.
+        editable: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1235,6 +1235,7 @@ impl<'de> Deserialize<'de> for Source {
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
+            lfs: Option<bool>,
             url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
@@ -1258,6 +1259,7 @@ impl<'de> Deserialize<'de> for Source {
             rev,
             tag,
             branch,
+            lfs,
             url,
             path,
             editable,
@@ -1335,6 +1337,7 @@ impl<'de> Deserialize<'de> for Source {
                 rev,
                 tag,
                 branch,
+                lfs,
                 marker,
                 extra,
                 group,
@@ -1546,11 +1549,6 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `workspace` and `branch`",
                 ));
             }
-            if editable.is_some() {
-                return Err(serde::de::Error::custom(
-                    "cannot specify both `workspace` and `editable`",
-                ));
-            }
             if package.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `workspace` and `package`",
@@ -1559,6 +1557,7 @@ impl<'de> Deserialize<'de> for Source {
 
             return Ok(Self::Workspace {
                 workspace,
+                editable,
                 marker,
                 extra,
                 group,
@@ -1595,13 +1594,13 @@ pub enum SourceError {
     )]
     UnusedBranch(String, String),
     #[error(
+        "`{0}` did not resolve to a Git repository, but a Git extension (`--lfs`) was provided."
+    )]
+    UnusedLfs(String),
+    #[error(
         "`{0}` did not resolve to a local directory, but the `--editable` flag was provided. Editable installs are only supported for local directories."
     )]
     UnusedEditable(String),
-    #[error(
-        "Workspace dependency `{0}` was marked as `--no-editable`, but workspace dependencies are always added in editable mode. Pass `--no-editable` to `uv sync` or `uv run` to install workspace dependencies in non-editable mode."
-    )]
-    UnusedNoEditable(String),
     #[error("Failed to resolve absolute path")]
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
@@ -1627,12 +1626,16 @@ impl Source {
         rev: Option<String>,
         tag: Option<String>,
         branch: Option<String>,
+        lfs: GitLfsSetting,
         root: &Path,
         existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Self>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
-            && (branch.is_some() || tag.is_some() || rev.is_some())
+            && (branch.is_some()
+                || tag.is_some()
+                || rev.is_some()
+                || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
             if let Some(sources) = existing_sources {
                 if let Some(package_sources) = sources.get(name) {
@@ -1652,6 +1655,7 @@ impl Source {
                                 rev,
                                 tag,
                                 branch,
+                                lfs: lfs.into(),
                                 marker: *marker,
                                 extra: extra.clone(),
                                 group: group.clone(),
@@ -1669,15 +1673,13 @@ impl Source {
             if let Some(branch) = branch {
                 return Err(SourceError::UnusedBranch(name.to_string(), branch));
             }
+            if matches!(lfs, GitLfsSetting::Enabled { from_env: false }) {
+                return Err(SourceError::UnusedLfs(name.to_string()));
+            }
         }
 
-        if workspace {
-            // If a workspace source is added with `--no-editable`, error.
-            if editable == Some(false) {
-                return Err(SourceError::UnusedNoEditable(name.to_string()));
-            }
-        } else {
-            // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        // If we resolved a non-path source, and user specified an `--editable` flag, error.
+        if !workspace {
             if !matches!(source, RequirementSource::Directory { .. }) {
                 if editable == Some(true) {
                     return Err(SourceError::UnusedEditable(name.to_string()));
@@ -1691,6 +1693,7 @@ impl Source {
                 RequirementSource::Registry { .. } | RequirementSource::Directory { .. } => {
                     Ok(Some(Self::Workspace {
                         workspace: true,
+                        editable,
                         marker: MarkerTree::TRUE,
                         extra: None,
                         group: None,
@@ -1724,9 +1727,25 @@ impl Source {
                     return Ok(None);
                 }
             }
-            RequirementSource::Path { install_path, .. }
-            | RequirementSource::Directory { install_path, .. } => Self::Path {
-                editable,
+            RequirementSource::Path { install_path, .. } => Self::Path {
+                editable: None,
+                package: None,
+                path: PortablePathBuf::from(
+                    relative_to(&install_path, root)
+                        .or_else(|_| std::path::absolute(&install_path))
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
+                ),
+                marker: MarkerTree::TRUE,
+                extra: None,
+                group: None,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable: is_editable,
+                ..
+            } => Self::Path {
+                editable: editable.or(is_editable),
                 package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
@@ -1765,6 +1784,7 @@ impl Source {
                         rev: rev.cloned(),
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,
@@ -1776,6 +1796,7 @@ impl Source {
                         rev,
                         tag,
                         branch,
+                        lfs: lfs.into(),
                         git: git.repository().clone(),
                         subdirectory: subdirectory.map(PortablePathBuf::from),
                         marker: MarkerTree::TRUE,

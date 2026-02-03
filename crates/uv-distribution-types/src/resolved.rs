@@ -16,7 +16,6 @@ use crate::{
 ///
 /// Either an already-installed distribution or a distribution that can be installed.
 #[derive(Debug, Clone, Hash)]
-#[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
     Installed {
         dist: Arc<InstalledDist>,
@@ -139,6 +138,15 @@ impl ResolvedDistRef<'_> {
             Self::Installed { dist } => ResolvedDist::Installed {
                 dist: Arc::new((*dist).clone()),
             },
+        }
+    }
+
+    /// Returns the [`IndexUrl`], if the distribution is from a registry.
+    pub fn index(&self) -> Option<&IndexUrl> {
+        match self {
+            Self::InstallableRegistrySourceDist { sdist, .. } => Some(&sdist.index),
+            Self::InstallableRegistryBuiltDist { wheel, .. } => Some(&wheel.index),
+            Self::Installed { .. } => None,
         }
     }
 }

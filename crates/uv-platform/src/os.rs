@@ -30,12 +30,9 @@ impl Os {
 
     /// Whether this OS can run the other OS.
     pub fn supports(&self, other: Self) -> bool {
-        // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
+        // Emscripten can run on any OS
         if other.is_emscripten() {
-            return !self.is_windows();
-        }
-        if self.is_windows() && other.is_emscripten() {
-            return false;
+            return true;
         }
 
         // Otherwise, we require an exact match
@@ -106,6 +103,9 @@ impl From<&uv_platform_tags::Os> for Os {
             uv_platform_tags::Os::Windows => Self::new(target_lexicon::OperatingSystem::Windows),
             uv_platform_tags::Os::Pyodide { .. } => {
                 Self::new(target_lexicon::OperatingSystem::Emscripten)
+            }
+            uv_platform_tags::Os::Ios { .. } => {
+                Self::new(target_lexicon::OperatingSystem::IOS(None))
             }
         }
     }

@@ -20,6 +20,9 @@ target/
 # Python tmp files
 __pycache__
 
+# GitHub issue mirror
+.prism/
+
 # Maturin builds, and other native editable builds
 *.so
 *.pyd
@@ -36,6 +39,11 @@ profile.json.gz
 
 # MkDocs
 /site
+
+# Generated reference docs (use `cargo dev generate-all` to regenerate)
+/docs/reference/cli.md
+/docs/reference/environment.md
+/docs/reference/settings.md
 
 # macOS
 **/.DS_Store

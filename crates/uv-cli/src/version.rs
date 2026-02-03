@@ -162,17 +162,17 @@ mod tests {
             }),
         };
         assert_json_snapshot!(version, @r#"
-    {
-      "package_name": "uv",
-      "version": "0.0.0",
-      "commit_info": {
-        "short_commit_hash": "53b0f5d92",
-        "commit_hash": "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7",
-        "commit_date": "2023-10-19",
-        "last_tag": "v0.0.1",
-        "commits_since_last_tag": 0
-      }
-    }
-    "#);
+        {
+          "package_name": "uv",
+          "version": "0.0.0",
+          "commit_info": {
+            "short_commit_hash": "53b0f5d92",
+            "commit_hash": "53b0f5d924110e5b26fbf09f6fd3a03d67b475b7",
+            "commit_date": "2023-10-19",
+            "last_tag": "v0.0.1",
+            "commits_since_last_tag": 0
+          }
+        }
+        "#);
     }
 }

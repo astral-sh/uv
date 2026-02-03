@@ -105,6 +105,8 @@ pub enum StateBucket {
     ManagedPython,
     /// Installed tools.
     Tools,
+    /// Credentials.
+    Credentials,
 }
 
 impl StateBucket {
@@ -112,6 +114,7 @@ impl StateBucket {
         match self {
             Self::ManagedPython => "python",
             Self::Tools => "tools",
+            Self::Credentials => "credentials",
         }
     }
 }

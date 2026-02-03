@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.8.14/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.9.28/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```pwsh-session
-    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.8.14/install.ps1 | iex"
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.9.28/install.ps1 | iex"
     ```
 
 !!! tip
@@ -96,6 +96,14 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
+### MacPorts
+
+uv is available via [MacPorts](https://ports.macports.org/port/uv/).
+
+```console
+$ sudo port install uv
+```
+
 ### WinGet
 
 uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
@@ -129,11 +137,10 @@ the standalone installer via `github.com` instead of `astral.sh`.
 
 ### Cargo
 
-uv is available via Cargo, but must be built from Git rather than [crates.io](https://crates.io) due
-to its dependency on unpublished crates.
+uv is available via [crates.io](https://crates.io).
 
 ```console
-$ cargo install --git https://github.com/astral-sh/uv uv
+$ cargo install --locked uv
 ```
 
 !!! note
@@ -252,7 +259,8 @@ If you need to remove uv from your system, follow these steps:
 
     !!! tip
 
-        Before removing the binaries, you may want to remove any data that uv has stored.
+        Before removing the binaries, you may want to remove any data that uv has stored. See the
+        [storage reference](../reference/storage.md) for details on where uv stores data.
 
 2.  Remove the uv, uvx, and uvw binaries:
 

@@ -1,9 +1,12 @@
 use std::fmt::{Display, Formatter};
+use std::iter;
+use std::sync::Arc;
 
-use crate::resolver::{MetadataUnavailable, VersionFork};
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
+
+use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -119,6 +122,29 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
     }
 }
 
+/// Display the error chain for unavailable packages.
+#[derive(Debug, Clone)]
+pub struct UnavailableErrorChain(Arc<dyn std::error::Error + Send + Sync + 'static>);
+
+impl Display for UnavailableErrorChain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for source in iter::successors(Some(&self.0 as &dyn std::error::Error), |&err| err.source())
+        {
+            writeln!(f, "Caused by: {}", source.to_string().trim())?;
+        }
+        Ok(())
+    }
+}
+
+impl PartialEq for UnavailableErrorChain {
+    /// Whether we can collapse two reasons into one because they would be rendered the same.
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Eq for UnavailableErrorChain {}
+
 /// The package is unavailable and cannot be used.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum UnavailablePackage {
@@ -129,9 +155,9 @@ pub enum UnavailablePackage {
     /// The package was not found in the registry.
     NotFound,
     /// The package metadata was found, but could not be parsed.
-    InvalidMetadata(String),
+    InvalidMetadata(UnavailableErrorChain),
     /// The package has an invalid structure.
-    InvalidStructure(String),
+    InvalidStructure(UnavailableErrorChain),
 }
 
 impl UnavailablePackage {
@@ -166,11 +192,15 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
     fn from(reason: &MetadataUnavailable) -> Self {
         match reason {
             MetadataUnavailable::Offline => Self::Offline,
-            MetadataUnavailable::InvalidMetadata(err) => Self::InvalidMetadata(err.to_string()),
-            MetadataUnavailable::InconsistentMetadata(err) => {
-                Self::InvalidMetadata(err.to_string())
+            MetadataUnavailable::InvalidMetadata(err) => {
+                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
             }
-            MetadataUnavailable::InvalidStructure(err) => Self::InvalidStructure(err.to_string()),
+            MetadataUnavailable::InconsistentMetadata(err) => {
+                Self::InvalidMetadata(UnavailableErrorChain(err.clone()))
+            }
+            MetadataUnavailable::InvalidStructure(err) => {
+                Self::InvalidStructure(UnavailableErrorChain(err.clone()))
+            }
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }

@@ -4,88 +4,90 @@ exclude = [
   "scripts",
   # Needs nightly
   "crates/uv-trampoline",
-  # Only used to pull in features, allocators, etc. — we specifically don't want them
-  # to be part of a workspace-wide cargo check, cargo clippy, etc.
-  "crates/uv-performance-memory-allocator",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.91"
 homepage = "https://pypi.org/project/uv/"
-documentation = "https://pypi.org/project/uv/"
 repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-uv-auth = { path = "crates/uv-auth" }
-uv-bin-install = { path = "crates/uv-bin-install" }
-uv-build-backend = { path = "crates/uv-build-backend" }
-uv-build-frontend = { path = "crates/uv-build-frontend" }
-uv-cache = { path = "crates/uv-cache" }
-uv-cache-info = { path = "crates/uv-cache-info" }
-uv-cache-key = { path = "crates/uv-cache-key" }
-uv-cli = { path = "crates/uv-cli" }
-uv-client = { path = "crates/uv-client" }
-uv-configuration = { path = "crates/uv-configuration" }
-uv-console = { path = "crates/uv-console" }
-uv-dirs = { path = "crates/uv-dirs" }
-uv-dispatch = { path = "crates/uv-dispatch" }
-uv-distribution = { path = "crates/uv-distribution" }
-uv-distribution-filename = { path = "crates/uv-distribution-filename" }
-uv-distribution-types = { path = "crates/uv-distribution-types" }
-uv-extract = { path = "crates/uv-extract" }
-uv-fs = { path = "crates/uv-fs", features = ["serde", "tokio"] }
-uv-git = { path = "crates/uv-git" }
-uv-git-types = { path = "crates/uv-git-types" }
-uv-globfilter = { path = "crates/uv-globfilter" }
-uv-install-wheel = { path = "crates/uv-install-wheel", default-features = false }
-uv-installer = { path = "crates/uv-installer" }
-uv-logging = { path = "crates/uv-logging" }
-uv-macros = { path = "crates/uv-macros" }
-uv-metadata = { path = "crates/uv-metadata" }
-uv-normalize = { path = "crates/uv-normalize" }
-uv-once-map = { path = "crates/uv-once-map" }
-uv-options-metadata = { path = "crates/uv-options-metadata" }
-uv-pep440 = { path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
-uv-pep508 = { path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
-uv-platform = { path = "crates/uv-platform" }
-uv-platform-tags = { path = "crates/uv-platform-tags" }
-uv-preview = { path = "crates/uv-preview" }
-uv-publish = { path = "crates/uv-publish" }
-uv-pypi-types = { path = "crates/uv-pypi-types" }
-uv-python = { path = "crates/uv-python" }
-uv-redacted = { path = "crates/uv-redacted" }
-uv-requirements = { path = "crates/uv-requirements" }
-uv-requirements-txt = { path = "crates/uv-requirements-txt" }
-uv-resolver = { path = "crates/uv-resolver" }
-uv-scripts = { path = "crates/uv-scripts" }
-uv-settings = { path = "crates/uv-settings" }
-uv-shell = { path = "crates/uv-shell" }
-uv-small-str = { path = "crates/uv-small-str" }
-uv-state = { path = "crates/uv-state" }
-uv-static = { path = "crates/uv-static" }
-uv-tool = { path = "crates/uv-tool" }
-uv-torch = { path = "crates/uv-torch" }
-uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
-uv-types = { path = "crates/uv-types" }
-uv-version = { path = "crates/uv-version" }
-uv-virtualenv = { path = "crates/uv-virtualenv" }
-uv-warnings = { path = "crates/uv-warnings" }
-uv-workspace = { path = "crates/uv-workspace" }
+uv-auth = { version = "0.0.17", path = "crates/uv-auth" }
+uv-bin-install = { version = "0.0.17", path = "crates/uv-bin-install" }
+uv-build-backend = { version = "0.0.17", path = "crates/uv-build-backend" }
+uv-build-frontend = { version = "0.0.17", path = "crates/uv-build-frontend" }
+uv-cache = { version = "0.0.17", path = "crates/uv-cache" }
+uv-cache-info = { version = "0.0.17", path = "crates/uv-cache-info" }
+uv-cache-key = { version = "0.0.17", path = "crates/uv-cache-key" }
+uv-cli = { version = "0.0.17", path = "crates/uv-cli" }
+uv-client = { version = "0.0.17", path = "crates/uv-client" }
+uv-configuration = { version = "0.0.17", path = "crates/uv-configuration" }
+uv-console = { version = "0.0.17", path = "crates/uv-console" }
+uv-dirs = { version = "0.0.17", path = "crates/uv-dirs" }
+uv-dispatch = { version = "0.0.17", path = "crates/uv-dispatch" }
+uv-distribution = { version = "0.0.17", path = "crates/uv-distribution" }
+uv-distribution-filename = { version = "0.0.17", path = "crates/uv-distribution-filename" }
+uv-distribution-types = { version = "0.0.17", path = "crates/uv-distribution-types" }
+uv-extract = { version = "0.0.17", path = "crates/uv-extract" }
+uv-flags = { version = "0.0.17", path = "crates/uv-flags" }
+uv-fs = { version = "0.0.17", path = "crates/uv-fs", features = ["serde", "tokio"] }
+uv-git = { version = "0.0.17", path = "crates/uv-git" }
+uv-git-types = { version = "0.0.17", path = "crates/uv-git-types" }
+uv-globfilter = { version = "0.0.17", path = "crates/uv-globfilter" }
+uv-install-wheel = { version = "0.0.17", path = "crates/uv-install-wheel", default-features = false }
+uv-installer = { version = "0.0.17", path = "crates/uv-installer" }
+uv-keyring = { version = "0.0.17", path = "crates/uv-keyring" }
+uv-logging = { version = "0.0.17", path = "crates/uv-logging" }
+uv-macros = { version = "0.0.17", path = "crates/uv-macros" }
+uv-metadata = { version = "0.0.17", path = "crates/uv-metadata" }
+uv-normalize = { version = "0.0.17", path = "crates/uv-normalize" }
+uv-once-map = { version = "0.0.17", path = "crates/uv-once-map" }
+uv-options-metadata = { version = "0.0.17", path = "crates/uv-options-metadata" }
+uv-performance-memory-allocator = { version = "0.0.17", path = "crates/uv-performance-memory-allocator" }
+uv-pep440 = { version = "0.0.17", path = "crates/uv-pep440", features = ["tracing", "rkyv", "version-ranges"] }
+uv-pep508 = { version = "0.0.17", path = "crates/uv-pep508", features = ["non-pep508-extensions"] }
+uv-platform = { version = "0.0.17", path = "crates/uv-platform" }
+uv-platform-tags = { version = "0.0.17", path = "crates/uv-platform-tags" }
+uv-preview = { version = "0.0.17", path = "crates/uv-preview" }
+uv-publish = { version = "0.0.17", path = "crates/uv-publish" }
+uv-pypi-types = { version = "0.0.17", path = "crates/uv-pypi-types" }
+uv-python = { version = "0.0.17", path = "crates/uv-python" }
+uv-redacted = { version = "0.0.17", path = "crates/uv-redacted" }
+uv-requirements = { version = "0.0.17", path = "crates/uv-requirements" }
+uv-requirements-txt = { version = "0.0.17", path = "crates/uv-requirements-txt" }
+uv-resolver = { version = "0.0.17", path = "crates/uv-resolver" }
+uv-scripts = { version = "0.0.17", path = "crates/uv-scripts" }
+uv-settings = { version = "0.0.17", path = "crates/uv-settings" }
+uv-shell = { version = "0.0.17", path = "crates/uv-shell" }
+uv-small-str = { version = "0.0.17", path = "crates/uv-small-str" }
+uv-state = { version = "0.0.17", path = "crates/uv-state" }
+uv-static = { version = "0.0.17", path = "crates/uv-static" }
+uv-tool = { version = "0.0.17", path = "crates/uv-tool" }
+uv-torch = { version = "0.0.17", path = "crates/uv-torch" }
+uv-trampoline-builder = { version = "0.0.17", path = "crates/uv-trampoline-builder" }
+uv-types = { version = "0.0.17", path = "crates/uv-types" }
+uv-unix = { version = "0.0.17", path = "crates/uv-unix" }
+uv-version = { version = "0.9.28", path = "crates/uv-version" }
+uv-virtualenv = { version = "0.0.17", path = "crates/uv-virtualenv" }
+uv-warnings = { version = "0.0.17", path = "crates/uv-warnings" }
+uv-windows = { version = "0.0.17", path = "crates/uv-windows" }
+uv-workspace = { version = "0.0.17", path = "crates/uv-workspace" }
 
+ambient-id = { version = "0.0.7", default-features = false, features = ["astral-reqwest-middleware"] }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
-astral-tokio-tar = { version = "0.5.3" }
+astral-tokio-tar = { version = "0.5.6" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.9.1" }
-async_zip = { git = "https://github.com/astral-sh/rs-async-zip", rev = "285e48742b74ab109887d62e1ae79e7c15fd4878", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
+async_http_range_reader = { version = "0.9.1", package = "astral_async_http_range_reader" }
+async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
 base64 = { version = "0.22.1" }
@@ -100,25 +102,28 @@ configparser = { version = "3.1.0" }
 console = { version = "0.16.0", default-features = false, features = ["std"] }
 csv = { version = "1.3.0" }
 ctrlc = { version = "3.4.5" }
+cyclonedx-bom = { version = "0.8.0" }
 dashmap = { version = "6.1.0" }
 data-encoding = { version = "2.6.0" }
+diskus = { version = "0.9.0", default-features = false }
 dotenvy = { version = "0.15.7" }
 dunce = { version = "1.0.5" }
 either = { version = "1.13.0" }
 encoding_rs_io = { version = "0.1.7" }
-etcetera = { version = "0.10.0" }
+embed-manifest = { version = "1.5.0" }
+enumflags2 = { version = "0.7.12" }
+etcetera = { version = "0.11.0" }
+fastrand = { version = "2.3.0" }
 flate2 = { version = "1.0.33", default-features = false, features = ["zlib-rs"] }
-fs-err = { version = "3.0.0", features = ["tokio"] }
-fs2 = { version = "0.4.3" }
+fs-err = { version = "3.2.2", features = ["tokio"] }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
 globwalk = { version = "0.9.1" }
 goblin = { version = "0.10.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 h2 = { version = "0.4.7" }
-hashbrown = { version = "0.15.1" }
+hashbrown = { version = "0.16.0" }
 hex = { version = "0.4.3" }
-home = { version = "0.5.9" }
 html-escape = { version = "0.2.13" }
 http = { version = "1.1.0" }
 indexmap = { version = "2.5.0" }
@@ -132,26 +137,27 @@ md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
-nix = { version = "0.30.0", features = ["signal"] }
-once_cell = { version = "1.20.2" }
+nix = { version = "0.30.0", features = ["resource", "signal"] }
+open = { version = "5.3.2" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
 proc-macro2 = { version = "1.0.86" }
-procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
-pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
+procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }
+pubgrub = { version = "0.3.3" , package = "astral-pubgrub" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
 ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
+reqsign = { version = "0.18.1", features = ["aws", "google", "default-context"], default-features = false }
 reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8", features = ["multipart"] }
-reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
-rkyv = { version = "0.8.8", features = ["bytecheck"] }
+reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = ["multipart"] }
+reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry" }
+rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
@@ -159,13 +165,15 @@ rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"]
 same-file = { version = "1.0.6" }
 schemars = { version = "1.0.0", features = ["url2"] }
 seahash = { version = "4.1.0" }
+secret-service = { version = "5.0.0", features = ["rt-tokio-crypto-rust"] }
+security-framework = { version = "3" }
 self-replace = { version = "1.5.0" }
 serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
-spdx = { version = "0.10.6" }
+spdx = { version = "0.13.0" }
 syn = { version = "2.0.77" }
 sys-info = { version = "0.9.1" }
 tar = { version = "0.4.43" }
@@ -173,12 +181,12 @@ target-lexicon = { version = "0.13.0" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
-tl = { git = "https://github.com/astral-sh/tl.git", rev = "6e25b2ee2513d75385101a8ff9f591ef51f314ec" }
-tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync"] }
+astral-tl = { version = "0.7.11" }
+tokio = { version = "1.40.0", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync", "time"] }
 tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
 toml = { version = "0.9.2", features = ["fast_hash"] }
-toml_edit = { version = "0.23.2", features = ["serde"] }
+toml_edit = { version = "0.24.0", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18" } # Default feature set for uv_build, uv activates extra features
@@ -187,17 +195,18 @@ tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.2.0" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
-version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
+uuid = { version = "1.16.0" }
+version-ranges = { version = "0.1.3", package = "astral-version-ranges" }
 walkdir = { version = "2.5.0" }
 which = { version = "8.0.0", features = ["regex"] }
-windows = { version = "0.59.0", features = ["Win32_Globalization", "Win32_System_Console", "Win32_System_Kernel", "Win32_System_Diagnostics_Debug", "Win32_Storage_FileSystem"] }
-windows-core = { version = "0.59.0" }
+windows = { version = "0.61.0", features = ["std", "Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Environment", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_JobObjects", "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 windows-registry = { version = "0.5.0" }
-windows-result = { version = "0.3.0" }
-windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_Registry"] }
 wiremock = { version = "0.6.4" }
+wmi = { version = "0.16.0", default-features = false }
 xz2 = { version = "0.1.7" }
+zeroize = { version = "1.8.1" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
+zstd = { version = "0.13.3" }
 
 # dev-dependencies
 assert_cmd = { version = "2.0.16" }
@@ -206,18 +215,18 @@ byteorder = { version = "1.5.0" }
 filetime = { version = "0.2.25" }
 http-body-util = { version = "0.1.2" }
 hyper = { version = "1.4.1", features = ["server", "http1"] }
-hyper-util = { version = "0.1.8", features = ["tokio"] }
+hyper-util = { version = "0.1.8", features = ["tokio", "server", "http1"] }
 ignore = { version = "0.4.23" }
 insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
 predicates = { version = "3.1.2" }
+rcgen = { version = "0.14.5", features = ["crypto", "pem", "ring"], default-features = false }
+rustls = { version = "0.23.29", default-features = false }
 similar = { version = "2.6.0" }
 temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
-whoami = { version = "1.6.0" }
-
-[workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2", "h2"]
+tokio-rustls = { version = "0.26.2", default-features = false }
+whoami = { version = "2.0.0" }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
@@ -304,7 +313,17 @@ strip = false
 debug = "full"
 lto = false
 
+# Profile for fast test execution: Skip debug info generation, and
+# apply basic optimization, which speed up build and running tests.
 [profile.fast-build]
+inherits = "dev"
+opt-level = 1
+debug = 0
+strip = "debuginfo"
+
+# Profile for faster builds: Skip debug info generation, for faster
+# builds of smaller binaries.
+[profile.no-debug]
 inherits = "dev"
 debug = 0
 strip = "debuginfo"
@@ -320,7 +339,3 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
-
-[patch.crates-io]
-reqwest-middleware = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }
-reqwest-retry = { git = "https://github.com/astral-sh/reqwest-middleware", rev = "ad8b9d332d1773fde8b4cd008486de5973e0a3f8" }

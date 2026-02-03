@@ -1,0 +1,24 @@
+on:
+  workflow_call:
+
+jobs:
+  dist-plan:
+    name: "dist plan"
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install dist
+        shell: bash
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/download/v0.30.2/cargo-dist-installer.sh | sh"
+
+      - name: Run dist plan
+        run: |
+          dist plan --output-format=json > plan-dist-manifest.json
+          echo "dist plan completed successfully"
+          cat plan-dist-manifest.json

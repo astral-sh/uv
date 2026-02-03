@@ -3,20 +3,19 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal"],
-  schedule: ["before 4am on Monday"],
+  labels: ["internal", "build:skip-release"],
+  schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
-  prHourlyLimit: 10,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
     rangeStrategy: "update-lockfile",
-    managerFilePatterns: ["/^crates/.*Cargo\\.toml$/"],
+    managerFilePatterns: ["/^Cargo\\.toml$/", "/^crates/.*Cargo\\.toml$/"],
   },
   "pre-commit": {
     enabled: true,
@@ -38,6 +37,13 @@
       // See: https://github.com/astral-sh/uv/issues/3642
       matchPackageNames: ["/zip/"],
       matchManagers: ["cargo"],
+      enabled: false,
+    },
+    {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
       enabled: false,
     },
     {
@@ -67,6 +73,14 @@
       enabled: false,
     },
     {
+      // Exclude test-system.yml from Python version updates, as it intentionally
+      // tests multiple Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-system.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-system.yml",
+      enabled: false,
+    },
+    {
       groupName: "pre-commit dependencies",
       matchManagers: ["pre-commit"],
       description: "Weekly update of pre-commit dependencies",
@@ -87,6 +101,12 @@
       enabled: false,
     },
     {
+      groupName: "pubgrub",
+      matchManagers: ["cargo"],
+      matchDepNames: ["pubgrub", "version-ranges"],
+      description: "version-ranges and pubgrub are in the same Git repository",
+    },
+    {
       commitMessageTopic: "MSRV",
       matchManagers: ["custom.regex"],
       matchDepNames: ["msrv"],
@@ -101,6 +121,11 @@
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["maturin"],
+      commitMessageTopic: "maturin",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
@@ -112,6 +137,17 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Maturin version used in maturin-action
+    {
+      customType: "regex",
+      managerFilePatterns: [
+        "/.github/workflows/build-release-binaries\\.yml$/",
+      ],
+      matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
     },
     // Minimum supported Rust toolchain version
     {

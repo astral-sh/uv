@@ -8,14 +8,15 @@ fn packse_add_remove_one_package() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -206,7 +207,7 @@ fn packse_add_remove_one_package() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###""###);
+        assert_snapshot!(diff, @"");
     });
 }
 
@@ -215,14 +216,15 @@ fn packse_add_remove_existing_package_noop() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -250,14 +252,15 @@ fn packse_promote_transitive_to_direct_then_remove() {
     let context = TestContext::new("3.12");
     context.copy_ecosystem_project("packse");
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 49 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -274,7 +277,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###"
+        assert_snapshot!(diff, @r#"
         --- old
         +++ new
         @@ -306,20 +306,21 @@
@@ -321,7 +324,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
-        "###);
+        "#);
     });
 
     let diff = context.diff_lock(|context| {
@@ -332,7 +335,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###"
+        assert_snapshot!(diff, @r#"
         --- old
         +++ new
         @@ -306,21 +306,20 @@
@@ -379,7 +382,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
              { name = "psutil", specifier = ">=5.9.7" },
              { name = "pytest", specifier = ">=7.4.3" },
              { name = "syrupy", specifier = ">=4.6.0" },
-        "###);
+        "#);
     });
 
     // Back to where we started.
@@ -388,7 +391,7 @@ fn packse_promote_transitive_to_direct_then_remove() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r###""###);
+        assert_snapshot!(diff, @"");
     });
 }
 
@@ -407,14 +410,14 @@ fn jax_instability() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({

@@ -1,0 +1,182 @@
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "The commit SHA to use for artifact names"
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  smoke-test-linux:
+    name: "linux"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-linux-aarch64:
+    name: "linux aarch64"
+    timeout-minutes: 10
+    runs-on: github-ubuntu-24.04-aarch64-2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-aarch64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-linux-musl:
+    name: "linux musl"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-musl-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv run scripts/smoke-test
+
+  smoke-test-macos:
+    name: "macos"
+    timeout-minutes: 10
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-macos-x86_64-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
+  smoke-test-windows-x86_64:
+    name: "windows x86_64"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Smoke test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          ./uv run scripts/smoke-test
+
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+  smoke-test-windows-aarch64:
+    name: "windows aarch64"
+    timeout-minutes: 10
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-aarch64-${{ inputs.sha }}
+
+      - name: "Smoke test"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          ./uv run scripts/smoke-test
+
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
+          (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression

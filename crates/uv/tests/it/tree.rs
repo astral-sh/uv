@@ -24,7 +24,7 @@ fn nested_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -38,7 +38,7 @@ fn nested_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -65,7 +65,7 @@ fn nested_platform_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("linux"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("linux"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -82,10 +82,10 @@ fn nested_platform_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -105,7 +105,7 @@ fn nested_platform_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -132,7 +132,7 @@ fn invert() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -149,10 +149,10 @@ fn invert() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--no-dedupe"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--no-dedupe"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -171,7 +171,7 @@ fn invert() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -192,7 +192,7 @@ fn frozen() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -203,7 +203,7 @@ fn frozen() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -223,7 +223,7 @@ fn frozen() -> Result<()> {
     )?;
 
     // Running with `--frozen` should show the stale tree.
-    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -233,7 +233,7 @@ fn frozen() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
-    "###
+    "
     );
 
     Ok(())
@@ -254,7 +254,7 @@ fn outdated() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--outdated").arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--outdated").arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -265,7 +265,7 @@ fn outdated() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -290,7 +290,7 @@ fn platform_dependencies() -> Result<()> {
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
     #[cfg(not(windows))]
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -304,10 +304,10 @@ fn platform_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
-    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--python-platform").arg("windows"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -322,11 +322,11 @@ fn platform_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###);
+    ");
 
     // When `--universal` is _not_ provided, should include `colorama`, even though it's only
     // included on Windows.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -341,7 +341,7 @@ fn platform_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -369,7 +369,7 @@ fn platform_dependencies_inverted() -> Result<()> {
     )?;
 
     // When `--universal` is _not_ provided, `colorama` should _not_ be included.
-    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("linux"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("linux"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -378,10 +378,10 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Unless `--python-platform` is set to `windows`, in which case it should be included.
-    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @r#"
+    uv_snapshot!(context.filters(), context.tree().arg("--invert").arg("--python-platform").arg("windows"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -391,7 +391,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "#);
+    ");
 
     Ok(())
 }
@@ -415,7 +415,7 @@ fn repeated_dependencies() -> Result<()> {
     )?;
 
     // Should include both versions of `anyio`, which have different dependencies.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -430,7 +430,7 @@ fn repeated_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -488,7 +488,7 @@ fn repeated_version() -> Result<()> {
         Url::from_file_path(context.temp_dir.join("v2")).unwrap(),
     })?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -504,7 +504,7 @@ fn repeated_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -532,7 +532,7 @@ fn dev_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -543,11 +543,12 @@ fn dev_dependencies() -> Result<()> {
         └── sniffio v1.3.1
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -555,8 +556,9 @@ fn dev_dependencies() -> Result<()> {
     └── iniconfig v2.0.0
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -584,7 +586,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -598,11 +600,12 @@ fn dev_dependencies_inverted() -> Result<()> {
     (*) Package tree already displayed
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert").arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -610,8 +613,9 @@ fn dev_dependencies_inverted() -> Result<()> {
     └── project v0.1.0
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -639,7 +643,7 @@ fn optional_dependencies() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -661,7 +665,7 @@ fn optional_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -689,7 +693,7 @@ fn optional_dependencies_inverted() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -719,7 +723,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -744,7 +748,7 @@ fn package() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -764,10 +768,10 @@ fn package() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("scipy"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("scipy"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -776,10 +780,10 @@ fn package() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("numpy").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("numpy").arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -794,7 +798,7 @@ fn package() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -826,7 +830,7 @@ fn group() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.tree(), @r###"
+    uv_snapshot!(context.filters(), context.tree(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -836,9 +840,9 @@ fn group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--only-group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -847,9 +851,9 @@ fn group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -862,25 +866,9 @@ fn group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    project v0.1.0
-    ├── typing-extensions v4.10.0
-    ├── iniconfig v2.0.0 (group: bar)
-    ├── sniffio v1.3.1 (group: dev)
-    └── anyio v4.3.0 (group: foo)
-        ├── idna v3.6
-        └── sniffio v1.3.1
-
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    "###);
-
-    uv_snapshot!(context.filters(), context.tree().arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--group").arg("foo").arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -894,9 +882,25 @@ fn group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.tree().arg("--all-groups").arg("--no-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--all-groups"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── typing-extensions v4.10.0
+    ├── iniconfig v2.0.0 (group: bar)
+    ├── sniffio v1.3.1 (group: dev)
+    └── anyio v4.3.0 (group: foo)
+        ├── idna v3.6
+        └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--all-groups").arg("--no-group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -909,7 +913,7 @@ fn group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -929,7 +933,7 @@ fn cycle() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -954,10 +958,10 @@ fn cycle() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -967,10 +971,10 @@ fn cycle() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("traceback2").arg("--package").arg("six").arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -990,7 +994,7 @@ fn cycle() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -1036,7 +1040,7 @@ fn workspace_dev() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1056,7 +1060,7 @@ fn workspace_dev() -> Result<()> {
 
     // Under `--no-dev`, the member should still be included, since we show the entire workspace.
     // But it shouldn't be considered a dependency of the root.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @r"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1094,7 +1098,7 @@ fn non_project() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1105,7 +1109,7 @@ fn non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -1145,7 +1149,7 @@ fn non_project_member() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1160,10 +1164,10 @@ fn non_project_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--invert"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1179,7 +1183,7 @@ fn non_project_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -1211,7 +1215,7 @@ fn script() -> Result<()> {
         pprint([(k, v["title"]) for k, v in data.items()][:10])
     "#})?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1227,20 +1231,20 @@ fn script() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     // If the lockfile didn't exist already, it shouldn't be persisted to disk.
     assert!(!context.temp_dir.child("uv.lock").exists());
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -1409,7 +1413,7 @@ fn script() -> Result<()> {
     "#})?;
 
     // `uv tree` should update the lockfile.
-    uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--script").arg(script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1426,7 +1430,7 @@ fn script() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -1615,7 +1619,7 @@ fn only_group() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1632,7 +1636,7 @@ fn only_group() -> Result<()> {
     "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("dev"), @r"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1647,7 +1651,7 @@ fn only_group() -> Result<()> {
     "
     );
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("test"), @r"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1685,7 +1689,7 @@ fn show_sizes() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--show-sizes").arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--show-sizes").arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1694,7 +1698,103 @@ fn show_sizes() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn workspace_circular_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create workspace root
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#,
+    )?;
+
+    // Create package-a that depends on package-b
+    let package_a_dir = context.temp_dir.child("packages").child("package-a");
+    package_a_dir.create_dir_all()?;
+    let package_a_pyproject = package_a_dir.child("pyproject.toml");
+    package_a_pyproject.write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { workspace = true }
+    "#,
+    )?;
+
+    // Create package-b that depends on package-a (circular dependency)
+    let package_b_dir = context.temp_dir.child("packages").child("package-b");
+    package_b_dir.create_dir_all()?;
+    let package_b_pyproject = package_b_dir.child("pyproject.toml");
+    package_b_pyproject.write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a"]
+
+        [tool.uv.sources]
+        package-a = { workspace = true }
+    "#,
+    )?;
+
+    // Test that package-a is at the root when requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a v0.1.0
+    └── package-b v0.1.0
+        └── package-a v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    // Test that package-b is at the root when requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-b v0.1.0
+    └── package-a v0.1.0
+        └── package-b v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    // Test that both packages are shown as roots when both are requested
+    uv_snapshot!(context.filters(), context.tree().arg("--package").arg("package-a").arg("--package").arg("package-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a v0.1.0
+    └── package-b v0.1.0
+        └── package-a v0.1.0 (*)
+    package-b v0.1.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
     );
 
     Ok(())

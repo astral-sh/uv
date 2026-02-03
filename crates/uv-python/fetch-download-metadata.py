@@ -142,6 +142,20 @@ class ImplementationName(StrEnum):
 class Variant(StrEnum):
     FREETHREADED = "freethreaded"
     DEBUG = "debug"
+    FREETHREADED_DEBUG = "freethreaded+debug"
+
+    @classmethod
+    def from_build_options(
+        cls: type["Variant"], build_options: list[str]
+    ) -> "Variant" | None:
+        if "debug" in build_options and "freethreaded" in build_options:
+            return cls.FREETHREADED_DEBUG
+        elif "debug" in build_options:
+            return cls.DEBUG
+        elif "freethreaded" in build_options:
+            return cls.FREETHREADED
+        else:
+            return None
 
 
 @dataclass
@@ -208,7 +222,10 @@ class CPythonFinder(Finder):
             cpython-
             (?P<ver>\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)(?:\+\d+)?\+
             (?P<date>\d+)-
-            (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-[a-z\d]+)-
+            # Note we lookahead to avoid matching "debug" as a triple as we'd
+            # prefer it matches as a build option; we could enumerate all known
+            # build options instead but this is the easy path forward
+            (?P<triple>[a-z\d_]+-[a-z\d]+(?>-[a-z\d]+)?-(?!debug(?:-|$))[a-z\d_]+)-
             (?:(?P<build_options>.+)-)?
             (?P<flavor>[a-z_]+)?
             \.tar\.(?:gz|zst)
@@ -377,13 +394,7 @@ class CPythonFinder(Finder):
         flavor = groups.get("flavor", "full")
 
         build_options = build_options.split("+") if build_options else []
-        variant: Variant | None
-        for variant in Variant:
-            if variant in build_options:
-                break
-        else:
-            variant = None
-
+        variant = Variant.from_build_options(build_options)
         version = Version.from_str(version)
         triple = self._normalize_triple(triple)
         if triple is None:
@@ -586,41 +597,41 @@ class PyodideFinder(Finder):
         releases = release_resp.json()
         metadata = meta_resp.json()["releases"]
 
-        maj_minor_seen = set()
-        results = []
+        results = {}
         for release in releases:
             pyodide_version = release["tag_name"]
             meta = metadata.get(pyodide_version, None)
             if meta is None:
                 continue
 
-            maj_min = pyodide_version.rpartition(".")[0]
-            # Only keep latest
-            if maj_min in maj_minor_seen:
-                continue
-            maj_minor_seen.add(maj_min)
-
             python_version = Version.from_str(meta["python_version"])
+
             # Find xbuildenv asset
             for asset in release["assets"]:
                 if asset["name"].startswith("xbuildenv"):
                     break
+            else:
+                # not found: should not happen but just in case
+                continue
 
             url = asset["browser_download_url"]
-            results.append(
-                PythonDownload(
-                    release=0,
-                    version=python_version,
-                    triple=self.TRIPLE,
-                    flavor=pyodide_version,
-                    implementation=self.implementation,
-                    filename=asset["name"],
-                    url=url,
-                    build=pyodide_version,
-                )
+            download = PythonDownload(
+                release=0,
+                version=python_version,
+                triple=self.TRIPLE,
+                flavor=pyodide_version,
+                implementation=self.implementation,
+                filename=asset["name"],
+                url=url,
+                build=pyodide_version,
             )
 
-        return results
+            # Only keep latest Pyodide version of each Python version
+            # arch/platform are all the same for Pyodide (wasm32, emscripten)
+            if python_version not in results:
+                results[python_version] = download
+
+        return list(results.values())
 
     async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
         for idx, batch in enumerate(batched(downloads, n)):
@@ -766,8 +777,10 @@ def render(downloads: list[PythonDownload]) -> None:
         match variant:
             case Variant.FREETHREADED:
                 return 1
-            case Variant.DEBUG:
+            case Variant.FREETHREADED_DEBUG:
                 return 2
+            case Variant.DEBUG:
+                return 3
         raise ValueError(f"Missing sort key implementation for variant: {variant}")
 
     def sort_key(download: PythonDownload) -> tuple:
@@ -822,7 +835,7 @@ def render(downloads: list[PythonDownload]) -> None:
 
     VERSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Make newlines consistent across platforms
-    VERSIONS_FILE.write_text(json.dumps(results, indent=2), newline="\n")
+    VERSIONS_FILE.write_text(json.dumps(results, indent=2) + "\n", newline="\n")
 
 
 async def find() -> None:

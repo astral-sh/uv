@@ -8,6 +8,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
+use http::StatusCode;
 use indoc::indoc;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -28,7 +29,7 @@ fn compile_requirements_in() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -43,7 +44,7 @@ fn compile_requirements_in() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -58,7 +59,7 @@ fn compile_requirements_in_annotation_line() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--annotation-style=line")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -70,7 +71,7 @@ fn compile_requirements_in_annotation_line() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -86,7 +87,7 @@ fn compile_requirements_in_stdin() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .stdin(fs::File::open(requirements_in)?)
-        .arg("-"), @r###"
+        .arg("-"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -100,7 +101,7 @@ fn compile_requirements_in_stdin() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -111,14 +112,14 @@ fn missing_requirements_in() {
     let requirements_in = context.temp_dir.child("requirements.in");
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: File not found: `requirements.in`
-    "###
+    "
     );
 
     requirements_in.assert(predicates::path::missing());
@@ -131,7 +132,7 @@ fn missing_venv() -> Result<()> {
     fs_err::remove_dir_all(context.venv.path())?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -141,7 +142,7 @@ fn missing_venv() -> Result<()> {
     ----- stderr -----
     warning: Requirements file `requirements.in` does not contain any dependencies
     Resolved in [TIME]
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::missing());
@@ -161,7 +162,7 @@ fn empty_output() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--output-file")
-            .arg("requirements.txt"), @r###"
+            .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -172,7 +173,7 @@ fn empty_output() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -197,7 +198,7 @@ dependencies = [
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -212,7 +213,7 @@ dependencies = [
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -238,7 +239,7 @@ dependencies = [
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -253,7 +254,7 @@ dependencies = [
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -279,7 +280,7 @@ dependencies = [
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("--annotation-style=line")
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -291,7 +292,7 @@ dependencies = [
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -315,7 +316,7 @@ fn compile_pyproject_toml_eager_validation() -> Result<()> {
     // This should fail without attempting to build the package.
     uv_snapshot!(context
         .pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -323,7 +324,7 @@ fn compile_pyproject_toml_eager_validation() -> Result<()> {
     ----- stderr -----
     error: Failed to parse entry: `anyio`
       Caused by: `anyio` references a workspace in `tool.uv.sources` (e.g., `anyio = { workspace = true }`), but is not a workspace member
-    "###);
+    ");
 
     Ok(())
 }
@@ -341,7 +342,7 @@ fn compile_constraints_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -358,7 +359,7 @@ fn compile_constraints_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -376,7 +377,7 @@ fn compile_constraints_inline() -> Result<()> {
     constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -385,7 +386,7 @@ fn compile_constraints_inline() -> Result<()> {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -408,7 +409,7 @@ fn compile_constraints_markers() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -425,7 +426,7 @@ fn compile_constraints_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -447,7 +448,7 @@ fn compile_constraint_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -474,7 +475,7 @@ fn compile_constraint_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -528,7 +529,7 @@ portalocker==2.5.1
             .arg("line")
             .arg("--python-version")
             .arg("3.10")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -684,7 +685,7 @@ portalocker==2.5.1
 
     ----- stderr -----
     Resolved 149 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -712,7 +713,7 @@ optional-dependencies.foo = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("foo"), @r###"
+            .arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -727,7 +728,7 @@ optional-dependencies.foo = [
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -755,7 +756,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("FRiENDlY-...-_-BARd"), @r###"
+            .arg("FRiENDlY-...-_-BARd"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -770,7 +771,7 @@ optional-dependencies."FrIeNdLy-._.-bArD" = [
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -798,14 +799,14 @@ optional-dependencies.foo = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("bar"), @r###"
+            .arg("bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requested extra not found: bar
-    "###
+    "
     );
 
     Ok(())
@@ -840,7 +841,7 @@ build-backend = "poetry.core.masonry.api"
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("test"), @r###"
+            .arg("test"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -863,7 +864,7 @@ build-backend = "poetry.core.masonry.api"
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -899,7 +900,7 @@ build-backend = "poetry.core.masonry.api"
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -914,7 +915,7 @@ build-backend = "poetry.core.masonry.api"
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -954,7 +955,7 @@ build-backend = "poetry.core.masonry.api"
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -966,8 +967,7 @@ build-backend = "poetry.core.masonry.api"
     13 | [project.dependencies]
        | ^^^^^^^^^^^^^^^^^^^^^^
     invalid type: map, expected a sequence
-
-    "###
+    "
     );
 
     Ok(())
@@ -1015,7 +1015,7 @@ setup(
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("dev"), @r###"
+            .arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1032,7 +1032,7 @@ setup(
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1073,7 +1073,7 @@ setup(
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("setup.cfg")
             .arg("--extra")
-            .arg("dev"), @r###"
+            .arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1090,7 +1090,7 @@ setup(
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1121,7 +1121,7 @@ setup(
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("setup.py")
             .arg("--extra")
-            .arg("dev"), @r###"
+            .arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1138,7 +1138,7 @@ setup(
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1162,7 +1162,7 @@ dependencies = [
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1174,8 +1174,7 @@ dependencies = [
     5 | name = "!project"
       |        ^^^^^^^^^^
     Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
-
-    "###
+    "#
     );
 
     Ok(())
@@ -1207,14 +1206,14 @@ optional-dependencies.foo = [
             .arg("--extra")
             .arg("bar")
             .arg("--extra")
-            .arg("foobar"), @r###"
+            .arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requested extras not found: bar, foobar
-    "###
+    "
     );
 
     Ok(())
@@ -1230,14 +1229,14 @@ fn compile_requirements_file_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--all-extras"),
-            @r###"
+            @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file.
-    "###
+    "
     );
 
     Ok(())
@@ -1264,7 +1263,7 @@ optional-dependencies.foo = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("invalid name!"), @r###"
+            .arg("invalid name!"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1273,7 +1272,7 @@ optional-dependencies.foo = [
     error: invalid value 'invalid name!' for '--extra <EXTRA>': Extra names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     Ok(())
@@ -1289,7 +1288,7 @@ fn compile_python_312() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1310,14 +1309,14 @@ fn compile_python_312() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // This should work with the short flag
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("-p")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1338,14 +1337,14 @@ fn compile_python_312() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // And `--python`
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1366,13 +1365,13 @@ fn compile_python_312() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // And `UV_PYTHON`
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env(EnvVars::UV_PYTHON, "3.12"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1393,7 +1392,7 @@ fn compile_python_312() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1410,7 +1409,7 @@ fn compile_python_312_annotation_line() -> Result<()> {
             .arg("--annotation-style=line")
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1425,7 +1424,7 @@ fn compile_python_312_annotation_line() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1441,7 +1440,7 @@ fn compile_fallback_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1463,14 +1462,14 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // This should work for the short flag too
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-p")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1492,13 +1491,13 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // And for `UV_PYTHON`
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env(EnvVars::UV_PYTHON, "3.12"), @r###"
+            .env(EnvVars::UV_PYTHON, "3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1520,14 +1519,14 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // And for `--python`
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--python")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1549,35 +1548,39 @@ fn compile_fallback_interpreter() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // We also allow requesting alternative implementations, but we should fail if we can't find it
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("-p")
-        .arg("pypy"), @r###"
+        .arg("pypy"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for PyPy, but Python downloads are set to 'never'
+    "
     );
 
     // Similarly, we fail if we receive a range request that cannot be satisfied
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-p")
-            .arg(">=3.12"), @r###"
+            .arg(">=3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for Python >=3.12, but Python downloads are set to 'never'
+    "
     );
 
     Ok(())
@@ -1595,7 +1598,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .arg("-p")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1614,7 +1617,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("-p")
         .arg("3.12")
-        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1635,7 +1638,7 @@ fn compile_python_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `UV_PYTHON` should  be usable with `--python`
@@ -1643,7 +1646,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python")
         .arg("3.12")
-        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1664,7 +1667,7 @@ fn compile_python_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `UV_PYTHON` should  be usable with `--python-version`
@@ -1672,7 +1675,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-version")
         .arg("3.12")
-        .env(EnvVars::UV_PYTHON, "3.11"), @r###"
+        .env(EnvVars::UV_PYTHON, "3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1693,7 +1696,7 @@ fn compile_python_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1713,7 +1716,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.11")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1734,7 +1737,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -1743,7 +1746,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("cpython@3.11")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1764,7 +1767,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // If we can't find the interpreter, we fail
@@ -1774,14 +1777,16 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("pypy@3.11")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for PyPy 3.11 in [PYTHON SOURCES]
-    "###
+
+    hint: A managed Python download is available for PyPy 3.11, but Python downloads are set to 'never'
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -1790,13 +1795,15 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("3.12")
         .arg("-p")
         .arg("3.13")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: No interpreter found for Python 3.13 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python 3.13, but Python downloads are set to 'never'
     "
     );
 
@@ -1806,7 +1813,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("--python-version")
         .arg("3.12")
         .env(EnvVars::UV_PYTHON, "3.11")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1827,7 +1834,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `UV_PYTHON` is ignored if `--python-version` is set
@@ -1836,7 +1843,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
         .arg("--python-version")
         .arg("3.12")
         .env(EnvVars::UV_PYTHON, "pypy")
-        .env_remove(EnvVars::VIRTUAL_ENV), @r###"
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1857,7 +1864,7 @@ fn compile_python_build_version_different_than_target() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1892,7 +1899,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
             .arg("--python-version")
             .arg("3.12")
             // In tests, we ignore `PATH` during Python discovery so we need to add the context `bin`
-            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @r###"
+            .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1914,7 +1921,7 @@ fn compile_fallback_interpreter_broken_in_path() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.12 is not available; 3.10.[X] will be used to build dependencies instead.
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1931,7 +1938,7 @@ fn compile_python_312_no_deps() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-deps")
             .arg("--python-version")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1942,7 +1949,7 @@ fn compile_python_312_no_deps() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -1970,7 +1977,7 @@ fn compile_python_37() -> Result<()> {
     uv_snapshot!(filters, context.pip_compile()
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.7"), @r###"
+            .arg("3.7"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1981,7 +1988,7 @@ fn compile_python_37() -> Result<()> {
           And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
           hint: The `--python-version` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., black==23.10.1 only supports >=3.8). Consider using a higher `--python-version` value.
-    "###);
+    ");
 
     Ok(())
 }
@@ -1998,7 +2005,7 @@ fn compile_sdist_resolution_lowest() -> Result<()> {
             .arg("requirements.in")
             .arg("--resolution=lowest-direct")
             .arg("--python-version")
-            .arg("3.12"), @r###"
+            .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2013,7 +2020,7 @@ fn compile_sdist_resolution_lowest() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2029,7 +2036,7 @@ fn compile_python_invalid_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.7.x"), @r###"
+            .arg("3.7.x"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2038,7 +2045,7 @@ fn compile_python_invalid_version() -> Result<()> {
     error: invalid value '3.7.x' for '--python-version <PYTHON_VERSION>': Python version `3.7.x` could not be parsed: after parsing `3.7`, found `.x`, which is not part of a valid version
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     Ok(())
@@ -2054,7 +2061,7 @@ fn compile_python_dev_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--python-version")
-            .arg("3.7-dev"), @r###"
+            .arg("3.7-dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2063,7 +2070,7 @@ fn compile_python_dev_version() -> Result<()> {
     error: invalid value '3.7-dev' for '--python-version <PYTHON_VERSION>': Python version `3.7-dev` is a development release
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     Ok(())
@@ -2083,7 +2090,7 @@ fn omit_non_matching_annotation() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-c")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2098,7 +2105,7 @@ fn omit_non_matching_annotation() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2116,7 +2123,7 @@ fn compile_numpy_py38() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-build"), @r###"
+            .arg("--no-build"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2127,7 +2134,7 @@ fn compile_numpy_py38() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2141,7 +2148,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2166,7 +2173,7 @@ fn compile_wheel_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2182,7 +2189,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
     requirements_in.write_str("flask @ https://files.pythonhosted.org/packages/d8/09/c1a7354d3925a3c6c8cfdebf4245bae67d633ffda1ba415add06ffc839c5/flask-3.0.0.tar.gz")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2207,7 +2214,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2230,7 +2237,7 @@ fn compile_git_https_dependency() -> Result<()> {
         .collect();
 
     uv_snapshot!(filters, context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2241,7 +2248,7 @@ fn compile_git_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2257,7 +2264,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2268,7 +2275,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2285,7 +2292,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2296,7 +2303,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2315,7 +2322,7 @@ fn compile_git_date_tag_https_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2326,7 +2333,7 @@ fn compile_git_date_tag_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2343,7 +2350,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2354,7 +2361,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2371,7 +2378,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2382,7 +2389,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2398,7 +2405,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
         .write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@refs/pull/4/head")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2409,7 +2416,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2424,7 +2431,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
     requirements_in.write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2435,7 +2442,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2451,7 +2458,7 @@ fn compile_git_concurrent_access() -> Result<()> {
         .write_str("example-pkg-a @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\nexample-pkg-b @ git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2464,7 +2471,7 @@ fn compile_git_concurrent_access() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2480,7 +2487,7 @@ fn compile_git_unnamed_concurrent_access() -> Result<()> {
         .write_str("git+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_a\ngit+https://github.com/pypa/sample-namespace-packages.git@df7530eeb8fa0cb7dbb8ecb28363e8e36bfa2f45#subdirectory=pkg_resources/pkg_b")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2493,7 +2500,7 @@ fn compile_git_unnamed_concurrent_access() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2509,7 +2516,7 @@ fn compile_git_mismatched_name() -> Result<()> {
         .write_str("flask @ git+https://github.com/pallets/flask.git@2.0.0\ndask @ git+https://github.com/pallets/flask.git@3.0.0")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2517,7 +2524,7 @@ fn compile_git_mismatched_name() -> Result<()> {
     ----- stderr -----
       × Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
       ╰─▶ Package metadata name `flask` does not match given name `dask`
-    "###
+    "
     );
 
     Ok(())
@@ -2534,7 +2541,7 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
     requirements_in.write_str("uv-public-pypackage @ git+https://github.com/astral-test/uv-workspace-pypackage#subdirectory=uv-public-pypackage")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2545,7 +2552,7 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2560,7 +2567,7 @@ fn mixed_url_dependency() -> Result<()> {
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2587,7 +2594,7 @@ fn mixed_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2602,7 +2609,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     requirements_in.write_str("werkzeug==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2610,7 +2617,7 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -2625,7 +2632,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
     requirements_in.write_str("werkzeug==2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2636,7 +2643,7 @@ fn compatible_direct_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2650,7 +2657,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     requirements_in.write_str("werkzeug @ https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2659,7 +2666,7 @@ fn conflicting_repeated_url_dependency_version_mismatch() -> Result<()> {
     error: Requirements contain conflicting URLs for package `werkzeug`:
     - https://files.pythonhosted.org/packages/bd/24/11c3ea5a7e866bf2d97f0501d0b4b1c9bbeade102bb4b588f0d2919a5212/Werkzeug-2.0.1-py3-none-any.whl
     - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
-    "###
+    "
     );
 
     Ok(())
@@ -2677,7 +2684,7 @@ fn conflicting_repeated_url_dependency_markers() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2688,7 +2695,7 @@ fn conflicting_repeated_url_dependency_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2705,7 +2712,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     requirements_in.write_str("werkzeug @ git+https://github.com/pallets/werkzeug.git@2.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2714,7 +2721,7 @@ fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     error: Requirements contain conflicting URLs for package `werkzeug`:
     - git+https://github.com/pallets/werkzeug.git@2.0.0
     - https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl
-    "###
+    "
     );
 
     Ok(())
@@ -2728,7 +2735,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     requirements_in.write_str("flask==3.0.0\nwerkzeug @ https://files.pythonhosted.org/packages/ff/1d/960bb4017c68674a1cb099534840f18d3def3ce44aed12b5ed8b78e0153e/Werkzeug-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2737,7 +2744,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
           And because you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -2755,7 +2762,7 @@ fn compatible_repeated_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2766,7 +2773,7 @@ fn compatible_repeated_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2785,7 +2792,7 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2794,7 +2801,7 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
     error: Requirements contain conflicting URLs for package `uv-public-pypackage`:
     - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1
     - git+https://github.com/astral-test/uv-public-pypackage.git@0.0.2
-    "###
+    "
     );
 
     Ok(())
@@ -2814,7 +2821,7 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2825,7 +2832,7 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2845,7 +2852,7 @@ fn compatible_broader_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2856,7 +2863,7 @@ fn compatible_broader_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2865,6 +2872,7 @@ fn compatible_broader_url_dependency() -> Result<()> {
 /// Request `uv-public-pypackage` via two different URLs: `0.0.2`, and a precise SHA, followed by
 /// `0.0.2` again. All three are compatible, since they resolve to the same canonical version.
 #[test]
+#[cfg(feature = "git")]
 fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2875,7 +2883,7 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2886,7 +2894,7 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2909,7 +2917,7 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
     "})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2934,7 +2942,7 @@ fn allowed_transitive_git_dependency() -> Result<()> {
     requirements_in.write_str("hatchling_editable @ https://github.com/astral-sh/uv/files/14762645/hatchling_editable.zip")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2947,7 +2955,7 @@ fn allowed_transitive_git_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -2969,7 +2977,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--constraint")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2984,7 +2992,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3007,7 +3015,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--constraint")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3022,7 +3030,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3038,10 +3046,10 @@ fn allowed_transitive_url_path_dependency() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("hatchling_editable @ ${HATCH_PATH}")?;
 
-    let hatchling_path = current_dir()?.join("../../scripts/packages/hatchling_editable");
+    let hatchling_path = current_dir()?.join("../../test/packages/hatchling_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env(EnvVars::HATCH_PATH, hatchling_path.as_os_str()), @r###"
+        .env(EnvVars::HATCH_PATH, hatchling_path.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3054,7 +3062,7 @@ fn allowed_transitive_url_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3080,7 +3088,7 @@ fn requirement_constraint_override_url() -> Result<()> {
         .arg("--constraint")
         .arg("constraints.txt")
         .arg("--override")
-        .arg("overrides.txt"), @r###"
+        .arg("overrides.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3088,7 +3096,7 @@ fn requirement_constraint_override_url() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -3110,7 +3118,7 @@ fn requirement_override_prerelease() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--override")
-        .arg("overrides.txt"), @r###"
+        .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3133,7 +3141,7 @@ fn requirement_override_prerelease() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3163,7 +3171,7 @@ optional-dependencies.bar = [
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
-            .arg("--all-extras"), @r###"
+            .arg("--all-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3190,7 +3198,7 @@ optional-dependencies.bar = [
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3220,7 +3228,7 @@ optional-dependencies.bar = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("--annotation-style=line")
             .arg("pyproject.toml")
-            .arg("--all-extras"), @r###"
+            .arg("--all-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3236,7 +3244,7 @@ optional-dependencies.bar = [
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3268,7 +3276,7 @@ optional-dependencies.bar = [
             .arg("--all-extras")
             .arg("--extra")
             .arg("foo"),
-            @r"
+            @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3302,7 +3310,7 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3310,7 +3318,7 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -3334,7 +3342,7 @@ dependencies = ["anyio==300.1.4"]
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3342,7 +3350,7 @@ dependencies = ["anyio==300.1.4"]
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -3362,7 +3370,7 @@ fn compile_exclude_newer() -> Result<()> {
         .arg("--exclude-newer")
         // 4.64.0: 2022-04-04T01:48:46.194635Z1
         // 4.64.1: 2022-09-03T11:10:27.148080Z
-        .arg("2022-04-04T12:00:00Z"), @r"
+        .arg("2022-04-04T12:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3383,7 +3391,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04"), @r"
+        .arg("2022-04-04"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3403,7 +3411,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04+02:00"), @r###"
+        .arg("2022-04-04+02:00"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3412,7 +3420,7 @@ fn compile_exclude_newer() -> Result<()> {
     error: invalid value '2022-04-04+02:00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04+02:00` could not be parsed as a valid date: parsed value '2022-04-04', but unparsed input "+02:00" remains (expected no unparsed input)
 
     For more information, try '--help'.
-    "###
+    "#
     );
 
     // Check the error message for the case of
@@ -3423,16 +3431,16 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r###"
+        .arg("2022-04-04T26:00:00+00"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "###
+    "#
     );
 
     Ok(())
@@ -3453,7 +3461,7 @@ fn compile_exclude_newer_package() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T12:00:00Z"), @r"
+        .arg("2022-04-04T12:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3485,7 +3493,7 @@ fn compile_exclude_newer_package() -> Result<()> {
         .arg("--exclude-newer")
         .arg("2022-04-04T12:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("tqdm=2022-09-04T00:00:00Z"), @r"
+        .arg("tqdm=2022-09-04T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3519,7 +3527,7 @@ fn compile_exclude_newer_package() -> Result<()> {
         .arg("--exclude-newer-package")
         .arg("tqdm=2022-09-04T00:00:00Z")
         .arg("--exclude-newer-package")
-        .arg("requests=2022-06-01T00:00:00Z"), @r"
+        .arg("requests=2022-06-01T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3559,13 +3567,13 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer-package")
-        .arg("tqdm"), @r"
+        .arg("tqdm"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE`
+    error: invalid value 'tqdm' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `tqdm`: expected format `PACKAGE=DATE` or `PACKAGE=false`
 
     For more information, try '--help'.
     "
@@ -3577,16 +3585,16 @@ fn compile_exclude_newer_package_errors() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer-package")
-        .arg("tqdm=invalid-date"), @r#"
+        .arg("tqdm=invalid-date"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` timestamp `invalid-date`: `invalid-date` could not be parsed as a valid date: failed to parse year in date "invalid-date": failed to parse "inva" as year (a four digit integer): invalid digit, expected 0-9 but got i
+    error: invalid value 'tqdm=invalid-date' for '--exclude-newer-package <EXCLUDE_NEWER_PACKAGE>': Invalid `exclude-newer-package` value `invalid-date`: `invalid-date` could not be parsed as a valid exclude-newer value (expected a date like `2024-01-01`, a timestamp like `2024-01-01T00:00:00Z`, or a duration like `3 days` or `P3D`)
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
@@ -3611,7 +3619,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3636,14 +3644,14 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     // Run the same operation, but this time with a relative path, omitting the `//`.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask @ file:flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3668,7 +3676,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // Run the same operation, but this time with a relative path, including the `//`.
@@ -3676,7 +3684,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str("flask @ file://flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3701,7 +3709,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // Run the same operation, but this time with a relative path, exclusive of any scheme.
@@ -3709,7 +3717,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str("flask @ ./flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3734,7 +3742,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // Run the same operation, but this time with an absolute path (rather than a URL).
@@ -3742,7 +3750,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ {}", flask_wheel.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3767,7 +3775,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // Run the same operation, but this time with an absolute path (rather than a URL), including
@@ -3776,7 +3784,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     requirements_in.write_str(&format!("flask @ file://{}", flask_wheel.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3801,7 +3809,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     // Run the same operation, but this time with an absolute path (rather than a URL), including
@@ -3813,7 +3821,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3838,7 +3846,7 @@ fn compile_wheel_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3862,7 +3870,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3887,7 +3895,7 @@ fn compile_source_distribution_path_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -3906,14 +3914,14 @@ fn compile_wheel_path_dependency_missing() -> Result<()> {
     ))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Distribution not found at: file://[TEMP_DIR]/flask-3.0.0-py3-none-any.whl
-    "###);
+    ");
 
     Ok(())
 }
@@ -3926,7 +3934,7 @@ fn compile_yanked_version_direct() -> Result<()> {
     requirements_in.write_str("attrs==21.1.0")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3938,7 +3946,7 @@ fn compile_yanked_version_direct() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: `attrs==21.1.0` is yanked (reason: "Installable but not importable on Python 3.4.")
-    "###
+    "#
     );
 
     Ok(())
@@ -3952,7 +3960,7 @@ fn compile_yanked_version_indirect() -> Result<()> {
     requirements_in.write_str("attrs>20.3.0,<21.2.0")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3960,12 +3968,12 @@ fn compile_yanked_version_indirect() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of attrs are available:
-              attrs<20.3.0
+              attrs<=20.3.0
               attrs==21.1.0
-              attrs>21.2.0
+              attrs>=21.2.0
           and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
           And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -3985,7 +3993,7 @@ fn override_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4012,7 +4020,7 @@ fn override_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4041,7 +4049,7 @@ fn override_dependency_from_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .current_dir(&context.temp_dir)
-            , @r###"
+            , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4068,7 +4076,7 @@ fn override_dependency_from_pyproject() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4095,7 +4103,7 @@ fn constraint_dependency_from_pyproject() -> Result<()> {
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("pyproject.toml"), @r###"
+            .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4112,7 +4120,7 @@ fn constraint_dependency_from_pyproject() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4149,7 +4157,7 @@ fn override_dependency_from_specific_uv_toml() -> Result<()> {
         .arg("--config-file")
         .arg("../uv/uv.toml")
         .current_dir(context.temp_dir.child("project"))
-            , @r###"
+            , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4176,7 +4184,7 @@ fn override_dependency_from_specific_uv_toml() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4198,7 +4206,7 @@ fn override_multi_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4223,7 +4231,7 @@ fn override_multi_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4243,7 +4251,7 @@ fn dont_add_override_for_non_activated_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--override")
-        .arg("overrides.txt"), @r###"
+        .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4254,7 +4262,7 @@ fn dont_add_override_for_non_activated_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4283,7 +4291,7 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .current_dir(&context.temp_dir)
-            , @r###"
+            , @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4306,7 +4314,7 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
     no such comparison operator "=", must be one of ~= == != <= >= < > ===
     werkzeug=2.3.0
             ^^^^^^
-    "###
+    "#
     );
 
     Ok(())
@@ -4326,7 +4334,7 @@ fn override_dependency_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4351,7 +4359,7 @@ fn override_dependency_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4371,7 +4379,7 @@ fn override_dependency_unnamed_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4396,7 +4404,7 @@ fn override_dependency_unnamed_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4410,7 +4418,7 @@ fn missing_registry_extra() -> Result<()> {
     requirements_in.write_str("black[tensorboard]==23.10.1")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4432,7 +4440,7 @@ fn missing_registry_extra() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     warning: The package `black==23.10.1` does not have an extra named `tensorboard`
-    "###
+    "
     );
 
     Ok(())
@@ -4446,7 +4454,7 @@ fn missing_url_extra() -> Result<()> {
     requirements_in.write_str("flask[tensorboard] @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4472,7 +4480,7 @@ fn missing_url_extra() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     warning: The package `flask @ https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl` does not have an extra named `tensorboard`
-    "###
+    "
     );
 
     Ok(())
@@ -4487,7 +4495,7 @@ fn preserve_url() -> Result<()> {
     requirements_in.write_str("flask @ https://files.PYTHONHOSTED.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4512,7 +4520,7 @@ fn preserve_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4534,7 +4542,7 @@ fn preserve_project_root() -> Result<()> {
     requirements_in.write_str("flask @ file://${PROJECT_ROOT}/flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4559,7 +4567,7 @@ fn preserve_project_root() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4575,7 +4583,7 @@ fn respect_http_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
+            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4600,7 +4608,7 @@ fn respect_http_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4616,7 +4624,7 @@ fn respect_unnamed_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @r###"
+            .env(EnvVars::URL, "https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4641,7 +4649,7 @@ fn respect_unnamed_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4657,7 +4665,7 @@ fn error_missing_unnamed_env_var() -> Result<()> {
     requirements_in.write_str("${URL}")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4667,7 +4675,7 @@ fn error_missing_unnamed_env_var() -> Result<()> {
       Caused by: Expected package name starting with an alphanumeric character, found `$`
     ${URL}
     ^
-    "###
+    "
     );
 
     Ok(())
@@ -4689,7 +4697,7 @@ fn respect_file_env_var() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env(EnvVars::FILE_PATH, context.temp_dir.join("flask-3.0.0-py3-none-any.whl")), @r###"
+            .env(EnvVars::FILE_PATH, context.temp_dir.join("flask-3.0.0-py3-none-any.whl")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4714,7 +4722,7 @@ fn respect_file_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4725,23 +4733,23 @@ fn compile_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e ../../scripts/packages/poetry_editable
-        -e file://../../scripts/packages/black_editable[dev]
+        -e ../../test/packages/poetry_editable
+        -e file://../../test/packages/black_editable[dev]
         boltons # normal dependency for comparison
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/poetry_editable
+    -e ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
-    -e file://../../scripts/packages/black_editable
+    -e file://../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     aiohttp==3.9.3
         # via black
@@ -4774,7 +4782,7 @@ fn compile_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 13 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4785,21 +4793,21 @@ fn deduplicate_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e file://../../scripts/packages/black_editable
-        -e ${PROJECT_ROOT}/../../scripts/packages/black_editable
-        -e file://../../scripts/packages/black_editable[dev]
+        -e file://../../test/packages/black_editable
+        -e ${PROJECT_ROOT}/../../test/packages/black_editable
+        -e file://../../test/packages/black_editable[dev]
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e file://../../scripts/packages/black_editable
+    -e file://../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     aiohttp==3.9.3
         # via black
@@ -4824,7 +4832,7 @@ fn deduplicate_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4834,24 +4842,24 @@ fn strip_fragment_unnamed() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/black_editable#egg=black
+        ../../test/packages/black_editable#egg=black
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    ../../scripts/packages/black_editable#egg=black
+    ../../test/packages/black_editable#egg=black
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4861,24 +4869,24 @@ fn strip_fragment_named() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        black @ ../../scripts/packages/black_editable#egg=black
+        black @ ../../test/packages/black_editable#egg=black
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    ../../scripts/packages/black_editable#egg=black
+    ../../test/packages/black_editable#egg=black
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4887,12 +4895,12 @@ fn strip_fragment_named() -> Result<()> {
 fn recursive_extras_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("black[dev] @ ../../scripts/packages/black_editable")?;
+    requirements_in.write_str("black[dev] @ ../../test/packages/black_editable")?;
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir().unwrap()), @r###"
+        .current_dir(current_dir().unwrap()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4904,7 +4912,7 @@ fn recursive_extras_direct_url() -> Result<()> {
         # via aiohttp
     attrs==23.2.0
         # via aiohttp
-    ../../scripts/packages/black_editable
+    ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     frozenlist==1.4.1
         # via
@@ -4923,7 +4931,7 @@ fn recursive_extras_direct_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4934,24 +4942,24 @@ fn recursive_extras_direct_url() -> Result<()> {
 fn compile_editable_url_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/hatchling_editable")?;
+    requirements_in.write_str("-e ../../test/packages/hatchling_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/hatchling_editable
+    -e ../../test/packages/hatchling_editable
         # via -r [TEMP_DIR]/requirements.in
     iniconfig @ git+https://github.com/pytest-dev/iniconfig@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4
         # via hatchling-editable
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4967,7 +4975,7 @@ fn compile_html() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4980,7 +4988,7 @@ fn compile_html() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -4996,7 +5004,7 @@ fn trailing_slash() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple"), @r###"
+        .arg("https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5009,13 +5017,13 @@ fn trailing_slash() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://test.pypi.org/simple/"), @r###"
+        .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5028,7 +5036,7 @@ fn trailing_slash() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5042,7 +5050,7 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
     requirements_in.write_str("flake8 @ https://files.pythonhosted.org/packages/66/53/3ad4a3b74d609b3b9008a10075c40e7c8909eae60af53623c3888f7a529a/flake8-6.0.0.tar.gz")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5059,7 +5067,7 @@ fn compile_legacy_sdist_pep_517() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5074,7 +5082,7 @@ fn generate_hashes_registry() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes"), @r###"
+        .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5095,7 +5103,7 @@ fn generate_hashes_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5110,7 +5118,7 @@ fn generate_hashes_source_distribution_url() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes"), @r###"
+        .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5130,7 +5138,7 @@ fn generate_hashes_source_distribution_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5145,7 +5153,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes"), @r###"
+        .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5165,7 +5173,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5181,7 +5189,7 @@ fn generate_hashes_git() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes"), @r###"
+        .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5200,7 +5208,7 @@ fn generate_hashes_git() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5215,7 +5223,7 @@ fn generate_hashes_unnamed_url() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--generate-hashes"), @r###"
+        .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5235,7 +5243,7 @@ fn generate_hashes_unnamed_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5249,14 +5257,14 @@ fn generate_hashes_local_directory() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/poetry_editable
+        ../../test/packages/poetry_editable
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
         .arg("--generate-hashes")
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5270,7 +5278,7 @@ fn generate_hashes_local_directory() -> Result<()> {
         --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
         --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
         # via anyio
-    ../../scripts/packages/poetry_editable
+    ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     sniffio==1.3.1 \
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
@@ -5279,7 +5287,7 @@ fn generate_hashes_local_directory() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5292,20 +5300,20 @@ fn generate_hashes_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        -e ../../scripts/packages/poetry_editable
+        -e ../../test/packages/poetry_editable
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
         .arg("--generate-hashes")
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --generate-hashes
-    -e ../../scripts/packages/poetry_editable
+    -e ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     anyio==4.3.0 \
         --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
@@ -5322,7 +5330,7 @@ fn generate_hashes_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5338,7 +5346,7 @@ fn generate_hashes_find_links_directory() -> Result<()> {
         .arg("requirements.in")
         .arg("--generate-hashes")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts").join("links")), @r###"
+        .arg(context.workspace_root.join("test").join("links")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5350,7 +5358,7 @@ fn generate_hashes_find_links_directory() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5368,7 +5376,7 @@ fn generate_hashes_find_links_url() -> Result<()> {
         .arg("--generate-hashes")
         .arg("--no-index")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5380,7 +5388,7 @@ fn generate_hashes_find_links_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5400,7 +5408,7 @@ fn find_links_directory() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5417,7 +5425,7 @@ fn find_links_directory() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5433,7 +5441,7 @@ fn find_links_url() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+            .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5444,7 +5452,7 @@ fn find_links_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5460,7 +5468,7 @@ fn find_links_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--no-index")
-            .env(EnvVars::URL, "https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+            .env(EnvVars::URL, "https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5471,7 +5479,7 @@ fn find_links_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5489,7 +5497,7 @@ fn find_links_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--no-index")
-            .arg("--emit-find-links"), @r###"
+            .arg("--emit-find-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5502,7 +5510,7 @@ fn find_links_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5518,7 +5526,7 @@ fn find_links_uv_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--no-index")
-            .env(EnvVars::UV_FIND_LINKS, "https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+            .env(EnvVars::UV_FIND_LINKS, "https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5529,7 +5537,7 @@ fn find_links_uv_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5550,7 +5558,7 @@ fn avoid_irrelevant_extras() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5569,7 +5577,7 @@ fn avoid_irrelevant_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5603,7 +5611,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--find-links")
-        .arg(context.workspace_root.join("scripts").join("links")), @r###"
+        .arg(context.workspace_root.join("test").join("links")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5618,7 +5626,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5637,7 +5645,7 @@ fn requires_python_prefetch() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5648,7 +5656,7 @@ fn requires_python_prefetch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -5679,7 +5687,7 @@ fn upgrade_none() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--output-file")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5700,7 +5708,7 @@ fn upgrade_none() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5735,7 +5743,7 @@ fn upgrade_all() -> Result<()> {
         .arg("requirements.in")
         .arg("--output-file")
         .arg("requirements.txt")
-        .arg("--upgrade"), @r###"
+        .arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5756,7 +5764,7 @@ fn upgrade_all() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5792,7 +5800,7 @@ fn upgrade_package() -> Result<()> {
             .arg("--output-file")
             .arg("requirements.txt")
             .arg("--upgrade-package")
-            .arg("click"), @r###"
+            .arg("click"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5813,7 +5821,7 @@ fn upgrade_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5838,7 +5846,7 @@ fn upgrade_constraint() -> Result<()> {
             .arg("--output-file")
             .arg("requirements.txt")
             .arg("--upgrade-package")
-            .arg("iniconfig<2"), @r###"
+            .arg("iniconfig<2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5849,7 +5857,7 @@ fn upgrade_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -5857,7 +5865,7 @@ fn upgrade_constraint() -> Result<()> {
             .arg("--output-file")
             .arg("requirements.txt")
             .arg("-P")
-            .arg("iniconfig"), @r###"
+            .arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5868,7 +5876,7 @@ fn upgrade_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5891,14 +5899,14 @@ fn missing_path_requirement() -> Result<()> {
         .collect();
 
     uv_snapshot!(filters, context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Distribution not found at: file://tmp/anyio-3.7.0.tar.gz
-    "###);
+    ");
 
     Ok(())
 }
@@ -5911,7 +5919,7 @@ fn missing_editable_file() -> Result<()> {
     requirements_in.write_str("-e foo/anyio-3.7.0.tar.gz")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -5919,7 +5927,7 @@ fn missing_editable_file() -> Result<()> {
     ----- stderr -----
     error: Unsupported editable requirement in `requirements.in`
       Caused by: Editable must refer to a local directory, not an archive: `file://[TEMP_DIR]/foo/anyio-3.7.0.tar.gz`
-    "###);
+    ");
 
     Ok(())
 }
@@ -5932,14 +5940,14 @@ fn missing_editable_directory() -> Result<()> {
     requirements_in.write_str("-e foo/bar")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Distribution not found at: file://[TEMP_DIR]/foo/bar
-    "###);
+    ");
 
     Ok(())
 }
@@ -5953,7 +5961,7 @@ fn unnamed_requirement_with_package_name() -> Result<()> {
     requirements_in.write_str("https://files.pythonhosted.org/packages/36/42/015c23096649b908c809c69388a805a571a3bea44362fe87e33fc3afa01f/flask-3.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5978,7 +5986,7 @@ fn unnamed_requirement_with_package_name() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -5993,7 +6001,7 @@ fn no_annotate() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-annotate"), @r###"
+            .arg("--no-annotate"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6008,7 +6016,7 @@ fn no_annotate() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6023,7 +6031,7 @@ fn no_header() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-header"), @r###"
+            .arg("--no-header"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6042,7 +6050,7 @@ fn no_header() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6058,7 +6066,7 @@ fn custom_compile_command() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--custom-compile-command")
-            .arg("./custom-uv-compile.sh"), @r###"
+            .arg("./custom-uv-compile.sh"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6079,13 +6087,13 @@ fn custom_compile_command() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // with env var
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .env(EnvVars::UV_CUSTOM_COMPILE_COMMAND, "./custom-uv-compile.sh"), @r###"
+            .env(EnvVars::UV_CUSTOM_COMPILE_COMMAND, "./custom-uv-compile.sh"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6106,7 +6114,7 @@ fn custom_compile_command() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6121,7 +6129,7 @@ fn allow_unsafe() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--allow-unsafe"), @r###"
+            .arg("--allow-unsafe"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6135,7 +6143,7 @@ fn allow_unsafe() -> Result<()> {
     ----- stderr -----
     warning: pip-compile's `--allow-unsafe` has no effect (uv can safely pin `pip` and other packages)
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6150,14 +6158,14 @@ fn resolver_legacy() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--resolver=legacy"), @r###"
+            .arg("--resolver=legacy"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: pip-compile's `--resolver=legacy` is unsupported (uv always backtracks)
-    "###
+    "
     );
 
     Ok(())
@@ -6173,7 +6181,7 @@ fn hide_index_urls() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--default-index")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6184,12 +6192,12 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--default-index=https://test.pypi.org/simple/"), @r###"
+            .arg("--default-index=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6200,13 +6208,13 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--index")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6217,12 +6225,12 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--index=https://test.pypi.org/simple/"), @r###"
+            .arg("--index=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6233,13 +6241,13 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("-i")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6250,12 +6258,12 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("-i=https://test.pypi.org/simple/"), @r###"
+            .arg("-i=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6266,13 +6274,13 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6283,12 +6291,12 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--index-url=https://test.pypi.org/simple/"), @r###"
+            .arg("--index-url=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6299,13 +6307,13 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6316,12 +6324,12 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--extra-index-url=https://test.pypi.org/simple/"), @r###"
+            .arg("--extra-index-url=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6332,7 +6340,7 @@ fn hide_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6350,7 +6358,7 @@ fn emit_index_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--default-index")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6363,13 +6371,13 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .arg("--default-index=https://test.pypi.org/simple/"), @r###"
+            .arg("--default-index=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6382,14 +6390,14 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--index")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6403,13 +6411,13 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .arg("--index=https://test.pypi.org/simple/"), @r###"
+            .arg("--index=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6423,14 +6431,14 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("-i")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6443,13 +6451,13 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .arg("-i=https://test.pypi.org/simple/"), @r###"
+            .arg("-i=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6462,14 +6470,14 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6482,13 +6490,13 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .arg("--index-url=https://test.pypi.org/simple/"), @r###"
+            .arg("--index-url=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6501,14 +6509,14 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
             .arg("--extra-index-url")
-            .arg("https://test.pypi.org/simple/"), @r###"
+            .arg("https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6522,13 +6530,13 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .arg("--extra-index-url=https://test.pypi.org/simple/"), @r###"
+            .arg("--extra-index-url=https://test.pypi.org/simple/"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6542,7 +6550,7 @@ fn emit_index_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6559,7 +6567,7 @@ fn emit_find_links() -> Result<()> {
             .arg("requirements.in")
             .arg("--emit-find-links")
             .arg("--find-links")
-            .arg("./"), @r###"
+            .arg("./"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6582,7 +6590,7 @@ fn emit_find_links() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6598,7 +6606,7 @@ fn emit_find_links_relative() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--emit-find-links"), @r###"
+            .arg("--emit-find-links"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6611,7 +6619,7 @@ fn emit_find_links_relative() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6630,7 +6638,7 @@ fn emit_build_options() -> Result<()> {
             .arg("--only-binary")
             .arg("black")
             .arg("--no-binary")
-            .arg(":all:"), @r###"
+            .arg(":all:"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6654,7 +6662,7 @@ fn emit_build_options() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6668,7 +6676,7 @@ fn no_index_requirements_txt() -> Result<()> {
     requirements_in.write_str("--no-index\ntqdm")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6678,7 +6686,7 @@ fn no_index_requirements_txt() -> Result<()> {
       ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###
+    "
     );
 
     Ok(())
@@ -6696,7 +6704,7 @@ fn index_url_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--index-url")
-            .arg("https://pypi.org/simple"), @r###"
+            .arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6707,7 +6715,7 @@ fn index_url_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6726,14 +6734,14 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.in"), @r###"
+            .arg("constraints.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Multiple index URLs specified: `https://google.com/` vs. `https://wikipedia.org/`
-    "###
+    "
     );
 
     Ok(())
@@ -6752,7 +6760,7 @@ fn matching_index_urls_requirements_txt() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.in"), @r###"
+            .arg("constraints.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6761,7 +6769,7 @@ fn matching_index_urls_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6777,7 +6785,7 @@ fn offline_registry() -> Result<()> {
     // Resolve with `--offline` with an empty cache.
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6787,12 +6795,12 @@ fn offline_registry() -> Result<()> {
       ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    "
     );
 
     // Populate the cache.
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6813,13 +6821,13 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // Resolve with `--offline` with a populated cache.
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6840,7 +6848,7 @@ fn offline_registry() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6856,7 +6864,7 @@ fn offline_registry_backtrack() -> Result<()> {
 
     // Populate the cache.
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6867,7 +6875,7 @@ fn offline_registry_backtrack() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // Resolve with `--offline`, with a looser requirement. We should backtrack to `1.1.1`.
@@ -6876,7 +6884,7 @@ fn offline_registry_backtrack() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6887,7 +6895,7 @@ fn offline_registry_backtrack() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -6908,7 +6916,7 @@ fn offline_find_links() -> Result<()> {
             .arg("requirements.in")
             .arg("--find-links")
             .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6918,7 +6926,7 @@ fn offline_find_links() -> Result<()> {
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    "
     );
 
     // Resolve with `--offline`, `--find-links`, and `--no-index`.
@@ -6927,7 +6935,7 @@ fn offline_find_links() -> Result<()> {
             .arg("--find-links")
             .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html")
             .arg("--no-index")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6937,7 +6945,7 @@ fn offline_find_links() -> Result<()> {
       ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
           hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
-    "###
+    "
     );
 
     Ok(())
@@ -6953,7 +6961,7 @@ fn offline_direct_url() -> Result<()> {
     // Resolve with `--offline` with an empty cache.
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -6961,12 +6969,12 @@ fn offline_direct_url() -> Result<()> {
     ----- stderr -----
       × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-    "###
+    "
     );
 
     // Populate the cache.
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6977,13 +6985,13 @@ fn offline_direct_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     // Resolve with `--offline` with a populated cache.
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--offline"), @r###"
+            .arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -6994,7 +7002,7 @@ fn offline_direct_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7013,7 +7021,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7026,7 +7034,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
             Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
             12
             ^^
-    "###
+    "
     );
 
     Ok(())
@@ -7044,7 +7052,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7055,7 +7063,7 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
 
           hint: The structure of `validation` (v3.0.0) was invalid:
             Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
-    "###
+    "
     );
 
     Ok(())
@@ -7074,7 +7082,7 @@ fn invalid_metadata_backtrack() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-index")
             .arg("--find-links")
-            .arg(context.workspace_root.join("scripts").join("links")), @r###"
+            .arg(context.workspace_root.join("test").join("links")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7085,7 +7093,7 @@ fn invalid_metadata_backtrack() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7107,7 +7115,7 @@ fn compile_relative_subfile() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7122,7 +7130,7 @@ fn compile_relative_subfile() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7136,7 +7144,7 @@ fn compile_none_extra() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7147,7 +7155,7 @@ fn compile_none_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7168,7 +7176,7 @@ fn compile_types_pytz() -> Result<()> {
         .pip_compile()
         .arg("requirements.in")
         .arg("-o")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7179,7 +7187,7 @@ fn compile_types_pytz() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7193,13 +7201,13 @@ fn compile_unnamed_preference() -> Result<()> {
     requirements_in.write_str("black")?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("./scripts/packages/black_editable")?;
+    requirements_txt.write_str("./test/packages/black_editable")?;
 
     uv_snapshot!(context
         .pip_compile()
         .arg("requirements.in")
         .arg("-o")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7220,7 +7228,7 @@ fn compile_unnamed_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -7239,7 +7247,7 @@ fn compile_constraints_compatible_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7256,7 +7264,7 @@ fn compile_constraints_compatible_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7276,7 +7284,7 @@ fn compile_constraints_compatible_url_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7293,7 +7301,7 @@ fn compile_constraints_compatible_url_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7313,7 +7321,7 @@ fn compile_constraints_incompatible_url() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7321,7 +7329,7 @@ fn compile_constraints_incompatible_url() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -7337,7 +7345,7 @@ fn index_url_in_requirements() -> Result<()> {
         .write_str("--index-url https://astral-sh.github.io/pytorch-mirror/whl\nanyio<4")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7345,7 +7353,7 @@ fn index_url_in_requirements() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -7363,7 +7371,7 @@ fn index_url_from_command_line() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--index-url")
-            .arg("https://pypi.org/simple"), @r###"
+            .arg("https://pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7378,7 +7386,7 @@ fn index_url_from_command_line() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7393,7 +7401,7 @@ fn unsupported_scheme() -> Result<()> {
     requirements_in.write_str("anyio @ bzr+https://example.com/anyio")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -7403,7 +7411,7 @@ fn unsupported_scheme() -> Result<()> {
       Caused by: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
     anyio @ bzr+https://example.com/anyio
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###
+    "
     );
 
     Ok(())
@@ -7418,7 +7426,7 @@ fn no_deps_valid_extra() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-deps"), @r###"
+            .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7429,7 +7437,7 @@ fn no_deps_valid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7444,7 +7452,7 @@ fn no_deps_invalid_extra() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-deps"), @r###"
+            .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7455,7 +7463,7 @@ fn no_deps_invalid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7512,7 +7520,7 @@ dependencies = [
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-deps"), @r###"
+            .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7525,7 +7533,7 @@ dependencies = [
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7536,23 +7544,23 @@ dependencies = [
 fn editable_invalid_extra() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/black_editable[empty]")?;
+    requirements_in.write_str("-e ../../test/packages/black_editable[empty]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg(requirements_in.path())
-            .current_dir(current_dir()?), @r###"
+            .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
-    -e ../../scripts/packages/black_editable
+    -e ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: The package `black @ file://[WORKSPACE]/scripts/packages/black_editable` does not have an extra named `empty`
-    "###);
+    warning: The package `black @ file://[WORKSPACE]/test/packages/black_editable` does not have an extra named `empty`
+    ");
 
     Ok(())
 }
@@ -7566,7 +7574,7 @@ fn no_strip_extra() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7593,7 +7601,7 @@ fn no_strip_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7609,7 +7617,7 @@ fn no_strip_extras() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7693,7 +7701,7 @@ fn no_strip_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 30 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7710,7 +7718,7 @@ fn no_strip_markers() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-strip-markers")
             .arg("--python-platform")
-            .arg("linux"), @r###"
+            .arg("linux"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7725,7 +7733,7 @@ fn no_strip_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7746,7 +7754,7 @@ fn no_strip_markers_multiple_markers() -> Result<()> {
         .arg("requirements.in")
         .arg("--no-strip-markers")
         .arg("--python-platform")
-        .arg("windows"), @r###"
+        .arg("windows"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7773,7 +7781,7 @@ fn no_strip_markers_multiple_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7791,7 +7799,7 @@ fn no_strip_markers_transitive_marker() -> Result<()> {
             .arg("requirements.in")
             .arg("--no-strip-markers")
             .arg("--python-platform")
-            .arg("windows"), @r###"
+            .arg("windows"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7818,7 +7826,7 @@ fn no_strip_markers_transitive_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7836,7 +7844,7 @@ fn universal() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7863,7 +7871,7 @@ fn universal() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7881,7 +7889,7 @@ fn universal_conflicting() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7912,7 +7920,7 @@ fn universal_conflicting() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7930,7 +7938,7 @@ fn universal_cycles() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7970,7 +7978,7 @@ fn universal_cycles() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -7994,7 +8002,7 @@ fn universal_constraint() -> Result<()> {
             .arg("requirements.in")
             .arg("-c")
             .arg("constraints.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8011,7 +8019,7 @@ fn universal_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8035,7 +8043,7 @@ fn universal_constraint_marker() -> Result<()> {
             .arg("requirements.in")
             .arg("-c")
             .arg("constraints.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8052,7 +8060,7 @@ fn universal_constraint_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8083,7 +8091,7 @@ fn universal_multi_version() -> Result<()> {
             .arg("requirements.in")
             .arg("-c")
             .arg("constraints.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8096,7 +8104,7 @@ fn universal_multi_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8122,7 +8130,7 @@ fn universal_platform_fork() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("-c")
-        .arg("constraints.txt"), @r"
+        .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8177,7 +8185,7 @@ fn universal_disjoint_locals() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8214,7 +8222,7 @@ fn universal_disjoint_locals() -> Result<()> {
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8238,7 +8246,7 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
     // but the local versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8296,7 +8304,7 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
 
     ----- stderr -----
     Resolved 21 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8328,7 +8336,7 @@ fn universal_local_path_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8366,7 +8374,7 @@ fn universal_local_path_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8399,7 +8407,7 @@ fn universal_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8437,7 +8445,7 @@ fn universal_overlapping_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8473,7 +8481,7 @@ fn universal_disjoint_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8515,7 +8523,7 @@ fn universal_disjoint_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 13 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8552,7 +8560,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8633,7 +8641,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8712,7 +8720,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8760,7 +8768,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 17 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8797,7 +8805,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         .arg("requirements.in")
         .arg("--universal")
         .arg("--find-links")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @r"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/torch_stable.html"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8878,7 +8886,7 @@ fn existing_prerelease_preference() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("-o")
-            .arg("requirements.txt"), @r###"
+            .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8891,7 +8899,7 @@ fn existing_prerelease_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8909,7 +8917,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8922,7 +8930,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8948,7 +8956,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8961,7 +8969,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -8990,7 +8998,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
             .arg("requirements.in")
             .arg("-o")
             .arg("requirements.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9003,7 +9011,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9024,7 +9032,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("--prerelease")
-            .arg("allow"), @r###"
+            .arg("allow"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9039,7 +9047,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9059,7 +9067,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9080,7 +9088,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9099,7 +9107,7 @@ fn universal_prerelease_mode() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("--prerelease=allow")
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9112,7 +9120,7 @@ fn universal_prerelease_mode() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9143,7 +9151,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9160,7 +9168,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9194,7 +9202,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
     // but the pre-release versions are still respected correctly.
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9215,7 +9223,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9236,7 +9244,7 @@ fn universal_requires_python() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9250,7 +9258,7 @@ fn universal_requires_python() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9269,7 +9277,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.7")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9281,7 +9289,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.7 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9306,7 +9314,7 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9402,7 +9410,7 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 41 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9424,7 +9432,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.11")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9456,7 +9464,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9477,7 +9485,7 @@ fn universal_prefer_upper_bounds() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9513,7 +9521,7 @@ fn universal_prefer_upper_bounds() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 12 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9532,7 +9540,7 @@ fn universal_unnecessary_python() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9544,7 +9552,7 @@ fn universal_unnecessary_python() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9577,7 +9585,7 @@ fn universal_marker_propagation() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9665,7 +9673,7 @@ fn universal_disjoint_extra() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9694,7 +9702,7 @@ fn universal_disjoint_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9712,7 +9720,7 @@ fn universal_disjoint_extra_no_strip() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9745,7 +9753,7 @@ fn universal_disjoint_extra_no_strip() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9762,7 +9770,7 @@ fn universal_overlap_extra_base() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9791,7 +9799,7 @@ fn universal_overlap_extra_base() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9809,7 +9817,7 @@ fn universal_overlap_extra_base_no_strip() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9840,7 +9848,7 @@ fn universal_overlap_extra_base_no_strip() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9857,7 +9865,7 @@ fn universal_overlap_extras() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9886,7 +9894,7 @@ fn universal_overlap_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9904,7 +9912,7 @@ fn universal_overlap_extras_no_strip() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9935,7 +9943,7 @@ fn universal_overlap_extras_no_strip() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9952,7 +9960,7 @@ fn universal_identical_extras() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9981,7 +9989,7 @@ fn universal_identical_extras() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -9999,7 +10007,7 @@ fn universal_identical_extras_no_strip() -> Result<()> {
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
             .arg("requirements.in")
             .arg("--universal")
-            .arg("--no-strip-extras"), @r###"
+            .arg("--no-strip-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10028,7 +10036,7 @@ fn universal_identical_extras_no_strip() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10048,7 +10056,7 @@ fn compile_constraints_compatible_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10067,7 +10075,7 @@ fn compile_constraints_compatible_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10087,7 +10095,7 @@ fn compile_constraints_incompatible_version() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10095,7 +10103,7 @@ fn compile_constraints_incompatible_version() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -10115,7 +10123,7 @@ fn conflicting_url_markers() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10123,7 +10131,7 @@ fn conflicting_url_markers() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -10140,26 +10148,26 @@ fn editable_override() -> Result<()> {
 
     // Add an editable override.
     let overrides_txt = context.temp_dir.child("overrides.txt");
-    overrides_txt.write_str("-e ../../scripts/packages/black_editable")?;
+    overrides_txt.write_str("-e ../../test/packages/black_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
         .arg("--override")
         .arg(overrides_txt.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --override [TEMP_DIR]/overrides.txt
-    -e ../../scripts/packages/black_editable
+    -e ../../test/packages/black_editable
         # via
         #   --override [TEMP_DIR]/overrides.txt
         #   -r [TEMP_DIR]/requirements.in
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10170,7 +10178,7 @@ fn editable_override() -> Result<()> {
 fn override_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/black_editable")?;
+    requirements_in.write_str("-e ../../test/packages/black_editable")?;
 
     let overrides_txt = context.temp_dir.child("overrides.txt");
     overrides_txt.write_str("black==23.10.1")?;
@@ -10179,7 +10187,7 @@ fn override_editable() -> Result<()> {
             .arg(requirements_in.path())
             .arg("--override")
             .arg(overrides_txt.path())
-            .current_dir(current_dir()?), @r###"
+            .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10202,7 +10210,7 @@ fn override_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -10226,7 +10234,7 @@ fn override_with_compatible_constraint() -> Result<()> {
             .arg("--constraint")
             .arg("constraints.txt")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10244,7 +10252,7 @@ fn override_with_compatible_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10269,7 +10277,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
             .arg("--constraint")
             .arg("constraints.txt")
             .arg("--override")
-            .arg("overrides.txt"), @r###"
+            .arg("overrides.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10277,7 +10285,7 @@ fn override_with_incompatible_constraint() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -10295,7 +10303,7 @@ fn unsafe_package() -> Result<()> {
             .arg("--unsafe-package")
             .arg("jinja2")
             .arg("--unsafe-package")
-            .arg("pydantic"), @r###"
+            .arg("pydantic"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10321,7 +10329,7 @@ fn unsafe_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10337,7 +10345,7 @@ fn prerelease_upper_bound_exclude() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--prerelease=allow"), @r###"
+            .arg("--prerelease=allow"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10358,7 +10366,7 @@ fn prerelease_upper_bound_exclude() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10374,7 +10382,7 @@ fn prerelease_upper_bound_include() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--prerelease=allow"), @r###"
+            .arg("--prerelease=allow"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10397,7 +10405,7 @@ fn prerelease_upper_bound_include() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10412,7 +10420,7 @@ fn pre_alias() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--pre"), @r###"
+            .arg("--pre"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10433,7 +10441,7 @@ fn pre_alias() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10452,7 +10460,7 @@ fn prerelease_constraint() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--constraint")
-            .arg("constraints.txt"), @r###"
+            .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10477,7 +10485,7 @@ fn prerelease_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10511,7 +10519,7 @@ dev = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("dev"), @r###"
+            .arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10528,7 +10536,7 @@ dev = [
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10561,7 +10569,7 @@ dev = [
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--extra")
-            .arg("dev"), @r###"
+            .arg("dev"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10578,7 +10586,7 @@ dev = [
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10612,7 +10620,7 @@ dev = [
             .arg("pyproject.toml")
             .arg("--extra")
             .arg("dev")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10629,7 +10637,7 @@ dev = [
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10660,7 +10668,7 @@ qux = ["project[bop] ; python_version == '3.12'"]
             .arg("pyproject.toml")
             .arg("--universal")
             .arg("--extra")
-            .arg("qux"), @r###"
+            .arg("qux"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10671,7 +10679,7 @@ qux = ["project[bop] ; python_version == '3.12'"]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -10680,7 +10688,7 @@ qux = ["project[bop] ; python_version == '3.12'"]
             .arg("--extra")
             .arg("bop")
             .arg("--extra")
-            .arg("bar"), @r###"
+            .arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10691,13 +10699,13 @@ qux = ["project[bop] ; python_version == '3.12'"]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")
             .arg("--universal")
-            .arg("--all-extras"), @r###"
+            .arg("--all-extras"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10708,7 +10716,7 @@ qux = ["project[bop] ; python_version == '3.12'"]
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10719,26 +10727,26 @@ qux = ["project[bop] ; python_version == '3.12'"]
 fn editable_direct_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("-e ../../scripts/packages/setuptools_editable")?;
+    requirements_in.write_str("-e ../../test/packages/setuptools_editable")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg(requirements_in.path())
             .arg("--resolution")
             .arg("lowest-direct")
-            .current_dir(current_dir()?), @r###"
+            .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in --resolution lowest-direct
-    -e ../../scripts/packages/setuptools_editable
+    -e ../../test/packages/setuptools_editable
         # via -r [TEMP_DIR]/requirements.in
     iniconfig==0.1
         # via setuptools-editable
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -10753,7 +10761,7 @@ fn empty_index_url_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env(EnvVars::UV_INDEX_URL, ""), @r###"
+            .env(EnvVars::UV_INDEX_URL, ""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10770,7 +10778,7 @@ fn empty_index_url_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10786,7 +10794,7 @@ fn empty_extra_index_url_env_var() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env(EnvVars::UV_EXTRA_INDEX_URL, ""), @r###"
+            .env(EnvVars::UV_EXTRA_INDEX_URL, ""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10803,7 +10811,7 @@ fn empty_extra_index_url_env_var() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10820,7 +10828,7 @@ fn empty_index_url_env_var_override() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env(EnvVars::UV_INDEX_URL, ""), @r###"
+            .env(EnvVars::UV_INDEX_URL, ""), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10833,7 +10841,7 @@ fn empty_index_url_env_var_override() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10849,7 +10857,7 @@ fn index_url_env_var_override() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
             .arg("--emit-index-url")
-            .env(EnvVars::UV_INDEX_URL, "https://test.pypi.org/simple"), @r###"
+            .env(EnvVars::UV_INDEX_URL, "https://test.pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10862,7 +10870,7 @@ fn index_url_env_var_override() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10880,7 +10888,7 @@ fn expand_env_var_requirements_txt() -> Result<()> {
     requirements_dev_in.write_str("anyio")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10895,7 +10903,7 @@ fn expand_env_var_requirements_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -10926,7 +10934,7 @@ requires-python = ">=3.13"
     requirements_in.write_str(&format!("-e {}", editable_dir.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10935,7 +10943,7 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -10978,7 +10986,7 @@ requires-python = ">=3.13"
 
     uv_snapshot!(filters, context.pip_compile()
         .arg("requirements.in")
-        .arg("--python-version=3.11"), @r###"
+        .arg("--python-version=3.11"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -10987,7 +10995,7 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -11018,7 +11026,7 @@ dev = [
     requirements_in.write_str("-e .[dev]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11035,7 +11043,7 @@ dev = [
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11068,7 +11076,7 @@ dev = ["setuptools"]
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--resolution=lowest-direct"), @r###"
+        .arg("--resolution=lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11085,7 +11093,7 @@ dev = ["setuptools"]
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11099,7 +11107,7 @@ fn metadata_2_2() -> Result<()> {
     requirements_in.write_str("pyo3-mixed @ https://files.pythonhosted.org/packages/2b/b8/e04b783d3569d5b61b1dcdfda683ac2e3617340539aecd0f099fbade0b4a/pyo3_mixed-2.1.5.tar.gz")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11112,7 +11120,7 @@ fn metadata_2_2() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11126,7 +11134,7 @@ fn not_found_direct_url() -> Result<()> {
     requirements_in.write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-            .arg("requirements.in"), @r###"
+            .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -11135,7 +11143,7 @@ fn not_found_direct_url() -> Result<()> {
       × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
       ├─▶ Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
       ╰─▶ HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
-    "###
+    "
     );
 
     Ok(())
@@ -11166,7 +11174,7 @@ requires-python = ">=3.13"
     requirements_in.write_str(&format!("example @ {}", editable_dir.path().display()))?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -11175,7 +11183,7 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -11189,10 +11197,10 @@ fn compile_root_uri_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("-e ${ROOT_PATH}")?;
 
-    let root_path = current_dir()?.join("../../scripts/packages/root_editable");
+    let root_path = current_dir()?.join("../../test/packages/root_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .env(EnvVars::ROOT_PATH, root_path.as_os_str()), @r###"
+        .env(EnvVars::ROOT_PATH, root_path.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11200,12 +11208,12 @@ fn compile_root_uri_editable() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
     -e ${ROOT_PATH}
         # via -r requirements.in
-    black @ file://[WORKSPACE]/scripts/packages/root_editable/../black_editable
+    black @ file://[WORKSPACE]/test/packages/root_editable/../black_editable
         # via root-editable
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11219,12 +11227,12 @@ fn compile_root_uri_non_editable() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("${ROOT_PATH}\n${BLACK_PATH}")?;
 
-    let root_path = current_dir()?.join("../../scripts/packages/root_editable");
-    let black_path = current_dir()?.join("../../scripts/packages/black_editable");
+    let root_path = current_dir()?.join("../../test/packages/root_editable");
+    let black_path = current_dir()?.join("../../test/packages/black_editable");
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .env(EnvVars::ROOT_PATH, root_path.as_os_str())
-        .env(EnvVars::BLACK_PATH, black_path.as_os_str()), @r###"
+        .env(EnvVars::BLACK_PATH, black_path.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11239,7 +11247,7 @@ fn compile_root_uri_non_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11254,14 +11262,14 @@ fn requirement_wheel_name_mismatch() -> Result<()> {
     requirements_in.write_str("dateutil @ https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: Requested package name `dateutil` does not match `python-dateutil` in the distribution filename: https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl
-    "###
+    "
     );
 
     Ok(())
@@ -11291,7 +11299,7 @@ fn preserve_hashes_no_upgrade() -> Result<()> {
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
-            .arg("--generate-hashes"), @r###"
+            .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11305,7 +11313,7 @@ fn preserve_hashes_no_upgrade() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11336,7 +11344,7 @@ fn preserve_hashes_upgrade() -> Result<()> {
             .arg("--output-file")
             .arg("requirements.txt")
             .arg("--generate-hashes")
-            .arg("--upgrade"), @r###"
+            .arg("--upgrade"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11397,7 +11405,7 @@ fn preserve_hashes_upgrade() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11424,7 +11432,7 @@ fn preserve_hashes_no_existing_hashes() -> Result<()> {
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
-            .arg("--generate-hashes"), @r###"
+            .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11485,7 +11493,7 @@ fn preserve_hashes_no_existing_hashes() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11515,7 +11523,7 @@ fn preserve_hashes_newer_version() -> Result<()> {
             .arg("requirements.in")
             .arg("--output-file")
             .arg("requirements.txt")
-            .arg("--generate-hashes"), @r###"
+            .arg("--generate-hashes"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11586,7 +11594,7 @@ fn preserve_hashes_newer_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -11598,16 +11606,16 @@ fn unnamed_path_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"
-        ../../scripts/packages/poetry_editable
-        ../../scripts/packages/black_editable
-        ../../scripts/packages/setup_py_editable
-        ../../scripts/packages/setup_cfg_editable
+        ../../test/packages/poetry_editable
+        ../../test/packages/black_editable
+        ../../test/packages/setup_py_editable
+        ../../test/packages/setup_cfg_editable
         "
     })?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11617,7 +11625,7 @@ fn unnamed_path_requirement() -> Result<()> {
         # via
         #   httpx
         #   poetry-editable
-    ../../scripts/packages/black_editable
+    ../../test/packages/black_editable
         # via -r [TEMP_DIR]/requirements.in
     certifi==2024.2.2
         # via
@@ -11637,13 +11645,13 @@ fn unnamed_path_requirement() -> Result<()> {
         #   anyio
         #   httpx
         #   requests
-    ../../scripts/packages/poetry_editable
+    ../../test/packages/poetry_editable
         # via -r [TEMP_DIR]/requirements.in
     requests==2.31.0
         # via setup-cfg-editable
-    ../../scripts/packages/setup_cfg_editable
+    ../../test/packages/setup_cfg_editable
         # via -r [TEMP_DIR]/requirements.in
-    ../../scripts/packages/setup_py_editable
+    ../../test/packages/setup_py_editable
         # via -r [TEMP_DIR]/requirements.in
     sniffio==1.3.1
         # via
@@ -11654,7 +11662,7 @@ fn unnamed_path_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 14 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11668,7 +11676,7 @@ fn unnamed_git_requirement() -> Result<()> {
     requirements_in.write_str("git+https://github.com/pallets/flask.git@3.0.0")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11693,7 +11701,7 @@ fn unnamed_git_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11707,7 +11715,7 @@ fn unnamed_https_requirement() -> Result<()> {
     requirements_in.write_str("https://github.com/pallets/flask/archive/refs/tags/3.0.2.tar.gz")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11732,7 +11740,7 @@ fn unnamed_https_requirement() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11742,11 +11750,11 @@ fn unnamed_https_requirement() -> Result<()> {
 fn dynamic_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("hatchling-dynamic @ ../../scripts/packages/hatchling_dynamic")?;
+    requirements_in.write_str("hatchling-dynamic @ ../../test/packages/hatchling_dynamic")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.path())
-        .current_dir(current_dir()?), @r###"
+        .current_dir(current_dir()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11754,7 +11762,7 @@ fn dynamic_dependencies() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
     anyio==4.3.0
         # via hatchling-dynamic
-    ../../scripts/packages/hatchling_dynamic
+    ../../test/packages/hatchling_dynamic
         # via -r [TEMP_DIR]/requirements.in
     idna==3.6
         # via anyio
@@ -11763,7 +11771,7 @@ fn dynamic_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11857,7 +11865,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-platform")
         .arg("linux")
-        .arg("--emit-marker-expression"), @r###"
+        .arg("--emit-marker-expression"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11868,7 +11876,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11920,13 +11928,13 @@ fn emit_marker_expression_pypy() -> Result<()> {
 #[test]
 fn local_version_of_remote_package() -> Result<()> {
     let context = TestContext::new("3.12");
-    let root_path = context.workspace_root.join("scripts/packages");
+    let root_path = context.workspace_root.join("test/packages");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(requirements_in.canonicalize()?), @r###"
+        .arg(requirements_in.canonicalize()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11941,14 +11949,14 @@ fn local_version_of_remote_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Actually install the local dependency
     let mut command = context.pip_install();
     command.arg(root_path.join("anyio_local"));
     uv_snapshot!(
         context.filters(),
-        command, @r###"
+        command, @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11957,13 +11965,13 @@ fn local_version_of_remote_package() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + anyio==4.3.0+foo (from file://[WORKSPACE]/scripts/packages/anyio_local)
-    "###
+     + anyio==4.3.0+foo (from file://[WORKSPACE]/test/packages/anyio_local)
+    "
     );
 
     // The local version should _not_ be included in the resolution
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(requirements_in.canonicalize()?), @r###"
+        .arg(requirements_in.canonicalize()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11978,12 +11986,12 @@ fn local_version_of_remote_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Write a lockfile with the local version
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-            anyio @ {workspace_root}/scripts/packages/anyio_local
+            anyio @ {workspace_root}/test/packages/anyio_local
         ",
         workspace_root = context.workspace_root.simplified_display(),
     })?;
@@ -11995,7 +12003,7 @@ fn local_version_of_remote_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(requirements_in.canonicalize()?)
         .arg("--output-file")
-        .arg(requirements_txt.canonicalize()?), @r###"
+        .arg(requirements_txt.canonicalize()?), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12010,7 +12018,7 @@ fn local_version_of_remote_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -12024,7 +12032,7 @@ fn pendulum_no_tzdata_on_windows() -> Result<()> {
     uv_snapshot!(
         context.filters(),
         windows_filters=false,
-        context.pip_compile().arg("requirements.in"), @r###"
+        context.pip_compile().arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12045,7 +12053,7 @@ fn pendulum_no_tzdata_on_windows() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -12107,7 +12115,7 @@ requires-python = ">3.8"
     requirements_in.write_str("./app")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12124,7 +12132,7 @@ requires-python = ">3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12193,7 +12201,7 @@ requires-python = ">3.8"
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--override")
-        .arg("overrides.txt"), @r###"
+        .arg("overrides.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12214,7 +12222,7 @@ requires-python = ">3.8"
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12287,7 +12295,7 @@ requires-python = ">3.8"
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--override")
-        .arg("overrides.txt"), @r###"
+        .arg("overrides.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12297,7 +12305,7 @@ requires-python = ">3.8"
       ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
           And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     // Now constrain `anyio` to the local version.
@@ -12309,7 +12317,7 @@ requires-python = ">3.8"
         .arg("--override")
         .arg("overrides.txt")
         .arg("--constraint")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12329,7 +12337,7 @@ requires-python = ">3.8"
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12358,7 +12366,7 @@ requires-python = ">3.8"
     requirements_in.write_str(".")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12383,7 +12391,7 @@ requires-python = ">3.8"
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12412,7 +12420,7 @@ requires-python = ">3.8"
     requirements_in.write_str("-e .")?;
 
     uv_snapshot!( context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12437,7 +12445,7 @@ requires-python = ">3.8"
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12460,7 +12468,7 @@ fn compile_index_url_first_match_base() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12470,7 +12478,7 @@ fn compile_index_url_first_match_base() -> Result<()> {
       ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
-    "###
+    "
     );
 
     Ok(())
@@ -12494,7 +12502,7 @@ fn compile_index_url_first_match_marker() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12504,7 +12512,7 @@ fn compile_index_url_first_match_marker() -> Result<()> {
       ╰─▶ Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
-    "###
+    "
     );
 
     Ok(())
@@ -12527,7 +12535,7 @@ fn compile_index_url_first_match_all_versions() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12535,7 +12543,7 @@ fn compile_index_url_first_match_all_versions() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of pandas and you require pandas, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -12561,7 +12569,7 @@ fn compile_index_url_fallback() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12572,7 +12580,7 @@ fn compile_index_url_fallback() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12601,7 +12609,7 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12612,7 +12620,7 @@ fn compile_index_url_fallback_prefer_primary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12641,7 +12649,7 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12652,7 +12660,7 @@ fn compile_index_url_unsafe_highest() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12686,7 +12694,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r"
+        .arg("--no-deps"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12716,7 +12724,7 @@ fn emit_index_annotation_hide_password() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--emit-index-annotation")
-        .env(EnvVars::UV_INDEX_URL, "https://test-user:test-password@pypi.org/simple"), @r###"
+        .env(EnvVars::UV_INDEX_URL, "https://test-user:test-password@pypi.org/simple"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12740,7 +12748,7 @@ fn emit_index_annotation_hide_password() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12756,7 +12764,7 @@ fn emit_index_annotation_pypi_org_simple() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--emit-index-annotation"), @r###"
+        .arg("--emit-index-annotation"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12780,7 +12788,7 @@ fn emit_index_annotation_pypi_org_simple() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12800,7 +12808,7 @@ fn emit_index_annotation_no_annotate() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--emit-index-annotation")
-        .arg("--no-annotate"), @r###"
+        .arg("--no-annotate"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12819,7 +12827,7 @@ fn emit_index_annotation_no_annotate() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12837,7 +12845,7 @@ fn emit_index_annotation_line() -> Result<()> {
         .arg("requirements.in")
         .arg("--emit-index-annotation")
         .arg("--annotation-style")
-        .arg("line"), @r###"
+        .arg("line"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12856,7 +12864,7 @@ fn emit_index_annotation_line() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -12874,7 +12882,7 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
         .arg("requirements.in")
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
-        .arg("--emit-index-annotation"), @r"
+        .arg("--emit-index-annotation"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12912,7 +12920,7 @@ fn no_version_for_direct_dependency() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         // Must error before we make any network requests
-        .arg("--offline"), @r###"
+        .arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -12920,7 +12928,7 @@ fn no_version_for_direct_dependency() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ you require pypyp ∅
-    "###
+    "
     );
 
     Ok(())
@@ -12939,7 +12947,7 @@ fn python_platform() -> Result<()> {
         context.pip_compile()
         .arg("requirements.in")
         .arg("--python-platform")
-        .arg("aarch64-unknown-linux-gnu"), @r###"
+        .arg("aarch64-unknown-linux-gnu"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12960,7 +12968,7 @@ fn python_platform() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(),
@@ -12968,7 +12976,7 @@ fn python_platform() -> Result<()> {
         context.pip_compile()
         .arg("requirements.in")
         .arg("--python-platform")
-        .arg("x86_64-pc-windows-msvc"), @r###"
+        .arg("x86_64-pc-windows-msvc"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12991,7 +12999,7 @@ fn python_platform() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13023,7 +13031,7 @@ fn git_source_default_branch() -> Result<()> {
         .collect();
 
     uv_snapshot!(filters, context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13034,7 +13042,7 @@ fn git_source_default_branch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13059,7 +13067,7 @@ fn git_source_branch() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13070,7 +13078,7 @@ fn git_source_branch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13095,7 +13103,7 @@ fn git_source_tag() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13106,7 +13114,7 @@ fn git_source_tag() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13131,7 +13139,7 @@ fn git_source_long_commit() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13142,7 +13150,7 @@ fn git_source_long_commit() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13167,7 +13175,7 @@ fn git_source_short_commit() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13178,7 +13186,7 @@ fn git_source_short_commit() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13203,7 +13211,7 @@ fn git_source_refs() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13214,7 +13222,7 @@ fn git_source_refs() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13243,7 +13251,7 @@ fn git_source_missing_tag() -> Result<()> {
     "#})?;
 
     uv_snapshot!(filters, context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13256,7 +13264,7 @@ fn git_source_missing_tag() -> Result<()> {
       ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
           --- stderr
           fatal: couldn't find remote ref refs/tags/missing
-    "###);
+    ");
 
     Ok(())
 }
@@ -13280,7 +13288,7 @@ fn warn_missing_constraint() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13297,7 +13305,7 @@ fn warn_missing_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13319,7 +13327,7 @@ fn dont_warn_missing_constraint_without_sources() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13336,7 +13344,7 @@ fn dont_warn_missing_constraint_without_sources() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13376,11 +13384,11 @@ fn tool_uv_sources() -> Result<()> {
     let project_root = fs_err::canonicalize(current_dir()?.join("../.."))?;
     fs_err::create_dir_all(context.temp_dir.join("poetry_editable/poetry_editable"))?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/pyproject.toml"),
+        project_root.join("test/packages/poetry_editable/pyproject.toml"),
         context.temp_dir.join("poetry_editable/pyproject.toml"),
     )?;
     fs_err::copy(
-        project_root.join("scripts/packages/poetry_editable/poetry_editable/__init__.py"),
+        project_root.join("test/packages/poetry_editable/poetry_editable/__init__.py"),
         context
             .temp_dir
             .join("poetry_editable/poetry_editable/__init__.py"),
@@ -13390,7 +13398,7 @@ fn tool_uv_sources() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(require_path)
         .arg("--extra")
-        .arg("utils"), @r###"
+        .arg("utils"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13415,7 +13423,7 @@ fn tool_uv_sources() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13437,7 +13445,7 @@ fn invalid_tool_uv_sources() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(context.temp_dir.join("pyproject.toml")), @r###"
+        .arg(context.temp_dir.join("pyproject.toml")), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13447,7 +13455,7 @@ fn invalid_tool_uv_sources() -> Result<()> {
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
     urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    "###
+    "
     );
 
     // Write an invalid extension on a source.
@@ -13465,7 +13473,7 @@ fn invalid_tool_uv_sources() -> Result<()> {
     "#})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg(context.temp_dir.join("pyproject.toml")), @r###"
+        .arg(context.temp_dir.join("pyproject.toml")), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13473,7 +13481,7 @@ fn invalid_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse entry: `urllib3`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    "###
+    "
     );
 
     Ok(())
@@ -13497,7 +13505,7 @@ fn dynamic_pyproject_toml() -> Result<()> {
     let bird_feeder = context.temp_dir.child("bird_feeder/__init__.py");
     bird_feeder.write_str("__all__= []")?;
 
-    uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @r###"
+    uv_snapshot!(context.filters(), context.pip_compile().arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13506,7 +13514,7 @@ fn dynamic_pyproject_toml() -> Result<()> {
 
     ----- stderr -----
     Resolved in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13521,7 +13529,7 @@ fn file_url() -> Result<()> {
 
     let url = Url::from_file_path(requirements_txt.simple_canonicalize()?).expect("valid file URL");
 
-    uv_snapshot!(context.filters(), context.pip_compile().arg(url.to_string()), @r###"
+    uv_snapshot!(context.filters(), context.pip_compile().arg(url.to_string()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13532,7 +13540,7 @@ fn file_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -13548,7 +13556,7 @@ fn no_binary_only_binary() -> Result<()> {
         .pip_compile()
         .arg("requirements.in")
         .arg("--only-binary")
-        .arg(":all:"), @r###"
+        .arg(":all:"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13559,7 +13567,7 @@ fn no_binary_only_binary() -> Result<()> {
           And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
-    "###
+    "
     );
 
     uv_snapshot!(context
@@ -13568,7 +13576,7 @@ fn no_binary_only_binary() -> Result<()> {
         .arg("--only-binary")
         .arg(":all:")
         .arg("--no-binary")
-        .arg("source-distribution"), @r###"
+        .arg("source-distribution"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13579,7 +13587,7 @@ fn no_binary_only_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13601,7 +13609,7 @@ fn ignore_invalid_constraint() -> Result<()> {
         .pip_compile()
         .arg("requirements.in")
         .arg("-c")
-        .arg("constraints.txt"), @r###"
+        .arg("constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13614,7 +13622,7 @@ fn ignore_invalid_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13633,7 +13641,7 @@ fn incompatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13643,7 +13651,7 @@ fn incompatible_build_constraint() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -13662,7 +13670,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r"
+        .arg("build_constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13703,7 +13711,7 @@ build-constraint-dependencies = [
     )?;
 
     uv_snapshot!(context.pip_compile()
-        .arg("pyproject.toml"), @r###"
+        .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13713,7 +13721,7 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -13744,7 +13752,7 @@ build-constraint-dependencies = [
     )?;
 
     uv_snapshot!(context.pip_compile()
-        .arg("pyproject.toml"), @r"
+        .arg("pyproject.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13791,7 +13799,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13801,7 +13809,7 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     // compatible setuptools version in pyproject.toml, incompatible in build_constraints.txt
@@ -13830,7 +13838,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13840,7 +13848,7 @@ build-constraint-dependencies = [
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -13876,7 +13884,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r"
+        .arg("build_constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13916,7 +13924,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_compile()
         .arg("pyproject.toml")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r"
+        .arg("build_constraints.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13957,7 +13965,7 @@ fn invalid_extra() -> Result<()> {
     requirements_in.write_str(".[encryption]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13970,14 +13978,14 @@ fn invalid_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Sync the `_anyio` extra. We should reject it.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(".[_anyio]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13987,14 +13995,14 @@ fn invalid_extra() -> Result<()> {
       Caused by: Expected an alphanumeric character starting the extra name, found `_`
     .[_anyio]
       ^
-    "###);
+    ");
 
     // Sync the `anyio` extra. We should reject it.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(".[anyio]")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14006,7 +14014,7 @@ fn invalid_extra() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: The package `project @ file://[TEMP_DIR]/` does not have an extra named `anyio`
-    "###);
+    ");
 
     Ok(())
 }
@@ -14031,7 +14039,7 @@ fn symlink() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.in")
         .arg("--output-file")
-        .arg("requirements-symlink.txt"), @r"
+        .arg("requirements-symlink.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14080,7 +14088,7 @@ fn universal_constrained_environment() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
     .arg("pyproject.toml")
-    .arg("--universal"), @r###"
+    .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14101,7 +14109,7 @@ fn universal_constrained_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14116,7 +14124,7 @@ fn compile_enumerate_no_versions() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in"),
-    @r"
+    @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14140,7 +14148,7 @@ fn compile_requires_txt() -> Result<()> {
 
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14163,7 +14171,7 @@ fn compile_requires_txt() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14209,7 +14217,7 @@ exceptiongroup==1.0.0rc8
             .arg("-c").arg("constraints.txt")
             .arg("--universal")
             .arg("-p").arg("3.10"),
-        @r###"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14300,7 +14308,7 @@ exceptiongroup==1.0.0rc8
 
     ----- stderr -----
     Resolved 36 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14351,7 +14359,7 @@ matplotlib
             .arg("requirements.in")
             .arg("--universal")
             .arg("-p").arg("3.8"),
-        @r###"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14410,7 +14418,7 @@ matplotlib
 
     ----- stderr -----
     Resolved 22 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14441,7 +14449,7 @@ fn importlib_metadata_not_repeated() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("-p").arg("3.7"),
-        @r###"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14472,7 +14480,7 @@ fn importlib_metadata_not_repeated() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14504,7 +14512,7 @@ fn prune_unreachable() -> Result<()> {
             .arg("--universal")
             .arg("-p")
             .arg("3.7"),
-        @r###"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14515,7 +14523,7 @@ fn prune_unreachable() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14533,7 +14541,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14544,7 +14552,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14563,7 +14571,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14572,9 +14580,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: python_full_version >= '3.10'):
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
-
           hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+
+          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     ");
 
     Ok(())
@@ -14588,7 +14596,7 @@ fn negation_not_imply_prerelease() -> Result<()> {
     requirements_in.write_str("flask<2.0.1, !=2.0.0rc1")?;
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14611,7 +14619,7 @@ fn negation_not_imply_prerelease() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14629,7 +14637,7 @@ fn lowest_direct_fork_min_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("--resolution")
-            .arg("lowest-direct"), @r###"
+            .arg("lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14648,7 +14656,7 @@ fn lowest_direct_fork_min_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14667,7 +14675,7 @@ fn lowest_fork_min_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("--resolution")
-            .arg("lowest"), @r###"
+            .arg("lowest"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14688,7 +14696,7 @@ fn lowest_fork_min_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14707,7 +14715,7 @@ fn lowest_direct_fork_max_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("--resolution")
-            .arg("lowest-direct"), @r###"
+            .arg("lowest-direct"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14722,7 +14730,7 @@ fn lowest_direct_fork_max_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14741,7 +14749,7 @@ fn lowest_fork_max_python() -> Result<()> {
             .arg("requirements.in")
             .arg("--universal")
             .arg("--resolution")
-            .arg("lowest"), @r###"
+            .arg("lowest"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14756,7 +14764,7 @@ fn lowest_fork_max_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14781,7 +14789,7 @@ fn same_version_multi_index_incompatibility() -> Result<()> {
         .arg("--python-platform")
         .arg("linux")
         .arg("--python-version")
-        .arg("3.10"), @r###"
+        .arg("3.10"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14794,7 +14802,7 @@ fn same_version_multi_index_incompatibility() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -14834,7 +14842,7 @@ fn compile_derivation_chain() -> Result<()> {
         .chain([(r"/.*/src", "/[TMP]/src")])
         .collect::<Vec<_>>();
 
-    uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r###"
+    uv_snapshot!(filters, context.pip_compile().arg("pyproject.toml"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14864,7 +14872,7 @@ fn compile_derivation_chain() -> Result<()> {
 
           hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
-    "###
+    "#
     );
 
     Ok(())
@@ -14881,7 +14889,7 @@ fn invalid_platform() -> Result<()> {
         .pip_compile()
         .arg("--python-platform")
         .arg("x86_64-manylinux_2_17")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -14928,7 +14936,7 @@ fn universal_disjoint_deprecated_markers() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("requirements.in")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14943,7 +14951,7 @@ fn universal_disjoint_deprecated_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14967,7 +14975,7 @@ fn universal_disjoint_override_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--overrides")
             .arg("overrides.txt")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14988,7 +14996,7 @@ fn universal_disjoint_override_urls() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -15012,7 +15020,7 @@ fn universal_conflicting_override_urls() -> Result<()> {
             .arg("requirements.in")
             .arg("--overrides")
             .arg("overrides.txt")
-            .arg("--universal"), @r"
+            .arg("--universal"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15045,7 +15053,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
         .arg("--index-url")
         .arg(packse_index_url())
         .arg(requirements_in.path())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15084,7 +15092,7 @@ fn disjoint_requires_python() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--universal")
-        .arg(requirements_in.path()), @r###"
+        .arg(requirements_in.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15099,7 +15107,7 @@ fn disjoint_requires_python() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -15155,7 +15163,7 @@ fn dynamic_version_source_dist() -> Result<()> {
         .arg(requirements_in.path())
         .arg("--no-index")
         .arg("--find-links")
-        .arg(context.temp_dir.path()), @r###"
+        .arg(context.temp_dir.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15166,7 +15174,7 @@ fn dynamic_version_source_dist() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -15188,7 +15196,7 @@ fn max_python_requirement() -> Result<()> {
             .arg("requires-python")
             .arg("--universal")
             .arg("--python-version")
-            .arg("3.7"), @r###"
+            .arg("3.7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15246,7 +15254,7 @@ fn max_python_requirement() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.7 is not available; 3.8.[X] will be used to build dependencies instead.
     Resolved 21 packages in [TIME]
-    "###
+    "
     );
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
@@ -15255,7 +15263,7 @@ fn max_python_requirement() -> Result<()> {
             .arg("fewest")
             .arg("--universal")
             .arg("--python-version")
-            .arg("3.7"), @r###"
+            .arg("3.7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15299,7 +15307,7 @@ fn max_python_requirement() -> Result<()> {
     ----- stderr -----
     warning: The requested Python version 3.7 is not available; 3.8.[X] will be used to build dependencies instead.
     Resolved 14 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -15335,7 +15343,7 @@ fn respect_index_preference() -> Result<()> {
         .pip_compile()
         .arg("pyproject.toml")
         .arg("-o")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15348,7 +15356,7 @@ fn respect_index_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -15382,7 +15390,7 @@ fn dependency_group() -> Result<()> {
     // Passing --group should add just that group's contents from ./pyproject.toml
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("bar"), @r"
+        .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15401,7 +15409,7 @@ fn dependency_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
-        .arg("--group").arg("bar"), @r"
+        .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15420,7 +15428,7 @@ fn dependency_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg(context.temp_dir.child("pyproject.toml").path())
-        .arg("--group").arg("bar"), @r"
+        .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15438,7 +15446,7 @@ fn dependency_group() -> Result<()> {
     // An explicit use of `<path>:<group>` syntax, here using what the default is anyway
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("pyproject.toml:bar"), @r"
+        .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15455,7 +15463,7 @@ fn dependency_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
-        .arg("--group").arg("pyproject.toml:bar"), @r"
+        .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15473,7 +15481,7 @@ fn dependency_group() -> Result<()> {
     // Let's check that the other group works fine individually
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15490,7 +15498,7 @@ fn dependency_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--group").arg("foo")
-        .arg("--group").arg("bar"), @r"
+        .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15510,7 +15518,7 @@ fn dependency_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
         .arg("--group").arg("foo")
-        .arg("--group").arg("bar"), @r"
+        .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15573,7 +15581,7 @@ fn many_pyproject_group() -> Result<()> {
     // Use the 'foo' group from the main toml
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("pyproject.toml:foo"), @r"
+        .arg("--group").arg("pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15588,7 +15596,7 @@ fn many_pyproject_group() -> Result<()> {
 
     // Use the 'foo' group from the subtoml
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15606,7 +15614,7 @@ fn many_pyproject_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--group").arg("pyproject.toml:foo")
-        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15669,7 +15677,7 @@ fn suspicious_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--group").arg("foo")
-        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15690,7 +15698,7 @@ fn suspicious_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--group").arg("foo")
-        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15712,7 +15720,7 @@ fn suspicious_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("subdir/pyproject.toml")
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15732,7 +15740,7 @@ fn suspicious_group() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml")
-        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15805,7 +15813,7 @@ fn invalid_group() -> Result<()> {
 
     // Hey this path needs to end with "pyproject.toml"!
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("./:foo"), @r"
+        .arg("--group").arg("./:foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -15818,7 +15826,7 @@ fn invalid_group() -> Result<()> {
 
     // Hey this path needs to end with "pyproject.toml"!
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("subdir/:foo"), @r"
+        .arg("--group").arg("subdir/:foo"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -15834,7 +15842,7 @@ fn invalid_group() -> Result<()> {
     // we should error!
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--group").arg("bar")
-        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -15919,7 +15927,7 @@ fn project_and_group_workspace_inherit() -> Result<()> {
     // Check that the workspace's sources are discovered and consulted
     let context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("--group").arg("packages/mysubproject/pyproject.toml:foo"), @r"
+        .arg("--group").arg("packages/mysubproject/pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15988,7 +15996,7 @@ fn project_and_group_workspace() -> Result<()> {
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--project").arg("subdir")
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16008,7 +16016,7 @@ fn project_and_group_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--project").arg("subdir")
         .arg("--group").arg("subdir/pyproject.toml:bar")
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16030,7 +16038,7 @@ fn project_and_group_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--project").arg("subdir")
         .arg("--group").arg("bar")
-        .arg("--group").arg("pyproject.toml:foo"), @r"
+        .arg("--group").arg("pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16052,7 +16060,7 @@ fn project_and_group_workspace() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--project").arg("subdir")
         .arg("--group").arg("subdir/pyproject.toml:bar")
-        .arg("--group").arg("pyproject.toml:foo"), @r"
+        .arg("--group").arg("pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16116,7 +16124,7 @@ fn directory_and_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--directory").arg("subdir")
         .arg("--group").arg("bar")
-        .arg("--group").arg("../pyproject.toml:foo"), @r"
+        .arg("--group").arg("../pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16138,7 +16146,7 @@ fn directory_and_group() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--directory").arg("subdir")
         .arg("--group").arg("pyproject.toml:bar")
-        .arg("--group").arg("../pyproject.toml:foo"), @r"
+        .arg("--group").arg("../pyproject.toml:foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16161,7 +16169,7 @@ fn directory_and_group() -> Result<()> {
         .arg("--directory").arg("subdir")
         .arg("--project").arg("../")
         .arg("--group").arg("pyproject.toml:bar")
-        .arg("--group").arg("foo"), @r"
+        .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16174,6 +16182,34 @@ fn directory_and_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn group_target_does_not_exist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "uv%%%"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("does/not/exist/pyproject.toml:foo"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to read dependency groups from: does/not/exist/pyproject.toml
+      Caused by: No pyproject.toml found at: does/not/exist/pyproject.toml
     ");
 
     Ok(())
@@ -16194,7 +16230,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
         .arg("--universal")
         .arg("requirements.in")
         .arg("-o")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16207,7 +16243,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-running shouldn't change the output.
     uv_snapshot!(context
@@ -16217,7 +16253,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
         .arg("--universal")
         .arg("requirements.in")
         .arg("-o")
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16230,7 +16266,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16248,7 +16284,7 @@ fn markers_on_extra_packages() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--universal")
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16265,7 +16301,7 @@ fn markers_on_extra_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16286,7 +16322,7 @@ fn respect_non_local_preference() -> Result<()> {
         .arg("requirements.txt")
         .arg("--universal")
         .arg("--index")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu"), @r###"
+        .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16317,7 +16353,7 @@ fn respect_non_local_preference() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -16395,7 +16431,7 @@ fn compile_quotes() -> Result<()> {
 
     uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
         .arg("requirements.in")
-        .arg("--universal"), @r"
+        .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16437,7 +16473,7 @@ fn compile_invalid_output_file() -> Result<()> {
         .pip_compile()
         .arg("requirements.in")
         .arg("-o")
-        .arg("pyproject.toml"), @r"
+        .arg("pyproject.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -16463,7 +16499,7 @@ fn pep_751_filename() -> Result<()> {
         .arg("--format")
         .arg("pylock.toml")
         .arg("-o")
-        .arg("test.toml"), @r"
+        .arg("test.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -16509,7 +16545,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16557,7 +16593,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16658,7 +16694,7 @@ fn pep_751_compile_directory() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16712,7 +16748,7 @@ fn pep_751_compile_git() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16774,7 +16810,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16838,7 +16874,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16895,7 +16931,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16974,7 +17010,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r"
+        .arg("pylock.toml"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17250,26 +17286,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
         { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
-        { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17329,26 +17346,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     version = "24.3.0"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
-        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
-        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
-        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
-        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
-        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
-        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
-        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
-        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
-        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
-        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
-        { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
         { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
-        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
-        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
-        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
-        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
-        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
-        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
-        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
-        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
         { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
     ]
 
@@ -17391,6 +17389,82 @@ fn pep_751_compile_non_universal() -> Result<()> {
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--only-binary` excludes source distributions from pylock.toml output.
+#[test]
+fn pep_751_compile_only_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--only-binary iniconfig`, the sdist should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --only-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Test that `--no-binary` excludes wheels from pylock.toml output.
+#[test]
+fn pep_751_compile_no_binary() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    // With `--no-binary iniconfig`, the wheels should be excluded.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("iniconfig"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-binary iniconfig
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     "#);
 
     Ok(())
@@ -17478,7 +17552,7 @@ async fn index_has_no_requires_python() -> Result<()> {
         .arg("3.9")
         .arg("--index-url")
         .arg(server.uri())
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17498,7 +17572,7 @@ async fn index_has_no_requires_python() -> Result<()> {
         .arg("3.12")
         .arg("--index-url")
         .arg(server.uri())
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17534,7 +17608,7 @@ fn incompatible_cuda() -> Result<()> {
         .arg("--python-platform")
         .arg("x86_64-manylinux_2_28")
         .arg("--python-version")
-        .arg("3.11"), @r"
+        .arg("3.11"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -17562,7 +17636,7 @@ fn compile_broken_active_venv() -> Result<()> {
         .venv()
         .arg("--python")
         .arg(&broken_system_python)
-        .arg("venv2"), @r"
+        .arg("venv2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -17576,7 +17650,7 @@ fn compile_broken_active_venv() -> Result<()> {
     fs_err::os::unix::fs::symlink("/removed/python/interpreter", context.interpreter())?;
     uv_snapshot!(context
         .pip_compile()
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -17617,7 +17691,7 @@ fn pubgrub_panic_double_self_dependency() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
-        .arg(requirements_in.path()), @r"
+        .arg(requirements_in.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17662,7 +17736,7 @@ fn pubgrub_panic_double_self_dependency_extra() -> Result<()> {
 
     uv_snapshot!(context.filters(), context
         .pip_compile()
-        .arg(requirements_in.path()), @r"
+        .arg(requirements_in.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17695,7 +17769,7 @@ fn git_path_transitive_dependency() -> Result<()> {
         ",
     )?;
 
-    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @r"
+    uv_snapshot!(context.filters(), context.pip_compile().arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17722,7 +17796,7 @@ fn omit_python_patch_universal() -> Result<()> {
     requirements_in.write_str("redis")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17738,7 +17812,7 @@ fn omit_python_patch_universal() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
-        .arg("--universal"), @r"
+        .arg("--universal"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -17755,4 +17829,495 @@ fn omit_python_patch_universal() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn credentials_from_subdirectory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local dependency in a subdirectory.
+    let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        iniconfig = { index = "internal" }
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple/"
+        explicit = true
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("foo/pyproject.toml"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and foo depends on iniconfig, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("foo/pyproject.toml")
+        .env(EnvVars::index_username("INTERNAL"), "public")
+        .env(EnvVars::index_password("INTERNAL"), "heron"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] foo/pyproject.toml
+    iniconfig==2.0.0
+        # via foo (foo/pyproject.toml)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Install a package with a post-release version constraint.
+///
+/// `<V.postN` should include earlier post-releases but exclude pre-releases.
+///
+/// See: <https://github.com/astral-sh/uv/issues/16868>
+#[test]
+fn post_release_less_than() -> Result<()> {
+    let context = TestContext::new("3.10");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("hidapi>=0.12.0.post1,<0.12.0.post2")?;
+
+    // The constraint `>=0.12.0.post1, <0.12.0.post2` should only match 0.12.0.post1.
+    uv_snapshot!(context.pip_compile()
+        .arg("requirements.in"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in
+    hidapi==0.12.0.post1
+        # via -r requirements.in
+    setuptools==69.2.0
+        # via hidapi
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// When using `uv pip compile --python-platform`, it should not matter what platform the built
+/// wheel is for. We want to ensure that uv accepts both wheels for the host platform and wheels for
+/// the target platform in `uv pip compile`. This is unlike `uv pip install --python-platform`,
+/// where a wheel for the target platform is required.
+///
+/// The main test (first snapshot) builds a Windows wheel, and targets macOS. If we run this test on
+/// Linux, the wheel tag is neither host nor target, but we don't have a reason to reject the
+/// Windows tag either.
+#[test]
+fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("./project")?;
+
+    let project = context.temp_dir.child("project");
+    // This pyproject.toml uses dynamic versioning to prevent uv from reading static metadata.
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        requires-python = ">=3.12"
+        dependencies = [
+          "sniffio; sys_platform == 'linux'",
+          "tqdm; sys_platform == 'darwin'"
+        ]
+        dynamic = ["version"]
+
+        [build-system]
+        requires = ["hatchling"]
+        backend-path = ["."]
+        build-backend = "build"
+
+        [tool.hatch.version]
+        path = "src/project/__init__.py"
+    "#})?;
+    // Rename the built wheel to a Windows wheel
+    project.child("build.py").write_str(indoc! {r#"
+        import os
+
+        import hatchling.build
+
+        __all__ = ["build_sdist", "build_wheel"]
+
+
+        def build_sdist(
+            sdist_directory: str, config_settings: "Mapping[Any, Any] | None" = None
+        ) -> str:
+            hatchling.build.build_sdist(sdist_directory, config_settings)
+
+
+        def build_wheel(
+            wheel_directory: str,
+            config_settings: "Mapping[Any, Any] | None" = None,
+            metadata_directory: "str | None" = None,
+        ) -> str:
+            name = hatchling.build.build_wheel(
+                wheel_directory, config_settings, metadata_directory
+            )
+            # Don't do this at home, ask your build backend instead so it also changes the
+            # `WHEEL` file.
+            new_name = "project-0.1.0-cp312-abi3-win_amd64.whl"
+            os.rename(
+                os.path.join(wheel_directory, name), os.path.join(wheel_directory, new_name)
+            )
+            return new_name
+    "#})?;
+    project
+        .child("src/project/__init__.py")
+        .write_str(r#"__version__ = "0.1.0"\n"#)?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("macos"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform macos
+    ./project
+        # via -r requirements.in
+    tqdm==4.66.2
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("linux"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1
+        # via project
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("windows"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform windows
+    ./project
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    ./project
+        # via -r requirements.in
+    sniffio==1.3.1 ; sys_platform == 'linux'
+        # via project
+    tqdm==4.66.2 ; sys_platform == 'darwin'
+        # via project
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn compile_missing_python() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("--python").arg("3.13")
+        .arg("--python-version").arg("3.13")
+        .arg("requirements.in"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.13 --python-version 3.13 requirements.in
+    anyio==3.7.0
+        # via -r requirements.in
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn compile_missing_python_version() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_python_download_cache()
+        .with_managed_python_dirs();
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("--python-version").arg("3.13")
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python-version 3.13 requirements.in
+    anyio==3.7.0
+        # via -r requirements.in
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn compile_missing_python_version_patch_fallback() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        // Filter the patch of the version which will get downloaded
+        .with_filter((
+            r"(3\.13)\.\d+ will be used",
+            "$1.[X] will be used".to_string(),
+        ));
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.13.99")
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python-version 3.13.99 requirements.in
+    anyio==3.7.0
+        # via -r requirements.in
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    warning: The requested Python version 3.13.99 is not available; 3.13.[X] will be used to build dependencies instead.
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "python-managed")]
+#[test]
+fn compile_missing_python_version_default_fallback() -> Result<()> {
+    let context = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_managed_python_dirs()
+        // Filter the version which will get downloaded
+        .with_filter((
+            r" \d\+\.\d\+(\.\d+)? will be used",
+            " [DEFAULT] will be used".to_string(),
+        ));
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .env(EnvVars::UV_MANAGED_PYTHON, "1")
+        .arg("--python-version").arg("3.99.99")
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python-version 3.99.99 requirements.in
+    anyio==3.7.0
+        # via -r requirements.in
+    idna==3.6
+        # via anyio
+    sniffio==1.3.1
+        # via anyio
+
+    ----- stderr -----
+    warning: The requested Python version 3.99.99 is not available; 3.14.2 will be used to build dependencies instead.
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that pip compile warns on download errors
+#[cfg(feature = "python-managed")]
+#[tokio::test]
+async fn compile_missing_python_download_error_warning() {
+    let context = TestContext::new("3.12")
+        .with_managed_python_dirs()
+        .with_filter((
+            r"(https://github\.com/astral-sh/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ));
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(StatusCode::INTERNAL_SERVER_ERROR))
+        .mount(&server)
+        .await;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0").unwrap();
+
+    // This produces an error in the end because we've just broken ALL network
+    // traffic. But the goal here is to check the warning.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    warning: The requested Python version 3.10 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
+
+    // Also check for the patch fallback
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10.99")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    warning: The requested Python version 3.10.99 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
+
+    // Check that looking up a valid patch version only warns once
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("--python-version").arg("3.10.19")
+        .env("ALL_PROXY", server.uri())
+        .env(EnvVars::UV_HTTP_RETRIES, "0")
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: A managed Python download is available for Python 3.10.19, but an error occurred when attempting to download it.
+      Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    warning: The requested Python version 3.10.19 is not available; 3.12.[X] will be used to build dependencies instead.
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: error sending request for url (https://pypi.org/simple/anyio/)
+      Caused by: client error (Connect)
+      Caused by: tunnel error: unsuccessful
+    ");
 }

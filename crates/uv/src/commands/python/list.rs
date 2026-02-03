@@ -10,8 +10,9 @@ use itertools::Either;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
-use uv_python::downloads::PythonDownloadRequest;
+use uv_python::downloads::{ManagedPythonDownloadList, PythonDownloadRequest};
 use uv_python::{
     DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
     PythonPreference, PythonRequest, PythonSource, find_python_installations,
@@ -51,7 +52,7 @@ struct PrintData {
 }
 
 /// List available Python installations.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[expect(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
     request: Option<String>,
     kinds: PythonListKinds,
@@ -61,8 +62,11 @@ pub(crate) async fn list(
     show_urls: bool,
     output_format: PythonListFormat,
     python_downloads_json_url: Option<String>,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
+    client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -75,6 +79,9 @@ pub(crate) async fn list(
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
     };
 
+    let client = client_builder.build();
+    let download_list =
+        ManagedPythonDownloadList::new(&client, python_downloads_json_url.as_deref()).await?;
     let mut output = BTreeSet::new();
     if let Some(base_download_request) = base_download_request {
         let download_request = match kinds {
@@ -106,16 +113,20 @@ pub(crate) async fn list(
 
         let downloads = download_request
             .as_ref()
-            .map(|a| PythonDownloadRequest::iter_downloads(a, python_downloads_json_url.as_deref()))
-            .transpose()?
+            .map(|request| download_list.iter_matching(request))
             .into_iter()
-            .flatten();
+            .flatten()
+            // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
+            .filter(|download| !download.key().variant().is_debug());
 
         for download in downloads {
             output.insert((
                 download.key().clone(),
                 Kind::Download,
-                Either::Right(download.url()),
+                Either::Right(download.download_url(
+                    python_install_mirror.as_deref(),
+                    pypy_install_mirror.as_deref(),
+                )?),
             ));
         }
     }
@@ -241,7 +252,7 @@ pub(crate) async fn list(
                     Ok(PrintData {
                         key: key.to_string(),
                         version: version.version().clone(),
-                        #[allow(clippy::get_first)]
+                        #[expect(clippy::get_first)]
                         version_parts: NamedVersionParts {
                             major: release.get(0).copied().unwrap_or(0),
                             minor: release.get(1).copied().unwrap_or(0),

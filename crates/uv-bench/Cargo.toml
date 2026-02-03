@@ -1,13 +1,12 @@
 [package]
 name = "uv-bench"
-version = "0.0.0"
-description = "uv Micro-benchmarks"
+version = "0.0.17"
+description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 license = { workspace = true }
 
@@ -23,14 +22,14 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
-[dependencies]
+[dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-extract = { workspace = true, optional = true }
+uv-extract = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -43,10 +42,7 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
-codspeed-criterion-compat = { version = "3.0.2", default-features = false, optional = true }
-criterion = { version = "0.7.0", default-features = false, features = [
-  "async_tokio",
-] }
+criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 jiff = { workspace = true }
 tokio = { workspace = true }
 
@@ -54,5 +50,4 @@ tokio = { workspace = true }
 ignored = ["uv-extract"]
 
 [features]
-codspeed = ["codspeed-criterion-compat"]
 static = ["uv-extract/static"]

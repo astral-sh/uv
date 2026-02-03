@@ -8,10 +8,11 @@ use crate::commands::project::{
     EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, TargetTriple};
 use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
@@ -36,7 +37,7 @@ impl From<EphemeralEnvironment> for PythonEnvironment {
 
 impl EphemeralEnvironment {
     /// Set the ephemeral overlay for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_overlay(&self, contents: impl AsRef<[u8]>) -> Result<(), ProjectError> {
         let site_packages = self
             .0
@@ -49,7 +50,7 @@ impl EphemeralEnvironment {
     }
 
     /// Enable system site packages for a Python environment.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
         self.0
             .set_pyvenv_cfg("include-system-site-packages", "true")?;
@@ -68,7 +69,7 @@ impl EphemeralEnvironment {
     /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
     /// easier for these tools to statically and reliably understand the relationship between
     /// the two environments.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn set_parent_environment(
         &self,
         parent_environment_sys_prefix: &Path,
@@ -113,7 +114,7 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         python_platform: Option<&TargetTriple>,
         settings: &ResolverInstallerSettings,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
@@ -133,7 +134,7 @@ impl CachedEnvironment {
                 python_platform,
                 build_constraints.clone(),
                 &settings.resolver,
-                network_settings,
+                client_builder,
                 state,
                 resolve,
                 concurrency,
@@ -173,11 +174,9 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        if cache.refresh().is_none() {
-            if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-                if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                    return Ok(Self(environment));
-                }
+        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
+            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
+                return Ok(Self(environment));
             }
         }
 
@@ -188,7 +187,7 @@ impl CachedEnvironment {
             interpreter,
             uv_virtualenv::Prompt::None,
             false,
-            uv_virtualenv::OnExisting::Remove,
+            uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
             true,
             false,
             false,
@@ -201,7 +200,7 @@ impl CachedEnvironment {
             Modifications::Exact,
             build_constraints,
             settings.into(),
-            network_settings,
+            client_builder,
             state,
             install,
             installer_metadata,

@@ -1,7 +1,8 @@
 mod options_metadata;
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{quote, quote_spanned};
+use syn::spanned::Spanned;
 use syn::{Attribute, DeriveInput, ImplItem, ItemImpl, LitStr, parse_macro_input};
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, doc, option_group))]
@@ -77,6 +78,14 @@ fn get_env_var_pattern_from_attr(attrs: &[Attribute]) -> Option<String> {
         .map(|lit_str| lit_str.value())
 }
 
+fn get_added_in(attrs: &[Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .find(|a| a.path().is_ident("attr_added_in"))
+        .and_then(|attr| attr.parse_args::<LitStr>().ok())
+        .map(|lit_str| lit_str.value())
+}
+
 fn is_hidden(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.path().is_ident("attr_hidden"))
 }
@@ -91,15 +100,24 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         .iter()
         .filter_map(|item| match item {
             ImplItem::Const(item) if !is_hidden(&item.attrs) => {
-                let name = item.ident.to_string();
                 let doc = get_doc_comment(&item.attrs);
-                Some((name, doc))
+                let added_in = get_added_in(&item.attrs);
+                let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit),
+                    ..
+                }) = &item.expr
+                else {
+                    return None;
+                };
+                let name = lit.value();
+                Some((name, doc, added_in, item.ident.span()))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
                 // Extract the environment variable patterns.
                 if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
                     let doc = get_doc_comment(&item.attrs);
-                    Some((pattern, doc))
+                    let added_in = get_added_in(&item.attrs);
+                    Some((pattern, doc, added_in, item.sig.span()))
                 } else {
                     None // Skip if pattern extraction fails.
                 }
@@ -108,10 +126,44 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
         })
         .collect();
 
+    // Look for missing attr_added_in and issue a compiler error if any are found.
+    let added_in_errors: Vec<_> = constants
+        .iter()
+        .filter_map(|(name, _, added_in, span)| {
+            added_in.is_none().then_some({
+                let msg = format!(
+                    "missing #[attr_added_in(\"x.y.z\")] on `{name}`\nnote: env vars for an upcoming release should be annotated with `#[attr_added_in(\"next release\")]`"
+                );
+                quote_spanned! {*span => compile_error!(#msg); }
+            })
+        })
+        .collect();
+
+    if !added_in_errors.is_empty() {
+        return quote! { #ast #(#added_in_errors)* }.into();
+    }
+
+    let env_var_names = ast.items.iter().filter_map(|item| {
+        if let ImplItem::Const(item) = item {
+            let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit),
+                ..
+            }) = &item.expr
+            else {
+                return None;
+            };
+            Some(lit.value())
+        } else {
+            None
+        }
+    });
+
     let struct_name = &ast.self_ty;
-    let pairs = constants.iter().map(|(name, doc)| {
-        quote! {
-            (#name, #doc)
+    let pairs = constants.iter().map(|(name, doc, added_in, _span)| {
+        if let Some(added_in) = added_in {
+            quote! { (#name, #doc, Some(#added_in)) }
+        } else {
+            quote! { (#name, #doc, None) }
         }
     });
 
@@ -120,8 +172,13 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
 
         impl #struct_name {
             /// Returns a list of pairs of env var and their documentation defined in this impl block.
-            pub fn metadata<'a>() -> &'a [(&'static str, &'static str)] {
+            pub fn metadata<'a>() -> &'a [(&'static str, &'static str, Option<&'static str>)] {
                 &[#(#pairs),*]
+            }
+
+            /// Returns all environment variable names defined as constants (including hidden ones).
+            pub fn all_names() -> &'static [&'static str] {
+                &[#(#env_var_names),*]
             }
         }
     };
@@ -136,5 +193,10 @@ pub fn attr_hidden(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn attr_env_var_pattern(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn attr_added_in(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }

@@ -3,6 +3,7 @@ use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::str::FromStr;
 use std::sync::OnceLock;
 use std::{env, io};
 
@@ -17,7 +18,9 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{
+    LockedFile, LockedFileError, LockedFileMode, PythonExt, Simplified, write_atomic_sync,
+};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -34,9 +37,10 @@ use crate::{
 };
 
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE};
+use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -59,6 +63,7 @@ pub struct Interpreter {
     pointer_size: PointerSize,
     gil_disabled: bool,
     real_executable: PathBuf,
+    debug_enabled: bool,
 }
 
 impl Interpreter {
@@ -82,6 +87,7 @@ impl Interpreter {
             sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
+            debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
@@ -169,7 +175,7 @@ impl Interpreter {
             base_executable,
             self.python_major(),
             self.python_minor(),
-            self.variant().suffix(),
+            self.variant().executable_suffix(),
         ) {
             Ok(path) => path,
             Err(err) => {
@@ -212,7 +218,13 @@ impl Interpreter {
 
     pub fn variant(&self) -> PythonVariant {
         if self.gil_disabled() {
-            PythonVariant::Freethreaded
+            if self.debug_enabled() {
+                PythonVariant::FreethreadedDebug
+            } else {
+                PythonVariant::Freethreaded
+            }
+        } else if self.debug_enabled() {
+            PythonVariant::Debug
         } else {
             PythonVariant::default()
         }
@@ -243,6 +255,7 @@ impl Interpreter {
                 self.implementation_tuple(),
                 self.manylinux_compatible,
                 self.gil_disabled,
+                false,
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
@@ -292,7 +305,19 @@ impl Interpreter {
             return false;
         };
 
-        self.sys_base_prefix.starts_with(installations.root())
+        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+            return false;
+        };
+
+        let Some(first_component) = suffix.components().next() else {
+            return false;
+        };
+
+        let Some(name) = first_component.as_os_str().to_str() else {
+            return false;
+        };
+
+        PythonInstallationKey::from_str(name).is_ok()
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -508,6 +533,12 @@ impl Interpreter {
         self.gil_disabled
     }
 
+    /// Return whether this is a debug build of Python, as specified by the sysconfig var
+    /// `Py_DEBUG`.
+    pub fn debug_enabled(&self) -> bool {
+        self.debug_enabled
+    }
+
     /// Return the `--target` directory for this interpreter, if any.
     pub fn target(&self) -> Option<&Target> {
         self.target.as_ref()
@@ -638,17 +669,28 @@ impl Interpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+    pub async fn lock(&self) -> Result<LockedFile, LockedFileError> {
         if let Some(target) = self.target() {
             // If we're installing into a `--target`, use a target-specific lockfile.
-            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+            LockedFile::acquire(
+                target.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                target.root().user_display(),
+            )
+            .await
         } else if let Some(prefix) = self.prefix() {
             // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
-            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+            LockedFile::acquire(
+                prefix.root().join(".lock"),
+                LockedFileMode::Exclusive,
+                prefix.root().user_display(),
+            )
+            .await
         } else if self.is_virtualenv() {
             // If the environment a virtualenv, use a virtualenv-specific lockfile.
             LockedFile::acquire(
                 self.sys_prefix.join(".lock"),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -656,6 +698,7 @@ impl Interpreter {
             // Otherwise, use a global lockfile.
             LockedFile::acquire(
                 env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
             )
             .await
@@ -797,6 +840,12 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error("Failed to query Python interpreter at `{path}`")]
+    PermissionDenied {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
     #[error("{0}")]
     UnexpectedResponse(UnexpectedResponseError),
     #[error("{0}")]
@@ -871,6 +920,7 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -889,6 +939,7 @@ struct InterpreterInfo {
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    debug_enabled: bool,
 }
 
 impl InterpreterInfo {
@@ -911,12 +962,21 @@ impl InterpreterInfo {
             .arg(script)
             .output()
             .map_err(|err| {
-                if err.kind() == io::ErrorKind::NotFound {
-                    return Error::NotFound(interpreter.to_path_buf());
+                match err.kind() {
+                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::PermissionDenied => {
+                        return Error::PermissionDenied {
+                            path: interpreter.to_path_buf(),
+                            err,
+                        };
+                    }
+                    _ => {}
                 }
                 #[cfg(windows)]
-                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) =
-                    err.raw_os_error().and_then(|code| u32::try_from(code).ok())
+                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                    .raw_os_error()
+                    .and_then(|code| u32::try_from(code).ok())
+                    .map(WIN32_ERROR)
                 {
                     // These error codes are returned if the Python interpreter is a corrupt MSIX
                     // package, which we want to differentiate from a typical spawn failure.
@@ -1227,8 +1287,8 @@ mod tests {
 
     use crate::Interpreter;
 
-    #[test]
-    fn test_cache_invalidation() {
+    #[tokio::test]
+    async fn test_cache_invalidation() {
         let mock_dir = tempdir().unwrap();
         let mocked_interpreter = mock_dir.path().join("python");
         let json = indoc! {r##"
@@ -1284,11 +1344,12 @@ mod tests {
                 "scripts": "bin"
             },
             "pointer_size": "64",
-            "gil_disabled": true
+            "gil_disabled": true,
+            "debug_enabled": false
         }
     "##};
 
-        let cache = Cache::temp().unwrap().init().unwrap();
+        let cache = Cache::temp().unwrap().init().await.unwrap();
 
         fs::write(
             &mocked_interpreter,

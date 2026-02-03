@@ -106,7 +106,7 @@ fn find_sysconfigdata(
         .join("lib")
         .join(format!("python{major}.{minor}{suffix}"));
     if !lib.exists() {
-        return Err(Error::MissingLib);
+        return Err(Error::MissingLib(lib));
     }
 
     // Probe the `lib` directory for `_sysconfigdata_`.
@@ -270,8 +270,8 @@ fn patch_pkgconfig(contents: &str) -> Option<String> {
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Python installation is missing a `lib` directory")]
-    MissingLib,
+    #[error("Python installation is missing a `lib` directory at: {0}")]
+    MissingLib(PathBuf),
     #[error("Python installation is missing a `_sysconfigdata_` file")]
     MissingSysconfigdata,
     #[error(transparent)]
@@ -305,7 +305,7 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "BASEMODLIBS": "",
@@ -318,7 +318,7 @@ mod tests {
             "exec_prefix": "/real/prefix/exec_prefix",
             "prefix": "/real/prefix/prefix"
         }
-        "###);
+        "#);
 
         Ok(())
     }
@@ -337,7 +337,7 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "AR": "ar",
@@ -345,7 +345,7 @@ mod tests {
             "CXX": "c++ -pthread",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "##);
+        "#);
 
         // Cross-compiles use GNU
         let sysconfigdata = [
@@ -359,14 +359,14 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "CC": "cc",
             "CXX": "c++",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "##);
+        "#);
 
         Ok(())
     }
@@ -383,13 +383,13 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "BLDSHARED": "cc -bundle -undefined dynamic_lookup -arch arm64",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "###);
+        "#);
 
         Ok(())
     }
@@ -416,7 +416,7 @@ mod tests {
 
         let pkgconfig = patch_pkgconfig(pkgconfig).unwrap();
 
-        insta::assert_snapshot!(pkgconfig, @r###"
+        insta::assert_snapshot!(pkgconfig, @"
         # See: man pkg-config
         prefix=${pcfiledir}/../..
         exec_prefix=${prefix}
@@ -430,6 +430,6 @@ mod tests {
         Libs.private: -ldl   -framework CoreFoundation
         Libs:
         Cflags: -I${includedir}/python3.10
-        "###);
+        ");
     }
 }

@@ -24,7 +24,7 @@ fn format_project() -> Result<()> {
         x    = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.format(), @r"
+    uv_snapshot!(context.filters(), context.format(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -36,9 +36,103 @@ fn format_project() -> Result<()> {
 
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(formatted_content, @r"
-        x = 1
+    assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_missing_pyproject_toml() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_missing_project_in_pyproject_toml() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Create an empty pyproject.toml with no [project] section
+    context.temp_dir.child("pyproject.toml");
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_unmanaged_project() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        managed = false
+    "#})?;
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
 }
@@ -66,7 +160,7 @@ fn format_from_project_root() -> Result<()> {
     fs_err::create_dir_all(&subdir)?;
 
     // Using format from a subdirectory should still run in the project root
-    uv_snapshot!(context.filters(), context.format().current_dir(&subdir), @r"
+    uv_snapshot!(context.filters(), context.format().current_dir(&subdir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -78,9 +172,33 @@ fn format_from_project_root() -> Result<()> {
 
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(formatted_content, @r"
-        x = 1
+    assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_no_project() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
+        x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format().arg("--no-project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     ");
+
+    // Check that the file was formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @"x = 1");
 
     Ok(())
 }
@@ -110,7 +228,7 @@ fn format_relative_project() -> Result<()> {
         x    = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.format().arg("--project").arg("project"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--project").arg("project"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -122,15 +240,53 @@ fn format_relative_project() -> Result<()> {
 
     // Check that the relative project file was formatted
     let relative_project_content = fs_err::read_to_string(&relative_project_main_py)?;
-    assert_snapshot!(relative_project_content, @r"
-        x = 1
-    ");
+    assert_snapshot!(relative_project_content, @"x = 1");
 
     // Check that the root file was not formatted
     let root_content = fs_err::read_to_string(&root_main_py)?;
-    assert_snapshot!(root_content, @r"
+    assert_snapshot!(root_content, @"x    = 1");
+
+    Ok(())
+}
+
+#[test]
+fn format_fails_malformed_pyproject() -> Result<()> {
+    let context = TestContext::new_with_versions(&[]);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str("malformed pyproject.toml")?;
+
+    // Create an unformatted Python file
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str(indoc! {r"
         x    = 1
+    "})?;
+
+    uv_snapshot!(context.filters(), context.format(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 1, column 11
+        |
+      1 | malformed pyproject.toml
+        |           ^
+      key with no value, expected `=`
+
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 1, column 11
+      |
+    1 | malformed pyproject.toml
+      |           ^
+    key with no value, expected `=`
     ");
+
+    // Check that the file is not formatted
+    let formatted_content = fs_err::read_to_string(&main_py)?;
+    assert_snapshot!(formatted_content, @"x    = 1");
 
     Ok(())
 }
@@ -154,7 +310,7 @@ fn format_check() -> Result<()> {
         x    = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.format().arg("--check"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--check"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -167,9 +323,7 @@ fn format_check() -> Result<()> {
 
     // Verify the file wasn't modified
     let content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(content, @r"
-        x    = 1
-    ");
+    assert_snapshot!(content, @"x    = 1");
 
     Ok(())
 }
@@ -193,7 +347,7 @@ fn format_diff() -> Result<()> {
         x    = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.format().arg("--diff"), @r#"
+    uv_snapshot!(context.filters(), context.format().arg("--diff"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -207,13 +361,11 @@ fn format_diff() -> Result<()> {
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     1 file would be reformatted
-    "#);
+    ");
 
     // Verify the file wasn't modified
     let content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(content, @r"
-        x    = 1
-    ");
+    assert_snapshot!(content, @"x    = 1");
 
     Ok(())
 }
@@ -239,7 +391,7 @@ fn format_with_ruff_args() -> Result<()> {
     "#})?;
 
     // Run format with custom line length
-    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py").arg("--line-length").arg("200"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py").arg("--line-length").arg("200"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -283,7 +435,7 @@ fn format_specific_files() -> Result<()> {
         x    = 1
     "})?;
 
-    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--").arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -294,15 +446,11 @@ fn format_specific_files() -> Result<()> {
     ");
 
     let main_content = fs_err::read_to_string(&main_py)?;
-    assert_snapshot!(main_content, @r"
-        x = 1
-    ");
+    assert_snapshot!(main_content, @"x = 1");
 
     // Unchanged
     let utils_content = fs_err::read_to_string(&utils_py)?;
-    assert_snapshot!(utils_content, @r"
-        x    = 1
-    ");
+    assert_snapshot!(utils_content, @"x    = 1");
 
     Ok(())
 }
@@ -329,7 +477,7 @@ fn format_version_option() -> Result<()> {
     // TODO(zanieb): It'd be nice to assert on the version used here somehow? Maybe we should emit
     // the version we're using to stderr? Alas there's not a way to get the Ruff version from the
     // format command :)
-    uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2"), @r"
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg("0.8.2"), @"
     success: true
     exit_code: 0
     ----- stdout -----

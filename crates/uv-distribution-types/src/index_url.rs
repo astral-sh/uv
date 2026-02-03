@@ -8,9 +8,9 @@ use std::sync::{Arc, LazyLock, RwLock};
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
-use tracing::trace;
 use url::{ParseError, Url};
-
+use uv_auth::RealmRef;
+use uv_cache_key::CanonicalUrl;
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user;
@@ -82,22 +82,21 @@ impl schemars::JsonSchema for IndexUrl {
 }
 
 impl IndexUrl {
+    #[inline]
+    fn inner(&self) -> &VerbatimUrl {
+        match self {
+            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => url,
+        }
+    }
+
     /// Return the raw URL for the index.
     pub fn url(&self) -> &DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.raw(),
-            Self::Url(url) => url.raw(),
-            Self::Path(url) => url.raw(),
-        }
+        self.inner().raw()
     }
 
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
-        match self {
-            Self::Pypi(url) => url.to_url(),
-            Self::Url(url) => url.to_url(),
-            Self::Path(url) => url.to_url(),
-        }
+        self.inner().to_url()
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
@@ -140,21 +139,13 @@ impl IndexUrl {
 
 impl Display for IndexUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pypi(url) => Display::fmt(url, f),
-            Self::Url(url) => Display::fmt(url, f),
-            Self::Path(url) => Display::fmt(url, f),
-        }
+        Display::fmt(self.inner(), f)
     }
 }
 
 impl Verbatim for IndexUrl {
     fn verbatim(&self) -> Cow<'_, str> {
-        match self {
-            Self::Pypi(url) => url.verbatim(),
-            Self::Url(url) => url.verbatim(),
-            Self::Path(url) => url.verbatim(),
-        }
+        self.inner().verbatim()
     }
 }
 
@@ -204,11 +195,7 @@ impl serde::ser::Serialize for IndexUrl {
     where
         S: serde::ser::Serializer,
     {
-        match self {
-            Self::Pypi(url) => url.without_credentials().serialize(serializer),
-            Self::Url(url) => url.without_credentials().serialize(serializer),
-            Self::Path(url) => url.without_credentials().serialize(serializer),
-        }
+        self.inner().without_credentials().serialize(serializer)
     }
 }
 
@@ -249,11 +236,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
-        match index {
-            IndexUrl::Pypi(url) => url.to_url(),
-            IndexUrl::Url(url) => url.to_url(),
-            IndexUrl::Path(url) => url.to_url(),
-        }
+        index.inner().to_url()
     }
 }
 
@@ -261,11 +244,7 @@ impl Deref for IndexUrl {
     type Target = Url;
 
     fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Pypi(url) => url,
-            Self::Url(url) => url,
-            Self::Path(url) => url,
-        }
+        self.inner()
     }
 }
 
@@ -311,6 +290,12 @@ impl IndexLocations {
     pub fn is_none(&self) -> bool {
         *self == Self::default()
     }
+}
+
+/// Returns `true` if two [`IndexUrl`]s refer to the same index.
+fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
+    RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
+        && CanonicalUrl::new(a.url()) == CanonicalUrl::new(b.url())
 }
 
 impl<'a> IndexLocations {
@@ -454,31 +439,10 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Add all authenticated sources to the cache.
-    pub fn cache_index_credentials(&self) {
-        for index in self.known_indexes() {
-            if let Some(credentials) = index.credentials() {
-                trace!(
-                    "Read credentials for index {}",
-                    index
-                        .name
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_else(|| index.url.to_string())
-                );
-                let credentials = Arc::new(credentials);
-                uv_auth::store_credentials(index.raw_url(), credentials.clone());
-                if let Some(root_url) = index.root_url() {
-                    uv_auth::store_credentials(&root_url, credentials.clone());
-                }
-            }
-        }
-    }
-
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
     pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
             }
         }
@@ -488,7 +452,7 @@ impl<'a> IndexLocations {
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
             }
         }
@@ -621,7 +585,7 @@ impl<'a> IndexUrls {
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
     pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.status_code_strategy();
             }
         }
@@ -631,7 +595,7 @@ impl<'a> IndexUrls {
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
     pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.simple_api_cache_control();
             }
         }
@@ -641,7 +605,7 @@ impl<'a> IndexUrls {
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<&str> {
         for index in &self.indexes {
-            if index.url() == url {
+            if is_same_index(index.url(), url) {
                 return index.artifact_cache_control();
             }
         }
@@ -909,6 +873,45 @@ mod tests {
         assert_eq!(
             index_locations.artifact_cache_control_for(&pytorch_url),
             Some("max-age=3600")
+        );
+    }
+
+    #[test]
+    fn test_nvidia_default_cache_control() {
+        // Test that NVIDIA indexes get default cache control from the getter methods
+        let indexes = vec![Index {
+            name: Some(IndexName::from_str("nvidia").unwrap()),
+            url: IndexUrl::from_str("https://pypi.nvidia.com").unwrap(),
+            cache_control: None, // No explicit cache control
+            explicit: false,
+            default: false,
+            origin: None,
+            format: IndexFormat::Simple,
+            publish_url: None,
+            authenticate: uv_auth::AuthPolicy::default(),
+            ignore_error_codes: None,
+        }];
+
+        let index_urls = IndexUrls::from_indexes(indexes.clone());
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+
+        let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
+
+        // IndexUrls should return the default for NVIDIA
+        assert_eq!(index_urls.simple_api_cache_control_for(&nvidia_url), None);
+        assert_eq!(
+            index_urls.artifact_cache_control_for(&nvidia_url),
+            Some("max-age=365000000, immutable, public")
+        );
+
+        // IndexLocations should also return the default for NVIDIA
+        assert_eq!(
+            index_locations.simple_api_cache_control_for(&nvidia_url),
+            None
+        );
+        assert_eq!(
+            index_locations.artifact_cache_control_for(&nvidia_url),
+            Some("max-age=365000000, immutable, public")
         );
     }
 }

@@ -1,119 +1,145 @@
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
+    ops::BitOr,
     str::FromStr,
 };
 
+use enumflags2::{BitFlags, bitflags};
 use thiserror::Error;
 use uv_warnings::warn_user_once;
 
-bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-    pub struct PreviewFeatures: u32 {
-        const PYTHON_INSTALL_DEFAULT = 1 << 0;
-        const PYTHON_UPGRADE = 1 << 1;
-        const JSON_OUTPUT = 1 << 2;
-        const PYLOCK = 1 << 3;
-        const ADD_BOUNDS = 1 << 4;
-        const PACKAGE_CONFLICTS = 1 << 5;
-        const EXTRA_BUILD_DEPENDENCIES = 1 << 6;
-        const DETECT_MODULE_CONFLICTS = 1 << 7;
-        const FORMAT = 1 << 8;
-    }
+#[bitflags]
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewFeature {
+    PythonInstallDefault = 1 << 0,
+    PythonUpgrade = 1 << 1,
+    JsonOutput = 1 << 2,
+    Pylock = 1 << 3,
+    AddBounds = 1 << 4,
+    PackageConflicts = 1 << 5,
+    ExtraBuildDependencies = 1 << 6,
+    DetectModuleConflicts = 1 << 7,
+    Format = 1 << 8,
+    NativeAuth = 1 << 9,
+    S3Endpoint = 1 << 10,
+    CacheSize = 1 << 11,
+    InitProjectFlag = 1 << 12,
+    WorkspaceMetadata = 1 << 13,
+    WorkspaceDir = 1 << 14,
+    WorkspaceList = 1 << 15,
+    SbomExport = 1 << 16,
+    AuthHelper = 1 << 17,
+    DirectPublish = 1 << 18,
+    TargetWorkspaceDiscovery = 1 << 19,
+    MetadataJson = 1 << 20,
+    GcsEndpoint = 1 << 21,
+    AdjustUlimit = 1 << 22,
+    SpecialCondaEnvNames = 1 << 23,
 }
 
-impl PreviewFeatures {
+impl PreviewFeature {
     /// Returns the string representation of a single preview feature flag.
-    ///
-    /// Panics if given a combination of flags.
-    fn flag_as_str(self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
-            Self::PYTHON_INSTALL_DEFAULT => "python-install-default",
-            Self::PYTHON_UPGRADE => "python-upgrade",
-            Self::JSON_OUTPUT => "json-output",
-            Self::PYLOCK => "pylock",
-            Self::ADD_BOUNDS => "add-bounds",
-            Self::PACKAGE_CONFLICTS => "package-conflicts",
-            Self::EXTRA_BUILD_DEPENDENCIES => "extra-build-dependencies",
-            Self::DETECT_MODULE_CONFLICTS => "detect-module-conflicts",
-            Self::FORMAT => "format",
-            _ => panic!("`flag_as_str` can only be used for exactly one feature flag"),
+            Self::PythonInstallDefault => "python-install-default",
+            Self::PythonUpgrade => "python-upgrade",
+            Self::JsonOutput => "json-output",
+            Self::Pylock => "pylock",
+            Self::AddBounds => "add-bounds",
+            Self::PackageConflicts => "package-conflicts",
+            Self::ExtraBuildDependencies => "extra-build-dependencies",
+            Self::DetectModuleConflicts => "detect-module-conflicts",
+            Self::Format => "format",
+            Self::NativeAuth => "native-auth",
+            Self::S3Endpoint => "s3-endpoint",
+            Self::CacheSize => "cache-size",
+            Self::InitProjectFlag => "init-project-flag",
+            Self::WorkspaceMetadata => "workspace-metadata",
+            Self::WorkspaceDir => "workspace-dir",
+            Self::WorkspaceList => "workspace-list",
+            Self::SbomExport => "sbom-export",
+            Self::AuthHelper => "auth-helper",
+            Self::DirectPublish => "direct-publish",
+            Self::TargetWorkspaceDiscovery => "target-workspace-discovery",
+            Self::MetadataJson => "metadata-json",
+            Self::GcsEndpoint => "gcs-endpoint",
+            Self::AdjustUlimit => "adjust-ulimit",
+            Self::SpecialCondaEnvNames => "special-conda-env-names",
         }
     }
 }
 
-impl Display for PreviewFeatures {
+impl Display for PreviewFeature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.is_empty() {
-            write!(f, "none")
-        } else {
-            let features: Vec<&str> = self.iter().map(Self::flag_as_str).collect();
-            write!(f, "{}", features.join(","))
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
 #[derive(Debug, Error, Clone)]
-pub enum PreviewFeaturesParseError {
-    #[error("Empty string in preview features: {0}")]
-    Empty(String),
-}
+#[error("Unknown feature flag")]
+pub struct PreviewFeatureParseError;
 
-impl FromStr for PreviewFeatures {
-    type Err = PreviewFeaturesParseError;
+impl FromStr for PreviewFeature {
+    type Err = PreviewFeatureParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut flags = Self::empty();
-
-        for part in s.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                return Err(PreviewFeaturesParseError::Empty(
-                    "Empty string in preview features".to_string(),
-                ));
-            }
-
-            let flag = match part {
-                "python-install-default" => Self::PYTHON_INSTALL_DEFAULT,
-                "python-upgrade" => Self::PYTHON_UPGRADE,
-                "json-output" => Self::JSON_OUTPUT,
-                "pylock" => Self::PYLOCK,
-                "add-bounds" => Self::ADD_BOUNDS,
-                "package-conflicts" => Self::PACKAGE_CONFLICTS,
-                "extra-build-dependencies" => Self::EXTRA_BUILD_DEPENDENCIES,
-                "detect-module-conflicts" => Self::DETECT_MODULE_CONFLICTS,
-                "format" => Self::FORMAT,
-                _ => {
-                    warn_user_once!("Unknown preview feature: `{part}`");
-                    continue;
-                }
-            };
-
-            flags |= flag;
-        }
-
-        Ok(flags)
+        Ok(match s {
+            "python-install-default" => Self::PythonInstallDefault,
+            "python-upgrade" => Self::PythonUpgrade,
+            "json-output" => Self::JsonOutput,
+            "pylock" => Self::Pylock,
+            "add-bounds" => Self::AddBounds,
+            "package-conflicts" => Self::PackageConflicts,
+            "extra-build-dependencies" => Self::ExtraBuildDependencies,
+            "detect-module-conflicts" => Self::DetectModuleConflicts,
+            "format" => Self::Format,
+            "native-auth" => Self::NativeAuth,
+            "s3-endpoint" => Self::S3Endpoint,
+            "gcs-endpoint" => Self::GcsEndpoint,
+            "cache-size" => Self::CacheSize,
+            "init-project-flag" => Self::InitProjectFlag,
+            "workspace-metadata" => Self::WorkspaceMetadata,
+            "workspace-dir" => Self::WorkspaceDir,
+            "workspace-list" => Self::WorkspaceList,
+            "sbom-export" => Self::SbomExport,
+            "auth-helper" => Self::AuthHelper,
+            "direct-publish" => Self::DirectPublish,
+            "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
+            "metadata-json" => Self::MetadataJson,
+            "adjust-ulimit" => Self::AdjustUlimit,
+            "special-conda-env-names" => Self::SpecialCondaEnvNames,
+            _ => return Err(PreviewFeatureParseError),
+        })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
-    flags: PreviewFeatures,
+    flags: BitFlags<PreviewFeature>,
+}
+
+impl Debug for Preview {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let flags: Vec<_> = self.flags.iter().collect();
+        f.debug_struct("Preview").field("flags", &flags).finish()
+    }
 }
 
 impl Preview {
-    pub fn new(flags: PreviewFeatures) -> Self {
-        Self { flags }
+    pub fn new(flags: &[PreviewFeature]) -> Self {
+        Self {
+            flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
+        }
     }
 
     pub fn all() -> Self {
-        Self::new(PreviewFeatures::all())
+        Self {
+            flags: BitFlags::all(),
+        }
     }
 
-    pub fn from_args(
-        preview: bool,
-        no_preview: bool,
-        preview_features: &[PreviewFeatures],
-    ) -> Self {
+    pub fn from_args(preview: bool, no_preview: bool, preview_features: &[PreviewFeature]) -> Self {
         if no_preview {
             return Self::default();
         }
@@ -122,16 +148,11 @@ impl Preview {
             return Self::all();
         }
 
-        let mut flags = PreviewFeatures::empty();
-
-        for features in preview_features {
-            flags |= *features;
-        }
-
-        Self { flags }
+        Self::new(preview_features)
     }
 
-    pub fn is_enabled(&self, flag: PreviewFeatures) -> bool {
+    /// Check if a single feature is enabled
+    pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
     }
 }
@@ -140,11 +161,47 @@ impl Display for Preview {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.flags.is_empty() {
             write!(f, "disabled")
-        } else if self.flags == PreviewFeatures::all() {
+        } else if self.flags.is_all() {
             write!(f, "enabled")
         } else {
-            write!(f, "{}", self.flags)
+            write!(
+                f,
+                "{}",
+                itertools::join(self.flags.iter().map(PreviewFeature::as_str), ",")
+            )
         }
+    }
+}
+
+#[derive(Debug, Error, Clone)]
+pub enum PreviewParseError {
+    #[error("Empty string in preview features: {0}")]
+    Empty(String),
+}
+
+impl FromStr for Preview {
+    type Err = PreviewParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut flags = BitFlags::empty();
+
+        for part in s.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                return Err(PreviewParseError::Empty(
+                    "Empty string in preview features".to_string(),
+                ));
+            }
+
+            match PreviewFeature::from_str(part) {
+                Ok(flag) => flags |= flag,
+                Err(_) => {
+                    warn_user_once!("Unknown preview feature: `{part}`");
+                }
+            }
+        }
+
+        Ok(Self { flags })
     }
 }
 
@@ -153,46 +210,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_preview_features_from_str() {
-        // Test single feature
-        let features = PreviewFeatures::from_str("python-install-default").unwrap();
-        assert_eq!(features, PreviewFeatures::PYTHON_INSTALL_DEFAULT);
-
-        // Test multiple features
-        let features = PreviewFeatures::from_str("python-upgrade,json-output").unwrap();
-        assert!(features.contains(PreviewFeatures::PYTHON_UPGRADE));
-        assert!(features.contains(PreviewFeatures::JSON_OUTPUT));
-        assert!(!features.contains(PreviewFeatures::PYLOCK));
-
-        // Test with whitespace
-        let features = PreviewFeatures::from_str("pylock , add-bounds").unwrap();
-        assert!(features.contains(PreviewFeatures::PYLOCK));
-        assert!(features.contains(PreviewFeatures::ADD_BOUNDS));
-
-        // Test empty string error
-        assert!(PreviewFeatures::from_str("").is_err());
-        assert!(PreviewFeatures::from_str("pylock,").is_err());
-        assert!(PreviewFeatures::from_str(",pylock").is_err());
-
-        // Test unknown feature (should be ignored with warning)
-        let features = PreviewFeatures::from_str("unknown-feature,pylock").unwrap();
-        assert!(features.contains(PreviewFeatures::PYLOCK));
-        assert_eq!(features.bits().count_ones(), 1);
+    fn test_preview_feature_from_str() {
+        let features = PreviewFeature::from_str("python-install-default").unwrap();
+        assert_eq!(features, PreviewFeature::PythonInstallDefault);
     }
 
     #[test]
-    fn test_preview_features_display() {
-        // Test empty
-        let features = PreviewFeatures::empty();
-        assert_eq!(features.to_string(), "none");
-
+    fn test_preview_from_str() {
         // Test single feature
-        let features = PreviewFeatures::PYTHON_INSTALL_DEFAULT;
-        assert_eq!(features.to_string(), "python-install-default");
+        let preview = Preview::from_str("python-install-default").unwrap();
+        assert_eq!(preview.flags, PreviewFeature::PythonInstallDefault);
 
         // Test multiple features
-        let features = PreviewFeatures::PYTHON_UPGRADE | PreviewFeatures::JSON_OUTPUT;
-        assert_eq!(features.to_string(), "python-upgrade,json-output");
+        let preview = Preview::from_str("python-upgrade,json-output").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
+        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
+        assert_eq!(preview.flags.bits().count_ones(), 2);
+
+        // Test with whitespace
+        let preview = Preview::from_str("pylock , add-bounds").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::Pylock));
+        assert!(preview.is_enabled(PreviewFeature::AddBounds));
+
+        // Test empty string error
+        assert!(Preview::from_str("").is_err());
+        assert!(Preview::from_str("pylock,").is_err());
+        assert!(Preview::from_str(",pylock").is_err());
+
+        // Test unknown feature (should be ignored with warning)
+        let preview = Preview::from_str("unknown-feature,pylock").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::Pylock));
+        assert_eq!(preview.flags.bits().count_ones(), 1);
     }
 
     #[test]
@@ -200,18 +248,28 @@ mod tests {
         // Test disabled
         let preview = Preview::default();
         assert_eq!(preview.to_string(), "disabled");
+        let preview = Preview::new(&[]);
+        assert_eq!(preview.to_string(), "disabled");
 
         // Test enabled (all features)
         let preview = Preview::all();
         assert_eq!(preview.to_string(), "enabled");
 
-        // Test specific features
-        let preview = Preview::new(PreviewFeatures::PYTHON_UPGRADE | PreviewFeatures::PYLOCK);
+        // Test single feature
+        let preview = Preview::new(&[PreviewFeature::PythonInstallDefault]);
+        assert_eq!(preview.to_string(), "python-install-default");
+
+        // Test multiple features
+        let preview = Preview::new(&[PreviewFeature::PythonUpgrade, PreviewFeature::Pylock]);
         assert_eq!(preview.to_string(), "python-upgrade,pylock");
     }
 
     #[test]
     fn test_preview_from_args() {
+        // Test no preview and no no_preview, and no features
+        let preview = Preview::from_args(false, false, &[]);
+        assert_eq!(preview.to_string(), "disabled");
+
         // Test no_preview
         let preview = Preview::from_args(true, true, &[]);
         assert_eq!(preview.to_string(), "disabled");
@@ -221,48 +279,62 @@ mod tests {
         assert_eq!(preview.to_string(), "enabled");
 
         // Test specific features
-        let features = vec![
-            PreviewFeatures::PYTHON_UPGRADE,
-            PreviewFeatures::JSON_OUTPUT,
-        ];
+        let features = vec![PreviewFeature::PythonUpgrade, PreviewFeature::JsonOutput];
         let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE));
-        assert!(preview.is_enabled(PreviewFeatures::JSON_OUTPUT));
-        assert!(!preview.is_enabled(PreviewFeatures::PYLOCK));
+        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
+        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
+        assert!(!preview.is_enabled(PreviewFeature::Pylock));
     }
 
     #[test]
-    fn test_as_str_single_flags() {
+    fn test_preview_feature_as_str() {
         assert_eq!(
-            PreviewFeatures::PYTHON_INSTALL_DEFAULT.flag_as_str(),
+            PreviewFeature::PythonInstallDefault.as_str(),
             "python-install-default"
         );
+        assert_eq!(PreviewFeature::PythonUpgrade.as_str(), "python-upgrade");
+        assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
+        assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
+        assert_eq!(PreviewFeature::AddBounds.as_str(), "add-bounds");
         assert_eq!(
-            PreviewFeatures::PYTHON_UPGRADE.flag_as_str(),
-            "python-upgrade"
-        );
-        assert_eq!(PreviewFeatures::JSON_OUTPUT.flag_as_str(), "json-output");
-        assert_eq!(PreviewFeatures::PYLOCK.flag_as_str(), "pylock");
-        assert_eq!(PreviewFeatures::ADD_BOUNDS.flag_as_str(), "add-bounds");
-        assert_eq!(
-            PreviewFeatures::PACKAGE_CONFLICTS.flag_as_str(),
+            PreviewFeature::PackageConflicts.as_str(),
             "package-conflicts"
         );
         assert_eq!(
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES.flag_as_str(),
+            PreviewFeature::ExtraBuildDependencies.as_str(),
             "extra-build-dependencies"
         );
         assert_eq!(
-            PreviewFeatures::DETECT_MODULE_CONFLICTS.flag_as_str(),
+            PreviewFeature::DetectModuleConflicts.as_str(),
             "detect-module-conflicts"
         );
-        assert_eq!(PreviewFeatures::FORMAT.flag_as_str(), "format");
-    }
-
-    #[test]
-    #[should_panic(expected = "`flag_as_str` can only be used for exactly one feature flag")]
-    fn test_as_str_multiple_flags_panics() {
-        let features = PreviewFeatures::PYTHON_UPGRADE | PreviewFeatures::JSON_OUTPUT;
-        let _ = features.flag_as_str();
+        assert_eq!(PreviewFeature::Format.as_str(), "format");
+        assert_eq!(PreviewFeature::NativeAuth.as_str(), "native-auth");
+        assert_eq!(PreviewFeature::S3Endpoint.as_str(), "s3-endpoint");
+        assert_eq!(PreviewFeature::CacheSize.as_str(), "cache-size");
+        assert_eq!(
+            PreviewFeature::InitProjectFlag.as_str(),
+            "init-project-flag"
+        );
+        assert_eq!(
+            PreviewFeature::WorkspaceMetadata.as_str(),
+            "workspace-metadata"
+        );
+        assert_eq!(PreviewFeature::WorkspaceDir.as_str(), "workspace-dir");
+        assert_eq!(PreviewFeature::WorkspaceList.as_str(), "workspace-list");
+        assert_eq!(PreviewFeature::SbomExport.as_str(), "sbom-export");
+        assert_eq!(PreviewFeature::AuthHelper.as_str(), "auth-helper");
+        assert_eq!(PreviewFeature::DirectPublish.as_str(), "direct-publish");
+        assert_eq!(
+            PreviewFeature::TargetWorkspaceDiscovery.as_str(),
+            "target-workspace-discovery"
+        );
+        assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
+        assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
+        assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
+        assert_eq!(
+            PreviewFeature::SpecialCondaEnvNames.as_str(),
+            "special-conda-env-names"
+        );
     }
 }

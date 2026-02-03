@@ -1,10 +1,10 @@
 [package]
 name = "uv-git"
-version = "0.0.1"
+version = "0.0.17"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -23,11 +23,13 @@ uv-git-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
+uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }
 dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+owo-colors = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 reqwest-middleware = { workspace = true }
 thiserror = { workspace = true }

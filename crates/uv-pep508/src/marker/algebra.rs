@@ -1104,7 +1104,7 @@ impl NodeId {
     // The terminal node representing `true`, or a trivially `true` node.
     pub(crate) const TRUE: Self = Self(0);
 
-    // The terminal node representing `false`, or an unsatisifable node.
+    // The terminal node representing `false`, or an unsatisfiable node.
     pub(crate) const FALSE: Self = Self(1);
 
     /// Create a new, optionally complemented, [`NodeId`] with the given index.
@@ -1161,7 +1161,6 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-#[allow(clippy::large_enum_variant)] // Nodes are interned.
 pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.

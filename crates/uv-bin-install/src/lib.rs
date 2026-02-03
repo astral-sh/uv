@@ -6,23 +6,22 @@
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
-use reqwest_retry::RetryPolicy;
+use reqwest_retry::policies::ExponentialBackoff;
 use std::fmt;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::debug;
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
 
-use uv_cache::{Cache, CacheBucket, CacheEntry};
-use uv_client::{BaseClient, is_extended_transient_error};
+use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
+use uv_client::{BaseClient, RetryState};
 use uv_extract::{Error as ExtractError, stream};
 use uv_pep440::Version;
 use uv_platform::Platform;
+use uv_redacted::DisplaySafeUrl;
 
 /// Binary tools that can be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -133,25 +132,30 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
+    #[error(transparent)]
+    Cache(#[from] CacheError),
+
     #[error("Failed to detect platform")]
     Platform(#[from] uv_platform::Error),
 
-    #[error("Attempt failed after {retries} retries")]
+    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RetriedError {
         #[source]
-        err: Box<Error>,
+        err: Box<Self>,
         retries: u32,
     },
 }
 
 impl Error {
-    /// Return the number of attempts that were made to complete this request before this error was
-    /// returned. Note that e.g. 3 retries equates to 4 attempts.
-    fn attempts(&self) -> u32 {
+    /// Return the number of retries that were made to complete this request before this error was
+    /// returned.
+    ///
+    /// Note that e.g. 3 retries equates to 4 attempts.
+    fn retries(&self) -> u32 {
         if let Self::RetriedError { retries, .. } = self {
-            return retries + 1;
+            return *retries;
         }
-        1
+        0
     }
 }
 
@@ -160,6 +164,7 @@ pub async fn bin_install(
     binary: Binary,
     version: &Version,
     client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
@@ -195,6 +200,7 @@ pub async fn bin_install(
         binary,
         version,
         client,
+        retry_policy,
         cache,
         reporter,
         &platform_name,
@@ -227,6 +233,7 @@ async fn download_and_unpack_with_retry(
     binary: Binary,
     version: &Version,
     client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
     reporter: &dyn Reporter,
     platform_name: &str,
@@ -234,10 +241,7 @@ async fn download_and_unpack_with_retry(
     download_url: &Url,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
-    let mut total_attempts = 0;
-    let mut retried_here = false;
-    let start_time = SystemTime::now();
-    let retry_policy = client.retry_policy();
+    let mut retry_state = RetryState::start(*retry_policy, download_url.clone());
 
     loop {
         let result = download_and_unpack(
@@ -253,40 +257,23 @@ async fn download_and_unpack_with_retry(
         )
         .await;
 
-        let result = match result {
-            Ok(path) => Ok(path),
+        match result {
+            Ok(path) => return Ok(path),
             Err(err) => {
-                total_attempts += err.attempts();
-                let past_retries = total_attempts - 1;
-
-                if is_extended_transient_error(&err) {
-                    let retry_decision = retry_policy.should_retry(start_time, past_retries);
-                    if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                        debug!(
-                            "Transient failure while installing {} {}; retrying...",
-                            binary.name(),
-                            version
-                        );
-                        let duration = execute_after
-                            .duration_since(SystemTime::now())
-                            .unwrap_or_else(|_| Duration::default());
-                        tokio::time::sleep(duration).await;
-                        retried_here = true;
-                        continue;
-                    }
+                if let Some(backoff) = retry_state.should_retry(&err, err.retries()) {
+                    retry_state.sleep_backoff(backoff).await;
+                    continue;
                 }
-
-                if retried_here {
+                return if retry_state.total_retries() > 0 {
                     Err(Error::RetriedError {
                         err: Box::new(err),
-                        retries: past_retries,
+                        retries: retry_state.total_retries(),
                     })
                 } else {
                     Err(err)
-                }
+                };
             }
-        };
-        return result;
+        }
     }
 }
 
@@ -308,7 +295,7 @@ async fn download_and_unpack(
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
-        .for_host(&download_url.clone().into())
+        .for_host(&DisplaySafeUrl::from_url(download_url.clone()))
         .get(download_url.clone())
         .send()
         .await

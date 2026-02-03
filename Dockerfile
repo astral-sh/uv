@@ -7,7 +7,6 @@ RUN apt update \
   build-essential \
   curl \
   python3-venv \
-  cmake \
   && apt clean \
   && rm -rf /var/lib/apt/lists/*
 

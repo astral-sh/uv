@@ -32,6 +32,8 @@ pub enum IncompatibleTag {
     Python,
     /// The ABI tag is incompatible.
     Abi,
+    /// The wheel uses an ABI, e.g., `abi3`, which is incompatible with free-threaded Python.
+    FreethreadedAbi,
     /// The Python version component of the ABI tag is incompatible with `requires-python`.
     AbiPythonVersion,
     /// The platform tag is incompatible.
@@ -75,10 +77,19 @@ impl TagCompatibility {
 #[derive(Debug, Clone)]
 pub struct Tags {
     /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,
+    /// Python platform used to generate the tags, for error messages.
+    python_platform: Platform,
+    /// Python version used to generate the tags, for error messages.
+    python_version: (u8, u8),
+    /// Whether the tags are for a different Python interpreter than the current one, for error
+    /// messages.
+    is_cross: bool,
+    /// Whether this is free-threaded Python.
+    is_freethreaded: bool,
 }
 
 impl Tags {
@@ -86,7 +97,13 @@ impl Tags {
     ///
     /// Tags are prioritized based on their position in the given vector. Specifically, tags that
     /// appear earlier in the vector are given higher priority than tags that appear later.
-    pub fn new(tags: Vec<(LanguageTag, AbiTag, PlatformTag)>) -> Self {
+    fn new(
+        tags: Vec<(LanguageTag, AbiTag, PlatformTag)>,
+        python_platform: Platform,
+        python_version: (u8, u8),
+        is_cross: bool,
+        is_freethreaded: bool,
+    ) -> Self {
         // Store the highest-priority tag for each component.
         let best = tags.first().cloned();
 
@@ -104,6 +121,10 @@ impl Tags {
         Self {
             map: Arc::new(map),
             best,
+            python_platform,
+            python_version,
+            is_cross,
+            is_freethreaded,
         }
     }
 
@@ -116,6 +137,7 @@ impl Tags {
         implementation_version: (u8, u8),
         manylinux_compatible: bool,
         gil_disabled: bool,
+        is_cross: bool,
     ) -> Result<Self, TagsError> {
         let implementation = Implementation::parse(implementation_name, gil_disabled)?;
 
@@ -219,7 +241,13 @@ impl Tags {
                 ));
             }
         }
-        Ok(Self::new(tags))
+        Ok(Self::new(
+            tags,
+            platform.clone(),
+            python_version,
+            is_cross,
+            gil_disabled,
+        ))
     }
 
     /// Returns true when there exists at least one tag for this platform
@@ -268,6 +296,19 @@ impl Tags {
         wheel_abi_tags: &[AbiTag],
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
+        // On free-threaded Python, check if any wheel ABI tag is compatible.
+        // Only `none` (pure Python) and free-threaded CPython ABIs (e.g., `cp313t`) are compatible.
+        if self.is_freethreaded {
+            let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
+                AbiTag::None => true,
+                AbiTag::CPython { gil_disabled, .. } => *gil_disabled,
+                _ => false,
+            });
+            if !has_compatible_abi {
+                return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+            }
+        }
+
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
 
         for wheel_py in wheel_python_tags {
@@ -319,6 +360,18 @@ impl Tags {
             .get(&python_tag)
             .map(|abis| abis.contains_key(&abi_tag))
             .unwrap_or(false)
+    }
+
+    pub fn python_platform(&self) -> &Platform {
+        &self.python_platform
+    }
+
+    pub fn python_version(&self) -> (u8, u8) {
+        self.python_version
+    }
+
+    pub fn is_cross(&self) -> bool {
+        self.is_cross
     }
 }
 
@@ -553,22 +606,25 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         }
         (Os::Windows, Arch::Aarch64) => vec![PlatformTag::WinArm64],
         (Os::FreeBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_").to_lowercase();
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::FreeBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::NetBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::NetBsd {
                 release_arch: SmallString::from(release_arch),
             }]
         }
         (Os::OpenBsd { release }, arch) => {
-            let release = release.replace(['.', '-'], "_");
-            let release_arch = format!("{release}_{arch}");
+            let release_tag = release.replace(['.', '-'], "_");
+            let arch_tag = arch.machine();
+            let release_arch = format!("{release_tag}_{arch_tag}");
             vec![PlatformTag::OpenBsd {
                 release_arch: SmallString::from(release_arch),
             }]
@@ -611,17 +667,81 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 release_arch: SmallString::from(release_arch),
             }]
         }
-        (Os::Android { api_level }, _) => {
-            vec![PlatformTag::Android {
-                api_level: *api_level,
-                arch,
-            }]
+        (Os::Android { api_level }, arch) => {
+            // Source: https://github.com/pypa/packaging/blob/e5470c1854e352f68fa3f83df9cbb0af59558c49/src/packaging/tags.py#L541
+            let mut platform_tags = vec![];
+
+            // 16 is the minimum API level known to have enough features to support CPython
+            // without major patching. Yield every API level from the maximum down to the
+            // minimum, inclusive.
+            for ver in (16..=*api_level).rev() {
+                platform_tags.push(PlatformTag::Android {
+                    api_level: ver,
+                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
+                });
+            }
+
+            platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
             vec![PlatformTag::Pyodide {
                 major: *major,
                 minor: *minor,
             }]
+        }
+        (
+            Os::Ios {
+                major,
+                minor,
+                simulator,
+            },
+            arch,
+        ) => {
+            // Source: https://github.com/pypa/packaging/blob/e9b9d09ebc5992ecad1799da22ee5faefb9cc7cb/src/packaging/tags.py#L484
+            let mut platform_tags = vec![];
+            let multiarch = IosMultiarch::from_arch(arch, *simulator)
+                .map_err(PlatformError::ArchDetectionError)?;
+
+            // Consider any iOS major.minor version from the version requested, down to
+            // 12.0. 12.0 is the first iOS version that is known to have enough features
+            // to support CPython. Consider every possible minor release up to X.9. The
+            // highest the minor has ever gone is 8 (14.8 and 15.8) but having some extra
+            // candidates that won't ever match doesn't really hurt, and it saves us from
+            // having to keep an explicit list of known iOS versions in the code. Return
+            // the results descending order of version number.
+
+            // If the requested major version is less than 12, there won't be any matches.
+            if *major < 12 {
+                return Ok(platform_tags);
+            }
+
+            // Consider the actual X.Y version that was requested.
+            platform_tags.push(PlatformTag::Ios {
+                major: *major,
+                minor: *minor,
+                multiarch,
+            });
+
+            // Consider every minor version from X.0 to the minor version prior to the
+            // version requested by the platform.
+            for min in (0..*minor).rev() {
+                platform_tags.push(PlatformTag::Ios {
+                    major: *major,
+                    minor: min,
+                    multiarch,
+                });
+            }
+            for maj in (12..*major).rev() {
+                for min in (0..=9).rev() {
+                    platform_tags.push(PlatformTag::Ios {
+                        major: maj,
+                        minor: min,
+                        multiarch,
+                    });
+                }
+            }
+
+            platform_tags
         }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
@@ -759,6 +879,138 @@ impl BinaryFormat {
     }
 }
 
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum AndroidAbi {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+    ArmeabiV7a,
+    Arm64V8a,
+    X86,
+    X86_64,
+}
+
+impl std::fmt::Display for AndroidAbi {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for AndroidAbi {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "armeabi_v7a" => Ok(Self::ArmeabiV7a),
+            "arm64_v8a" => Ok(Self::Arm64V8a),
+            "x86" => Ok(Self::X86),
+            "x86_64" => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {s}")),
+        }
+    }
+}
+
+impl AndroidAbi {
+    /// Determine the appropriate Android arch.
+    pub fn from_arch(arch: Arch) -> Result<Self, String> {
+        match arch {
+            Arch::Aarch64 => Ok(Self::Arm64V8a),
+            Arch::Armv7L => Ok(Self::ArmeabiV7a),
+            Arch::X86 => Ok(Self::X86),
+            Arch::X86_64 => Ok(Self::X86_64),
+            _ => Err(format!("Invalid Android arch format: {arch}")),
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::ArmeabiV7a => "armeabi_v7a",
+            Self::Arm64V8a => "arm64_v8a",
+            Self::X86 => "x86",
+            Self::X86_64 => "x86_64",
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub enum IosMultiarch {
+    // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#ios
+    Arm64Device,
+    Arm64Simulator,
+    X86_64Simulator,
+}
+
+impl std::fmt::Display for IosMultiarch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+impl FromStr for IosMultiarch {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "arm64_iphoneos" => Ok(Self::Arm64Device),
+            "arm64_iphonesimulator" => Ok(Self::Arm64Simulator),
+            "x86_64_iphonesimulator" => Ok(Self::X86_64Simulator),
+            _ => Err(format!("Invalid multiarch format: {s}")),
+        }
+    }
+}
+
+impl IosMultiarch {
+    /// Determine the appropriate multiarch for a iOS version.
+    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, String> {
+        if simulator {
+            match arch {
+                Arch::Aarch64 => Ok(Self::Arm64Simulator),
+                Arch::X86_64 => Ok(Self::X86_64Simulator),
+                _ => Err(format!("Invalid iOS simulator arch: {arch}")),
+            }
+        } else {
+            match arch {
+                Arch::Aarch64 => Ok(Self::Arm64Device),
+                _ => Err(format!("Invalid iOS device arch: {arch}")),
+            }
+        }
+    }
+
+    /// Return the canonical name of the binary format.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Arm64Device => "arm64_iphoneos",
+            Self::Arm64Simulator => "arm64_iphonesimulator",
+            Self::X86_64Simulator => "x86_64_iphonesimulator",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use insta::{assert_debug_snapshot, assert_snapshot};
@@ -785,30 +1037,30 @@ mod tests {
         let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(
             tags,
-            @r###"
-    [
-        "manylinux_2_20_x86_64",
-        "manylinux_2_19_x86_64",
-        "manylinux_2_18_x86_64",
-        "manylinux_2_17_x86_64",
-        "manylinux2014_x86_64",
-        "manylinux_2_16_x86_64",
-        "manylinux_2_15_x86_64",
-        "manylinux_2_14_x86_64",
-        "manylinux_2_13_x86_64",
-        "manylinux_2_12_x86_64",
-        "manylinux2010_x86_64",
-        "manylinux_2_11_x86_64",
-        "manylinux_2_10_x86_64",
-        "manylinux_2_9_x86_64",
-        "manylinux_2_8_x86_64",
-        "manylinux_2_7_x86_64",
-        "manylinux_2_6_x86_64",
-        "manylinux_2_5_x86_64",
-        "manylinux1_x86_64",
-        "linux_x86_64",
-    ]
-    "###
+            @r#"
+        [
+            "manylinux_2_20_x86_64",
+            "manylinux_2_19_x86_64",
+            "manylinux_2_18_x86_64",
+            "manylinux_2_17_x86_64",
+            "manylinux2014_x86_64",
+            "manylinux_2_16_x86_64",
+            "manylinux_2_15_x86_64",
+            "manylinux_2_14_x86_64",
+            "manylinux_2_13_x86_64",
+            "manylinux_2_12_x86_64",
+            "manylinux2010_x86_64",
+            "manylinux_2_11_x86_64",
+            "manylinux_2_10_x86_64",
+            "manylinux_2_9_x86_64",
+            "manylinux_2_8_x86_64",
+            "manylinux_2_7_x86_64",
+            "manylinux_2_6_x86_64",
+            "manylinux_2_5_x86_64",
+            "manylinux1_x86_64",
+            "linux_x86_64",
+        ]
+        "#
         );
     }
 
@@ -825,154 +1077,154 @@ mod tests {
         let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(
             tags,
-            @r###"
-    [
-        "macosx_21_0_x86_64",
-        "macosx_21_0_intel",
-        "macosx_21_0_fat64",
-        "macosx_21_0_fat32",
-        "macosx_21_0_universal2",
-        "macosx_21_0_universal",
-        "macosx_20_0_x86_64",
-        "macosx_20_0_intel",
-        "macosx_20_0_fat64",
-        "macosx_20_0_fat32",
-        "macosx_20_0_universal2",
-        "macosx_20_0_universal",
-        "macosx_19_0_x86_64",
-        "macosx_19_0_intel",
-        "macosx_19_0_fat64",
-        "macosx_19_0_fat32",
-        "macosx_19_0_universal2",
-        "macosx_19_0_universal",
-        "macosx_18_0_x86_64",
-        "macosx_18_0_intel",
-        "macosx_18_0_fat64",
-        "macosx_18_0_fat32",
-        "macosx_18_0_universal2",
-        "macosx_18_0_universal",
-        "macosx_17_0_x86_64",
-        "macosx_17_0_intel",
-        "macosx_17_0_fat64",
-        "macosx_17_0_fat32",
-        "macosx_17_0_universal2",
-        "macosx_17_0_universal",
-        "macosx_16_0_x86_64",
-        "macosx_16_0_intel",
-        "macosx_16_0_fat64",
-        "macosx_16_0_fat32",
-        "macosx_16_0_universal2",
-        "macosx_16_0_universal",
-        "macosx_15_0_x86_64",
-        "macosx_15_0_intel",
-        "macosx_15_0_fat64",
-        "macosx_15_0_fat32",
-        "macosx_15_0_universal2",
-        "macosx_15_0_universal",
-        "macosx_14_0_x86_64",
-        "macosx_14_0_intel",
-        "macosx_14_0_fat64",
-        "macosx_14_0_fat32",
-        "macosx_14_0_universal2",
-        "macosx_14_0_universal",
-        "macosx_13_0_x86_64",
-        "macosx_13_0_intel",
-        "macosx_13_0_fat64",
-        "macosx_13_0_fat32",
-        "macosx_13_0_universal2",
-        "macosx_13_0_universal",
-        "macosx_12_0_x86_64",
-        "macosx_12_0_intel",
-        "macosx_12_0_fat64",
-        "macosx_12_0_fat32",
-        "macosx_12_0_universal2",
-        "macosx_12_0_universal",
-        "macosx_11_0_x86_64",
-        "macosx_11_0_intel",
-        "macosx_11_0_fat64",
-        "macosx_11_0_fat32",
-        "macosx_11_0_universal2",
-        "macosx_11_0_universal",
-        "macosx_10_16_x86_64",
-        "macosx_10_16_intel",
-        "macosx_10_16_fat64",
-        "macosx_10_16_fat32",
-        "macosx_10_16_universal2",
-        "macosx_10_16_universal",
-        "macosx_10_15_x86_64",
-        "macosx_10_15_intel",
-        "macosx_10_15_fat64",
-        "macosx_10_15_fat32",
-        "macosx_10_15_universal2",
-        "macosx_10_15_universal",
-        "macosx_10_14_x86_64",
-        "macosx_10_14_intel",
-        "macosx_10_14_fat64",
-        "macosx_10_14_fat32",
-        "macosx_10_14_universal2",
-        "macosx_10_14_universal",
-        "macosx_10_13_x86_64",
-        "macosx_10_13_intel",
-        "macosx_10_13_fat64",
-        "macosx_10_13_fat32",
-        "macosx_10_13_universal2",
-        "macosx_10_13_universal",
-        "macosx_10_12_x86_64",
-        "macosx_10_12_intel",
-        "macosx_10_12_fat64",
-        "macosx_10_12_fat32",
-        "macosx_10_12_universal2",
-        "macosx_10_12_universal",
-        "macosx_10_11_x86_64",
-        "macosx_10_11_intel",
-        "macosx_10_11_fat64",
-        "macosx_10_11_fat32",
-        "macosx_10_11_universal2",
-        "macosx_10_11_universal",
-        "macosx_10_10_x86_64",
-        "macosx_10_10_intel",
-        "macosx_10_10_fat64",
-        "macosx_10_10_fat32",
-        "macosx_10_10_universal2",
-        "macosx_10_10_universal",
-        "macosx_10_9_x86_64",
-        "macosx_10_9_intel",
-        "macosx_10_9_fat64",
-        "macosx_10_9_fat32",
-        "macosx_10_9_universal2",
-        "macosx_10_9_universal",
-        "macosx_10_8_x86_64",
-        "macosx_10_8_intel",
-        "macosx_10_8_fat64",
-        "macosx_10_8_fat32",
-        "macosx_10_8_universal2",
-        "macosx_10_8_universal",
-        "macosx_10_7_x86_64",
-        "macosx_10_7_intel",
-        "macosx_10_7_fat64",
-        "macosx_10_7_fat32",
-        "macosx_10_7_universal2",
-        "macosx_10_7_universal",
-        "macosx_10_6_x86_64",
-        "macosx_10_6_intel",
-        "macosx_10_6_fat64",
-        "macosx_10_6_fat32",
-        "macosx_10_6_universal2",
-        "macosx_10_6_universal",
-        "macosx_10_5_x86_64",
-        "macosx_10_5_intel",
-        "macosx_10_5_fat64",
-        "macosx_10_5_fat32",
-        "macosx_10_5_universal2",
-        "macosx_10_5_universal",
-        "macosx_10_4_x86_64",
-        "macosx_10_4_intel",
-        "macosx_10_4_fat64",
-        "macosx_10_4_fat32",
-        "macosx_10_4_universal2",
-        "macosx_10_4_universal",
-    ]
-    "###
+            @r#"
+        [
+            "macosx_21_0_x86_64",
+            "macosx_21_0_intel",
+            "macosx_21_0_fat64",
+            "macosx_21_0_fat32",
+            "macosx_21_0_universal2",
+            "macosx_21_0_universal",
+            "macosx_20_0_x86_64",
+            "macosx_20_0_intel",
+            "macosx_20_0_fat64",
+            "macosx_20_0_fat32",
+            "macosx_20_0_universal2",
+            "macosx_20_0_universal",
+            "macosx_19_0_x86_64",
+            "macosx_19_0_intel",
+            "macosx_19_0_fat64",
+            "macosx_19_0_fat32",
+            "macosx_19_0_universal2",
+            "macosx_19_0_universal",
+            "macosx_18_0_x86_64",
+            "macosx_18_0_intel",
+            "macosx_18_0_fat64",
+            "macosx_18_0_fat32",
+            "macosx_18_0_universal2",
+            "macosx_18_0_universal",
+            "macosx_17_0_x86_64",
+            "macosx_17_0_intel",
+            "macosx_17_0_fat64",
+            "macosx_17_0_fat32",
+            "macosx_17_0_universal2",
+            "macosx_17_0_universal",
+            "macosx_16_0_x86_64",
+            "macosx_16_0_intel",
+            "macosx_16_0_fat64",
+            "macosx_16_0_fat32",
+            "macosx_16_0_universal2",
+            "macosx_16_0_universal",
+            "macosx_15_0_x86_64",
+            "macosx_15_0_intel",
+            "macosx_15_0_fat64",
+            "macosx_15_0_fat32",
+            "macosx_15_0_universal2",
+            "macosx_15_0_universal",
+            "macosx_14_0_x86_64",
+            "macosx_14_0_intel",
+            "macosx_14_0_fat64",
+            "macosx_14_0_fat32",
+            "macosx_14_0_universal2",
+            "macosx_14_0_universal",
+            "macosx_13_0_x86_64",
+            "macosx_13_0_intel",
+            "macosx_13_0_fat64",
+            "macosx_13_0_fat32",
+            "macosx_13_0_universal2",
+            "macosx_13_0_universal",
+            "macosx_12_0_x86_64",
+            "macosx_12_0_intel",
+            "macosx_12_0_fat64",
+            "macosx_12_0_fat32",
+            "macosx_12_0_universal2",
+            "macosx_12_0_universal",
+            "macosx_11_0_x86_64",
+            "macosx_11_0_intel",
+            "macosx_11_0_fat64",
+            "macosx_11_0_fat32",
+            "macosx_11_0_universal2",
+            "macosx_11_0_universal",
+            "macosx_10_16_x86_64",
+            "macosx_10_16_intel",
+            "macosx_10_16_fat64",
+            "macosx_10_16_fat32",
+            "macosx_10_16_universal2",
+            "macosx_10_16_universal",
+            "macosx_10_15_x86_64",
+            "macosx_10_15_intel",
+            "macosx_10_15_fat64",
+            "macosx_10_15_fat32",
+            "macosx_10_15_universal2",
+            "macosx_10_15_universal",
+            "macosx_10_14_x86_64",
+            "macosx_10_14_intel",
+            "macosx_10_14_fat64",
+            "macosx_10_14_fat32",
+            "macosx_10_14_universal2",
+            "macosx_10_14_universal",
+            "macosx_10_13_x86_64",
+            "macosx_10_13_intel",
+            "macosx_10_13_fat64",
+            "macosx_10_13_fat32",
+            "macosx_10_13_universal2",
+            "macosx_10_13_universal",
+            "macosx_10_12_x86_64",
+            "macosx_10_12_intel",
+            "macosx_10_12_fat64",
+            "macosx_10_12_fat32",
+            "macosx_10_12_universal2",
+            "macosx_10_12_universal",
+            "macosx_10_11_x86_64",
+            "macosx_10_11_intel",
+            "macosx_10_11_fat64",
+            "macosx_10_11_fat32",
+            "macosx_10_11_universal2",
+            "macosx_10_11_universal",
+            "macosx_10_10_x86_64",
+            "macosx_10_10_intel",
+            "macosx_10_10_fat64",
+            "macosx_10_10_fat32",
+            "macosx_10_10_universal2",
+            "macosx_10_10_universal",
+            "macosx_10_9_x86_64",
+            "macosx_10_9_intel",
+            "macosx_10_9_fat64",
+            "macosx_10_9_fat32",
+            "macosx_10_9_universal2",
+            "macosx_10_9_universal",
+            "macosx_10_8_x86_64",
+            "macosx_10_8_intel",
+            "macosx_10_8_fat64",
+            "macosx_10_8_fat32",
+            "macosx_10_8_universal2",
+            "macosx_10_8_universal",
+            "macosx_10_7_x86_64",
+            "macosx_10_7_intel",
+            "macosx_10_7_fat64",
+            "macosx_10_7_fat32",
+            "macosx_10_7_universal2",
+            "macosx_10_7_universal",
+            "macosx_10_6_x86_64",
+            "macosx_10_6_intel",
+            "macosx_10_6_fat64",
+            "macosx_10_6_fat32",
+            "macosx_10_6_universal2",
+            "macosx_10_6_universal",
+            "macosx_10_5_x86_64",
+            "macosx_10_5_intel",
+            "macosx_10_5_fat64",
+            "macosx_10_5_fat32",
+            "macosx_10_5_universal2",
+            "macosx_10_5_universal",
+            "macosx_10_4_x86_64",
+            "macosx_10_4_intel",
+            "macosx_10_4_fat64",
+            "macosx_10_4_fat32",
+            "macosx_10_4_universal2",
+            "macosx_10_4_universal",
+        ]
+        "#
         );
 
         let tags = compatible_tags(&Platform::new(
@@ -986,112 +1238,112 @@ mod tests {
         let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(
             tags,
-            @r###"
-    [
-        "macosx_14_0_x86_64",
-        "macosx_14_0_intel",
-        "macosx_14_0_fat64",
-        "macosx_14_0_fat32",
-        "macosx_14_0_universal2",
-        "macosx_14_0_universal",
-        "macosx_13_0_x86_64",
-        "macosx_13_0_intel",
-        "macosx_13_0_fat64",
-        "macosx_13_0_fat32",
-        "macosx_13_0_universal2",
-        "macosx_13_0_universal",
-        "macosx_12_0_x86_64",
-        "macosx_12_0_intel",
-        "macosx_12_0_fat64",
-        "macosx_12_0_fat32",
-        "macosx_12_0_universal2",
-        "macosx_12_0_universal",
-        "macosx_11_0_x86_64",
-        "macosx_11_0_intel",
-        "macosx_11_0_fat64",
-        "macosx_11_0_fat32",
-        "macosx_11_0_universal2",
-        "macosx_11_0_universal",
-        "macosx_10_16_x86_64",
-        "macosx_10_16_intel",
-        "macosx_10_16_fat64",
-        "macosx_10_16_fat32",
-        "macosx_10_16_universal2",
-        "macosx_10_16_universal",
-        "macosx_10_15_x86_64",
-        "macosx_10_15_intel",
-        "macosx_10_15_fat64",
-        "macosx_10_15_fat32",
-        "macosx_10_15_universal2",
-        "macosx_10_15_universal",
-        "macosx_10_14_x86_64",
-        "macosx_10_14_intel",
-        "macosx_10_14_fat64",
-        "macosx_10_14_fat32",
-        "macosx_10_14_universal2",
-        "macosx_10_14_universal",
-        "macosx_10_13_x86_64",
-        "macosx_10_13_intel",
-        "macosx_10_13_fat64",
-        "macosx_10_13_fat32",
-        "macosx_10_13_universal2",
-        "macosx_10_13_universal",
-        "macosx_10_12_x86_64",
-        "macosx_10_12_intel",
-        "macosx_10_12_fat64",
-        "macosx_10_12_fat32",
-        "macosx_10_12_universal2",
-        "macosx_10_12_universal",
-        "macosx_10_11_x86_64",
-        "macosx_10_11_intel",
-        "macosx_10_11_fat64",
-        "macosx_10_11_fat32",
-        "macosx_10_11_universal2",
-        "macosx_10_11_universal",
-        "macosx_10_10_x86_64",
-        "macosx_10_10_intel",
-        "macosx_10_10_fat64",
-        "macosx_10_10_fat32",
-        "macosx_10_10_universal2",
-        "macosx_10_10_universal",
-        "macosx_10_9_x86_64",
-        "macosx_10_9_intel",
-        "macosx_10_9_fat64",
-        "macosx_10_9_fat32",
-        "macosx_10_9_universal2",
-        "macosx_10_9_universal",
-        "macosx_10_8_x86_64",
-        "macosx_10_8_intel",
-        "macosx_10_8_fat64",
-        "macosx_10_8_fat32",
-        "macosx_10_8_universal2",
-        "macosx_10_8_universal",
-        "macosx_10_7_x86_64",
-        "macosx_10_7_intel",
-        "macosx_10_7_fat64",
-        "macosx_10_7_fat32",
-        "macosx_10_7_universal2",
-        "macosx_10_7_universal",
-        "macosx_10_6_x86_64",
-        "macosx_10_6_intel",
-        "macosx_10_6_fat64",
-        "macosx_10_6_fat32",
-        "macosx_10_6_universal2",
-        "macosx_10_6_universal",
-        "macosx_10_5_x86_64",
-        "macosx_10_5_intel",
-        "macosx_10_5_fat64",
-        "macosx_10_5_fat32",
-        "macosx_10_5_universal2",
-        "macosx_10_5_universal",
-        "macosx_10_4_x86_64",
-        "macosx_10_4_intel",
-        "macosx_10_4_fat64",
-        "macosx_10_4_fat32",
-        "macosx_10_4_universal2",
-        "macosx_10_4_universal",
-    ]
-    "###
+            @r#"
+        [
+            "macosx_14_0_x86_64",
+            "macosx_14_0_intel",
+            "macosx_14_0_fat64",
+            "macosx_14_0_fat32",
+            "macosx_14_0_universal2",
+            "macosx_14_0_universal",
+            "macosx_13_0_x86_64",
+            "macosx_13_0_intel",
+            "macosx_13_0_fat64",
+            "macosx_13_0_fat32",
+            "macosx_13_0_universal2",
+            "macosx_13_0_universal",
+            "macosx_12_0_x86_64",
+            "macosx_12_0_intel",
+            "macosx_12_0_fat64",
+            "macosx_12_0_fat32",
+            "macosx_12_0_universal2",
+            "macosx_12_0_universal",
+            "macosx_11_0_x86_64",
+            "macosx_11_0_intel",
+            "macosx_11_0_fat64",
+            "macosx_11_0_fat32",
+            "macosx_11_0_universal2",
+            "macosx_11_0_universal",
+            "macosx_10_16_x86_64",
+            "macosx_10_16_intel",
+            "macosx_10_16_fat64",
+            "macosx_10_16_fat32",
+            "macosx_10_16_universal2",
+            "macosx_10_16_universal",
+            "macosx_10_15_x86_64",
+            "macosx_10_15_intel",
+            "macosx_10_15_fat64",
+            "macosx_10_15_fat32",
+            "macosx_10_15_universal2",
+            "macosx_10_15_universal",
+            "macosx_10_14_x86_64",
+            "macosx_10_14_intel",
+            "macosx_10_14_fat64",
+            "macosx_10_14_fat32",
+            "macosx_10_14_universal2",
+            "macosx_10_14_universal",
+            "macosx_10_13_x86_64",
+            "macosx_10_13_intel",
+            "macosx_10_13_fat64",
+            "macosx_10_13_fat32",
+            "macosx_10_13_universal2",
+            "macosx_10_13_universal",
+            "macosx_10_12_x86_64",
+            "macosx_10_12_intel",
+            "macosx_10_12_fat64",
+            "macosx_10_12_fat32",
+            "macosx_10_12_universal2",
+            "macosx_10_12_universal",
+            "macosx_10_11_x86_64",
+            "macosx_10_11_intel",
+            "macosx_10_11_fat64",
+            "macosx_10_11_fat32",
+            "macosx_10_11_universal2",
+            "macosx_10_11_universal",
+            "macosx_10_10_x86_64",
+            "macosx_10_10_intel",
+            "macosx_10_10_fat64",
+            "macosx_10_10_fat32",
+            "macosx_10_10_universal2",
+            "macosx_10_10_universal",
+            "macosx_10_9_x86_64",
+            "macosx_10_9_intel",
+            "macosx_10_9_fat64",
+            "macosx_10_9_fat32",
+            "macosx_10_9_universal2",
+            "macosx_10_9_universal",
+            "macosx_10_8_x86_64",
+            "macosx_10_8_intel",
+            "macosx_10_8_fat64",
+            "macosx_10_8_fat32",
+            "macosx_10_8_universal2",
+            "macosx_10_8_universal",
+            "macosx_10_7_x86_64",
+            "macosx_10_7_intel",
+            "macosx_10_7_fat64",
+            "macosx_10_7_fat32",
+            "macosx_10_7_universal2",
+            "macosx_10_7_universal",
+            "macosx_10_6_x86_64",
+            "macosx_10_6_intel",
+            "macosx_10_6_fat64",
+            "macosx_10_6_fat32",
+            "macosx_10_6_universal2",
+            "macosx_10_6_universal",
+            "macosx_10_5_x86_64",
+            "macosx_10_5_intel",
+            "macosx_10_5_fat64",
+            "macosx_10_5_fat32",
+            "macosx_10_5_universal2",
+            "macosx_10_5_universal",
+            "macosx_10_4_x86_64",
+            "macosx_10_4_intel",
+            "macosx_10_4_fat64",
+            "macosx_10_4_fat32",
+            "macosx_10_4_universal2",
+            "macosx_10_4_universal",
+        ]
+        "#
         );
 
         let tags = compatible_tags(&Platform::new(
@@ -1105,28 +1357,145 @@ mod tests {
         let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(
             tags,
-            @r###"
-    [
-        "macosx_10_6_x86_64",
-        "macosx_10_6_intel",
-        "macosx_10_6_fat64",
-        "macosx_10_6_fat32",
-        "macosx_10_6_universal2",
-        "macosx_10_6_universal",
-        "macosx_10_5_x86_64",
-        "macosx_10_5_intel",
-        "macosx_10_5_fat64",
-        "macosx_10_5_fat32",
-        "macosx_10_5_universal2",
-        "macosx_10_5_universal",
-        "macosx_10_4_x86_64",
-        "macosx_10_4_intel",
-        "macosx_10_4_fat64",
-        "macosx_10_4_fat32",
-        "macosx_10_4_universal2",
-        "macosx_10_4_universal",
-    ]
-    "###
+            @r#"
+        [
+            "macosx_10_6_x86_64",
+            "macosx_10_6_intel",
+            "macosx_10_6_fat64",
+            "macosx_10_6_fat32",
+            "macosx_10_6_universal2",
+            "macosx_10_6_universal",
+            "macosx_10_5_x86_64",
+            "macosx_10_5_intel",
+            "macosx_10_5_fat64",
+            "macosx_10_5_fat32",
+            "macosx_10_5_universal2",
+            "macosx_10_5_universal",
+            "macosx_10_4_x86_64",
+            "macosx_10_4_intel",
+            "macosx_10_4_fat64",
+            "macosx_10_4_fat32",
+            "macosx_10_4_universal2",
+            "macosx_10_4_universal",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_android() {
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 14 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @"[]"
+        );
+
+        let tags =
+            compatible_tags(&Platform::new(Os::Android { api_level: 20 }, Arch::Aarch64)).unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "android_20_arm64_v8a",
+            "android_19_arm64_v8a",
+            "android_18_arm64_v8a",
+            "android_17_arm64_v8a",
+            "android_16_arm64_v8a",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_ios() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 11,
+                minor: 0,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @"[]"
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 12,
+                minor: 3,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "ios_12_3_arm64_iphoneos",
+            "ios_12_2_arm64_iphoneos",
+            "ios_12_1_arm64_iphoneos",
+            "ios_12_0_arm64_iphoneos",
+        ]
+        "#
+        );
+
+        let tags = compatible_tags(&Platform::new(
+            Os::Ios {
+                major: 15,
+                minor: 1,
+                simulator: false,
+            },
+            Arch::Aarch64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "ios_15_1_arm64_iphoneos",
+            "ios_15_0_arm64_iphoneos",
+            "ios_14_9_arm64_iphoneos",
+            "ios_14_8_arm64_iphoneos",
+            "ios_14_7_arm64_iphoneos",
+            "ios_14_6_arm64_iphoneos",
+            "ios_14_5_arm64_iphoneos",
+            "ios_14_4_arm64_iphoneos",
+            "ios_14_3_arm64_iphoneos",
+            "ios_14_2_arm64_iphoneos",
+            "ios_14_1_arm64_iphoneos",
+            "ios_14_0_arm64_iphoneos",
+            "ios_13_9_arm64_iphoneos",
+            "ios_13_8_arm64_iphoneos",
+            "ios_13_7_arm64_iphoneos",
+            "ios_13_6_arm64_iphoneos",
+            "ios_13_5_arm64_iphoneos",
+            "ios_13_4_arm64_iphoneos",
+            "ios_13_3_arm64_iphoneos",
+            "ios_13_2_arm64_iphoneos",
+            "ios_13_1_arm64_iphoneos",
+            "ios_13_0_arm64_iphoneos",
+            "ios_12_9_arm64_iphoneos",
+            "ios_12_8_arm64_iphoneos",
+            "ios_12_7_arm64_iphoneos",
+            "ios_12_6_arm64_iphoneos",
+            "ios_12_5_arm64_iphoneos",
+            "ios_12_4_arm64_iphoneos",
+            "ios_12_3_arm64_iphoneos",
+            "ios_12_2_arm64_iphoneos",
+            "ios_12_1_arm64_iphoneos",
+            "ios_12_0_arm64_iphoneos",
+        ]
+        "#
         );
     }
 
@@ -1147,45 +1516,46 @@ mod tests {
             (3, 9),
             false,
             false,
+            false,
         )
         .unwrap();
         assert_snapshot!(
         tags,
-        @r###"
-    cp39-cp39-linux_x86_64
-    cp39-abi3-linux_x86_64
-    cp39-none-linux_x86_64
-    cp38-abi3-linux_x86_64
-    cp37-abi3-linux_x86_64
-    cp36-abi3-linux_x86_64
-    cp35-abi3-linux_x86_64
-    cp34-abi3-linux_x86_64
-    cp33-abi3-linux_x86_64
-    cp32-abi3-linux_x86_64
-    py39-none-linux_x86_64
-    py3-none-linux_x86_64
-    py38-none-linux_x86_64
-    py37-none-linux_x86_64
-    py36-none-linux_x86_64
-    py35-none-linux_x86_64
-    py34-none-linux_x86_64
-    py33-none-linux_x86_64
-    py32-none-linux_x86_64
-    py31-none-linux_x86_64
-    py30-none-linux_x86_64
-    cp39-none-any
-    py39-none-any
-    py3-none-any
-    py38-none-any
-    py37-none-any
-    py36-none-any
-    py35-none-any
-    py34-none-any
-    py33-none-any
-    py32-none-any
-    py31-none-any
-    py30-none-any
-    "###);
+        @"
+        cp39-cp39-linux_x86_64
+        cp39-abi3-linux_x86_64
+        cp39-none-linux_x86_64
+        cp38-abi3-linux_x86_64
+        cp37-abi3-linux_x86_64
+        cp36-abi3-linux_x86_64
+        cp35-abi3-linux_x86_64
+        cp34-abi3-linux_x86_64
+        cp33-abi3-linux_x86_64
+        cp32-abi3-linux_x86_64
+        py39-none-linux_x86_64
+        py3-none-linux_x86_64
+        py38-none-linux_x86_64
+        py37-none-linux_x86_64
+        py36-none-linux_x86_64
+        py35-none-linux_x86_64
+        py34-none-linux_x86_64
+        py33-none-linux_x86_64
+        py32-none-linux_x86_64
+        py31-none-linux_x86_64
+        py30-none-linux_x86_64
+        cp39-none-any
+        py39-none-any
+        py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        ");
     }
 
     /// Check full tag ordering.
@@ -1210,612 +1580,613 @@ mod tests {
             (3, 9),
             true,
             false,
+            false,
         )
         .unwrap();
         assert_snapshot!(
             tags,
-            @r###"
-    cp39-cp39-manylinux_2_28_x86_64
-    cp39-cp39-manylinux_2_27_x86_64
-    cp39-cp39-manylinux_2_26_x86_64
-    cp39-cp39-manylinux_2_25_x86_64
-    cp39-cp39-manylinux_2_24_x86_64
-    cp39-cp39-manylinux_2_23_x86_64
-    cp39-cp39-manylinux_2_22_x86_64
-    cp39-cp39-manylinux_2_21_x86_64
-    cp39-cp39-manylinux_2_20_x86_64
-    cp39-cp39-manylinux_2_19_x86_64
-    cp39-cp39-manylinux_2_18_x86_64
-    cp39-cp39-manylinux_2_17_x86_64
-    cp39-cp39-manylinux2014_x86_64
-    cp39-cp39-manylinux_2_16_x86_64
-    cp39-cp39-manylinux_2_15_x86_64
-    cp39-cp39-manylinux_2_14_x86_64
-    cp39-cp39-manylinux_2_13_x86_64
-    cp39-cp39-manylinux_2_12_x86_64
-    cp39-cp39-manylinux2010_x86_64
-    cp39-cp39-manylinux_2_11_x86_64
-    cp39-cp39-manylinux_2_10_x86_64
-    cp39-cp39-manylinux_2_9_x86_64
-    cp39-cp39-manylinux_2_8_x86_64
-    cp39-cp39-manylinux_2_7_x86_64
-    cp39-cp39-manylinux_2_6_x86_64
-    cp39-cp39-manylinux_2_5_x86_64
-    cp39-cp39-manylinux1_x86_64
-    cp39-cp39-linux_x86_64
-    cp39-abi3-manylinux_2_28_x86_64
-    cp39-abi3-manylinux_2_27_x86_64
-    cp39-abi3-manylinux_2_26_x86_64
-    cp39-abi3-manylinux_2_25_x86_64
-    cp39-abi3-manylinux_2_24_x86_64
-    cp39-abi3-manylinux_2_23_x86_64
-    cp39-abi3-manylinux_2_22_x86_64
-    cp39-abi3-manylinux_2_21_x86_64
-    cp39-abi3-manylinux_2_20_x86_64
-    cp39-abi3-manylinux_2_19_x86_64
-    cp39-abi3-manylinux_2_18_x86_64
-    cp39-abi3-manylinux_2_17_x86_64
-    cp39-abi3-manylinux2014_x86_64
-    cp39-abi3-manylinux_2_16_x86_64
-    cp39-abi3-manylinux_2_15_x86_64
-    cp39-abi3-manylinux_2_14_x86_64
-    cp39-abi3-manylinux_2_13_x86_64
-    cp39-abi3-manylinux_2_12_x86_64
-    cp39-abi3-manylinux2010_x86_64
-    cp39-abi3-manylinux_2_11_x86_64
-    cp39-abi3-manylinux_2_10_x86_64
-    cp39-abi3-manylinux_2_9_x86_64
-    cp39-abi3-manylinux_2_8_x86_64
-    cp39-abi3-manylinux_2_7_x86_64
-    cp39-abi3-manylinux_2_6_x86_64
-    cp39-abi3-manylinux_2_5_x86_64
-    cp39-abi3-manylinux1_x86_64
-    cp39-abi3-linux_x86_64
-    cp39-none-manylinux_2_28_x86_64
-    cp39-none-manylinux_2_27_x86_64
-    cp39-none-manylinux_2_26_x86_64
-    cp39-none-manylinux_2_25_x86_64
-    cp39-none-manylinux_2_24_x86_64
-    cp39-none-manylinux_2_23_x86_64
-    cp39-none-manylinux_2_22_x86_64
-    cp39-none-manylinux_2_21_x86_64
-    cp39-none-manylinux_2_20_x86_64
-    cp39-none-manylinux_2_19_x86_64
-    cp39-none-manylinux_2_18_x86_64
-    cp39-none-manylinux_2_17_x86_64
-    cp39-none-manylinux2014_x86_64
-    cp39-none-manylinux_2_16_x86_64
-    cp39-none-manylinux_2_15_x86_64
-    cp39-none-manylinux_2_14_x86_64
-    cp39-none-manylinux_2_13_x86_64
-    cp39-none-manylinux_2_12_x86_64
-    cp39-none-manylinux2010_x86_64
-    cp39-none-manylinux_2_11_x86_64
-    cp39-none-manylinux_2_10_x86_64
-    cp39-none-manylinux_2_9_x86_64
-    cp39-none-manylinux_2_8_x86_64
-    cp39-none-manylinux_2_7_x86_64
-    cp39-none-manylinux_2_6_x86_64
-    cp39-none-manylinux_2_5_x86_64
-    cp39-none-manylinux1_x86_64
-    cp39-none-linux_x86_64
-    cp38-abi3-manylinux_2_28_x86_64
-    cp38-abi3-manylinux_2_27_x86_64
-    cp38-abi3-manylinux_2_26_x86_64
-    cp38-abi3-manylinux_2_25_x86_64
-    cp38-abi3-manylinux_2_24_x86_64
-    cp38-abi3-manylinux_2_23_x86_64
-    cp38-abi3-manylinux_2_22_x86_64
-    cp38-abi3-manylinux_2_21_x86_64
-    cp38-abi3-manylinux_2_20_x86_64
-    cp38-abi3-manylinux_2_19_x86_64
-    cp38-abi3-manylinux_2_18_x86_64
-    cp38-abi3-manylinux_2_17_x86_64
-    cp38-abi3-manylinux2014_x86_64
-    cp38-abi3-manylinux_2_16_x86_64
-    cp38-abi3-manylinux_2_15_x86_64
-    cp38-abi3-manylinux_2_14_x86_64
-    cp38-abi3-manylinux_2_13_x86_64
-    cp38-abi3-manylinux_2_12_x86_64
-    cp38-abi3-manylinux2010_x86_64
-    cp38-abi3-manylinux_2_11_x86_64
-    cp38-abi3-manylinux_2_10_x86_64
-    cp38-abi3-manylinux_2_9_x86_64
-    cp38-abi3-manylinux_2_8_x86_64
-    cp38-abi3-manylinux_2_7_x86_64
-    cp38-abi3-manylinux_2_6_x86_64
-    cp38-abi3-manylinux_2_5_x86_64
-    cp38-abi3-manylinux1_x86_64
-    cp38-abi3-linux_x86_64
-    cp37-abi3-manylinux_2_28_x86_64
-    cp37-abi3-manylinux_2_27_x86_64
-    cp37-abi3-manylinux_2_26_x86_64
-    cp37-abi3-manylinux_2_25_x86_64
-    cp37-abi3-manylinux_2_24_x86_64
-    cp37-abi3-manylinux_2_23_x86_64
-    cp37-abi3-manylinux_2_22_x86_64
-    cp37-abi3-manylinux_2_21_x86_64
-    cp37-abi3-manylinux_2_20_x86_64
-    cp37-abi3-manylinux_2_19_x86_64
-    cp37-abi3-manylinux_2_18_x86_64
-    cp37-abi3-manylinux_2_17_x86_64
-    cp37-abi3-manylinux2014_x86_64
-    cp37-abi3-manylinux_2_16_x86_64
-    cp37-abi3-manylinux_2_15_x86_64
-    cp37-abi3-manylinux_2_14_x86_64
-    cp37-abi3-manylinux_2_13_x86_64
-    cp37-abi3-manylinux_2_12_x86_64
-    cp37-abi3-manylinux2010_x86_64
-    cp37-abi3-manylinux_2_11_x86_64
-    cp37-abi3-manylinux_2_10_x86_64
-    cp37-abi3-manylinux_2_9_x86_64
-    cp37-abi3-manylinux_2_8_x86_64
-    cp37-abi3-manylinux_2_7_x86_64
-    cp37-abi3-manylinux_2_6_x86_64
-    cp37-abi3-manylinux_2_5_x86_64
-    cp37-abi3-manylinux1_x86_64
-    cp37-abi3-linux_x86_64
-    cp36-abi3-manylinux_2_28_x86_64
-    cp36-abi3-manylinux_2_27_x86_64
-    cp36-abi3-manylinux_2_26_x86_64
-    cp36-abi3-manylinux_2_25_x86_64
-    cp36-abi3-manylinux_2_24_x86_64
-    cp36-abi3-manylinux_2_23_x86_64
-    cp36-abi3-manylinux_2_22_x86_64
-    cp36-abi3-manylinux_2_21_x86_64
-    cp36-abi3-manylinux_2_20_x86_64
-    cp36-abi3-manylinux_2_19_x86_64
-    cp36-abi3-manylinux_2_18_x86_64
-    cp36-abi3-manylinux_2_17_x86_64
-    cp36-abi3-manylinux2014_x86_64
-    cp36-abi3-manylinux_2_16_x86_64
-    cp36-abi3-manylinux_2_15_x86_64
-    cp36-abi3-manylinux_2_14_x86_64
-    cp36-abi3-manylinux_2_13_x86_64
-    cp36-abi3-manylinux_2_12_x86_64
-    cp36-abi3-manylinux2010_x86_64
-    cp36-abi3-manylinux_2_11_x86_64
-    cp36-abi3-manylinux_2_10_x86_64
-    cp36-abi3-manylinux_2_9_x86_64
-    cp36-abi3-manylinux_2_8_x86_64
-    cp36-abi3-manylinux_2_7_x86_64
-    cp36-abi3-manylinux_2_6_x86_64
-    cp36-abi3-manylinux_2_5_x86_64
-    cp36-abi3-manylinux1_x86_64
-    cp36-abi3-linux_x86_64
-    cp35-abi3-manylinux_2_28_x86_64
-    cp35-abi3-manylinux_2_27_x86_64
-    cp35-abi3-manylinux_2_26_x86_64
-    cp35-abi3-manylinux_2_25_x86_64
-    cp35-abi3-manylinux_2_24_x86_64
-    cp35-abi3-manylinux_2_23_x86_64
-    cp35-abi3-manylinux_2_22_x86_64
-    cp35-abi3-manylinux_2_21_x86_64
-    cp35-abi3-manylinux_2_20_x86_64
-    cp35-abi3-manylinux_2_19_x86_64
-    cp35-abi3-manylinux_2_18_x86_64
-    cp35-abi3-manylinux_2_17_x86_64
-    cp35-abi3-manylinux2014_x86_64
-    cp35-abi3-manylinux_2_16_x86_64
-    cp35-abi3-manylinux_2_15_x86_64
-    cp35-abi3-manylinux_2_14_x86_64
-    cp35-abi3-manylinux_2_13_x86_64
-    cp35-abi3-manylinux_2_12_x86_64
-    cp35-abi3-manylinux2010_x86_64
-    cp35-abi3-manylinux_2_11_x86_64
-    cp35-abi3-manylinux_2_10_x86_64
-    cp35-abi3-manylinux_2_9_x86_64
-    cp35-abi3-manylinux_2_8_x86_64
-    cp35-abi3-manylinux_2_7_x86_64
-    cp35-abi3-manylinux_2_6_x86_64
-    cp35-abi3-manylinux_2_5_x86_64
-    cp35-abi3-manylinux1_x86_64
-    cp35-abi3-linux_x86_64
-    cp34-abi3-manylinux_2_28_x86_64
-    cp34-abi3-manylinux_2_27_x86_64
-    cp34-abi3-manylinux_2_26_x86_64
-    cp34-abi3-manylinux_2_25_x86_64
-    cp34-abi3-manylinux_2_24_x86_64
-    cp34-abi3-manylinux_2_23_x86_64
-    cp34-abi3-manylinux_2_22_x86_64
-    cp34-abi3-manylinux_2_21_x86_64
-    cp34-abi3-manylinux_2_20_x86_64
-    cp34-abi3-manylinux_2_19_x86_64
-    cp34-abi3-manylinux_2_18_x86_64
-    cp34-abi3-manylinux_2_17_x86_64
-    cp34-abi3-manylinux2014_x86_64
-    cp34-abi3-manylinux_2_16_x86_64
-    cp34-abi3-manylinux_2_15_x86_64
-    cp34-abi3-manylinux_2_14_x86_64
-    cp34-abi3-manylinux_2_13_x86_64
-    cp34-abi3-manylinux_2_12_x86_64
-    cp34-abi3-manylinux2010_x86_64
-    cp34-abi3-manylinux_2_11_x86_64
-    cp34-abi3-manylinux_2_10_x86_64
-    cp34-abi3-manylinux_2_9_x86_64
-    cp34-abi3-manylinux_2_8_x86_64
-    cp34-abi3-manylinux_2_7_x86_64
-    cp34-abi3-manylinux_2_6_x86_64
-    cp34-abi3-manylinux_2_5_x86_64
-    cp34-abi3-manylinux1_x86_64
-    cp34-abi3-linux_x86_64
-    cp33-abi3-manylinux_2_28_x86_64
-    cp33-abi3-manylinux_2_27_x86_64
-    cp33-abi3-manylinux_2_26_x86_64
-    cp33-abi3-manylinux_2_25_x86_64
-    cp33-abi3-manylinux_2_24_x86_64
-    cp33-abi3-manylinux_2_23_x86_64
-    cp33-abi3-manylinux_2_22_x86_64
-    cp33-abi3-manylinux_2_21_x86_64
-    cp33-abi3-manylinux_2_20_x86_64
-    cp33-abi3-manylinux_2_19_x86_64
-    cp33-abi3-manylinux_2_18_x86_64
-    cp33-abi3-manylinux_2_17_x86_64
-    cp33-abi3-manylinux2014_x86_64
-    cp33-abi3-manylinux_2_16_x86_64
-    cp33-abi3-manylinux_2_15_x86_64
-    cp33-abi3-manylinux_2_14_x86_64
-    cp33-abi3-manylinux_2_13_x86_64
-    cp33-abi3-manylinux_2_12_x86_64
-    cp33-abi3-manylinux2010_x86_64
-    cp33-abi3-manylinux_2_11_x86_64
-    cp33-abi3-manylinux_2_10_x86_64
-    cp33-abi3-manylinux_2_9_x86_64
-    cp33-abi3-manylinux_2_8_x86_64
-    cp33-abi3-manylinux_2_7_x86_64
-    cp33-abi3-manylinux_2_6_x86_64
-    cp33-abi3-manylinux_2_5_x86_64
-    cp33-abi3-manylinux1_x86_64
-    cp33-abi3-linux_x86_64
-    cp32-abi3-manylinux_2_28_x86_64
-    cp32-abi3-manylinux_2_27_x86_64
-    cp32-abi3-manylinux_2_26_x86_64
-    cp32-abi3-manylinux_2_25_x86_64
-    cp32-abi3-manylinux_2_24_x86_64
-    cp32-abi3-manylinux_2_23_x86_64
-    cp32-abi3-manylinux_2_22_x86_64
-    cp32-abi3-manylinux_2_21_x86_64
-    cp32-abi3-manylinux_2_20_x86_64
-    cp32-abi3-manylinux_2_19_x86_64
-    cp32-abi3-manylinux_2_18_x86_64
-    cp32-abi3-manylinux_2_17_x86_64
-    cp32-abi3-manylinux2014_x86_64
-    cp32-abi3-manylinux_2_16_x86_64
-    cp32-abi3-manylinux_2_15_x86_64
-    cp32-abi3-manylinux_2_14_x86_64
-    cp32-abi3-manylinux_2_13_x86_64
-    cp32-abi3-manylinux_2_12_x86_64
-    cp32-abi3-manylinux2010_x86_64
-    cp32-abi3-manylinux_2_11_x86_64
-    cp32-abi3-manylinux_2_10_x86_64
-    cp32-abi3-manylinux_2_9_x86_64
-    cp32-abi3-manylinux_2_8_x86_64
-    cp32-abi3-manylinux_2_7_x86_64
-    cp32-abi3-manylinux_2_6_x86_64
-    cp32-abi3-manylinux_2_5_x86_64
-    cp32-abi3-manylinux1_x86_64
-    cp32-abi3-linux_x86_64
-    py39-none-manylinux_2_28_x86_64
-    py39-none-manylinux_2_27_x86_64
-    py39-none-manylinux_2_26_x86_64
-    py39-none-manylinux_2_25_x86_64
-    py39-none-manylinux_2_24_x86_64
-    py39-none-manylinux_2_23_x86_64
-    py39-none-manylinux_2_22_x86_64
-    py39-none-manylinux_2_21_x86_64
-    py39-none-manylinux_2_20_x86_64
-    py39-none-manylinux_2_19_x86_64
-    py39-none-manylinux_2_18_x86_64
-    py39-none-manylinux_2_17_x86_64
-    py39-none-manylinux2014_x86_64
-    py39-none-manylinux_2_16_x86_64
-    py39-none-manylinux_2_15_x86_64
-    py39-none-manylinux_2_14_x86_64
-    py39-none-manylinux_2_13_x86_64
-    py39-none-manylinux_2_12_x86_64
-    py39-none-manylinux2010_x86_64
-    py39-none-manylinux_2_11_x86_64
-    py39-none-manylinux_2_10_x86_64
-    py39-none-manylinux_2_9_x86_64
-    py39-none-manylinux_2_8_x86_64
-    py39-none-manylinux_2_7_x86_64
-    py39-none-manylinux_2_6_x86_64
-    py39-none-manylinux_2_5_x86_64
-    py39-none-manylinux1_x86_64
-    py39-none-linux_x86_64
-    py3-none-manylinux_2_28_x86_64
-    py3-none-manylinux_2_27_x86_64
-    py3-none-manylinux_2_26_x86_64
-    py3-none-manylinux_2_25_x86_64
-    py3-none-manylinux_2_24_x86_64
-    py3-none-manylinux_2_23_x86_64
-    py3-none-manylinux_2_22_x86_64
-    py3-none-manylinux_2_21_x86_64
-    py3-none-manylinux_2_20_x86_64
-    py3-none-manylinux_2_19_x86_64
-    py3-none-manylinux_2_18_x86_64
-    py3-none-manylinux_2_17_x86_64
-    py3-none-manylinux2014_x86_64
-    py3-none-manylinux_2_16_x86_64
-    py3-none-manylinux_2_15_x86_64
-    py3-none-manylinux_2_14_x86_64
-    py3-none-manylinux_2_13_x86_64
-    py3-none-manylinux_2_12_x86_64
-    py3-none-manylinux2010_x86_64
-    py3-none-manylinux_2_11_x86_64
-    py3-none-manylinux_2_10_x86_64
-    py3-none-manylinux_2_9_x86_64
-    py3-none-manylinux_2_8_x86_64
-    py3-none-manylinux_2_7_x86_64
-    py3-none-manylinux_2_6_x86_64
-    py3-none-manylinux_2_5_x86_64
-    py3-none-manylinux1_x86_64
-    py3-none-linux_x86_64
-    py38-none-manylinux_2_28_x86_64
-    py38-none-manylinux_2_27_x86_64
-    py38-none-manylinux_2_26_x86_64
-    py38-none-manylinux_2_25_x86_64
-    py38-none-manylinux_2_24_x86_64
-    py38-none-manylinux_2_23_x86_64
-    py38-none-manylinux_2_22_x86_64
-    py38-none-manylinux_2_21_x86_64
-    py38-none-manylinux_2_20_x86_64
-    py38-none-manylinux_2_19_x86_64
-    py38-none-manylinux_2_18_x86_64
-    py38-none-manylinux_2_17_x86_64
-    py38-none-manylinux2014_x86_64
-    py38-none-manylinux_2_16_x86_64
-    py38-none-manylinux_2_15_x86_64
-    py38-none-manylinux_2_14_x86_64
-    py38-none-manylinux_2_13_x86_64
-    py38-none-manylinux_2_12_x86_64
-    py38-none-manylinux2010_x86_64
-    py38-none-manylinux_2_11_x86_64
-    py38-none-manylinux_2_10_x86_64
-    py38-none-manylinux_2_9_x86_64
-    py38-none-manylinux_2_8_x86_64
-    py38-none-manylinux_2_7_x86_64
-    py38-none-manylinux_2_6_x86_64
-    py38-none-manylinux_2_5_x86_64
-    py38-none-manylinux1_x86_64
-    py38-none-linux_x86_64
-    py37-none-manylinux_2_28_x86_64
-    py37-none-manylinux_2_27_x86_64
-    py37-none-manylinux_2_26_x86_64
-    py37-none-manylinux_2_25_x86_64
-    py37-none-manylinux_2_24_x86_64
-    py37-none-manylinux_2_23_x86_64
-    py37-none-manylinux_2_22_x86_64
-    py37-none-manylinux_2_21_x86_64
-    py37-none-manylinux_2_20_x86_64
-    py37-none-manylinux_2_19_x86_64
-    py37-none-manylinux_2_18_x86_64
-    py37-none-manylinux_2_17_x86_64
-    py37-none-manylinux2014_x86_64
-    py37-none-manylinux_2_16_x86_64
-    py37-none-manylinux_2_15_x86_64
-    py37-none-manylinux_2_14_x86_64
-    py37-none-manylinux_2_13_x86_64
-    py37-none-manylinux_2_12_x86_64
-    py37-none-manylinux2010_x86_64
-    py37-none-manylinux_2_11_x86_64
-    py37-none-manylinux_2_10_x86_64
-    py37-none-manylinux_2_9_x86_64
-    py37-none-manylinux_2_8_x86_64
-    py37-none-manylinux_2_7_x86_64
-    py37-none-manylinux_2_6_x86_64
-    py37-none-manylinux_2_5_x86_64
-    py37-none-manylinux1_x86_64
-    py37-none-linux_x86_64
-    py36-none-manylinux_2_28_x86_64
-    py36-none-manylinux_2_27_x86_64
-    py36-none-manylinux_2_26_x86_64
-    py36-none-manylinux_2_25_x86_64
-    py36-none-manylinux_2_24_x86_64
-    py36-none-manylinux_2_23_x86_64
-    py36-none-manylinux_2_22_x86_64
-    py36-none-manylinux_2_21_x86_64
-    py36-none-manylinux_2_20_x86_64
-    py36-none-manylinux_2_19_x86_64
-    py36-none-manylinux_2_18_x86_64
-    py36-none-manylinux_2_17_x86_64
-    py36-none-manylinux2014_x86_64
-    py36-none-manylinux_2_16_x86_64
-    py36-none-manylinux_2_15_x86_64
-    py36-none-manylinux_2_14_x86_64
-    py36-none-manylinux_2_13_x86_64
-    py36-none-manylinux_2_12_x86_64
-    py36-none-manylinux2010_x86_64
-    py36-none-manylinux_2_11_x86_64
-    py36-none-manylinux_2_10_x86_64
-    py36-none-manylinux_2_9_x86_64
-    py36-none-manylinux_2_8_x86_64
-    py36-none-manylinux_2_7_x86_64
-    py36-none-manylinux_2_6_x86_64
-    py36-none-manylinux_2_5_x86_64
-    py36-none-manylinux1_x86_64
-    py36-none-linux_x86_64
-    py35-none-manylinux_2_28_x86_64
-    py35-none-manylinux_2_27_x86_64
-    py35-none-manylinux_2_26_x86_64
-    py35-none-manylinux_2_25_x86_64
-    py35-none-manylinux_2_24_x86_64
-    py35-none-manylinux_2_23_x86_64
-    py35-none-manylinux_2_22_x86_64
-    py35-none-manylinux_2_21_x86_64
-    py35-none-manylinux_2_20_x86_64
-    py35-none-manylinux_2_19_x86_64
-    py35-none-manylinux_2_18_x86_64
-    py35-none-manylinux_2_17_x86_64
-    py35-none-manylinux2014_x86_64
-    py35-none-manylinux_2_16_x86_64
-    py35-none-manylinux_2_15_x86_64
-    py35-none-manylinux_2_14_x86_64
-    py35-none-manylinux_2_13_x86_64
-    py35-none-manylinux_2_12_x86_64
-    py35-none-manylinux2010_x86_64
-    py35-none-manylinux_2_11_x86_64
-    py35-none-manylinux_2_10_x86_64
-    py35-none-manylinux_2_9_x86_64
-    py35-none-manylinux_2_8_x86_64
-    py35-none-manylinux_2_7_x86_64
-    py35-none-manylinux_2_6_x86_64
-    py35-none-manylinux_2_5_x86_64
-    py35-none-manylinux1_x86_64
-    py35-none-linux_x86_64
-    py34-none-manylinux_2_28_x86_64
-    py34-none-manylinux_2_27_x86_64
-    py34-none-manylinux_2_26_x86_64
-    py34-none-manylinux_2_25_x86_64
-    py34-none-manylinux_2_24_x86_64
-    py34-none-manylinux_2_23_x86_64
-    py34-none-manylinux_2_22_x86_64
-    py34-none-manylinux_2_21_x86_64
-    py34-none-manylinux_2_20_x86_64
-    py34-none-manylinux_2_19_x86_64
-    py34-none-manylinux_2_18_x86_64
-    py34-none-manylinux_2_17_x86_64
-    py34-none-manylinux2014_x86_64
-    py34-none-manylinux_2_16_x86_64
-    py34-none-manylinux_2_15_x86_64
-    py34-none-manylinux_2_14_x86_64
-    py34-none-manylinux_2_13_x86_64
-    py34-none-manylinux_2_12_x86_64
-    py34-none-manylinux2010_x86_64
-    py34-none-manylinux_2_11_x86_64
-    py34-none-manylinux_2_10_x86_64
-    py34-none-manylinux_2_9_x86_64
-    py34-none-manylinux_2_8_x86_64
-    py34-none-manylinux_2_7_x86_64
-    py34-none-manylinux_2_6_x86_64
-    py34-none-manylinux_2_5_x86_64
-    py34-none-manylinux1_x86_64
-    py34-none-linux_x86_64
-    py33-none-manylinux_2_28_x86_64
-    py33-none-manylinux_2_27_x86_64
-    py33-none-manylinux_2_26_x86_64
-    py33-none-manylinux_2_25_x86_64
-    py33-none-manylinux_2_24_x86_64
-    py33-none-manylinux_2_23_x86_64
-    py33-none-manylinux_2_22_x86_64
-    py33-none-manylinux_2_21_x86_64
-    py33-none-manylinux_2_20_x86_64
-    py33-none-manylinux_2_19_x86_64
-    py33-none-manylinux_2_18_x86_64
-    py33-none-manylinux_2_17_x86_64
-    py33-none-manylinux2014_x86_64
-    py33-none-manylinux_2_16_x86_64
-    py33-none-manylinux_2_15_x86_64
-    py33-none-manylinux_2_14_x86_64
-    py33-none-manylinux_2_13_x86_64
-    py33-none-manylinux_2_12_x86_64
-    py33-none-manylinux2010_x86_64
-    py33-none-manylinux_2_11_x86_64
-    py33-none-manylinux_2_10_x86_64
-    py33-none-manylinux_2_9_x86_64
-    py33-none-manylinux_2_8_x86_64
-    py33-none-manylinux_2_7_x86_64
-    py33-none-manylinux_2_6_x86_64
-    py33-none-manylinux_2_5_x86_64
-    py33-none-manylinux1_x86_64
-    py33-none-linux_x86_64
-    py32-none-manylinux_2_28_x86_64
-    py32-none-manylinux_2_27_x86_64
-    py32-none-manylinux_2_26_x86_64
-    py32-none-manylinux_2_25_x86_64
-    py32-none-manylinux_2_24_x86_64
-    py32-none-manylinux_2_23_x86_64
-    py32-none-manylinux_2_22_x86_64
-    py32-none-manylinux_2_21_x86_64
-    py32-none-manylinux_2_20_x86_64
-    py32-none-manylinux_2_19_x86_64
-    py32-none-manylinux_2_18_x86_64
-    py32-none-manylinux_2_17_x86_64
-    py32-none-manylinux2014_x86_64
-    py32-none-manylinux_2_16_x86_64
-    py32-none-manylinux_2_15_x86_64
-    py32-none-manylinux_2_14_x86_64
-    py32-none-manylinux_2_13_x86_64
-    py32-none-manylinux_2_12_x86_64
-    py32-none-manylinux2010_x86_64
-    py32-none-manylinux_2_11_x86_64
-    py32-none-manylinux_2_10_x86_64
-    py32-none-manylinux_2_9_x86_64
-    py32-none-manylinux_2_8_x86_64
-    py32-none-manylinux_2_7_x86_64
-    py32-none-manylinux_2_6_x86_64
-    py32-none-manylinux_2_5_x86_64
-    py32-none-manylinux1_x86_64
-    py32-none-linux_x86_64
-    py31-none-manylinux_2_28_x86_64
-    py31-none-manylinux_2_27_x86_64
-    py31-none-manylinux_2_26_x86_64
-    py31-none-manylinux_2_25_x86_64
-    py31-none-manylinux_2_24_x86_64
-    py31-none-manylinux_2_23_x86_64
-    py31-none-manylinux_2_22_x86_64
-    py31-none-manylinux_2_21_x86_64
-    py31-none-manylinux_2_20_x86_64
-    py31-none-manylinux_2_19_x86_64
-    py31-none-manylinux_2_18_x86_64
-    py31-none-manylinux_2_17_x86_64
-    py31-none-manylinux2014_x86_64
-    py31-none-manylinux_2_16_x86_64
-    py31-none-manylinux_2_15_x86_64
-    py31-none-manylinux_2_14_x86_64
-    py31-none-manylinux_2_13_x86_64
-    py31-none-manylinux_2_12_x86_64
-    py31-none-manylinux2010_x86_64
-    py31-none-manylinux_2_11_x86_64
-    py31-none-manylinux_2_10_x86_64
-    py31-none-manylinux_2_9_x86_64
-    py31-none-manylinux_2_8_x86_64
-    py31-none-manylinux_2_7_x86_64
-    py31-none-manylinux_2_6_x86_64
-    py31-none-manylinux_2_5_x86_64
-    py31-none-manylinux1_x86_64
-    py31-none-linux_x86_64
-    py30-none-manylinux_2_28_x86_64
-    py30-none-manylinux_2_27_x86_64
-    py30-none-manylinux_2_26_x86_64
-    py30-none-manylinux_2_25_x86_64
-    py30-none-manylinux_2_24_x86_64
-    py30-none-manylinux_2_23_x86_64
-    py30-none-manylinux_2_22_x86_64
-    py30-none-manylinux_2_21_x86_64
-    py30-none-manylinux_2_20_x86_64
-    py30-none-manylinux_2_19_x86_64
-    py30-none-manylinux_2_18_x86_64
-    py30-none-manylinux_2_17_x86_64
-    py30-none-manylinux2014_x86_64
-    py30-none-manylinux_2_16_x86_64
-    py30-none-manylinux_2_15_x86_64
-    py30-none-manylinux_2_14_x86_64
-    py30-none-manylinux_2_13_x86_64
-    py30-none-manylinux_2_12_x86_64
-    py30-none-manylinux2010_x86_64
-    py30-none-manylinux_2_11_x86_64
-    py30-none-manylinux_2_10_x86_64
-    py30-none-manylinux_2_9_x86_64
-    py30-none-manylinux_2_8_x86_64
-    py30-none-manylinux_2_7_x86_64
-    py30-none-manylinux_2_6_x86_64
-    py30-none-manylinux_2_5_x86_64
-    py30-none-manylinux1_x86_64
-    py30-none-linux_x86_64
-    cp39-none-any
-    py39-none-any
-    py3-none-any
-    py38-none-any
-    py37-none-any
-    py36-none-any
-    py35-none-any
-    py34-none-any
-    py33-none-any
-    py32-none-any
-    py31-none-any
-    py30-none-any
-    "###
+            @"
+        cp39-cp39-manylinux_2_28_x86_64
+        cp39-cp39-manylinux_2_27_x86_64
+        cp39-cp39-manylinux_2_26_x86_64
+        cp39-cp39-manylinux_2_25_x86_64
+        cp39-cp39-manylinux_2_24_x86_64
+        cp39-cp39-manylinux_2_23_x86_64
+        cp39-cp39-manylinux_2_22_x86_64
+        cp39-cp39-manylinux_2_21_x86_64
+        cp39-cp39-manylinux_2_20_x86_64
+        cp39-cp39-manylinux_2_19_x86_64
+        cp39-cp39-manylinux_2_18_x86_64
+        cp39-cp39-manylinux_2_17_x86_64
+        cp39-cp39-manylinux2014_x86_64
+        cp39-cp39-manylinux_2_16_x86_64
+        cp39-cp39-manylinux_2_15_x86_64
+        cp39-cp39-manylinux_2_14_x86_64
+        cp39-cp39-manylinux_2_13_x86_64
+        cp39-cp39-manylinux_2_12_x86_64
+        cp39-cp39-manylinux2010_x86_64
+        cp39-cp39-manylinux_2_11_x86_64
+        cp39-cp39-manylinux_2_10_x86_64
+        cp39-cp39-manylinux_2_9_x86_64
+        cp39-cp39-manylinux_2_8_x86_64
+        cp39-cp39-manylinux_2_7_x86_64
+        cp39-cp39-manylinux_2_6_x86_64
+        cp39-cp39-manylinux_2_5_x86_64
+        cp39-cp39-manylinux1_x86_64
+        cp39-cp39-linux_x86_64
+        cp39-abi3-manylinux_2_28_x86_64
+        cp39-abi3-manylinux_2_27_x86_64
+        cp39-abi3-manylinux_2_26_x86_64
+        cp39-abi3-manylinux_2_25_x86_64
+        cp39-abi3-manylinux_2_24_x86_64
+        cp39-abi3-manylinux_2_23_x86_64
+        cp39-abi3-manylinux_2_22_x86_64
+        cp39-abi3-manylinux_2_21_x86_64
+        cp39-abi3-manylinux_2_20_x86_64
+        cp39-abi3-manylinux_2_19_x86_64
+        cp39-abi3-manylinux_2_18_x86_64
+        cp39-abi3-manylinux_2_17_x86_64
+        cp39-abi3-manylinux2014_x86_64
+        cp39-abi3-manylinux_2_16_x86_64
+        cp39-abi3-manylinux_2_15_x86_64
+        cp39-abi3-manylinux_2_14_x86_64
+        cp39-abi3-manylinux_2_13_x86_64
+        cp39-abi3-manylinux_2_12_x86_64
+        cp39-abi3-manylinux2010_x86_64
+        cp39-abi3-manylinux_2_11_x86_64
+        cp39-abi3-manylinux_2_10_x86_64
+        cp39-abi3-manylinux_2_9_x86_64
+        cp39-abi3-manylinux_2_8_x86_64
+        cp39-abi3-manylinux_2_7_x86_64
+        cp39-abi3-manylinux_2_6_x86_64
+        cp39-abi3-manylinux_2_5_x86_64
+        cp39-abi3-manylinux1_x86_64
+        cp39-abi3-linux_x86_64
+        cp39-none-manylinux_2_28_x86_64
+        cp39-none-manylinux_2_27_x86_64
+        cp39-none-manylinux_2_26_x86_64
+        cp39-none-manylinux_2_25_x86_64
+        cp39-none-manylinux_2_24_x86_64
+        cp39-none-manylinux_2_23_x86_64
+        cp39-none-manylinux_2_22_x86_64
+        cp39-none-manylinux_2_21_x86_64
+        cp39-none-manylinux_2_20_x86_64
+        cp39-none-manylinux_2_19_x86_64
+        cp39-none-manylinux_2_18_x86_64
+        cp39-none-manylinux_2_17_x86_64
+        cp39-none-manylinux2014_x86_64
+        cp39-none-manylinux_2_16_x86_64
+        cp39-none-manylinux_2_15_x86_64
+        cp39-none-manylinux_2_14_x86_64
+        cp39-none-manylinux_2_13_x86_64
+        cp39-none-manylinux_2_12_x86_64
+        cp39-none-manylinux2010_x86_64
+        cp39-none-manylinux_2_11_x86_64
+        cp39-none-manylinux_2_10_x86_64
+        cp39-none-manylinux_2_9_x86_64
+        cp39-none-manylinux_2_8_x86_64
+        cp39-none-manylinux_2_7_x86_64
+        cp39-none-manylinux_2_6_x86_64
+        cp39-none-manylinux_2_5_x86_64
+        cp39-none-manylinux1_x86_64
+        cp39-none-linux_x86_64
+        cp38-abi3-manylinux_2_28_x86_64
+        cp38-abi3-manylinux_2_27_x86_64
+        cp38-abi3-manylinux_2_26_x86_64
+        cp38-abi3-manylinux_2_25_x86_64
+        cp38-abi3-manylinux_2_24_x86_64
+        cp38-abi3-manylinux_2_23_x86_64
+        cp38-abi3-manylinux_2_22_x86_64
+        cp38-abi3-manylinux_2_21_x86_64
+        cp38-abi3-manylinux_2_20_x86_64
+        cp38-abi3-manylinux_2_19_x86_64
+        cp38-abi3-manylinux_2_18_x86_64
+        cp38-abi3-manylinux_2_17_x86_64
+        cp38-abi3-manylinux2014_x86_64
+        cp38-abi3-manylinux_2_16_x86_64
+        cp38-abi3-manylinux_2_15_x86_64
+        cp38-abi3-manylinux_2_14_x86_64
+        cp38-abi3-manylinux_2_13_x86_64
+        cp38-abi3-manylinux_2_12_x86_64
+        cp38-abi3-manylinux2010_x86_64
+        cp38-abi3-manylinux_2_11_x86_64
+        cp38-abi3-manylinux_2_10_x86_64
+        cp38-abi3-manylinux_2_9_x86_64
+        cp38-abi3-manylinux_2_8_x86_64
+        cp38-abi3-manylinux_2_7_x86_64
+        cp38-abi3-manylinux_2_6_x86_64
+        cp38-abi3-manylinux_2_5_x86_64
+        cp38-abi3-manylinux1_x86_64
+        cp38-abi3-linux_x86_64
+        cp37-abi3-manylinux_2_28_x86_64
+        cp37-abi3-manylinux_2_27_x86_64
+        cp37-abi3-manylinux_2_26_x86_64
+        cp37-abi3-manylinux_2_25_x86_64
+        cp37-abi3-manylinux_2_24_x86_64
+        cp37-abi3-manylinux_2_23_x86_64
+        cp37-abi3-manylinux_2_22_x86_64
+        cp37-abi3-manylinux_2_21_x86_64
+        cp37-abi3-manylinux_2_20_x86_64
+        cp37-abi3-manylinux_2_19_x86_64
+        cp37-abi3-manylinux_2_18_x86_64
+        cp37-abi3-manylinux_2_17_x86_64
+        cp37-abi3-manylinux2014_x86_64
+        cp37-abi3-manylinux_2_16_x86_64
+        cp37-abi3-manylinux_2_15_x86_64
+        cp37-abi3-manylinux_2_14_x86_64
+        cp37-abi3-manylinux_2_13_x86_64
+        cp37-abi3-manylinux_2_12_x86_64
+        cp37-abi3-manylinux2010_x86_64
+        cp37-abi3-manylinux_2_11_x86_64
+        cp37-abi3-manylinux_2_10_x86_64
+        cp37-abi3-manylinux_2_9_x86_64
+        cp37-abi3-manylinux_2_8_x86_64
+        cp37-abi3-manylinux_2_7_x86_64
+        cp37-abi3-manylinux_2_6_x86_64
+        cp37-abi3-manylinux_2_5_x86_64
+        cp37-abi3-manylinux1_x86_64
+        cp37-abi3-linux_x86_64
+        cp36-abi3-manylinux_2_28_x86_64
+        cp36-abi3-manylinux_2_27_x86_64
+        cp36-abi3-manylinux_2_26_x86_64
+        cp36-abi3-manylinux_2_25_x86_64
+        cp36-abi3-manylinux_2_24_x86_64
+        cp36-abi3-manylinux_2_23_x86_64
+        cp36-abi3-manylinux_2_22_x86_64
+        cp36-abi3-manylinux_2_21_x86_64
+        cp36-abi3-manylinux_2_20_x86_64
+        cp36-abi3-manylinux_2_19_x86_64
+        cp36-abi3-manylinux_2_18_x86_64
+        cp36-abi3-manylinux_2_17_x86_64
+        cp36-abi3-manylinux2014_x86_64
+        cp36-abi3-manylinux_2_16_x86_64
+        cp36-abi3-manylinux_2_15_x86_64
+        cp36-abi3-manylinux_2_14_x86_64
+        cp36-abi3-manylinux_2_13_x86_64
+        cp36-abi3-manylinux_2_12_x86_64
+        cp36-abi3-manylinux2010_x86_64
+        cp36-abi3-manylinux_2_11_x86_64
+        cp36-abi3-manylinux_2_10_x86_64
+        cp36-abi3-manylinux_2_9_x86_64
+        cp36-abi3-manylinux_2_8_x86_64
+        cp36-abi3-manylinux_2_7_x86_64
+        cp36-abi3-manylinux_2_6_x86_64
+        cp36-abi3-manylinux_2_5_x86_64
+        cp36-abi3-manylinux1_x86_64
+        cp36-abi3-linux_x86_64
+        cp35-abi3-manylinux_2_28_x86_64
+        cp35-abi3-manylinux_2_27_x86_64
+        cp35-abi3-manylinux_2_26_x86_64
+        cp35-abi3-manylinux_2_25_x86_64
+        cp35-abi3-manylinux_2_24_x86_64
+        cp35-abi3-manylinux_2_23_x86_64
+        cp35-abi3-manylinux_2_22_x86_64
+        cp35-abi3-manylinux_2_21_x86_64
+        cp35-abi3-manylinux_2_20_x86_64
+        cp35-abi3-manylinux_2_19_x86_64
+        cp35-abi3-manylinux_2_18_x86_64
+        cp35-abi3-manylinux_2_17_x86_64
+        cp35-abi3-manylinux2014_x86_64
+        cp35-abi3-manylinux_2_16_x86_64
+        cp35-abi3-manylinux_2_15_x86_64
+        cp35-abi3-manylinux_2_14_x86_64
+        cp35-abi3-manylinux_2_13_x86_64
+        cp35-abi3-manylinux_2_12_x86_64
+        cp35-abi3-manylinux2010_x86_64
+        cp35-abi3-manylinux_2_11_x86_64
+        cp35-abi3-manylinux_2_10_x86_64
+        cp35-abi3-manylinux_2_9_x86_64
+        cp35-abi3-manylinux_2_8_x86_64
+        cp35-abi3-manylinux_2_7_x86_64
+        cp35-abi3-manylinux_2_6_x86_64
+        cp35-abi3-manylinux_2_5_x86_64
+        cp35-abi3-manylinux1_x86_64
+        cp35-abi3-linux_x86_64
+        cp34-abi3-manylinux_2_28_x86_64
+        cp34-abi3-manylinux_2_27_x86_64
+        cp34-abi3-manylinux_2_26_x86_64
+        cp34-abi3-manylinux_2_25_x86_64
+        cp34-abi3-manylinux_2_24_x86_64
+        cp34-abi3-manylinux_2_23_x86_64
+        cp34-abi3-manylinux_2_22_x86_64
+        cp34-abi3-manylinux_2_21_x86_64
+        cp34-abi3-manylinux_2_20_x86_64
+        cp34-abi3-manylinux_2_19_x86_64
+        cp34-abi3-manylinux_2_18_x86_64
+        cp34-abi3-manylinux_2_17_x86_64
+        cp34-abi3-manylinux2014_x86_64
+        cp34-abi3-manylinux_2_16_x86_64
+        cp34-abi3-manylinux_2_15_x86_64
+        cp34-abi3-manylinux_2_14_x86_64
+        cp34-abi3-manylinux_2_13_x86_64
+        cp34-abi3-manylinux_2_12_x86_64
+        cp34-abi3-manylinux2010_x86_64
+        cp34-abi3-manylinux_2_11_x86_64
+        cp34-abi3-manylinux_2_10_x86_64
+        cp34-abi3-manylinux_2_9_x86_64
+        cp34-abi3-manylinux_2_8_x86_64
+        cp34-abi3-manylinux_2_7_x86_64
+        cp34-abi3-manylinux_2_6_x86_64
+        cp34-abi3-manylinux_2_5_x86_64
+        cp34-abi3-manylinux1_x86_64
+        cp34-abi3-linux_x86_64
+        cp33-abi3-manylinux_2_28_x86_64
+        cp33-abi3-manylinux_2_27_x86_64
+        cp33-abi3-manylinux_2_26_x86_64
+        cp33-abi3-manylinux_2_25_x86_64
+        cp33-abi3-manylinux_2_24_x86_64
+        cp33-abi3-manylinux_2_23_x86_64
+        cp33-abi3-manylinux_2_22_x86_64
+        cp33-abi3-manylinux_2_21_x86_64
+        cp33-abi3-manylinux_2_20_x86_64
+        cp33-abi3-manylinux_2_19_x86_64
+        cp33-abi3-manylinux_2_18_x86_64
+        cp33-abi3-manylinux_2_17_x86_64
+        cp33-abi3-manylinux2014_x86_64
+        cp33-abi3-manylinux_2_16_x86_64
+        cp33-abi3-manylinux_2_15_x86_64
+        cp33-abi3-manylinux_2_14_x86_64
+        cp33-abi3-manylinux_2_13_x86_64
+        cp33-abi3-manylinux_2_12_x86_64
+        cp33-abi3-manylinux2010_x86_64
+        cp33-abi3-manylinux_2_11_x86_64
+        cp33-abi3-manylinux_2_10_x86_64
+        cp33-abi3-manylinux_2_9_x86_64
+        cp33-abi3-manylinux_2_8_x86_64
+        cp33-abi3-manylinux_2_7_x86_64
+        cp33-abi3-manylinux_2_6_x86_64
+        cp33-abi3-manylinux_2_5_x86_64
+        cp33-abi3-manylinux1_x86_64
+        cp33-abi3-linux_x86_64
+        cp32-abi3-manylinux_2_28_x86_64
+        cp32-abi3-manylinux_2_27_x86_64
+        cp32-abi3-manylinux_2_26_x86_64
+        cp32-abi3-manylinux_2_25_x86_64
+        cp32-abi3-manylinux_2_24_x86_64
+        cp32-abi3-manylinux_2_23_x86_64
+        cp32-abi3-manylinux_2_22_x86_64
+        cp32-abi3-manylinux_2_21_x86_64
+        cp32-abi3-manylinux_2_20_x86_64
+        cp32-abi3-manylinux_2_19_x86_64
+        cp32-abi3-manylinux_2_18_x86_64
+        cp32-abi3-manylinux_2_17_x86_64
+        cp32-abi3-manylinux2014_x86_64
+        cp32-abi3-manylinux_2_16_x86_64
+        cp32-abi3-manylinux_2_15_x86_64
+        cp32-abi3-manylinux_2_14_x86_64
+        cp32-abi3-manylinux_2_13_x86_64
+        cp32-abi3-manylinux_2_12_x86_64
+        cp32-abi3-manylinux2010_x86_64
+        cp32-abi3-manylinux_2_11_x86_64
+        cp32-abi3-manylinux_2_10_x86_64
+        cp32-abi3-manylinux_2_9_x86_64
+        cp32-abi3-manylinux_2_8_x86_64
+        cp32-abi3-manylinux_2_7_x86_64
+        cp32-abi3-manylinux_2_6_x86_64
+        cp32-abi3-manylinux_2_5_x86_64
+        cp32-abi3-manylinux1_x86_64
+        cp32-abi3-linux_x86_64
+        py39-none-manylinux_2_28_x86_64
+        py39-none-manylinux_2_27_x86_64
+        py39-none-manylinux_2_26_x86_64
+        py39-none-manylinux_2_25_x86_64
+        py39-none-manylinux_2_24_x86_64
+        py39-none-manylinux_2_23_x86_64
+        py39-none-manylinux_2_22_x86_64
+        py39-none-manylinux_2_21_x86_64
+        py39-none-manylinux_2_20_x86_64
+        py39-none-manylinux_2_19_x86_64
+        py39-none-manylinux_2_18_x86_64
+        py39-none-manylinux_2_17_x86_64
+        py39-none-manylinux2014_x86_64
+        py39-none-manylinux_2_16_x86_64
+        py39-none-manylinux_2_15_x86_64
+        py39-none-manylinux_2_14_x86_64
+        py39-none-manylinux_2_13_x86_64
+        py39-none-manylinux_2_12_x86_64
+        py39-none-manylinux2010_x86_64
+        py39-none-manylinux_2_11_x86_64
+        py39-none-manylinux_2_10_x86_64
+        py39-none-manylinux_2_9_x86_64
+        py39-none-manylinux_2_8_x86_64
+        py39-none-manylinux_2_7_x86_64
+        py39-none-manylinux_2_6_x86_64
+        py39-none-manylinux_2_5_x86_64
+        py39-none-manylinux1_x86_64
+        py39-none-linux_x86_64
+        py3-none-manylinux_2_28_x86_64
+        py3-none-manylinux_2_27_x86_64
+        py3-none-manylinux_2_26_x86_64
+        py3-none-manylinux_2_25_x86_64
+        py3-none-manylinux_2_24_x86_64
+        py3-none-manylinux_2_23_x86_64
+        py3-none-manylinux_2_22_x86_64
+        py3-none-manylinux_2_21_x86_64
+        py3-none-manylinux_2_20_x86_64
+        py3-none-manylinux_2_19_x86_64
+        py3-none-manylinux_2_18_x86_64
+        py3-none-manylinux_2_17_x86_64
+        py3-none-manylinux2014_x86_64
+        py3-none-manylinux_2_16_x86_64
+        py3-none-manylinux_2_15_x86_64
+        py3-none-manylinux_2_14_x86_64
+        py3-none-manylinux_2_13_x86_64
+        py3-none-manylinux_2_12_x86_64
+        py3-none-manylinux2010_x86_64
+        py3-none-manylinux_2_11_x86_64
+        py3-none-manylinux_2_10_x86_64
+        py3-none-manylinux_2_9_x86_64
+        py3-none-manylinux_2_8_x86_64
+        py3-none-manylinux_2_7_x86_64
+        py3-none-manylinux_2_6_x86_64
+        py3-none-manylinux_2_5_x86_64
+        py3-none-manylinux1_x86_64
+        py3-none-linux_x86_64
+        py38-none-manylinux_2_28_x86_64
+        py38-none-manylinux_2_27_x86_64
+        py38-none-manylinux_2_26_x86_64
+        py38-none-manylinux_2_25_x86_64
+        py38-none-manylinux_2_24_x86_64
+        py38-none-manylinux_2_23_x86_64
+        py38-none-manylinux_2_22_x86_64
+        py38-none-manylinux_2_21_x86_64
+        py38-none-manylinux_2_20_x86_64
+        py38-none-manylinux_2_19_x86_64
+        py38-none-manylinux_2_18_x86_64
+        py38-none-manylinux_2_17_x86_64
+        py38-none-manylinux2014_x86_64
+        py38-none-manylinux_2_16_x86_64
+        py38-none-manylinux_2_15_x86_64
+        py38-none-manylinux_2_14_x86_64
+        py38-none-manylinux_2_13_x86_64
+        py38-none-manylinux_2_12_x86_64
+        py38-none-manylinux2010_x86_64
+        py38-none-manylinux_2_11_x86_64
+        py38-none-manylinux_2_10_x86_64
+        py38-none-manylinux_2_9_x86_64
+        py38-none-manylinux_2_8_x86_64
+        py38-none-manylinux_2_7_x86_64
+        py38-none-manylinux_2_6_x86_64
+        py38-none-manylinux_2_5_x86_64
+        py38-none-manylinux1_x86_64
+        py38-none-linux_x86_64
+        py37-none-manylinux_2_28_x86_64
+        py37-none-manylinux_2_27_x86_64
+        py37-none-manylinux_2_26_x86_64
+        py37-none-manylinux_2_25_x86_64
+        py37-none-manylinux_2_24_x86_64
+        py37-none-manylinux_2_23_x86_64
+        py37-none-manylinux_2_22_x86_64
+        py37-none-manylinux_2_21_x86_64
+        py37-none-manylinux_2_20_x86_64
+        py37-none-manylinux_2_19_x86_64
+        py37-none-manylinux_2_18_x86_64
+        py37-none-manylinux_2_17_x86_64
+        py37-none-manylinux2014_x86_64
+        py37-none-manylinux_2_16_x86_64
+        py37-none-manylinux_2_15_x86_64
+        py37-none-manylinux_2_14_x86_64
+        py37-none-manylinux_2_13_x86_64
+        py37-none-manylinux_2_12_x86_64
+        py37-none-manylinux2010_x86_64
+        py37-none-manylinux_2_11_x86_64
+        py37-none-manylinux_2_10_x86_64
+        py37-none-manylinux_2_9_x86_64
+        py37-none-manylinux_2_8_x86_64
+        py37-none-manylinux_2_7_x86_64
+        py37-none-manylinux_2_6_x86_64
+        py37-none-manylinux_2_5_x86_64
+        py37-none-manylinux1_x86_64
+        py37-none-linux_x86_64
+        py36-none-manylinux_2_28_x86_64
+        py36-none-manylinux_2_27_x86_64
+        py36-none-manylinux_2_26_x86_64
+        py36-none-manylinux_2_25_x86_64
+        py36-none-manylinux_2_24_x86_64
+        py36-none-manylinux_2_23_x86_64
+        py36-none-manylinux_2_22_x86_64
+        py36-none-manylinux_2_21_x86_64
+        py36-none-manylinux_2_20_x86_64
+        py36-none-manylinux_2_19_x86_64
+        py36-none-manylinux_2_18_x86_64
+        py36-none-manylinux_2_17_x86_64
+        py36-none-manylinux2014_x86_64
+        py36-none-manylinux_2_16_x86_64
+        py36-none-manylinux_2_15_x86_64
+        py36-none-manylinux_2_14_x86_64
+        py36-none-manylinux_2_13_x86_64
+        py36-none-manylinux_2_12_x86_64
+        py36-none-manylinux2010_x86_64
+        py36-none-manylinux_2_11_x86_64
+        py36-none-manylinux_2_10_x86_64
+        py36-none-manylinux_2_9_x86_64
+        py36-none-manylinux_2_8_x86_64
+        py36-none-manylinux_2_7_x86_64
+        py36-none-manylinux_2_6_x86_64
+        py36-none-manylinux_2_5_x86_64
+        py36-none-manylinux1_x86_64
+        py36-none-linux_x86_64
+        py35-none-manylinux_2_28_x86_64
+        py35-none-manylinux_2_27_x86_64
+        py35-none-manylinux_2_26_x86_64
+        py35-none-manylinux_2_25_x86_64
+        py35-none-manylinux_2_24_x86_64
+        py35-none-manylinux_2_23_x86_64
+        py35-none-manylinux_2_22_x86_64
+        py35-none-manylinux_2_21_x86_64
+        py35-none-manylinux_2_20_x86_64
+        py35-none-manylinux_2_19_x86_64
+        py35-none-manylinux_2_18_x86_64
+        py35-none-manylinux_2_17_x86_64
+        py35-none-manylinux2014_x86_64
+        py35-none-manylinux_2_16_x86_64
+        py35-none-manylinux_2_15_x86_64
+        py35-none-manylinux_2_14_x86_64
+        py35-none-manylinux_2_13_x86_64
+        py35-none-manylinux_2_12_x86_64
+        py35-none-manylinux2010_x86_64
+        py35-none-manylinux_2_11_x86_64
+        py35-none-manylinux_2_10_x86_64
+        py35-none-manylinux_2_9_x86_64
+        py35-none-manylinux_2_8_x86_64
+        py35-none-manylinux_2_7_x86_64
+        py35-none-manylinux_2_6_x86_64
+        py35-none-manylinux_2_5_x86_64
+        py35-none-manylinux1_x86_64
+        py35-none-linux_x86_64
+        py34-none-manylinux_2_28_x86_64
+        py34-none-manylinux_2_27_x86_64
+        py34-none-manylinux_2_26_x86_64
+        py34-none-manylinux_2_25_x86_64
+        py34-none-manylinux_2_24_x86_64
+        py34-none-manylinux_2_23_x86_64
+        py34-none-manylinux_2_22_x86_64
+        py34-none-manylinux_2_21_x86_64
+        py34-none-manylinux_2_20_x86_64
+        py34-none-manylinux_2_19_x86_64
+        py34-none-manylinux_2_18_x86_64
+        py34-none-manylinux_2_17_x86_64
+        py34-none-manylinux2014_x86_64
+        py34-none-manylinux_2_16_x86_64
+        py34-none-manylinux_2_15_x86_64
+        py34-none-manylinux_2_14_x86_64
+        py34-none-manylinux_2_13_x86_64
+        py34-none-manylinux_2_12_x86_64
+        py34-none-manylinux2010_x86_64
+        py34-none-manylinux_2_11_x86_64
+        py34-none-manylinux_2_10_x86_64
+        py34-none-manylinux_2_9_x86_64
+        py34-none-manylinux_2_8_x86_64
+        py34-none-manylinux_2_7_x86_64
+        py34-none-manylinux_2_6_x86_64
+        py34-none-manylinux_2_5_x86_64
+        py34-none-manylinux1_x86_64
+        py34-none-linux_x86_64
+        py33-none-manylinux_2_28_x86_64
+        py33-none-manylinux_2_27_x86_64
+        py33-none-manylinux_2_26_x86_64
+        py33-none-manylinux_2_25_x86_64
+        py33-none-manylinux_2_24_x86_64
+        py33-none-manylinux_2_23_x86_64
+        py33-none-manylinux_2_22_x86_64
+        py33-none-manylinux_2_21_x86_64
+        py33-none-manylinux_2_20_x86_64
+        py33-none-manylinux_2_19_x86_64
+        py33-none-manylinux_2_18_x86_64
+        py33-none-manylinux_2_17_x86_64
+        py33-none-manylinux2014_x86_64
+        py33-none-manylinux_2_16_x86_64
+        py33-none-manylinux_2_15_x86_64
+        py33-none-manylinux_2_14_x86_64
+        py33-none-manylinux_2_13_x86_64
+        py33-none-manylinux_2_12_x86_64
+        py33-none-manylinux2010_x86_64
+        py33-none-manylinux_2_11_x86_64
+        py33-none-manylinux_2_10_x86_64
+        py33-none-manylinux_2_9_x86_64
+        py33-none-manylinux_2_8_x86_64
+        py33-none-manylinux_2_7_x86_64
+        py33-none-manylinux_2_6_x86_64
+        py33-none-manylinux_2_5_x86_64
+        py33-none-manylinux1_x86_64
+        py33-none-linux_x86_64
+        py32-none-manylinux_2_28_x86_64
+        py32-none-manylinux_2_27_x86_64
+        py32-none-manylinux_2_26_x86_64
+        py32-none-manylinux_2_25_x86_64
+        py32-none-manylinux_2_24_x86_64
+        py32-none-manylinux_2_23_x86_64
+        py32-none-manylinux_2_22_x86_64
+        py32-none-manylinux_2_21_x86_64
+        py32-none-manylinux_2_20_x86_64
+        py32-none-manylinux_2_19_x86_64
+        py32-none-manylinux_2_18_x86_64
+        py32-none-manylinux_2_17_x86_64
+        py32-none-manylinux2014_x86_64
+        py32-none-manylinux_2_16_x86_64
+        py32-none-manylinux_2_15_x86_64
+        py32-none-manylinux_2_14_x86_64
+        py32-none-manylinux_2_13_x86_64
+        py32-none-manylinux_2_12_x86_64
+        py32-none-manylinux2010_x86_64
+        py32-none-manylinux_2_11_x86_64
+        py32-none-manylinux_2_10_x86_64
+        py32-none-manylinux_2_9_x86_64
+        py32-none-manylinux_2_8_x86_64
+        py32-none-manylinux_2_7_x86_64
+        py32-none-manylinux_2_6_x86_64
+        py32-none-manylinux_2_5_x86_64
+        py32-none-manylinux1_x86_64
+        py32-none-linux_x86_64
+        py31-none-manylinux_2_28_x86_64
+        py31-none-manylinux_2_27_x86_64
+        py31-none-manylinux_2_26_x86_64
+        py31-none-manylinux_2_25_x86_64
+        py31-none-manylinux_2_24_x86_64
+        py31-none-manylinux_2_23_x86_64
+        py31-none-manylinux_2_22_x86_64
+        py31-none-manylinux_2_21_x86_64
+        py31-none-manylinux_2_20_x86_64
+        py31-none-manylinux_2_19_x86_64
+        py31-none-manylinux_2_18_x86_64
+        py31-none-manylinux_2_17_x86_64
+        py31-none-manylinux2014_x86_64
+        py31-none-manylinux_2_16_x86_64
+        py31-none-manylinux_2_15_x86_64
+        py31-none-manylinux_2_14_x86_64
+        py31-none-manylinux_2_13_x86_64
+        py31-none-manylinux_2_12_x86_64
+        py31-none-manylinux2010_x86_64
+        py31-none-manylinux_2_11_x86_64
+        py31-none-manylinux_2_10_x86_64
+        py31-none-manylinux_2_9_x86_64
+        py31-none-manylinux_2_8_x86_64
+        py31-none-manylinux_2_7_x86_64
+        py31-none-manylinux_2_6_x86_64
+        py31-none-manylinux_2_5_x86_64
+        py31-none-manylinux1_x86_64
+        py31-none-linux_x86_64
+        py30-none-manylinux_2_28_x86_64
+        py30-none-manylinux_2_27_x86_64
+        py30-none-manylinux_2_26_x86_64
+        py30-none-manylinux_2_25_x86_64
+        py30-none-manylinux_2_24_x86_64
+        py30-none-manylinux_2_23_x86_64
+        py30-none-manylinux_2_22_x86_64
+        py30-none-manylinux_2_21_x86_64
+        py30-none-manylinux_2_20_x86_64
+        py30-none-manylinux_2_19_x86_64
+        py30-none-manylinux_2_18_x86_64
+        py30-none-manylinux_2_17_x86_64
+        py30-none-manylinux2014_x86_64
+        py30-none-manylinux_2_16_x86_64
+        py30-none-manylinux_2_15_x86_64
+        py30-none-manylinux_2_14_x86_64
+        py30-none-manylinux_2_13_x86_64
+        py30-none-manylinux_2_12_x86_64
+        py30-none-manylinux2010_x86_64
+        py30-none-manylinux_2_11_x86_64
+        py30-none-manylinux_2_10_x86_64
+        py30-none-manylinux_2_9_x86_64
+        py30-none-manylinux_2_8_x86_64
+        py30-none-manylinux_2_7_x86_64
+        py30-none-manylinux_2_6_x86_64
+        py30-none-manylinux_2_5_x86_64
+        py30-none-manylinux1_x86_64
+        py30-none-linux_x86_64
+        cp39-none-any
+        py39-none-any
+        py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "
         );
     }
 
@@ -1834,465 +2205,466 @@ mod tests {
             (3, 9),
             false,
             false,
+            false,
         )
         .unwrap();
         assert_snapshot!(
             tags,
-            @r###"
-    cp39-cp39-macosx_14_0_arm64
-    cp39-cp39-macosx_14_0_universal2
-    cp39-cp39-macosx_13_0_arm64
-    cp39-cp39-macosx_13_0_universal2
-    cp39-cp39-macosx_12_0_arm64
-    cp39-cp39-macosx_12_0_universal2
-    cp39-cp39-macosx_11_0_arm64
-    cp39-cp39-macosx_11_0_universal2
-    cp39-cp39-macosx_10_16_universal2
-    cp39-cp39-macosx_10_15_universal2
-    cp39-cp39-macosx_10_14_universal2
-    cp39-cp39-macosx_10_13_universal2
-    cp39-cp39-macosx_10_12_universal2
-    cp39-cp39-macosx_10_11_universal2
-    cp39-cp39-macosx_10_10_universal2
-    cp39-cp39-macosx_10_9_universal2
-    cp39-cp39-macosx_10_8_universal2
-    cp39-cp39-macosx_10_7_universal2
-    cp39-cp39-macosx_10_6_universal2
-    cp39-cp39-macosx_10_5_universal2
-    cp39-cp39-macosx_10_4_universal2
-    cp39-abi3-macosx_14_0_arm64
-    cp39-abi3-macosx_14_0_universal2
-    cp39-abi3-macosx_13_0_arm64
-    cp39-abi3-macosx_13_0_universal2
-    cp39-abi3-macosx_12_0_arm64
-    cp39-abi3-macosx_12_0_universal2
-    cp39-abi3-macosx_11_0_arm64
-    cp39-abi3-macosx_11_0_universal2
-    cp39-abi3-macosx_10_16_universal2
-    cp39-abi3-macosx_10_15_universal2
-    cp39-abi3-macosx_10_14_universal2
-    cp39-abi3-macosx_10_13_universal2
-    cp39-abi3-macosx_10_12_universal2
-    cp39-abi3-macosx_10_11_universal2
-    cp39-abi3-macosx_10_10_universal2
-    cp39-abi3-macosx_10_9_universal2
-    cp39-abi3-macosx_10_8_universal2
-    cp39-abi3-macosx_10_7_universal2
-    cp39-abi3-macosx_10_6_universal2
-    cp39-abi3-macosx_10_5_universal2
-    cp39-abi3-macosx_10_4_universal2
-    cp39-none-macosx_14_0_arm64
-    cp39-none-macosx_14_0_universal2
-    cp39-none-macosx_13_0_arm64
-    cp39-none-macosx_13_0_universal2
-    cp39-none-macosx_12_0_arm64
-    cp39-none-macosx_12_0_universal2
-    cp39-none-macosx_11_0_arm64
-    cp39-none-macosx_11_0_universal2
-    cp39-none-macosx_10_16_universal2
-    cp39-none-macosx_10_15_universal2
-    cp39-none-macosx_10_14_universal2
-    cp39-none-macosx_10_13_universal2
-    cp39-none-macosx_10_12_universal2
-    cp39-none-macosx_10_11_universal2
-    cp39-none-macosx_10_10_universal2
-    cp39-none-macosx_10_9_universal2
-    cp39-none-macosx_10_8_universal2
-    cp39-none-macosx_10_7_universal2
-    cp39-none-macosx_10_6_universal2
-    cp39-none-macosx_10_5_universal2
-    cp39-none-macosx_10_4_universal2
-    cp38-abi3-macosx_14_0_arm64
-    cp38-abi3-macosx_14_0_universal2
-    cp38-abi3-macosx_13_0_arm64
-    cp38-abi3-macosx_13_0_universal2
-    cp38-abi3-macosx_12_0_arm64
-    cp38-abi3-macosx_12_0_universal2
-    cp38-abi3-macosx_11_0_arm64
-    cp38-abi3-macosx_11_0_universal2
-    cp38-abi3-macosx_10_16_universal2
-    cp38-abi3-macosx_10_15_universal2
-    cp38-abi3-macosx_10_14_universal2
-    cp38-abi3-macosx_10_13_universal2
-    cp38-abi3-macosx_10_12_universal2
-    cp38-abi3-macosx_10_11_universal2
-    cp38-abi3-macosx_10_10_universal2
-    cp38-abi3-macosx_10_9_universal2
-    cp38-abi3-macosx_10_8_universal2
-    cp38-abi3-macosx_10_7_universal2
-    cp38-abi3-macosx_10_6_universal2
-    cp38-abi3-macosx_10_5_universal2
-    cp38-abi3-macosx_10_4_universal2
-    cp37-abi3-macosx_14_0_arm64
-    cp37-abi3-macosx_14_0_universal2
-    cp37-abi3-macosx_13_0_arm64
-    cp37-abi3-macosx_13_0_universal2
-    cp37-abi3-macosx_12_0_arm64
-    cp37-abi3-macosx_12_0_universal2
-    cp37-abi3-macosx_11_0_arm64
-    cp37-abi3-macosx_11_0_universal2
-    cp37-abi3-macosx_10_16_universal2
-    cp37-abi3-macosx_10_15_universal2
-    cp37-abi3-macosx_10_14_universal2
-    cp37-abi3-macosx_10_13_universal2
-    cp37-abi3-macosx_10_12_universal2
-    cp37-abi3-macosx_10_11_universal2
-    cp37-abi3-macosx_10_10_universal2
-    cp37-abi3-macosx_10_9_universal2
-    cp37-abi3-macosx_10_8_universal2
-    cp37-abi3-macosx_10_7_universal2
-    cp37-abi3-macosx_10_6_universal2
-    cp37-abi3-macosx_10_5_universal2
-    cp37-abi3-macosx_10_4_universal2
-    cp36-abi3-macosx_14_0_arm64
-    cp36-abi3-macosx_14_0_universal2
-    cp36-abi3-macosx_13_0_arm64
-    cp36-abi3-macosx_13_0_universal2
-    cp36-abi3-macosx_12_0_arm64
-    cp36-abi3-macosx_12_0_universal2
-    cp36-abi3-macosx_11_0_arm64
-    cp36-abi3-macosx_11_0_universal2
-    cp36-abi3-macosx_10_16_universal2
-    cp36-abi3-macosx_10_15_universal2
-    cp36-abi3-macosx_10_14_universal2
-    cp36-abi3-macosx_10_13_universal2
-    cp36-abi3-macosx_10_12_universal2
-    cp36-abi3-macosx_10_11_universal2
-    cp36-abi3-macosx_10_10_universal2
-    cp36-abi3-macosx_10_9_universal2
-    cp36-abi3-macosx_10_8_universal2
-    cp36-abi3-macosx_10_7_universal2
-    cp36-abi3-macosx_10_6_universal2
-    cp36-abi3-macosx_10_5_universal2
-    cp36-abi3-macosx_10_4_universal2
-    cp35-abi3-macosx_14_0_arm64
-    cp35-abi3-macosx_14_0_universal2
-    cp35-abi3-macosx_13_0_arm64
-    cp35-abi3-macosx_13_0_universal2
-    cp35-abi3-macosx_12_0_arm64
-    cp35-abi3-macosx_12_0_universal2
-    cp35-abi3-macosx_11_0_arm64
-    cp35-abi3-macosx_11_0_universal2
-    cp35-abi3-macosx_10_16_universal2
-    cp35-abi3-macosx_10_15_universal2
-    cp35-abi3-macosx_10_14_universal2
-    cp35-abi3-macosx_10_13_universal2
-    cp35-abi3-macosx_10_12_universal2
-    cp35-abi3-macosx_10_11_universal2
-    cp35-abi3-macosx_10_10_universal2
-    cp35-abi3-macosx_10_9_universal2
-    cp35-abi3-macosx_10_8_universal2
-    cp35-abi3-macosx_10_7_universal2
-    cp35-abi3-macosx_10_6_universal2
-    cp35-abi3-macosx_10_5_universal2
-    cp35-abi3-macosx_10_4_universal2
-    cp34-abi3-macosx_14_0_arm64
-    cp34-abi3-macosx_14_0_universal2
-    cp34-abi3-macosx_13_0_arm64
-    cp34-abi3-macosx_13_0_universal2
-    cp34-abi3-macosx_12_0_arm64
-    cp34-abi3-macosx_12_0_universal2
-    cp34-abi3-macosx_11_0_arm64
-    cp34-abi3-macosx_11_0_universal2
-    cp34-abi3-macosx_10_16_universal2
-    cp34-abi3-macosx_10_15_universal2
-    cp34-abi3-macosx_10_14_universal2
-    cp34-abi3-macosx_10_13_universal2
-    cp34-abi3-macosx_10_12_universal2
-    cp34-abi3-macosx_10_11_universal2
-    cp34-abi3-macosx_10_10_universal2
-    cp34-abi3-macosx_10_9_universal2
-    cp34-abi3-macosx_10_8_universal2
-    cp34-abi3-macosx_10_7_universal2
-    cp34-abi3-macosx_10_6_universal2
-    cp34-abi3-macosx_10_5_universal2
-    cp34-abi3-macosx_10_4_universal2
-    cp33-abi3-macosx_14_0_arm64
-    cp33-abi3-macosx_14_0_universal2
-    cp33-abi3-macosx_13_0_arm64
-    cp33-abi3-macosx_13_0_universal2
-    cp33-abi3-macosx_12_0_arm64
-    cp33-abi3-macosx_12_0_universal2
-    cp33-abi3-macosx_11_0_arm64
-    cp33-abi3-macosx_11_0_universal2
-    cp33-abi3-macosx_10_16_universal2
-    cp33-abi3-macosx_10_15_universal2
-    cp33-abi3-macosx_10_14_universal2
-    cp33-abi3-macosx_10_13_universal2
-    cp33-abi3-macosx_10_12_universal2
-    cp33-abi3-macosx_10_11_universal2
-    cp33-abi3-macosx_10_10_universal2
-    cp33-abi3-macosx_10_9_universal2
-    cp33-abi3-macosx_10_8_universal2
-    cp33-abi3-macosx_10_7_universal2
-    cp33-abi3-macosx_10_6_universal2
-    cp33-abi3-macosx_10_5_universal2
-    cp33-abi3-macosx_10_4_universal2
-    cp32-abi3-macosx_14_0_arm64
-    cp32-abi3-macosx_14_0_universal2
-    cp32-abi3-macosx_13_0_arm64
-    cp32-abi3-macosx_13_0_universal2
-    cp32-abi3-macosx_12_0_arm64
-    cp32-abi3-macosx_12_0_universal2
-    cp32-abi3-macosx_11_0_arm64
-    cp32-abi3-macosx_11_0_universal2
-    cp32-abi3-macosx_10_16_universal2
-    cp32-abi3-macosx_10_15_universal2
-    cp32-abi3-macosx_10_14_universal2
-    cp32-abi3-macosx_10_13_universal2
-    cp32-abi3-macosx_10_12_universal2
-    cp32-abi3-macosx_10_11_universal2
-    cp32-abi3-macosx_10_10_universal2
-    cp32-abi3-macosx_10_9_universal2
-    cp32-abi3-macosx_10_8_universal2
-    cp32-abi3-macosx_10_7_universal2
-    cp32-abi3-macosx_10_6_universal2
-    cp32-abi3-macosx_10_5_universal2
-    cp32-abi3-macosx_10_4_universal2
-    py39-none-macosx_14_0_arm64
-    py39-none-macosx_14_0_universal2
-    py39-none-macosx_13_0_arm64
-    py39-none-macosx_13_0_universal2
-    py39-none-macosx_12_0_arm64
-    py39-none-macosx_12_0_universal2
-    py39-none-macosx_11_0_arm64
-    py39-none-macosx_11_0_universal2
-    py39-none-macosx_10_16_universal2
-    py39-none-macosx_10_15_universal2
-    py39-none-macosx_10_14_universal2
-    py39-none-macosx_10_13_universal2
-    py39-none-macosx_10_12_universal2
-    py39-none-macosx_10_11_universal2
-    py39-none-macosx_10_10_universal2
-    py39-none-macosx_10_9_universal2
-    py39-none-macosx_10_8_universal2
-    py39-none-macosx_10_7_universal2
-    py39-none-macosx_10_6_universal2
-    py39-none-macosx_10_5_universal2
-    py39-none-macosx_10_4_universal2
-    py3-none-macosx_14_0_arm64
-    py3-none-macosx_14_0_universal2
-    py3-none-macosx_13_0_arm64
-    py3-none-macosx_13_0_universal2
-    py3-none-macosx_12_0_arm64
-    py3-none-macosx_12_0_universal2
-    py3-none-macosx_11_0_arm64
-    py3-none-macosx_11_0_universal2
-    py3-none-macosx_10_16_universal2
-    py3-none-macosx_10_15_universal2
-    py3-none-macosx_10_14_universal2
-    py3-none-macosx_10_13_universal2
-    py3-none-macosx_10_12_universal2
-    py3-none-macosx_10_11_universal2
-    py3-none-macosx_10_10_universal2
-    py3-none-macosx_10_9_universal2
-    py3-none-macosx_10_8_universal2
-    py3-none-macosx_10_7_universal2
-    py3-none-macosx_10_6_universal2
-    py3-none-macosx_10_5_universal2
-    py3-none-macosx_10_4_universal2
-    py38-none-macosx_14_0_arm64
-    py38-none-macosx_14_0_universal2
-    py38-none-macosx_13_0_arm64
-    py38-none-macosx_13_0_universal2
-    py38-none-macosx_12_0_arm64
-    py38-none-macosx_12_0_universal2
-    py38-none-macosx_11_0_arm64
-    py38-none-macosx_11_0_universal2
-    py38-none-macosx_10_16_universal2
-    py38-none-macosx_10_15_universal2
-    py38-none-macosx_10_14_universal2
-    py38-none-macosx_10_13_universal2
-    py38-none-macosx_10_12_universal2
-    py38-none-macosx_10_11_universal2
-    py38-none-macosx_10_10_universal2
-    py38-none-macosx_10_9_universal2
-    py38-none-macosx_10_8_universal2
-    py38-none-macosx_10_7_universal2
-    py38-none-macosx_10_6_universal2
-    py38-none-macosx_10_5_universal2
-    py38-none-macosx_10_4_universal2
-    py37-none-macosx_14_0_arm64
-    py37-none-macosx_14_0_universal2
-    py37-none-macosx_13_0_arm64
-    py37-none-macosx_13_0_universal2
-    py37-none-macosx_12_0_arm64
-    py37-none-macosx_12_0_universal2
-    py37-none-macosx_11_0_arm64
-    py37-none-macosx_11_0_universal2
-    py37-none-macosx_10_16_universal2
-    py37-none-macosx_10_15_universal2
-    py37-none-macosx_10_14_universal2
-    py37-none-macosx_10_13_universal2
-    py37-none-macosx_10_12_universal2
-    py37-none-macosx_10_11_universal2
-    py37-none-macosx_10_10_universal2
-    py37-none-macosx_10_9_universal2
-    py37-none-macosx_10_8_universal2
-    py37-none-macosx_10_7_universal2
-    py37-none-macosx_10_6_universal2
-    py37-none-macosx_10_5_universal2
-    py37-none-macosx_10_4_universal2
-    py36-none-macosx_14_0_arm64
-    py36-none-macosx_14_0_universal2
-    py36-none-macosx_13_0_arm64
-    py36-none-macosx_13_0_universal2
-    py36-none-macosx_12_0_arm64
-    py36-none-macosx_12_0_universal2
-    py36-none-macosx_11_0_arm64
-    py36-none-macosx_11_0_universal2
-    py36-none-macosx_10_16_universal2
-    py36-none-macosx_10_15_universal2
-    py36-none-macosx_10_14_universal2
-    py36-none-macosx_10_13_universal2
-    py36-none-macosx_10_12_universal2
-    py36-none-macosx_10_11_universal2
-    py36-none-macosx_10_10_universal2
-    py36-none-macosx_10_9_universal2
-    py36-none-macosx_10_8_universal2
-    py36-none-macosx_10_7_universal2
-    py36-none-macosx_10_6_universal2
-    py36-none-macosx_10_5_universal2
-    py36-none-macosx_10_4_universal2
-    py35-none-macosx_14_0_arm64
-    py35-none-macosx_14_0_universal2
-    py35-none-macosx_13_0_arm64
-    py35-none-macosx_13_0_universal2
-    py35-none-macosx_12_0_arm64
-    py35-none-macosx_12_0_universal2
-    py35-none-macosx_11_0_arm64
-    py35-none-macosx_11_0_universal2
-    py35-none-macosx_10_16_universal2
-    py35-none-macosx_10_15_universal2
-    py35-none-macosx_10_14_universal2
-    py35-none-macosx_10_13_universal2
-    py35-none-macosx_10_12_universal2
-    py35-none-macosx_10_11_universal2
-    py35-none-macosx_10_10_universal2
-    py35-none-macosx_10_9_universal2
-    py35-none-macosx_10_8_universal2
-    py35-none-macosx_10_7_universal2
-    py35-none-macosx_10_6_universal2
-    py35-none-macosx_10_5_universal2
-    py35-none-macosx_10_4_universal2
-    py34-none-macosx_14_0_arm64
-    py34-none-macosx_14_0_universal2
-    py34-none-macosx_13_0_arm64
-    py34-none-macosx_13_0_universal2
-    py34-none-macosx_12_0_arm64
-    py34-none-macosx_12_0_universal2
-    py34-none-macosx_11_0_arm64
-    py34-none-macosx_11_0_universal2
-    py34-none-macosx_10_16_universal2
-    py34-none-macosx_10_15_universal2
-    py34-none-macosx_10_14_universal2
-    py34-none-macosx_10_13_universal2
-    py34-none-macosx_10_12_universal2
-    py34-none-macosx_10_11_universal2
-    py34-none-macosx_10_10_universal2
-    py34-none-macosx_10_9_universal2
-    py34-none-macosx_10_8_universal2
-    py34-none-macosx_10_7_universal2
-    py34-none-macosx_10_6_universal2
-    py34-none-macosx_10_5_universal2
-    py34-none-macosx_10_4_universal2
-    py33-none-macosx_14_0_arm64
-    py33-none-macosx_14_0_universal2
-    py33-none-macosx_13_0_arm64
-    py33-none-macosx_13_0_universal2
-    py33-none-macosx_12_0_arm64
-    py33-none-macosx_12_0_universal2
-    py33-none-macosx_11_0_arm64
-    py33-none-macosx_11_0_universal2
-    py33-none-macosx_10_16_universal2
-    py33-none-macosx_10_15_universal2
-    py33-none-macosx_10_14_universal2
-    py33-none-macosx_10_13_universal2
-    py33-none-macosx_10_12_universal2
-    py33-none-macosx_10_11_universal2
-    py33-none-macosx_10_10_universal2
-    py33-none-macosx_10_9_universal2
-    py33-none-macosx_10_8_universal2
-    py33-none-macosx_10_7_universal2
-    py33-none-macosx_10_6_universal2
-    py33-none-macosx_10_5_universal2
-    py33-none-macosx_10_4_universal2
-    py32-none-macosx_14_0_arm64
-    py32-none-macosx_14_0_universal2
-    py32-none-macosx_13_0_arm64
-    py32-none-macosx_13_0_universal2
-    py32-none-macosx_12_0_arm64
-    py32-none-macosx_12_0_universal2
-    py32-none-macosx_11_0_arm64
-    py32-none-macosx_11_0_universal2
-    py32-none-macosx_10_16_universal2
-    py32-none-macosx_10_15_universal2
-    py32-none-macosx_10_14_universal2
-    py32-none-macosx_10_13_universal2
-    py32-none-macosx_10_12_universal2
-    py32-none-macosx_10_11_universal2
-    py32-none-macosx_10_10_universal2
-    py32-none-macosx_10_9_universal2
-    py32-none-macosx_10_8_universal2
-    py32-none-macosx_10_7_universal2
-    py32-none-macosx_10_6_universal2
-    py32-none-macosx_10_5_universal2
-    py32-none-macosx_10_4_universal2
-    py31-none-macosx_14_0_arm64
-    py31-none-macosx_14_0_universal2
-    py31-none-macosx_13_0_arm64
-    py31-none-macosx_13_0_universal2
-    py31-none-macosx_12_0_arm64
-    py31-none-macosx_12_0_universal2
-    py31-none-macosx_11_0_arm64
-    py31-none-macosx_11_0_universal2
-    py31-none-macosx_10_16_universal2
-    py31-none-macosx_10_15_universal2
-    py31-none-macosx_10_14_universal2
-    py31-none-macosx_10_13_universal2
-    py31-none-macosx_10_12_universal2
-    py31-none-macosx_10_11_universal2
-    py31-none-macosx_10_10_universal2
-    py31-none-macosx_10_9_universal2
-    py31-none-macosx_10_8_universal2
-    py31-none-macosx_10_7_universal2
-    py31-none-macosx_10_6_universal2
-    py31-none-macosx_10_5_universal2
-    py31-none-macosx_10_4_universal2
-    py30-none-macosx_14_0_arm64
-    py30-none-macosx_14_0_universal2
-    py30-none-macosx_13_0_arm64
-    py30-none-macosx_13_0_universal2
-    py30-none-macosx_12_0_arm64
-    py30-none-macosx_12_0_universal2
-    py30-none-macosx_11_0_arm64
-    py30-none-macosx_11_0_universal2
-    py30-none-macosx_10_16_universal2
-    py30-none-macosx_10_15_universal2
-    py30-none-macosx_10_14_universal2
-    py30-none-macosx_10_13_universal2
-    py30-none-macosx_10_12_universal2
-    py30-none-macosx_10_11_universal2
-    py30-none-macosx_10_10_universal2
-    py30-none-macosx_10_9_universal2
-    py30-none-macosx_10_8_universal2
-    py30-none-macosx_10_7_universal2
-    py30-none-macosx_10_6_universal2
-    py30-none-macosx_10_5_universal2
-    py30-none-macosx_10_4_universal2
-    cp39-none-any
-    py39-none-any
-    py3-none-any
-    py38-none-any
-    py37-none-any
-    py36-none-any
-    py35-none-any
-    py34-none-any
-    py33-none-any
-    py32-none-any
-    py31-none-any
-    py30-none-any
-    "###
+            @"
+        cp39-cp39-macosx_14_0_arm64
+        cp39-cp39-macosx_14_0_universal2
+        cp39-cp39-macosx_13_0_arm64
+        cp39-cp39-macosx_13_0_universal2
+        cp39-cp39-macosx_12_0_arm64
+        cp39-cp39-macosx_12_0_universal2
+        cp39-cp39-macosx_11_0_arm64
+        cp39-cp39-macosx_11_0_universal2
+        cp39-cp39-macosx_10_16_universal2
+        cp39-cp39-macosx_10_15_universal2
+        cp39-cp39-macosx_10_14_universal2
+        cp39-cp39-macosx_10_13_universal2
+        cp39-cp39-macosx_10_12_universal2
+        cp39-cp39-macosx_10_11_universal2
+        cp39-cp39-macosx_10_10_universal2
+        cp39-cp39-macosx_10_9_universal2
+        cp39-cp39-macosx_10_8_universal2
+        cp39-cp39-macosx_10_7_universal2
+        cp39-cp39-macosx_10_6_universal2
+        cp39-cp39-macosx_10_5_universal2
+        cp39-cp39-macosx_10_4_universal2
+        cp39-abi3-macosx_14_0_arm64
+        cp39-abi3-macosx_14_0_universal2
+        cp39-abi3-macosx_13_0_arm64
+        cp39-abi3-macosx_13_0_universal2
+        cp39-abi3-macosx_12_0_arm64
+        cp39-abi3-macosx_12_0_universal2
+        cp39-abi3-macosx_11_0_arm64
+        cp39-abi3-macosx_11_0_universal2
+        cp39-abi3-macosx_10_16_universal2
+        cp39-abi3-macosx_10_15_universal2
+        cp39-abi3-macosx_10_14_universal2
+        cp39-abi3-macosx_10_13_universal2
+        cp39-abi3-macosx_10_12_universal2
+        cp39-abi3-macosx_10_11_universal2
+        cp39-abi3-macosx_10_10_universal2
+        cp39-abi3-macosx_10_9_universal2
+        cp39-abi3-macosx_10_8_universal2
+        cp39-abi3-macosx_10_7_universal2
+        cp39-abi3-macosx_10_6_universal2
+        cp39-abi3-macosx_10_5_universal2
+        cp39-abi3-macosx_10_4_universal2
+        cp39-none-macosx_14_0_arm64
+        cp39-none-macosx_14_0_universal2
+        cp39-none-macosx_13_0_arm64
+        cp39-none-macosx_13_0_universal2
+        cp39-none-macosx_12_0_arm64
+        cp39-none-macosx_12_0_universal2
+        cp39-none-macosx_11_0_arm64
+        cp39-none-macosx_11_0_universal2
+        cp39-none-macosx_10_16_universal2
+        cp39-none-macosx_10_15_universal2
+        cp39-none-macosx_10_14_universal2
+        cp39-none-macosx_10_13_universal2
+        cp39-none-macosx_10_12_universal2
+        cp39-none-macosx_10_11_universal2
+        cp39-none-macosx_10_10_universal2
+        cp39-none-macosx_10_9_universal2
+        cp39-none-macosx_10_8_universal2
+        cp39-none-macosx_10_7_universal2
+        cp39-none-macosx_10_6_universal2
+        cp39-none-macosx_10_5_universal2
+        cp39-none-macosx_10_4_universal2
+        cp38-abi3-macosx_14_0_arm64
+        cp38-abi3-macosx_14_0_universal2
+        cp38-abi3-macosx_13_0_arm64
+        cp38-abi3-macosx_13_0_universal2
+        cp38-abi3-macosx_12_0_arm64
+        cp38-abi3-macosx_12_0_universal2
+        cp38-abi3-macosx_11_0_arm64
+        cp38-abi3-macosx_11_0_universal2
+        cp38-abi3-macosx_10_16_universal2
+        cp38-abi3-macosx_10_15_universal2
+        cp38-abi3-macosx_10_14_universal2
+        cp38-abi3-macosx_10_13_universal2
+        cp38-abi3-macosx_10_12_universal2
+        cp38-abi3-macosx_10_11_universal2
+        cp38-abi3-macosx_10_10_universal2
+        cp38-abi3-macosx_10_9_universal2
+        cp38-abi3-macosx_10_8_universal2
+        cp38-abi3-macosx_10_7_universal2
+        cp38-abi3-macosx_10_6_universal2
+        cp38-abi3-macosx_10_5_universal2
+        cp38-abi3-macosx_10_4_universal2
+        cp37-abi3-macosx_14_0_arm64
+        cp37-abi3-macosx_14_0_universal2
+        cp37-abi3-macosx_13_0_arm64
+        cp37-abi3-macosx_13_0_universal2
+        cp37-abi3-macosx_12_0_arm64
+        cp37-abi3-macosx_12_0_universal2
+        cp37-abi3-macosx_11_0_arm64
+        cp37-abi3-macosx_11_0_universal2
+        cp37-abi3-macosx_10_16_universal2
+        cp37-abi3-macosx_10_15_universal2
+        cp37-abi3-macosx_10_14_universal2
+        cp37-abi3-macosx_10_13_universal2
+        cp37-abi3-macosx_10_12_universal2
+        cp37-abi3-macosx_10_11_universal2
+        cp37-abi3-macosx_10_10_universal2
+        cp37-abi3-macosx_10_9_universal2
+        cp37-abi3-macosx_10_8_universal2
+        cp37-abi3-macosx_10_7_universal2
+        cp37-abi3-macosx_10_6_universal2
+        cp37-abi3-macosx_10_5_universal2
+        cp37-abi3-macosx_10_4_universal2
+        cp36-abi3-macosx_14_0_arm64
+        cp36-abi3-macosx_14_0_universal2
+        cp36-abi3-macosx_13_0_arm64
+        cp36-abi3-macosx_13_0_universal2
+        cp36-abi3-macosx_12_0_arm64
+        cp36-abi3-macosx_12_0_universal2
+        cp36-abi3-macosx_11_0_arm64
+        cp36-abi3-macosx_11_0_universal2
+        cp36-abi3-macosx_10_16_universal2
+        cp36-abi3-macosx_10_15_universal2
+        cp36-abi3-macosx_10_14_universal2
+        cp36-abi3-macosx_10_13_universal2
+        cp36-abi3-macosx_10_12_universal2
+        cp36-abi3-macosx_10_11_universal2
+        cp36-abi3-macosx_10_10_universal2
+        cp36-abi3-macosx_10_9_universal2
+        cp36-abi3-macosx_10_8_universal2
+        cp36-abi3-macosx_10_7_universal2
+        cp36-abi3-macosx_10_6_universal2
+        cp36-abi3-macosx_10_5_universal2
+        cp36-abi3-macosx_10_4_universal2
+        cp35-abi3-macosx_14_0_arm64
+        cp35-abi3-macosx_14_0_universal2
+        cp35-abi3-macosx_13_0_arm64
+        cp35-abi3-macosx_13_0_universal2
+        cp35-abi3-macosx_12_0_arm64
+        cp35-abi3-macosx_12_0_universal2
+        cp35-abi3-macosx_11_0_arm64
+        cp35-abi3-macosx_11_0_universal2
+        cp35-abi3-macosx_10_16_universal2
+        cp35-abi3-macosx_10_15_universal2
+        cp35-abi3-macosx_10_14_universal2
+        cp35-abi3-macosx_10_13_universal2
+        cp35-abi3-macosx_10_12_universal2
+        cp35-abi3-macosx_10_11_universal2
+        cp35-abi3-macosx_10_10_universal2
+        cp35-abi3-macosx_10_9_universal2
+        cp35-abi3-macosx_10_8_universal2
+        cp35-abi3-macosx_10_7_universal2
+        cp35-abi3-macosx_10_6_universal2
+        cp35-abi3-macosx_10_5_universal2
+        cp35-abi3-macosx_10_4_universal2
+        cp34-abi3-macosx_14_0_arm64
+        cp34-abi3-macosx_14_0_universal2
+        cp34-abi3-macosx_13_0_arm64
+        cp34-abi3-macosx_13_0_universal2
+        cp34-abi3-macosx_12_0_arm64
+        cp34-abi3-macosx_12_0_universal2
+        cp34-abi3-macosx_11_0_arm64
+        cp34-abi3-macosx_11_0_universal2
+        cp34-abi3-macosx_10_16_universal2
+        cp34-abi3-macosx_10_15_universal2
+        cp34-abi3-macosx_10_14_universal2
+        cp34-abi3-macosx_10_13_universal2
+        cp34-abi3-macosx_10_12_universal2
+        cp34-abi3-macosx_10_11_universal2
+        cp34-abi3-macosx_10_10_universal2
+        cp34-abi3-macosx_10_9_universal2
+        cp34-abi3-macosx_10_8_universal2
+        cp34-abi3-macosx_10_7_universal2
+        cp34-abi3-macosx_10_6_universal2
+        cp34-abi3-macosx_10_5_universal2
+        cp34-abi3-macosx_10_4_universal2
+        cp33-abi3-macosx_14_0_arm64
+        cp33-abi3-macosx_14_0_universal2
+        cp33-abi3-macosx_13_0_arm64
+        cp33-abi3-macosx_13_0_universal2
+        cp33-abi3-macosx_12_0_arm64
+        cp33-abi3-macosx_12_0_universal2
+        cp33-abi3-macosx_11_0_arm64
+        cp33-abi3-macosx_11_0_universal2
+        cp33-abi3-macosx_10_16_universal2
+        cp33-abi3-macosx_10_15_universal2
+        cp33-abi3-macosx_10_14_universal2
+        cp33-abi3-macosx_10_13_universal2
+        cp33-abi3-macosx_10_12_universal2
+        cp33-abi3-macosx_10_11_universal2
+        cp33-abi3-macosx_10_10_universal2
+        cp33-abi3-macosx_10_9_universal2
+        cp33-abi3-macosx_10_8_universal2
+        cp33-abi3-macosx_10_7_universal2
+        cp33-abi3-macosx_10_6_universal2
+        cp33-abi3-macosx_10_5_universal2
+        cp33-abi3-macosx_10_4_universal2
+        cp32-abi3-macosx_14_0_arm64
+        cp32-abi3-macosx_14_0_universal2
+        cp32-abi3-macosx_13_0_arm64
+        cp32-abi3-macosx_13_0_universal2
+        cp32-abi3-macosx_12_0_arm64
+        cp32-abi3-macosx_12_0_universal2
+        cp32-abi3-macosx_11_0_arm64
+        cp32-abi3-macosx_11_0_universal2
+        cp32-abi3-macosx_10_16_universal2
+        cp32-abi3-macosx_10_15_universal2
+        cp32-abi3-macosx_10_14_universal2
+        cp32-abi3-macosx_10_13_universal2
+        cp32-abi3-macosx_10_12_universal2
+        cp32-abi3-macosx_10_11_universal2
+        cp32-abi3-macosx_10_10_universal2
+        cp32-abi3-macosx_10_9_universal2
+        cp32-abi3-macosx_10_8_universal2
+        cp32-abi3-macosx_10_7_universal2
+        cp32-abi3-macosx_10_6_universal2
+        cp32-abi3-macosx_10_5_universal2
+        cp32-abi3-macosx_10_4_universal2
+        py39-none-macosx_14_0_arm64
+        py39-none-macosx_14_0_universal2
+        py39-none-macosx_13_0_arm64
+        py39-none-macosx_13_0_universal2
+        py39-none-macosx_12_0_arm64
+        py39-none-macosx_12_0_universal2
+        py39-none-macosx_11_0_arm64
+        py39-none-macosx_11_0_universal2
+        py39-none-macosx_10_16_universal2
+        py39-none-macosx_10_15_universal2
+        py39-none-macosx_10_14_universal2
+        py39-none-macosx_10_13_universal2
+        py39-none-macosx_10_12_universal2
+        py39-none-macosx_10_11_universal2
+        py39-none-macosx_10_10_universal2
+        py39-none-macosx_10_9_universal2
+        py39-none-macosx_10_8_universal2
+        py39-none-macosx_10_7_universal2
+        py39-none-macosx_10_6_universal2
+        py39-none-macosx_10_5_universal2
+        py39-none-macosx_10_4_universal2
+        py3-none-macosx_14_0_arm64
+        py3-none-macosx_14_0_universal2
+        py3-none-macosx_13_0_arm64
+        py3-none-macosx_13_0_universal2
+        py3-none-macosx_12_0_arm64
+        py3-none-macosx_12_0_universal2
+        py3-none-macosx_11_0_arm64
+        py3-none-macosx_11_0_universal2
+        py3-none-macosx_10_16_universal2
+        py3-none-macosx_10_15_universal2
+        py3-none-macosx_10_14_universal2
+        py3-none-macosx_10_13_universal2
+        py3-none-macosx_10_12_universal2
+        py3-none-macosx_10_11_universal2
+        py3-none-macosx_10_10_universal2
+        py3-none-macosx_10_9_universal2
+        py3-none-macosx_10_8_universal2
+        py3-none-macosx_10_7_universal2
+        py3-none-macosx_10_6_universal2
+        py3-none-macosx_10_5_universal2
+        py3-none-macosx_10_4_universal2
+        py38-none-macosx_14_0_arm64
+        py38-none-macosx_14_0_universal2
+        py38-none-macosx_13_0_arm64
+        py38-none-macosx_13_0_universal2
+        py38-none-macosx_12_0_arm64
+        py38-none-macosx_12_0_universal2
+        py38-none-macosx_11_0_arm64
+        py38-none-macosx_11_0_universal2
+        py38-none-macosx_10_16_universal2
+        py38-none-macosx_10_15_universal2
+        py38-none-macosx_10_14_universal2
+        py38-none-macosx_10_13_universal2
+        py38-none-macosx_10_12_universal2
+        py38-none-macosx_10_11_universal2
+        py38-none-macosx_10_10_universal2
+        py38-none-macosx_10_9_universal2
+        py38-none-macosx_10_8_universal2
+        py38-none-macosx_10_7_universal2
+        py38-none-macosx_10_6_universal2
+        py38-none-macosx_10_5_universal2
+        py38-none-macosx_10_4_universal2
+        py37-none-macosx_14_0_arm64
+        py37-none-macosx_14_0_universal2
+        py37-none-macosx_13_0_arm64
+        py37-none-macosx_13_0_universal2
+        py37-none-macosx_12_0_arm64
+        py37-none-macosx_12_0_universal2
+        py37-none-macosx_11_0_arm64
+        py37-none-macosx_11_0_universal2
+        py37-none-macosx_10_16_universal2
+        py37-none-macosx_10_15_universal2
+        py37-none-macosx_10_14_universal2
+        py37-none-macosx_10_13_universal2
+        py37-none-macosx_10_12_universal2
+        py37-none-macosx_10_11_universal2
+        py37-none-macosx_10_10_universal2
+        py37-none-macosx_10_9_universal2
+        py37-none-macosx_10_8_universal2
+        py37-none-macosx_10_7_universal2
+        py37-none-macosx_10_6_universal2
+        py37-none-macosx_10_5_universal2
+        py37-none-macosx_10_4_universal2
+        py36-none-macosx_14_0_arm64
+        py36-none-macosx_14_0_universal2
+        py36-none-macosx_13_0_arm64
+        py36-none-macosx_13_0_universal2
+        py36-none-macosx_12_0_arm64
+        py36-none-macosx_12_0_universal2
+        py36-none-macosx_11_0_arm64
+        py36-none-macosx_11_0_universal2
+        py36-none-macosx_10_16_universal2
+        py36-none-macosx_10_15_universal2
+        py36-none-macosx_10_14_universal2
+        py36-none-macosx_10_13_universal2
+        py36-none-macosx_10_12_universal2
+        py36-none-macosx_10_11_universal2
+        py36-none-macosx_10_10_universal2
+        py36-none-macosx_10_9_universal2
+        py36-none-macosx_10_8_universal2
+        py36-none-macosx_10_7_universal2
+        py36-none-macosx_10_6_universal2
+        py36-none-macosx_10_5_universal2
+        py36-none-macosx_10_4_universal2
+        py35-none-macosx_14_0_arm64
+        py35-none-macosx_14_0_universal2
+        py35-none-macosx_13_0_arm64
+        py35-none-macosx_13_0_universal2
+        py35-none-macosx_12_0_arm64
+        py35-none-macosx_12_0_universal2
+        py35-none-macosx_11_0_arm64
+        py35-none-macosx_11_0_universal2
+        py35-none-macosx_10_16_universal2
+        py35-none-macosx_10_15_universal2
+        py35-none-macosx_10_14_universal2
+        py35-none-macosx_10_13_universal2
+        py35-none-macosx_10_12_universal2
+        py35-none-macosx_10_11_universal2
+        py35-none-macosx_10_10_universal2
+        py35-none-macosx_10_9_universal2
+        py35-none-macosx_10_8_universal2
+        py35-none-macosx_10_7_universal2
+        py35-none-macosx_10_6_universal2
+        py35-none-macosx_10_5_universal2
+        py35-none-macosx_10_4_universal2
+        py34-none-macosx_14_0_arm64
+        py34-none-macosx_14_0_universal2
+        py34-none-macosx_13_0_arm64
+        py34-none-macosx_13_0_universal2
+        py34-none-macosx_12_0_arm64
+        py34-none-macosx_12_0_universal2
+        py34-none-macosx_11_0_arm64
+        py34-none-macosx_11_0_universal2
+        py34-none-macosx_10_16_universal2
+        py34-none-macosx_10_15_universal2
+        py34-none-macosx_10_14_universal2
+        py34-none-macosx_10_13_universal2
+        py34-none-macosx_10_12_universal2
+        py34-none-macosx_10_11_universal2
+        py34-none-macosx_10_10_universal2
+        py34-none-macosx_10_9_universal2
+        py34-none-macosx_10_8_universal2
+        py34-none-macosx_10_7_universal2
+        py34-none-macosx_10_6_universal2
+        py34-none-macosx_10_5_universal2
+        py34-none-macosx_10_4_universal2
+        py33-none-macosx_14_0_arm64
+        py33-none-macosx_14_0_universal2
+        py33-none-macosx_13_0_arm64
+        py33-none-macosx_13_0_universal2
+        py33-none-macosx_12_0_arm64
+        py33-none-macosx_12_0_universal2
+        py33-none-macosx_11_0_arm64
+        py33-none-macosx_11_0_universal2
+        py33-none-macosx_10_16_universal2
+        py33-none-macosx_10_15_universal2
+        py33-none-macosx_10_14_universal2
+        py33-none-macosx_10_13_universal2
+        py33-none-macosx_10_12_universal2
+        py33-none-macosx_10_11_universal2
+        py33-none-macosx_10_10_universal2
+        py33-none-macosx_10_9_universal2
+        py33-none-macosx_10_8_universal2
+        py33-none-macosx_10_7_universal2
+        py33-none-macosx_10_6_universal2
+        py33-none-macosx_10_5_universal2
+        py33-none-macosx_10_4_universal2
+        py32-none-macosx_14_0_arm64
+        py32-none-macosx_14_0_universal2
+        py32-none-macosx_13_0_arm64
+        py32-none-macosx_13_0_universal2
+        py32-none-macosx_12_0_arm64
+        py32-none-macosx_12_0_universal2
+        py32-none-macosx_11_0_arm64
+        py32-none-macosx_11_0_universal2
+        py32-none-macosx_10_16_universal2
+        py32-none-macosx_10_15_universal2
+        py32-none-macosx_10_14_universal2
+        py32-none-macosx_10_13_universal2
+        py32-none-macosx_10_12_universal2
+        py32-none-macosx_10_11_universal2
+        py32-none-macosx_10_10_universal2
+        py32-none-macosx_10_9_universal2
+        py32-none-macosx_10_8_universal2
+        py32-none-macosx_10_7_universal2
+        py32-none-macosx_10_6_universal2
+        py32-none-macosx_10_5_universal2
+        py32-none-macosx_10_4_universal2
+        py31-none-macosx_14_0_arm64
+        py31-none-macosx_14_0_universal2
+        py31-none-macosx_13_0_arm64
+        py31-none-macosx_13_0_universal2
+        py31-none-macosx_12_0_arm64
+        py31-none-macosx_12_0_universal2
+        py31-none-macosx_11_0_arm64
+        py31-none-macosx_11_0_universal2
+        py31-none-macosx_10_16_universal2
+        py31-none-macosx_10_15_universal2
+        py31-none-macosx_10_14_universal2
+        py31-none-macosx_10_13_universal2
+        py31-none-macosx_10_12_universal2
+        py31-none-macosx_10_11_universal2
+        py31-none-macosx_10_10_universal2
+        py31-none-macosx_10_9_universal2
+        py31-none-macosx_10_8_universal2
+        py31-none-macosx_10_7_universal2
+        py31-none-macosx_10_6_universal2
+        py31-none-macosx_10_5_universal2
+        py31-none-macosx_10_4_universal2
+        py30-none-macosx_14_0_arm64
+        py30-none-macosx_14_0_universal2
+        py30-none-macosx_13_0_arm64
+        py30-none-macosx_13_0_universal2
+        py30-none-macosx_12_0_arm64
+        py30-none-macosx_12_0_universal2
+        py30-none-macosx_11_0_arm64
+        py30-none-macosx_11_0_universal2
+        py30-none-macosx_10_16_universal2
+        py30-none-macosx_10_15_universal2
+        py30-none-macosx_10_14_universal2
+        py30-none-macosx_10_13_universal2
+        py30-none-macosx_10_12_universal2
+        py30-none-macosx_10_11_universal2
+        py30-none-macosx_10_10_universal2
+        py30-none-macosx_10_9_universal2
+        py30-none-macosx_10_8_universal2
+        py30-none-macosx_10_7_universal2
+        py30-none-macosx_10_6_universal2
+        py30-none-macosx_10_5_universal2
+        py30-none-macosx_10_4_universal2
+        cp39-none-any
+        py39-none-any
+        py3-none-any
+        py38-none-any
+        py37-none-any
+        py36-none-any
+        py35-none-any
+        py34-none-any
+        py33-none-any
+        py32-none-any
+        py31-none-any
+        py30-none-any
+        "
         );
     }
 }

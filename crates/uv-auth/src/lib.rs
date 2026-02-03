@@ -1,48 +1,24 @@
-use std::sync::{Arc, LazyLock};
-
-use tracing::trace;
-
-use cache::CredentialsCache;
-pub use credentials::Credentials;
+pub use access_token::AccessToken;
+pub use cache::CredentialsCache;
+pub use credentials::{Credentials, Username};
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-use realm::Realm;
-use uv_redacted::DisplaySafeUrl;
+pub use pyx::{
+    DEFAULT_TOLERANCE_SECS, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens, TokenStoreError,
+};
+pub use realm::{Realm, RealmRef};
+pub use service::{Service, ServiceParseError};
+pub use store::{AuthBackend, AuthScheme, TextCredentialStore, TomlCredentialError};
 
+mod access_token;
 mod cache;
 mod credentials;
 mod index;
 mod keyring;
 mod middleware;
 mod providers;
+mod pyx;
 mod realm;
-
-// TODO(zanieb): Consider passing a cache explicitly throughout
-
-/// Global authentication cache for a uv invocation
-///
-/// This is used to share credentials across uv clients.
-pub(crate) static CREDENTIALS_CACHE: LazyLock<CredentialsCache> =
-    LazyLock::new(CredentialsCache::default);
-
-/// Populate the global authentication store with credentials on a URL, if there are any.
-///
-/// Returns `true` if the store was updated.
-pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> bool {
-    if let Some(credentials) = Credentials::from_url(url) {
-        trace!("Caching credentials for {url}");
-        CREDENTIALS_CACHE.insert(url, Arc::new(credentials));
-        true
-    } else {
-        false
-    }
-}
-
-/// Populate the global authentication store with credentials on a URL, if there are any.
-///
-/// Returns `true` if the store was updated.
-pub fn store_credentials(url: &DisplaySafeUrl, credentials: Arc<Credentials>) {
-    trace!("Caching credentials for {url}");
-    CREDENTIALS_CACHE.insert(url, credentials);
-}
+mod service;
+mod store;

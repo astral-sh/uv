@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
@@ -19,10 +19,9 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerTimestamp, ForkStrategy,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
     PrereleaseMode, ResolutionMode,
 };
-use uv_static::EnvVars;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
@@ -115,6 +114,9 @@ pub struct Options {
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -210,6 +212,7 @@ pub struct GlobalOptions {
     #[option(
         default = "false",
         value_type = "bool",
+        uv_toml_only = true,
         example = r#"
             native-tls = true
         "#
@@ -241,6 +244,7 @@ pub struct GlobalOptions {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             cache-dir = "./.uv_cache"
         "#
@@ -309,6 +313,36 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// The URL of the HTTP proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            http-proxy = "http://proxy.example.com"
+        "#
+    )]
+    pub http_proxy: Option<ProxyUrl>,
+    /// The URL of the HTTPS proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            https-proxy = "https://proxy.example.com"
+        "#
+    )]
+    pub https_proxy: Option<ProxyUrl>,
+    /// A list of hosts to exclude from proxying.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        uv_toml_only = true,
+        example = r#"
+            no-proxy = ["localhost", "127.0.0.1"]
+        "#
+    )]
+    pub no_proxy: Option<Vec<String>>,
     /// Allow insecure connections to host.
     ///
     /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
@@ -338,7 +372,7 @@ pub struct InstallerOptions {
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub config_settings: Option<ConfigSettings>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub reinstall: Option<Reinstall>,
@@ -348,6 +382,7 @@ pub struct InstallerOptions {
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -368,6 +403,7 @@ pub struct ResolverOptions {
     pub config_settings_package: Option<PackageConfigSettings>,
     pub exclude_newer: ExcludeNewer,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
@@ -377,6 +413,7 @@ pub struct ResolverOptions {
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -399,11 +436,13 @@ pub struct ResolverInstallerOptions {
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
+    pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub upgrade: Option<Upgrade>,
     pub reinstall: Option<Reinstall>,
     pub no_build: Option<bool>,
@@ -435,8 +474,10 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -469,8 +510,10 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             exclude_newer,
             exclude_newer_package,
             link_mode,
+            torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade: Upgrade::from_args(
                 upgrade,
                 upgrade_package
@@ -719,7 +762,7 @@ pub struct ResolverInstallerSchema {
     ///   to all versions of the package.
     /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
     /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-    /// - (Optional) `provides-extras`: The extras provided by the package.
+    /// - (Optional) `provides-extra`: The extras provided by the package.
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
@@ -785,9 +828,8 @@ pub struct ResolverInstallerSchema {
         default = "[]",
         value_type = "dict",
         example = r#"
-        [extra-build-dependencies]
-        pytest = ["setuptools"]
-    "#
+            extra-build-dependencies = { pytest = ["setuptools"] }
+        "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     /// Extra environment variables to set when building certain packages.
@@ -798,16 +840,18 @@ pub struct ResolverInstallerSchema {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [tool.uv.extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    /// Limit candidate packages to those that were uploaded prior to a given point in time.
+    /// Limit candidate packages to those that were uploaded prior to the given date.
     ///
-    /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
-    /// `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
-    /// behave consistently across timezones.
+    /// Accepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g.,
+    /// `24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "str",
@@ -815,10 +859,17 @@ pub struct ResolverInstallerSchema {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
-    /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
+    pub exclude_newer: Option<ExcludeNewerValue>,
+    /// Limit candidate packages for specific packages to those that were uploaded prior to the
+    /// given date.
     ///
-    /// Accepts package-date pairs in a dictionary format.
+    /// Accepts a dictionary format of `PACKAGE = "DATE"` pairs, where `DATE` is an RFC 3339
+    /// timestamp (e.g., `2006-12-02T02:07:43Z`), a "friendly" duration (e.g., `24 hours`, `1 week`,
+    /// `30 days`), or a ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).
+    ///
+    /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
+    /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
+    /// Calendar units such as months and years are not allowed.
     #[option(
         default = "None",
         value_type = "dict",
@@ -874,6 +925,15 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -957,10 +1017,32 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_binary_package: Option<Vec<PackageName>>,
+    /// The backend to use when fetching packages in the PyTorch ecosystem.
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This setting is only respected by `uv pip` commands.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            torch-backend = "auto"
+        "#
+    )]
+    pub torch_backend: Option<TorchMode>,
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -974,6 +1056,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
         "#
@@ -990,6 +1073,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             pypy-install-mirror = "https://downloads.python.org/pypy"
         "#
@@ -997,11 +1081,10 @@ pub struct PythonInstallMirrors {
     pub pypy_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
-    ///
-    /// Note that currently, only local paths are supported.
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-downloads-json-url = "/etc/uv/python-downloads.json"
         "#
@@ -1009,26 +1092,15 @@ pub struct PythonInstallMirrors {
     pub python_downloads_json_url: Option<String>,
 }
 
-impl Default for PythonInstallMirrors {
-    fn default() -> Self {
-        Self::resolve(None, None, None)
-    }
-}
-
 impl PythonInstallMirrors {
-    pub fn resolve(
-        python_mirror: Option<String>,
-        pypy_mirror: Option<String>,
-        python_downloads_json_url: Option<String>,
-    ) -> Self {
-        let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
-        let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
-        let python_downloads_json_url_env =
-            std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
+    #[must_use]
+    pub fn combine(self, other: Self) -> Self {
         Self {
-            python_install_mirror: python_mirror_env.or(python_mirror),
-            pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
-            python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
+            python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
+            pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            python_downloads_json_url: self
+                .python_downloads_json_url
+                .or(other.python_downloads_json_url),
         }
     }
 }
@@ -1284,8 +1356,7 @@ pub struct PipOptions {
         default = "[]",
         value_type = "dict",
         example = r#"
-            [extra-build-dependencies]
-            pytest = ["setuptools"]
+            extra-build-dependencies = { pytest = ["setuptools"] }
         "#
     )]
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
@@ -1297,8 +1368,7 @@ pub struct PipOptions {
         default = r#"{}"#,
         value_type = r#"dict[str, dict[str, str]]"#,
         example = r#"
-            [extra-build-variables]
-            flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" }
+            extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
         "#
     )]
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -1431,7 +1501,7 @@ pub struct PipOptions {
     ///   to all versions of the package.
     /// - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`).
     /// - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`).
-    /// - (Optional) `provides-extras`: The extras provided by the package.
+    /// - (Optional) `provides-extra`: The extras provided by the package.
     #[option(
         default = r#"[]"#,
         value_type = "list[dict]",
@@ -1591,7 +1661,7 @@ pub struct PipOptions {
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
     /// Accepts package-date pairs in a dictionary format.
@@ -1755,6 +1825,15 @@ pub struct PipOptions {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1805,6 +1884,8 @@ pub struct PipOptions {
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
     /// installed CUDA drivers.
+    ///
+    /// This setting is only respected by `uv pip` commands.
     ///
     /// This option is in preview and may change in any future release.
     #[option(
@@ -1903,6 +1984,8 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -1943,6 +2026,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
         }
     }
 }
@@ -1973,15 +2057,17 @@ pub struct ToolOptions {
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerTimestamp>,
+    pub exclude_newer: Option<ExcludeNewerValue>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
+    pub torch_backend: Option<TorchMode>,
 }
 
 impl From<ResolverInstallerOptions> for ToolOptions {
@@ -2008,10 +2094,12 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2040,12 +2128,14 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             upgrade: None,
             reinstall: None,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
+            torch_backend: value.torch_backend,
         }
     }
 }
@@ -2078,6 +2168,9 @@ pub struct OptionsWire {
     find_links: Option<Vec<PipFindLinks>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
@@ -2089,11 +2182,12 @@ pub struct OptionsWire {
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
-    exclude_newer: Option<ExcludeNewerTimestamp>,
+    exclude_newer: Option<ExcludeNewerValue>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
     upgrade: Option<bool>,
     upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     reinstall: Option<bool>,
@@ -2102,6 +2196,7 @@ pub struct OptionsWire {
     no_build_package: Option<Vec<PackageName>>,
     no_binary: Option<bool>,
     no_binary_package: Option<Vec<PackageName>>,
+    torch_backend: Option<TorchMode>,
 
     // #[serde(flatten)]
     // install_mirror: PythonInstallMirrors,
@@ -2126,6 +2221,7 @@ pub struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    exclude_dependencies: Option<Vec<PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
@@ -2171,6 +2267,9 @@ impl From<OptionsWire> for Options {
             find_links,
             index_strategy,
             keyring_provider,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             resolution,
             prerelease,
@@ -2185,6 +2284,7 @@ impl From<OptionsWire> for Options {
             link_mode,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -2193,9 +2293,11 @@ impl From<OptionsWire> for Options {
             no_build_package,
             no_binary,
             no_binary_package,
+            torch_backend,
             pip,
             cache_keys,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,
@@ -2231,6 +2333,9 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                http_proxy,
+                https_proxy,
+                no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
             },
@@ -2257,6 +2362,7 @@ impl From<OptionsWire> for Options {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package,
                 upgrade,
                 upgrade_package,
                 reinstall,
@@ -2265,20 +2371,22 @@ impl From<OptionsWire> for Options {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                torch_backend,
             },
             pip,
             cache_keys,
             build_backend,
             override_dependencies,
+            exclude_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
             environments,
             required_environments,
-            install_mirrors: PythonInstallMirrors::resolve(
+            install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
                 python_downloads_json_url,
-            ),
+            },
             conflicts,
             publish: PublishOptions {
                 publish_url,
@@ -2312,11 +2420,12 @@ pub struct PublishOptions {
     )]
     pub publish_url: Option<DisplaySafeUrl>,
 
-    /// Configure trusted publishing via GitHub Actions.
+    /// Configure trusted publishing.
     ///
-    /// By default, uv checks for trusted publishing when running in GitHub Actions, but ignores it
-    /// if it isn't configured or the workflow doesn't have enough permissions (e.g., a pull request
-    /// from a fork).
+    /// By default, uv checks for trusted publishing when running in a supported environment, but
+    /// ignores it if it isn't configured.
+    ///
+    /// uv's supported environments for trusted publishing include GitHub Actions and GitLab CI/CD.
     #[option(
         default = "automatic",
         value_type = "str",

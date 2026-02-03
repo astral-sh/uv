@@ -350,6 +350,31 @@ dependencies = ["langchain"]
 langchain = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/langchain" }
 ```
 
+Support for [Git LFS](https://git-lfs.com) is also configurable per source. By default, Git LFS
+objects will not be fetched.
+
+```console
+$ uv add --lfs git+https://github.com/astral-sh/lfs-cowsay
+```
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["lfs-cowsay"]
+
+[tool.uv.sources]
+lfs-cowsay = { git = "https://github.com/astral-sh/lfs-cowsay", lfs = true }
+```
+
+- When `lfs = true`, uv will always fetch LFS objects for this Git source.
+- When `lfs = false`, uv will never fetch LFS objects for this Git source.
+- When omitted, the `UV_GIT_LFS` environment variable is used for all Git sources without an
+  explicit `lfs` configuration.
+
+!!! important
+
+    Ensure Git LFS is installed and configured on your system before attempting to install sources
+    using Git LFS, otherwise a build failure can occur.
+
 ### URL
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
@@ -718,6 +743,26 @@ default-groups = "all"
 
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
     To exclude a specific default group, use `--no-group <name>`.
+
+### Group `requires-python`
+
+By default, dependency groups must be compatible with your project's `requires-python` range.
+
+If a dependency group requires a different range of Python versions than your project, you can
+specify a `requires-python` for the group in `[tool.uv.dependency-groups]`, e.g.:
+
+```toml title="pyproject.toml" hl_lines="9-10"
+[project]
+name = "example"
+version = "0.0.0"
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.dependency-groups]
+dev = {requires-python = ">=3.12"}
+```
 
 ### Legacy `dev-dependencies`
 

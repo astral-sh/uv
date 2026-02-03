@@ -1,10 +1,10 @@
 [package]
 name = "uv-installer"
-version = "0.0.1"
+version = "0.0.17"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -52,3 +52,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
+
+[dev-dependencies]
+anstream = { workspace = true }
+insta = { workspace = true }

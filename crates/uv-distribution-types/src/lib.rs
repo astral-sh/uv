@@ -122,9 +122,9 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Url(&'a T),
 }
 
-impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
+impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&T> {
+    pub fn url(&self) -> Option<&'a T> {
         match self {
             Self::Version(_) => None,
             Self::Url(url) => Some(url),
@@ -159,9 +159,9 @@ pub enum InstalledVersion<'a> {
     Url(&'a DisplaySafeUrl, &'a Version),
 }
 
-impl InstalledVersion<'_> {
+impl<'a> InstalledVersion<'a> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&DisplaySafeUrl> {
+    pub fn url(&self) -> Option<&'a DisplaySafeUrl> {
         match self {
             Self::Version(_) => None,
             Self::Url(url, _) => Some(url),
@@ -169,7 +169,7 @@ impl InstalledVersion<'_> {
     }
 
     /// If it is a version, return its value.
-    pub fn version(&self) -> &Version {
+    pub fn version(&self) -> &'a Version {
         match self {
             Self::Version(version) => version,
             Self::Url(_, version) => version,
@@ -204,7 +204,6 @@ pub enum DistRef<'a> {
 
 /// A wheel, with its three possible origins (index, url, path)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum BuiltDist {
     Registry(RegistryBuiltDist),
     DirectUrl(DirectUrlBuiltDist),
@@ -213,7 +212,6 @@ pub enum BuiltDist {
 
 /// A source distribution, with its possible origins (index, url, path, git)
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum SourceDist {
     Registry(RegistrySourceDist),
     DirectUrl(DirectUrlSourceDist),

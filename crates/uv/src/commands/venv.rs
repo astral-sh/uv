@@ -10,8 +10,8 @@ use thiserror::Error;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -39,7 +39,6 @@ use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{WorkspacePython, validate_project_requires_python};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 use super::project::default_dependency_groups;
 
@@ -59,7 +58,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
@@ -72,7 +71,7 @@ pub(crate) async fn venv(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     prompt: uv_virtualenv::Prompt,
     system_site_packages: bool,
     seed: bool,
@@ -126,14 +125,6 @@ pub(crate) async fn venv(
             .unwrap_or(PathBuf::from(".venv")),
     );
 
-    // TODO(zanieb): We don't use [`BaseClientBuilder::retries_from_env`] here because it's a pain
-    // to map into a miette diagnostic. We should just remove miette diagnostics here, we're not
-    // using them elsewhere.
-    let client_builder = BaseClientBuilder::default()
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
     let reporter = PythonDownloadReporter::single(printer);
 
     // If the default dependency-groups demand a higher requires-python
@@ -163,7 +154,7 @@ pub(crate) async fn venv(
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -199,7 +190,7 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+    let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
         && python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());
@@ -224,12 +215,10 @@ pub(crate) async fn venv(
         let interpreter = venv.interpreter();
 
         // Instantiate a client.
-        let client = RegistryClientBuilder::try_from(client_builder)?
-            .cache(cache.clone())
+        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
             .index_locations(index_locations.clone())
             .index_strategy(index_strategy)
             .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())
             .platform(interpreter.platform())
             .build();
@@ -259,7 +248,7 @@ pub(crate) async fn venv(
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
-        let sources = SourceStrategy::Disabled;
+        let sources = NoSources::All;
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
@@ -321,7 +310,7 @@ pub(crate) async fn venv(
             .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
-        DefaultInstallLogger.on_complete(&changelog, printer)?;
+        DefaultInstallLogger.on_complete(&changelog, printer, DryRun::Disabled)?;
     }
 
     // Determine the appropriate activation command.

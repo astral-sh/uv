@@ -19,7 +19,7 @@ fn create_venv() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -28,7 +28,7 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -36,7 +36,7 @@ fn create_venv() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -55,7 +55,7 @@ fn create_venv() {
         .arg(context.venv.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -64,7 +64,7 @@ fn create_venv() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -77,7 +77,7 @@ fn create_venv_313() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.13"), @r###"
+        .arg("3.13"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -86,7 +86,7 @@ fn create_venv_313() {
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -97,7 +97,7 @@ fn create_venv_project_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // `uv venv` ignores `UV_PROJECT_ENVIRONMENT` when it's not a project
-    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -106,7 +106,7 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -127,7 +127,7 @@ fn create_venv_project_environment() -> Result<()> {
     )?;
 
     // But, if we're in a project we'll respect it
-    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -136,7 +136,7 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: foo
     Activate with: source foo/[BIN]/activate
-    "###
+    "
     );
 
     context
@@ -148,7 +148,7 @@ fn create_venv_project_environment() -> Result<()> {
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
 
-    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(child.path()), @r###"
+    uv_snapshot!(context.filters(), context.venv().env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo").current_dir(child.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -157,7 +157,7 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // In which case, we'll use the default name of `.venv`
@@ -165,7 +165,7 @@ fn create_venv_project_environment() -> Result<()> {
     child.child(".venv").assert(predicates::path::is_dir());
 
     // Or, if a name is provided
-    uv_snapshot!(context.filters(), context.venv().arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("bar"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -174,7 +174,7 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: bar
     Activate with: source bar/[BIN]/activate
-    "###
+    "
     );
 
     context
@@ -183,7 +183,7 @@ fn create_venv_project_environment() -> Result<()> {
         .assert(predicates::path::is_dir());
 
     // Or, of they opt-out with `--no-workspace` or `--no-project`
-    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-workspace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -192,10 +192,10 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-project"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--no-project"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -204,8 +204,63 @@ fn create_venv_project_environment() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
+
+    Ok(())
+}
+
+#[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv venv` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.venv(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv venv` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`, but `[dependency-groups]` defined)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.venv(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
+    Activate with: source .venv/[BIN]/activate
+    ");
 
     Ok(())
 }
@@ -215,7 +270,7 @@ fn create_venv_defaults_to_cwd() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -224,7 +279,7 @@ fn create_venv_defaults_to_cwd() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -236,7 +291,7 @@ fn create_venv_ignores_virtual_env_variable() {
     // We shouldn't care if `VIRTUAL_ENV` is set to an non-existent directory
     // because we ignore virtual environment interpreter sources (we require a system interpreter)
     uv_snapshot!(context.filters(), context.venv()
-        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("does-not-exist").as_os_str()), @r###"
+        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("does-not-exist").as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -245,7 +300,7 @@ fn create_venv_ignores_virtual_env_variable() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 }
 
@@ -254,7 +309,7 @@ fn create_venv_reads_request_from_python_version_file() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without the file, we should use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -263,7 +318,7 @@ fn create_venv_reads_request_from_python_version_file() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With a version file, we should prefer that version
@@ -273,7 +328,7 @@ fn create_venv_reads_request_from_python_version_file() {
         .write_str("3.12")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -282,7 +337,7 @@ fn create_venv_reads_request_from_python_version_file() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -293,7 +348,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     let context = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without the file, we should use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -302,7 +357,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With a versions file, we should prefer the first listed version
@@ -312,7 +367,7 @@ fn create_venv_reads_request_from_python_versions_file() {
         .write_str("3.12\n3.11")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -321,7 +376,7 @@ fn create_venv_reads_request_from_python_versions_file() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -332,7 +387,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.9", "3.10", "3.12"]);
 
     // Without a Python requirement, we use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -341,7 +396,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = "<3.11"`, we prefer the first available version
@@ -355,7 +410,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -364,7 +419,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = "==3.11.*"`, we prefer exact version (3.11)
@@ -378,7 +433,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -387,7 +442,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = ">=3.11,<3.12"`, we prefer exact version (3.11)
@@ -401,7 +456,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -410,7 +465,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = ">=3.10"`, we prefer first compatible version (3.11)
@@ -435,7 +490,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -444,7 +499,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = ">3.11"`, we prefer first compatible version (3.11)
@@ -458,7 +513,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -467,7 +522,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = ">=3.12"`, we prefer first compatible version (3.12)
@@ -481,7 +536,7 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -490,13 +545,13 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
 
     // We warn if we receive an incompatible version
-    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -517,7 +572,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.9", "3.10", "3.11", "3.12"]);
 
     // Without a Python requirement, we use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -548,7 +603,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -581,7 +636,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -614,7 +669,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -642,7 +697,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -675,7 +730,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear").arg("--python").arg("3.11"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -697,7 +752,7 @@ fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r"[tool.no.project.here]" })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -706,7 +761,7 @@ fn create_venv_ignores_missing_pyproject_metadata() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -721,7 +776,7 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r"invalid toml" })?;
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -762,7 +817,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
         .write_str("3.12")
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -771,7 +826,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -785,7 +840,7 @@ fn seed() {
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -795,7 +850,7 @@ fn seed() {
     Creating virtual environment with seed packages at: .venv
      + pip==24.0
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -809,7 +864,7 @@ fn seed_older_python_version() {
         .arg(context.venv.as_os_str())
         .arg("--seed")
         .arg("--python")
-        .arg("3.11"), @r###"
+        .arg("3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -821,10 +876,42 @@ fn seed_older_python_version() {
      + setuptools==69.2.0
      + wheel==0.43.0
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_with_invalid_http_timeout() {
+    let context = TestContext::new_with_versions(&["3.12"]).with_http_timeout("not_a_number");
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_HTTP_TIMEOUT` with invalid value `not_a_number`: invalid digit found in string
+    ");
+}
+
+#[test]
+fn create_venv_with_invalid_concurrent_installs() {
+    let context = TestContext::new_with_versions(&["3.12"]).with_concurrent_installs("0");
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_CONCURRENT_INSTALLS` with invalid value `0`: number would be zero for non-zero type
+    ");
 }
 
 #[test]
@@ -840,7 +927,7 @@ fn create_venv_unknown_python_minor() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
-    uv_snapshot!(context.filters(), &mut command, @r"
+    uv_snapshot!(context.filters(), &mut command, @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -866,7 +953,7 @@ fn create_venv_unknown_python_patch() {
         // Unset this variable to force what the user would see
         .env_remove(EnvVars::UV_TEST_PYTHON_PATH);
 
-    uv_snapshot!(context.filters(), &mut command, @r"
+    uv_snapshot!(context.filters(), &mut command, @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -912,7 +999,7 @@ fn file_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -937,7 +1024,7 @@ fn empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -946,7 +1033,7 @@ fn empty_dir_exists() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());
@@ -966,7 +1053,7 @@ fn non_empty_dir_exists() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -978,14 +1065,13 @@ fn non_empty_dir_exists() -> Result<()> {
       Caused by: A directory already exists at: .venv
 
     hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
-    "
-    );
+    ");
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1012,7 +1098,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1031,7 +1117,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--allow-existing")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1040,7 +1126,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Running again should _also_ succeed, overwriting existing symlinks and respecting existing
@@ -1049,7 +1135,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
         .arg(context.venv.as_os_str())
         .arg("--allow-existing")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1058,7 +1144,7 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     Ok(())
@@ -1070,7 +1156,7 @@ fn create_venv_then_allow_existing() {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     // Create a venv
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1084,7 +1170,7 @@ fn create_venv_then_allow_existing() {
 
     // Create a venv again with `--allow-existing`
     uv_snapshot!(context.filters(), context.venv()
-        .arg("--allow-existing"), @r###"
+        .arg("--allow-existing"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1093,7 +1179,7 @@ fn create_venv_then_allow_existing() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 }
 
@@ -1210,6 +1296,12 @@ fn verify_pyvenv_cfg_relocatable() {
     let activate_fish = scripts.child("activate.fish");
     activate_fish.assert(predicates::path::is_file());
     activate_fish.assert(predicates::str::contains(r#"set -gx VIRTUAL_ENV ''"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"''"#));
+
+    let activate_nu = scripts.child("activate.nu");
+    activate_nu.assert(predicates::path::is_file());
+    activate_nu.assert(predicates::str::contains(
+        r"let virtual_env = (path self | path dirname | path dirname)",
+    ));
 }
 
 /// Ensure that a nested virtual environment uses the same `home` directory as the parent.
@@ -1287,7 +1379,8 @@ fn path_with_trailing_space_gives_proper_error() {
     ----- stdout -----
 
     ----- stderr -----
-    error: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
+    error: Failed to initialize cache at `[CACHE_DIR]/ `
+      Caused by: failed to open file `[CACHE_DIR]/ /CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)
     "###
     );
     // Note the extra trailing `/` in the snapshot is due to the filters, not the actual output.
@@ -1310,7 +1403,7 @@ fn create_venv_apostrophe() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(&venv_dir)
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1319,7 +1412,7 @@ fn create_venv_apostrophe() {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: Testing's
     Activate with: source Testing's/[BIN]/activate
-    "###
+    "
     );
 
     // One of them should be commonly available on a linux developer machine, if not, we have to
@@ -1353,18 +1446,18 @@ fn venv_python_preference() {
         TestContext::new_with_versions(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
 
     // Create a managed interpreter environment
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1376,7 +1469,7 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1388,25 +1481,25 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv().arg("--managed-python"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--managed-python"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Using CPython 3.12.[X]
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
@@ -1433,7 +1526,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1442,7 +1535,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is still preserved after creation
@@ -1453,7 +1546,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1462,7 +1555,7 @@ fn create_venv_symlink_clear_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is STILL preserved after --clear
@@ -1491,7 +1584,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1500,7 +1593,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is preserved after first creation
@@ -1510,7 +1603,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1520,7 +1613,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify symlink is STILL preserved after recreation
@@ -1554,7 +1647,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1563,7 +1656,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify both symlinks are preserved
@@ -1574,7 +1667,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     uv_snapshot!(context.filters(), context.venv()
         .arg(symlink_path.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1584,7 +1677,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
     Creating virtual environment at: .venv
     warning: A virtual environment already exists at `.venv`. In the future, uv will require `--clear` to replace it
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Verify nested symlinks are STILL preserved
@@ -1603,7 +1696,7 @@ fn create_venv_current_working_directory() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1620,7 +1713,7 @@ fn create_venv_current_working_directory() {
         .arg("--clear")
         .arg("--python")
         .arg("3.12")
-        .current_dir(&context.venv), @r"
+        .current_dir(&context.venv), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1628,7 +1721,7 @@ fn create_venv_current_working_directory() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .
-    Activate with: source bin/activate
+    Activate with: source [BIN]/activate
     "
     );
 
@@ -1672,6 +1765,126 @@ fn create_venv_current_working_directory() {
     Creating virtual environment at: .
     error: Failed to create virtual environment
       Caused by: failed to remove directory `[VENV]/`: The process cannot access the file because it is being used by another process. (os error 32)
+    "
+    );
+}
+
+#[test]
+fn no_clear_with_existing_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a virtual environment first
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // Try to create again with --no-clear (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A virtual environment already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing virtual environment
+    "
+    );
+}
+
+#[test]
+fn no_clear_with_non_existent_directory() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create with --no-clear on non-existent directory (should succeed)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn no_clear_overrides_clear() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Create a non-empty directory at `.venv`
+    context.venv.create_dir_all().unwrap();
+    context.venv.child("file").touch().unwrap();
+
+    // --no-clear should override --clear and fail without prompting
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--no-clear")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    error: Failed to create virtual environment
+      Caused by: A directory already exists at: .venv
+
+    hint: Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing directory
+    "
+    );
+}
+
+#[test]
+fn no_clear_conflicts_with_allow_existing() {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Try to use --no-clear with --allow-existing (should fail)
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--no-clear")
+        .arg("--allow-existing")
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--no-clear' cannot be used with '--allow-existing'
+
+    Usage: uv venv --cache-dir [CACHE_DIR] --python <PYTHON> --exclude-newer <EXCLUDE_NEWER> <PATH>
+
+    For more information, try '--help'.
     "
     );
 }

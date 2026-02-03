@@ -1,7 +1,13 @@
 [package]
 name = "uv-keyring"
-version = "0.0.1"
+version = "0.0.17"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lib]
 doctest = false
@@ -11,14 +17,14 @@ workspace = true
 
 [features]
 default = ["apple-native", "secret-service", "windows-native"]
-keyring-tests = []
+native-auth = []
 
 ## Use the built-in Keychain Services on macOS
 apple-native = ["dep:security-framework"]
 ## Use the secret-service on *nix.
 secret-service = ["dep:secret-service"]
 ## Use the built-in credential store on Windows
-windows-native = ["dep:windows-sys", "dep:byteorder"]
+windows-native = ["dep:windows", "dep:byteorder"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -26,20 +32,20 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = { version = "3", optional = true }
+security-framework = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux",target_os = "freebsd", target_os = "openbsd"))'.dependencies]
-secret-service = { version = "5.0.0", features = ["rt-tokio-crypto-rust"], optional = true }
+secret-service = { workspace = true, features = ["rt-tokio-crypto-rust"], optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-byteorder = { version = "1", optional = true }
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
-zeroize = "1.8.1"
+byteorder = { workspace = true, optional = true }
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Credentials"], optional = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 doc-comment = "0.3"
 env_logger = "0.11.5"
-fastrand = "2"
+fastrand = { workspace = true }
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"

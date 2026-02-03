@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.8.14"
+version = "0.9.28"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -26,7 +26,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Rust",
   "Topic :: Software Development :: Quality Assurance",
   "Topic :: Software Development :: Testing",
   "Topic :: Software Development :: Libraries",
@@ -50,54 +52,46 @@ include = [
     { path = "rust-toolchain.toml", format = ["sdist", "wheel"] },
     # this one isn't discovered by maturin because it's behind a feature flag
     { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
-    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" },
+    { path = "crates/uv-trampoline-builder/trampolines/*", format = "sdist" },
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]
 
 [tool.rooster]
-major_labels = []  # We do not use the major version number yet
-minor_labels = ["breaking"]
-changelog_ignore_labels = ["internal", "ci", "testing"]
-changelog_sections.breaking = "Breaking changes"
-changelog_sections.enhancement = "Enhancements"
-changelog_sections.compatibility = "Enhancements"
-changelog_sections.preview = "Preview features"
-changelog_sections.error_messages = "Enhancements"
-changelog_sections.cli = "Enhancements"
-changelog_sections.configuration = "Configuration"
-changelog_sections.performance = "Performance"
-changelog_sections.bug = "Bug fixes"
-changelog_sections.rustlib = "Rust API"
-changelog_sections.documentation = "Documentation"
-changelog_sections.__unknown__ = "Other changes"
-
-# We exclude contributors from the CHANGELOG file
-# Generate separately with `rooster contributors` for the GitHub release page
-changelog_contributors = false
-
+changelog-contributors = false  # We exclude contributors from the CHANGELOG file
+major-labels = []  # We do not use the major version number yet
+minor-labels = ["breaking"]
+ignore-labels = ["internal", "ci", "testing"]
 version_files = [
   "README.md",
+  "pyproject.toml",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
   "crates/uv-build/pyproject.toml",
+  { target = "crates/uv-static/src/env_vars.rs", replace = "next release" },
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
   "docs/guides/integration/github.md",
+  "docs/guides/integration/gitlab.md",
   "docs/guides/integration/aws-lambda.md",
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
+  { target = "docs/reference/environment.md", replace = "next release" },
 ]
 
-[tool.mypy]
-ignore_missing_imports = true
-files = [
-  "crates/uv-python/*.py",
-  "python/uv/*.py",
-]
+[tool.rooster.section-labels]
+"Breaking changes" = ["breaking"]
+"Enhancements" = ["enhancement", "compatibility", "error messages"]
+"Preview features" = ["preview"]
+"Configuration" = ["configuration"]
+"Performance" = ["performance"]
+"Bug fixes" = ["bug"]
+"Rust API" = ["rustlib"]
+"Documentation" = ["documentation"]
+"Other changes" = ["__unknown__"]
 
 [tool.uv]
 managed = false

@@ -12,7 +12,7 @@ repos:
       - id: validate-pyproject
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.35.5
+    rev: v1.42.1
     hooks:
       - id: typos
 
@@ -35,14 +35,17 @@ repos:
         pass_filenames: false
         files: ^crates/(uv-cli|uv-settings)/
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  - repo: local
     hooks:
       - id: prettier
+        name: prettier
+        entry: prettier --write --ignore-unknown
+        language: node
+        additional_dependencies: ["prettier@3"]
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.10
+    rev: v0.14.14
     hooks:
       - id: ruff-format
       - id: ruff

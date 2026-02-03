@@ -3,6 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -74,9 +75,9 @@ pub enum Error {
     MissingTopLevel(PathBuf),
     #[error("Invalid package version")]
     InvalidVersion(#[from] uv_pep440::VersionParseError),
-    #[error("Wheel package name does not match filename: {0} != {1}")]
+    #[error("Wheel package name does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedName(PackageName, PackageName),
-    #[error("Wheel version does not match filename: {0} != {1}")]
+    #[error("Wheel version does not match filename ({0} != {1}), which indicates a malformed wheel. If this is intentional, set `{env_var}`.", env_var = "UV_SKIP_WHEEL_FILENAME_CHECK=1".green())]
     MismatchedVersion(Version, Version),
     #[error("Invalid egg-link")]
     InvalidEggLink(PathBuf),

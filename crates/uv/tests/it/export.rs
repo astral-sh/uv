@@ -36,7 +36,7 @@ fn requirements_txt_dependency() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -58,7 +58,7 @@ fn requirements_txt_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -84,7 +84,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-header"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-header"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -104,7 +104,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -130,7 +130,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -187,7 +187,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -217,7 +217,7 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,9 +231,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest").arg("--extra").arg("async").arg("--no-extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest").arg("--extra").arg("async").arg("--no-extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -259,9 +259,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -279,9 +279,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -311,9 +311,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-extras").arg("--no-extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-extras").arg("--no-extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -339,7 +339,7 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -378,7 +378,7 @@ fn requirements_txt_prune() -> Result<()> {
             .arg("--no-hashes")
             .arg("--prune")
             .arg("jupyter-core"),
-            @r"
+            @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -430,7 +430,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -456,7 +456,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -486,7 +486,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
     context.lock().assert().success();
 
     // Note that the `python_version > '3.11'` markers disappear due to `requires-python = ">=3.12"`
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -539,7 +539,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -566,14 +566,14 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -731,7 +731,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         }
     );
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -783,7 +783,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -830,7 +830,7 @@ fn requirements_txt_non_root() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -844,7 +844,7 @@ fn requirements_txt_non_root() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -891,7 +891,7 @@ fn allrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -919,7 +919,7 @@ fn allrequirements_txt_() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -969,7 +969,7 @@ fn requirements_txt_frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -978,9 +978,9 @@ fn requirements_txt_frozen() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1007,7 +1007,7 @@ fn requirements_txt_frozen() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -1035,7 +1035,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.export()
         .arg("--output-file")
-        .arg("requirements/requirements.txt"), @r###"
+        .arg("requirements/requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1057,7 +1057,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
     //
     // Read the file contents.
     let contents = apply_filters(
@@ -1070,7 +1070,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
         .unwrap(),
         context.filters(),
     );
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR] --output-file requirements/requirements.txt
     -e .
@@ -1086,7 +1086,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
-    "###);
+    ");
     Ok(())
 }
 
@@ -1107,7 +1107,7 @@ fn requirements_txt_non_project() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1117,9 +1117,9 @@ fn requirements_txt_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1140,7 +1140,103 @@ fn requirements_txt_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_empty() -> Result<()> {
+    // testing how `uv export` reacts to a pyproject with no `[project]` and nothing useful to it
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.mycooltool]
+        wow = "someconfig"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR]
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv export --group` functionality
+    // when the pyproject.toml is fully virtual (no `[project]`)
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [dependency-groups]
+        foo = ["sortedcontainers"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+    "#})?;
+
+    // default groups
+    uv_snapshot!(context.filters(), context.export(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR]
+    sniffio==1.3.1 \
+        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // explicit --group
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --group bar
+    iniconfig==2.0.0 \
+        --hash=sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3 \
+        --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+    sniffio==1.3.1 \
+        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // explicit --only-group
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--only-group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --only-group foo
+    sortedcontainers==2.4.0 \
+        --hash=sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88 \
+        --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -1163,7 +1259,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
     context.lock().assert().success();
 
     // The token should not be included in the export
-    uv_snapshot!(context.filters(), context.export(), @r"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1190,8 +1286,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 
         fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
     }
-    #[cfg(windows)]
-    {
+    if cfg!(windows) {
         use std::process::Command;
 
         // https://superuser.com/a/1489152
@@ -1203,7 +1298,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!("{}:R", whoami::username()))
+            .arg(format!("{}:R", whoami::username()?))
             .assert()
             .success();
     }
@@ -1284,7 +1379,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         ssh_deploy_key.portable_display()
     );
 
-    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1350,7 +1445,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1360,9 +1455,9 @@ fn requirements_txt_non_project_marker() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1383,7 +1478,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1420,7 +1515,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1434,9 +1529,9 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1461,7 +1556,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1597,7 +1692,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         }
     );
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1623,9 +1718,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1651,9 +1746,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async").arg("--prune").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async").arg("--prune").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1676,9 +1771,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--prune").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--prune").arg("child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1687,7 +1782,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1734,7 +1829,7 @@ fn requirements_txt_relative_path() -> Result<()> {
     // Pipe the output to requirements.txt.
     let file = std::fs::File::create(project.child("requirements.txt")).unwrap();
 
-    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1742,14 +1837,14 @@ fn requirements_txt_relative_path() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Read the file contents.
     let contents = apply_filters(
         fs_err::read_to_string(project.child("requirements.txt")).unwrap(),
         context.filters(),
     );
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR]
     -e .
@@ -1759,10 +1854,10 @@ fn requirements_txt_relative_path() -> Result<()> {
         --hash=sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3 \
         --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
         # via dependency
-    "###);
+    ");
 
     // Install the dependencies.
-    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1775,7 +1870,7 @@ fn requirements_txt_relative_path() -> Result<()> {
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -1804,7 +1899,7 @@ fn devrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1828,10 +1923,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1844,10 +1940,11 @@ fn devrequirements_txt_() -> Result<()> {
         # via project
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1866,8 +1963,9 @@ fn devrequirements_txt_() -> Result<()> {
         # via anyio
 
     ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1893,7 +1991,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1909,7 +2007,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1935,7 +2033,7 @@ fn requirements_txt_output_file() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1957,10 +2055,10 @@ fn requirements_txt_output_file() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let contents = apply_filters(context.read("requirements.txt"), context.filters());
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR] --output-file requirements.txt
     -e .
@@ -1976,7 +2074,7 @@ fn requirements_txt_output_file() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
-    "###);
+    ");
 
     Ok(())
 }
@@ -2024,7 +2122,7 @@ fn requirements_txt_no_emit() -> Result<()> {
     context.lock().assert().success();
 
     // Exclude `anyio`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2048,10 +2146,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude `project`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2078,10 +2176,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude `child`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2094,10 +2192,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2122,7 +2220,7 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Remove the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2141,7 +2239,7 @@ fn requirements_txt_no_emit() -> Result<()> {
     )?;
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2162,7 +2260,93 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn requirements_txt_only_emit() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --only-emit-workspace
+    -e .
+    -e ./child
+        # via project
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-project"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --only-emit-project
+    -e .
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-package").arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --only-emit-package anyio
+    anyio==3.7.0 \
+        --hash=sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce \
+        --hash=sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0
+        # via project
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -2209,7 +2393,7 @@ fn requirements_txt_no_editable() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-editable"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2237,7 +2421,7 @@ fn requirements_txt_no_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2264,7 +2448,7 @@ fn requirements_txt_export_group() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2280,9 +2464,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2294,9 +2478,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2320,9 +2504,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo").arg("--group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2349,9 +2533,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2378,9 +2562,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2404,9 +2588,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2414,7 +2598,7 @@ fn requirements_txt_export_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
-    "###);
+    ");
 
     Ok(())
 }
@@ -2434,7 +2618,7 @@ fn requirements_txt_script() -> Result<()> {
         # ///
     "#})?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2457,20 +2641,20 @@ fn requirements_txt_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // If the lockfile didn't exist already, it shouldn't be persisted to disk.
     assert!(!context.temp_dir.child("uv.lock").exists());
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -2563,7 +2747,7 @@ fn requirements_txt_script() -> Result<()> {
     "#})?;
 
     // `uv tree` should update the lockfile.
-    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2589,7 +2773,7 @@ fn requirements_txt_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -2715,7 +2899,7 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2729,9 +2913,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2749,9 +2933,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra2"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2769,9 +2953,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2779,7 +2963,7 @@ fn requirements_txt_conflicts() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    ");
 
     Ok(())
 }
@@ -2817,7 +3001,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2838,9 +3022,9 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("cpu"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("cpu"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2864,7 +3048,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -3964,6 +4148,7 @@ fn pep_751_project_extra() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn pep_751_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4297,29 +4482,14 @@ fn pep_751_infer_output_format() -> Result<()> {
     Resolved 4 packages in [TIME]
     "#);
 
-    // TODO(charlie): Error on `pyproject.toml`. Right now, it's treated as `requirements.txt`.
-    uv_snapshot!(context.filters(), context.export().arg("-o").arg("pyproject.toml"), @r"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.export().arg("-o").arg("pyproject.toml"), @"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    # This file was autogenerated by uv via the following command:
-    #    uv export --cache-dir [CACHE_DIR] -o pyproject.toml
-    -e .
-    anyio==3.7.0 \
-        --hash=sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce \
-        --hash=sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0
-        # via project
-    idna==3.6 \
-        --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
-        --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-        # via anyio
-    sniffio==1.3.1 \
-        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
-        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
-        # via anyio
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    error: `pyproject.toml` is not a supported output format for `uv export` (supported formats: requirements.txt, pylock.toml, cyclonedx1.5)
     ");
 
     Ok(())
@@ -4346,7 +4516,7 @@ fn pep_751_filename() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("test.toml"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("test.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4453,7 +4623,7 @@ fn no_editable_env_var() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "1"), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4464,6 +4634,3781 @@ fn no_editable_env_var() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+#[test]
+fn export_only_group_and_extra_conflict() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        test = ["pytest"]
+
+        [dependency-groups]
+        dev = ["ruff"]
+        "#,
+    )?;
+
+    // Using --only-group and --extra together should error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--extra").arg("test"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--extra <EXTRA>'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    // Using --only-group and --all-extras together should also error.
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--all-extras"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--only-group <ONLY_GROUP>' cannot be used with '--all-extras'
+
+    Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
+/// The members in the workspace (`foo`) and in the lockfile (`bar`) mismatch.
+#[test]
+fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("uv.lock");
+    pyproject_toml.write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "bar"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Export multiple packages within a workspace.
+#[test]
+fn multiple_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo", "bar", "baz"]
+
+        [tool.uv.sources]
+        foo = { workspace = true }
+        bar = { workspace = true }
+        baz = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("foo")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("bar")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+        "#,
+        )?;
+
+    context
+        .temp_dir
+        .child("packages")
+        .child("baz")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "baz"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+        )?;
+
+    context.lock().assert().success();
+
+    // Export `foo` and `bar`.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --package foo --package bar
+    -e ./packages/bar
+    -e ./packages/foo
+    anyio==4.3.0 \
+        --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
+        --hash=sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6
+        # via foo
+    idna==3.6 \
+        --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+        --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+        # via anyio
+    sniffio==1.3.1 \
+        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+        # via anyio
+    typing-extensions==4.10.0 \
+        --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475 \
+        --hash=sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb
+        # via bar
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    // Export `foo`, `bar`, and `baz`.
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--package").arg("foo")
+        .arg("--package").arg("bar")
+        .arg("--package").arg("baz"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv export --cache-dir [CACHE_DIR] --package foo --package bar --package baz
+    -e ./packages/bar
+    -e ./packages/baz
+    -e ./packages/foo
+    anyio==4.3.0 \
+        --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
+        --hash=sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6
+        # via foo
+    idna==3.6 \
+        --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
+        --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
+        # via anyio
+    iniconfig==2.0.0 \
+        --hash=sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3 \
+        --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        # via baz
+    sniffio==1.3.1 \
+        --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
+        --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
+        # via anyio
+    typing-extensions==4.10.0 \
+        --hash=sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475 \
+        --hash=sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb
+        # via bar
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_basic() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_direct_url() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna @ https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "idna-2@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "idna-2@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "idna-2@3.6"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "git")]
+#[test]
+fn cyclonedx_export_git_dependency() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3 @ git+https://github.com/urllib3/urllib3.git@2.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0?vcs_url=https://github.com/urllib3/urllib3.git%3Frev%3D2.2.0%2304df048cf4b1c3790c56e26c659db764aad62d6f"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_no_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "standalone-project"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "standalone-project-1@1.0.0",
+          "name": "standalone-project",
+          "version": "1.0.0"
+        }
+      },
+      "components": [],
+      "dependencies": [
+        {
+          "ref": "standalone-project-1@1.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "git")]
+#[test]
+fn cyclonedx_export_mixed_source_types() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "mixed-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig==2.0.0",  # PyPI registry package
+            "urllib3 @ git+https://github.com/urllib3/urllib3.git@2.2.0",  # Git package
+            "idna @ https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"  # Direct URL package
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "mixed-project-1@0.1.0",
+          "name": "mixed-project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "idna-2@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6?download_url=https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl"
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0?vcs_url=https://github.com/urllib3/urllib3.git%3Frev%3D2.2.0%2304df048cf4b1c3790c56e26c659db764aad62d6f"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "idna-2@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "mixed-project-1@0.1.0",
+          "dependsOn": [
+            "idna-2@3.6",
+            "iniconfig-3@2.0.0",
+            "urllib3-4@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-4@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_project_extra() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions==4.10.0"]
+
+        [project.optional-dependencies]
+        url = ["urllib3==2.2.0"]
+        pytest = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-2@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "typing-extensions-2@4.10.0"
+          ]
+        },
+        {
+          "ref": "typing-extensions-2@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions==4.10.0"]
+
+        [project.optional-dependencies]
+        url = ["urllib3==2.2.0"]
+        pytest = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-2@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-3@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "iniconfig-2@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "iniconfig-2@2.0.0",
+            "typing-extensions-3@4.10.0",
+            "urllib3-4@2.2.0"
+          ]
+        },
+        {
+          "ref": "typing-extensions-3@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-4@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_with_workspace_member() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0", "child1", "child2"]
+
+        [tool.uv.workspace]
+        members = ["child1", "packages/*"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+        child2 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("packages").child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.9"
+        requires-python = ">=3.11"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child1-2@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "child2-3@0.2.9",
+          "name": "child2",
+          "version": "0.2.9",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-4@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-5@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child1-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-4@2.0.0"
+          ]
+        },
+        {
+          "ref": "child2-3@0.2.9",
+          "dependsOn": []
+        },
+        {
+          "ref": "iniconfig-4@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child1-2@0.1.0",
+            "child2-3@0.2.9",
+            "urllib3-5@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-5@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_non_root() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--package").arg("child"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "child-1@0.1.0",
+          "name": "child",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-2@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-1@0.1.0",
+          "dependsOn": [
+            "iniconfig-2@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-2@2.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_with_extras() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [project.optional-dependencies]
+        url = ["urllib3==2.2.0"]
+        test = ["iniconfig==2.0.0"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions==4.10.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-3@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "typing-extensions-3@4.10.0"
+          ]
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0"
+          ]
+        },
+        {
+          "ref": "typing-extensions-3@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-extras"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-4@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-5@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "typing-extensions-4@4.10.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "iniconfig-3@2.0.0",
+            "urllib3-5@2.2.0"
+          ]
+        },
+        {
+          "ref": "typing-extensions-4@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-5@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_frozen() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Remove the child `pyproject.toml`.
+    fs_err::remove_dir_all(child.path())?;
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-5",
+          "name": "project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-3@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "urllib3-4@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-4@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-5",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_workspace_all_packages() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-7",
+          "name": "project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child1-2@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "child2-3@0.2.0",
+          "name": "child2",
+          "version": "0.2.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-4@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "sniffio-5@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-6@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child1-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-4@2.0.0"
+          ]
+        },
+        {
+          "ref": "child2-3@0.2.0",
+          "dependsOn": [
+            "sniffio-5@1.3.1"
+          ]
+        },
+        {
+          "ref": "iniconfig-4@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-6@2.2.0"
+          ]
+        },
+        {
+          "ref": "sniffio-5@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-6@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-7",
+          "dependsOn": [
+            "child1-2@0.1.0",
+            "child2-3@0.2.0",
+            "project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "my-project-3",
+          "name": "my-project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "my-project-1@0.1.0",
+          "name": "my-project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "my-project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "my-project-3",
+          "dependsOn": [
+            "my-project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+// Contains a combination of combination of workspace and registry deps, with another workspace dep not depended on by the root
+#[test]
+fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child1", "urllib3==2.2.0"]
+
+        [tool.uv.workspace]
+        members = ["child1", "child2"]
+
+        [tool.uv.sources]
+        child1 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child1 = context.temp_dir.child("child1");
+    child1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child2", "iniconfig==2.0.0"]
+
+        [tool.uv.sources]
+        child2 = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child2 = context.temp_dir.child("child2");
+    child2.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child2"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = ["sniffio==1.3.1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child1-2@0.1.0",
+          "name": "child1",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child1"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "child2-3@0.2.0",
+          "name": "child2",
+          "version": "0.2.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child2"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-4@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "sniffio-5@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-6@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child1-2@0.1.0",
+          "dependsOn": [
+            "child2-3@0.2.0",
+            "iniconfig-4@2.0.0"
+          ]
+        },
+        {
+          "ref": "child2-3@0.2.0",
+          "dependsOn": [
+            "sniffio-5@1.3.1"
+          ]
+        },
+        {
+          "ref": "iniconfig-4@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child1-2@0.1.0",
+            "urllib3-6@2.2.0"
+          ]
+        },
+        {
+          "ref": "sniffio-5@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-6@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dependency_marker() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "urllib3==2.2.1 ; sys_platform == 'darwin'",
+            "iniconfig==2.0.0",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-2@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-3@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "iniconfig-2@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "iniconfig-2@2.0.0",
+            "urllib3-3@2.2.1"
+          ]
+        },
+        {
+          "ref": "urllib3-3@2.2.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        dependencies = [
+            "cryptography==42.0.5 ; python_version > '3.11'",
+            "cryptography==42.0.5 ; sys_platform == 'win32'",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "cffi-2@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "(python_full_version >= '3.12' and platform_python_implementation != 'PyPy') or (platform_python_implementation != 'PyPy' and sys_platform == 'win32')"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "cryptography-3@42.0.5",
+          "name": "cryptography",
+          "version": "42.0.5",
+          "purl": "pkg:pypi/cryptography@42.0.5",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "python_full_version >= '3.12' or sys_platform == 'win32'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "pycparser-4@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "(python_full_version >= '3.12' and platform_python_implementation != 'PyPy') or (platform_python_implementation != 'PyPy' and sys_platform == 'win32')"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "cffi-2@1.16.0",
+          "dependsOn": [
+            "pycparser-4@2.21"
+          ]
+        },
+        {
+          "ref": "cryptography-3@42.0.5",
+          "dependsOn": [
+            "cffi-2@1.16.0"
+          ]
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "cryptography-3@42.0.5"
+          ]
+        },
+        {
+          "ref": "pycparser-4@2.21",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dependency_extra() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["cryptography[ssh]==42.0.5"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "bcrypt-2@4.1.2",
+          "name": "bcrypt",
+          "version": "4.1.2",
+          "purl": "pkg:pypi/bcrypt@4.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "cffi-3@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "platform_python_implementation != 'PyPy'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "cryptography-4@42.0.5",
+          "name": "cryptography",
+          "version": "42.0.5",
+          "purl": "pkg:pypi/cryptography@42.0.5"
+        },
+        {
+          "type": "library",
+          "bom-ref": "pycparser-5@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "platform_python_implementation != 'PyPy'"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "bcrypt-2@4.1.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "cffi-3@1.16.0",
+          "dependsOn": [
+            "pycparser-5@2.21"
+          ]
+        },
+        {
+          "ref": "cryptography-4@42.0.5",
+          "dependsOn": [
+            "bcrypt-2@4.1.2",
+            "cffi-3@1.16.0"
+          ]
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "cryptography-4@42.0.5"
+          ]
+        },
+        {
+          "ref": "pycparser-5@2.21",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_prune() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "jupyter-client==8.6.1"
+        ]
+    "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(
+        context.filters(),
+        context.export()
+            .arg("--format")
+            .arg("cyclonedx1.5")
+            .arg("--prune")
+            .arg("jupyter-core"),
+            @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "cffi-2@1.16.0",
+          "name": "cffi",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/cffi@1.16.0",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "implementation_name == 'pypy'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "jupyter-client-3@8.6.1",
+          "name": "jupyter-client",
+          "version": "8.6.1",
+          "purl": "pkg:pypi/jupyter-client@8.6.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "pycparser-4@2.21",
+          "name": "pycparser",
+          "version": "2.21",
+          "purl": "pkg:pypi/pycparser@2.21",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "implementation_name == 'pypy'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "python-dateutil-5@2.9.0.post0",
+          "name": "python-dateutil",
+          "version": "2.9.0.post0",
+          "purl": "pkg:pypi/python-dateutil@2.9.0.post0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "pyzmq-6@25.1.2",
+          "name": "pyzmq",
+          "version": "25.1.2",
+          "purl": "pkg:pypi/pyzmq@25.1.2"
+        },
+        {
+          "type": "library",
+          "bom-ref": "six-7@1.16.0",
+          "name": "six",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/six@1.16.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "tornado-8@6.4",
+          "name": "tornado",
+          "version": "6.4",
+          "purl": "pkg:pypi/tornado@6.4"
+        },
+        {
+          "type": "library",
+          "bom-ref": "traitlets-9@5.14.2",
+          "name": "traitlets",
+          "version": "5.14.2",
+          "purl": "pkg:pypi/traitlets@5.14.2"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "cffi-2@1.16.0",
+          "dependsOn": [
+            "pycparser-4@2.21"
+          ]
+        },
+        {
+          "ref": "jupyter-client-3@8.6.1",
+          "dependsOn": [
+            "python-dateutil-5@2.9.0.post0",
+            "pyzmq-6@25.1.2",
+            "tornado-8@6.4",
+            "traitlets-9@5.14.2"
+          ]
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "jupyter-client-3@8.6.1"
+          ]
+        },
+        {
+          "ref": "pycparser-4@2.21",
+          "dependsOn": []
+        },
+        {
+          "ref": "python-dateutil-5@2.9.0.post0",
+          "dependsOn": [
+            "six-7@1.16.0"
+          ]
+        },
+        {
+          "ref": "pyzmq-6@25.1.2",
+          "dependsOn": [
+            "cffi-2@1.16.0"
+          ]
+        },
+        {
+          "ref": "six-7@1.16.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "tornado-8@6.4",
+          "dependsOn": []
+        },
+        {
+          "ref": "traitlets-9@5.14.2",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#
+    );
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions==4.10.0"]
+
+        [dependency-groups]
+        foo = ["urllib3==2.2.1 ; sys_platform == 'darwin'"]
+        bar = ["iniconfig==2.0.0"]
+        dev = ["sniffio==1.3.1"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default exports include dev group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "sniffio-2@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-3@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "sniffio-2@1.3.1",
+            "typing-extensions-3@4.10.0"
+          ]
+        },
+        {
+          "ref": "sniffio-2@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "typing-extensions-3@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Export only specific group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-group").arg("bar"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-2@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "iniconfig-2@2.0.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Export with additional group
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "sniffio-2@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-3@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "sniffio-2@1.3.1",
+            "typing-extensions-3@4.10.0",
+            "urllib3-4@2.2.1"
+          ]
+        },
+        {
+          "ref": "sniffio-2@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "typing-extensions-3@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-4@2.2.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_non_project() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = []
+
+        [dependency-groups]
+        url = ["urllib3==2.2.1"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default export with no project section
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ]
+      },
+      "components": [],
+      "dependencies": []
+    }
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Export with group specified
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--group").arg("url"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ]
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-1@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "urllib3-1@2.2.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 1 package in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_no_emit() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0", "child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Exclude `urllib3`.
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-package").arg("urllib3"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-3@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "child-2@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Exclude `project`.
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-emit-project"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-4@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-3@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-4@2.2.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dependency"]
+
+        [tool.uv.sources]
+        dependency = { path = "../dependency" }
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().current_dir(&project).assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&project), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "dependency-2@0.1.0",
+          "name": "dependency",
+          "version": "0.1.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-3@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "dependency-2@0.1.0",
+          "dependsOn": [
+            "iniconfig-3@2.0.0"
+          ]
+        },
+        {
+          "ref": "iniconfig-3@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "dependency-2@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "testtools==2.3.0",
+            "fixtures==3.0.0",
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "argparse-2@1.4.0",
+          "name": "argparse",
+          "version": "1.4.0",
+          "purl": "pkg:pypi/argparse@1.4.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "extras-3@1.0.0",
+          "name": "extras",
+          "version": "1.0.0",
+          "purl": "pkg:pypi/extras@1.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "fixtures-4@3.0.0",
+          "name": "fixtures",
+          "version": "3.0.0",
+          "purl": "pkg:pypi/fixtures@3.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "linecache2-5@1.0.0",
+          "name": "linecache2",
+          "version": "1.0.0",
+          "purl": "pkg:pypi/linecache2@1.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "pbr-6@6.0.0",
+          "name": "pbr",
+          "version": "6.0.0",
+          "purl": "pkg:pypi/pbr@6.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "python-mimeparse-7@1.6.0",
+          "name": "python-mimeparse",
+          "version": "1.6.0",
+          "purl": "pkg:pypi/python-mimeparse@1.6.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "six-8@1.16.0",
+          "name": "six",
+          "version": "1.16.0",
+          "purl": "pkg:pypi/six@1.16.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "testtools-9@2.3.0",
+          "name": "testtools",
+          "version": "2.3.0",
+          "purl": "pkg:pypi/testtools@2.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "traceback2-10@1.4.0",
+          "name": "traceback2",
+          "version": "1.4.0",
+          "purl": "pkg:pypi/traceback2@1.4.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "unittest2-11@1.1.0",
+          "name": "unittest2",
+          "version": "1.1.0",
+          "purl": "pkg:pypi/unittest2@1.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "argparse-2@1.4.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "extras-3@1.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "fixtures-4@3.0.0",
+          "dependsOn": [
+            "pbr-6@6.0.0",
+            "six-8@1.16.0",
+            "testtools-9@2.3.0"
+          ]
+        },
+        {
+          "ref": "linecache2-5@1.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "pbr-6@6.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "fixtures-4@3.0.0",
+            "testtools-9@2.3.0"
+          ]
+        },
+        {
+          "ref": "python-mimeparse-7@1.6.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "six-8@1.16.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "testtools-9@2.3.0",
+          "dependsOn": [
+            "extras-3@1.0.0",
+            "fixtures-4@3.0.0",
+            "pbr-6@6.0.0",
+            "python-mimeparse-7@1.6.0",
+            "six-8@1.16.0",
+            "traceback2-10@1.4.0",
+            "unittest2-11@1.1.0"
+          ]
+        },
+        {
+          "ref": "traceback2-10@1.4.0",
+          "dependsOn": [
+            "linecache2-5@1.0.0"
+          ]
+        },
+        {
+          "ref": "unittest2-11@1.1.0",
+          "dependsOn": [
+            "argparse-2@1.4.0",
+            "six-8@1.16.0",
+            "traceback2-10@1.4.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_dev_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions==4.10.0"]
+
+        [tool.uv]
+        dev-dependencies = ["urllib3==2.2.1"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Default export includes dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-2@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "urllib3-3@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "typing-extensions-2@4.10.0",
+            "urllib3-3@2.2.1"
+          ]
+        },
+        {
+          "ref": "typing-extensions-2@4.10.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "urllib3-3@2.2.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Export without dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--no-dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-2@4.10.0",
+          "name": "typing-extensions",
+          "version": "4.10.0",
+          "purl": "pkg:pypi/typing-extensions@4.10.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "typing-extensions-2@4.10.0"
+          ]
+        },
+        {
+          "ref": "typing-extensions-2@4.10.0",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Export only dev dependencies
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--only-dev"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.1",
+          "name": "urllib3",
+          "version": "2.2.1",
+          "purl": "pkg:pypi/urllib3@2.2.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "urllib3-2@2.2.1",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 3 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv]
+        conflicts = [
+          [
+            { package = "project" },
+            { package = "child" },
+          ],
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Export with --all-packages to CycloneDX format should succeed as conflict detection is skipped
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-3",
+          "name": "project"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "child-2@0.1.0",
+          "name": "child",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "child"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "child-2@0.1.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-3",
+          "dependsOn": [
+            "child-2@0.1.0",
+            "project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    // Should fail when exporting to `requirements.txt` or `pylock.toml`as conflict detection is enabled for these formats
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("requirements-txt").arg("--all-packages"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    error: Package `child` and package `project` are incompatible with the declared conflicts: {child, project}
+    ");
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--all-packages"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 4 packages in [TIME]
+    error: Package `child` and package `project` are incompatible with the declared conflicts: {child, project}
+    ");
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_alternative_registry() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_cyclonedx_filters()
+        .with_exclude_newer("2025-01-30T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["torch==2.6.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [[tool.uv.index]]
+        name = "pytorch-cpu"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        default = true
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "project-1@0.1.0",
+          "name": "project",
+          "version": "0.1.0"
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "filelock-2@3.13.1",
+          "name": "filelock",
+          "version": "3.13.1",
+          "purl": "pkg:pypi/filelock@3.13.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "fsspec-3@2024.6.1",
+          "name": "fsspec",
+          "version": "2024.6.1",
+          "purl": "pkg:pypi/fsspec@2024.6.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "jinja2-4@3.1.4",
+          "name": "jinja2",
+          "version": "3.1.4",
+          "purl": "pkg:pypi/jinja2@3.1.4?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "markupsafe-5@3.0.2",
+          "name": "markupsafe",
+          "version": "3.0.2",
+          "purl": "pkg:pypi/markupsafe@3.0.2?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "mpmath-6@1.3.0",
+          "name": "mpmath",
+          "version": "1.3.0",
+          "purl": "pkg:pypi/mpmath@1.3.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "networkx-7@3.3",
+          "name": "networkx",
+          "version": "3.3",
+          "purl": "pkg:pypi/networkx@3.3?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "setuptools-8@70.2.0",
+          "name": "setuptools",
+          "version": "70.2.0",
+          "purl": "pkg:pypi/setuptools@70.2.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "sympy-9@1.13.1",
+          "name": "sympy",
+          "version": "1.13.1",
+          "purl": "pkg:pypi/sympy@1.13.1?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        },
+        {
+          "type": "library",
+          "bom-ref": "torch-10@2.6.0",
+          "name": "torch",
+          "version": "2.6.0",
+          "purl": "pkg:pypi/torch@2.6.0?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform == 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "torch-11@2.6.0+cpu",
+          "name": "torch",
+          "version": "2.6.0+cpu",
+          "purl": "pkg:pypi/torch@2.6.0%2Bcpu?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu",
+          "properties": [
+            {
+              "name": "uv:package:marker",
+              "value": "sys_platform != 'darwin'"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "typing-extensions-12@4.12.2",
+          "name": "typing-extensions",
+          "version": "4.12.2",
+          "purl": "pkg:pypi/typing-extensions@4.12.2?repository_url=https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "filelock-2@3.13.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "fsspec-3@2024.6.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "jinja2-4@3.1.4",
+          "dependsOn": [
+            "markupsafe-5@3.0.2"
+          ]
+        },
+        {
+          "ref": "markupsafe-5@3.0.2",
+          "dependsOn": []
+        },
+        {
+          "ref": "mpmath-6@1.3.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "networkx-7@3.3",
+          "dependsOn": []
+        },
+        {
+          "ref": "project-1@0.1.0",
+          "dependsOn": [
+            "torch-10@2.6.0",
+            "torch-11@2.6.0+cpu"
+          ]
+        },
+        {
+          "ref": "setuptools-8@70.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "sympy-9@1.13.1",
+          "dependsOn": [
+            "mpmath-6@1.3.0"
+          ]
+        },
+        {
+          "ref": "torch-10@2.6.0",
+          "dependsOn": [
+            "filelock-2@3.13.1",
+            "fsspec-3@2024.6.1",
+            "jinja2-4@3.1.4",
+            "networkx-7@3.3",
+            "setuptools-8@70.2.0",
+            "sympy-9@1.13.1",
+            "typing-extensions-12@4.12.2"
+          ]
+        },
+        {
+          "ref": "torch-11@2.6.0+cpu",
+          "dependsOn": [
+            "filelock-2@3.13.1",
+            "fsspec-3@2024.6.1",
+            "jinja2-4@3.1.4",
+            "networkx-7@3.3",
+            "setuptools-8@70.2.0",
+            "sympy-9@1.13.1",
+            "typing-extensions-12@4.12.2"
+          ]
+        },
+        {
+          "ref": "typing-extensions-12@4.12.2",
+          "dependsOn": []
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
 
     Ok(())
 }

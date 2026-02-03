@@ -36,8 +36,13 @@ Ok(
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
             fork_strategy: RequiresPython,
-            exclude_newer: None,
-            exclude_newer_package: None,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
         },
         packages: [
             Package {
@@ -90,6 +95,7 @@ Ok(
                                 },
                             },
                         },
+                        zstd: None,
                     },
                 ],
                 fork_markers: [],
@@ -98,7 +104,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
-                    provides_extras: [],
+                    provides_extra: [],
                     dependency_groups: {},
                 },
             },
@@ -126,6 +132,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            excludes: {},
             build_constraints: {},
             dependency_metadata: {},
         },

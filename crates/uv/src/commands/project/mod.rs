@@ -7,13 +7,13 @@ use std::sync::Arc;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
-
+use uv_auth::CredentialsCache;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    TargetTriple, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -21,13 +21,13 @@ use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
-use uv_installer::{SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
@@ -43,12 +43,12 @@ use uv_resolver::{
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
+use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_virtualenv::remove_virtualenv;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::pyproject::ExtraBuildDependency;
-use uv_workspace::pyproject::PyProjectToml;
+use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
 use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -58,7 +58,8 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -75,17 +76,76 @@ pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod version;
 
+/// The source of a missing lockfile error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MissingLockfileSource {
+    /// The `--frozen` flag was provided.
+    Frozen,
+    /// The `UV_FROZEN` environment variable was set.
+    FrozenEnv,
+    /// The `frozen` option was set via workspace configuration.
+    FrozenConfiguration,
+    /// The `--locked` flag was provided.
+    Locked,
+    /// The `UV_LOCKED` environment variable was set.
+    LockedEnv,
+    /// The `locked` option was set via workspace configuration.
+    LockedConfiguration,
+    /// The `--check` flag was provided.
+    Check,
+}
+
+impl std::fmt::Display for MissingLockfileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Frozen => write!(f, "`--frozen`"),
+            Self::FrozenEnv => write!(f, "`UV_FROZEN=1`"),
+            Self::FrozenConfiguration => write!(f, "`frozen` (workspace configuration)"),
+            Self::Locked => write!(f, "`--locked`"),
+            Self::LockedEnv => write!(f, "`UV_LOCKED=1`"),
+            Self::LockedConfiguration => write!(f, "`locked` (workspace configuration)"),
+            Self::Check => write!(f, "`--check`"),
+        }
+    }
+}
+
+impl From<LockCheckSource> for MissingLockfileSource {
+    fn from(source: LockCheckSource) -> Self {
+        match source {
+            LockCheckSource::LockedCli => Self::Locked,
+            LockCheckSource::LockedEnv => Self::LockedEnv,
+            LockCheckSource::LockedConfiguration => Self::LockedConfiguration,
+            LockCheckSource::Check => Self::Check,
+        }
+    }
+}
+
+impl From<FrozenSource> for MissingLockfileSource {
+    fn from(source: FrozenSource) -> Self {
+        match source {
+            FrozenSource::Cli => Self::Frozen,
+            FrozenSource::Env => Self::FrozenEnv,
+            FrozenSource::Configuration => Self::FrozenConfiguration,
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `{2}` was provided. To update the lockfile, run `uv lock`."
     )]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>),
+    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
-        "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
+        "Unable to find lockfile at `uv.lock`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
     )]
-    MissingLockfile,
+    MissingLockfile(MissingLockfileSource),
+
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+    )]
+    LockWorkspaceMismatch(PackageName),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -156,7 +216,7 @@ pub(crate) enum ProjectError {
     MissingGroupProject(GroupName),
 
     #[error("Group `{0}` is not defined in any project's `dependency-groups` table")]
-    MissingGroupWorkspace(GroupName),
+    MissingGroupProjects(GroupName),
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
@@ -170,7 +230,7 @@ pub(crate) enum ProjectError {
     MissingExtraProject(ExtraName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
-    MissingExtraWorkspace(ExtraName),
+    MissingExtraProjects(ExtraName),
 
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
@@ -215,6 +275,9 @@ pub(crate) enum ProjectError {
     DependencyGroup(#[from] DependencyGroupError),
 
     #[error(transparent)]
+    Client(#[from] uv_client::Error),
+
+    #[error(transparent)]
     Python(#[from] uv_python::Error),
 
     #[error(transparent)]
@@ -254,6 +317,9 @@ pub(crate) enum ProjectError {
     Lowering(#[from] uv_distribution::LoweringError),
 
     #[error(transparent)]
+    Workspace(#[from] uv_workspace::WorkspaceError),
+
+    #[error(transparent)]
     PyprojectMut(#[from] uv_workspace::pyproject_mut::Error),
 
     #[error(transparent)]
@@ -267,6 +333,9 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     RetryParsing(#[from] uv_client::RetryParsingError),
+
+    #[error(transparent)]
+    Accelerator(#[from] uv_torch::AcceleratorError),
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
@@ -319,14 +388,9 @@ impl std::fmt::Display for ConflictError {
             .iter()
             .all(|conflict| matches!(conflict.kind(), ConflictKind::Group(..)))
         {
-            let conflict_source = if self.set.is_inferred_conflict() {
-                "transitively inferred"
-            } else {
-                "declared"
-            };
             write!(
                 f,
-                "Groups {} are incompatible with the {conflict_source} conflicts: {{{set}}}",
+                "Groups {} are incompatible with the conflicts: {{{set}}}",
                 conjunction(
                     self.conflicts
                         .iter()
@@ -423,7 +487,7 @@ impl PlatformState {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
@@ -467,7 +531,7 @@ pub(crate) fn find_requires_python(
 ///
 /// If no [`Workspace`] is provided, the `requires-python` will be validated against the originating
 /// source (e.g., a `.python-version` file or a `--python` command-line argument).
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
@@ -520,7 +584,7 @@ pub(crate) fn validate_project_requires_python(
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 fn validate_script_requires_python(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
@@ -554,7 +618,7 @@ fn validate_script_requires_python(
 
 /// An interpreter suitable for a PEP 723 script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptInterpreter {
     /// An interpreter to use to create a new script environment.
     Interpreter(Interpreter),
@@ -652,7 +716,7 @@ impl ScriptInterpreter {
     pub(crate) async fn discover(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -702,12 +766,6 @@ impl ScriptInterpreter {
             Err(err) => warn!("Ignoring existing script environment: {err}"),
         }
 
-        let client_builder = BaseClientBuilder::new()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         let interpreter = PythonInstallation::find_or_download(
@@ -715,7 +773,7 @@ impl ScriptInterpreter {
             EnvironmentPreference::Any,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -756,11 +814,12 @@ impl ScriptInterpreter {
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
         match script {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
+                    LockedFileMode::Exclusive,
                     script.path.simplified_display(),
                 )
                 .await
@@ -768,6 +827,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Remote(.., url) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
+                    LockedFileMode::Exclusive,
                     url.to_string(),
                 )
                 .await
@@ -775,6 +835,7 @@ impl ScriptInterpreter {
             Pep723ItemRef::Stdin(metadata) => {
                 LockedFile::acquire(
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
+                    LockedFileMode::Exclusive,
                     "stdin".to_string(),
                 )
                 .await
@@ -877,7 +938,7 @@ fn environment_is_usable(
 
 /// An interpreter suitable for the project.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ProjectInterpreter {
     /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
@@ -892,7 +953,7 @@ impl ProjectInterpreter {
         project_dir: &Path,
         groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -986,12 +1047,6 @@ impl ProjectInterpreter {
             Err(err) => return Err(err.into()),
         }
 
-        let client_builder = BaseClientBuilder::default()
-            .retries_from_env()?
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
-
         let reporter = PythonDownloadReporter::single(printer);
 
         // Locate the Python interpreter to use in the environment.
@@ -1000,7 +1055,7 @@ impl ProjectInterpreter {
             EnvironmentPreference::OnlySystem,
             python_preference,
             python_downloads,
-            &client_builder,
+            client_builder,
             cache,
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
@@ -1017,16 +1072,18 @@ impl ProjectInterpreter {
         if managed {
             writeln!(
                 printer.stderr(),
-                "Using {} {}",
+                "Using {} {}{}",
                 implementation.pretty(),
-                interpreter.python_version().cyan()
+                interpreter.python_version().cyan(),
+                interpreter.variant().display_suffix().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "Using {} {} interpreter at: {}",
+                "Using {} {}{} interpreter at: {}",
                 implementation.pretty(),
                 interpreter.python_version(),
+                interpreter.variant().display_suffix(),
                 interpreter.sys_executable().user_display().cyan()
             )?;
         }
@@ -1053,12 +1110,13 @@ impl ProjectInterpreter {
     }
 
     /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, std::io::Error> {
+    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
         LockedFile::acquire(
             std::env::temp_dir().join(format!(
                 "uv-{}.lock",
                 cache_digest(workspace.install_path())
             )),
+            LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
         )
         .await
@@ -1299,7 +1357,7 @@ impl ProjectEnvironment {
         groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         no_sync: bool,
@@ -1318,7 +1376,7 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+        let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
             && python
                 .as_ref()
                 .is_none_or(|request| !request.includes_patch());
@@ -1328,7 +1386,7 @@ impl ProjectEnvironment {
             workspace.install_path().as_ref(),
             groups,
             python,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1404,7 +1462,9 @@ impl ProjectEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1444,7 +1504,9 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1464,7 +1526,7 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -1530,7 +1592,7 @@ impl ScriptEnvironment {
     pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
-        network_settings: &NetworkSettings,
+        client_builder: &BaseClientBuilder<'_>,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
@@ -1557,7 +1619,7 @@ impl ScriptEnvironment {
         match ScriptInterpreter::discover(
             script,
             python_request,
-            network_settings,
+            client_builder,
             python_preference,
             python_downloads,
             install_mirrors,
@@ -1596,7 +1658,9 @@ impl ScriptEnvironment {
                         interpreter,
                         prompt,
                         false,
-                        uv_virtualenv::OnExisting::Remove,
+                        uv_virtualenv::OnExisting::Remove(
+                            uv_virtualenv::RemovalReason::ManagedEnvironment,
+                        ),
                         false,
                         false,
                         upgradeable,
@@ -1636,7 +1700,9 @@ impl ScriptEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    uv_virtualenv::OnExisting::Remove,
+                    uv_virtualenv::OnExisting::Remove(
+                        uv_virtualenv::RemovalReason::ManagedEnvironment,
+                    ),
                     false,
                     false,
                     upgradeable,
@@ -1656,7 +1722,7 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -1695,24 +1761,26 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: Concurrency,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    lfs: GitLfsSetting,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
     // Partition the requirements into named and unnamed requirements.
-    let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
-        requirements
-            .into_iter()
-            .partition_map(|spec| match spec.requirement {
-                UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    itertools::Either::Right(requirement)
-                }
-            });
+    let (mut requirements, unnamed): (Vec<_>, Vec<_>) = requirements
+        .into_iter()
+        .map(|spec| {
+            spec.requirement
+                .augment_requirement(None, None, None, lfs.into(), None)
+        })
+        .partition_map(|requirement| match requirement {
+            UnresolvedRequirement::Named(requirement) => itertools::Either::Left(requirement),
+            UnresolvedRequirement::Unnamed(requirement) => itertools::Either::Right(requirement),
+        });
 
     // Short-circuit if there are no unnamed requirements.
     if unnamed.is_empty() {
@@ -1739,25 +1807,36 @@ pub(crate) async fn resolve_names(
                 prerelease: _,
                 resolution: _,
                 sources,
+                torch_backend,
                 upgrade: _,
             },
         compile_bytecode: _,
         reinstall: _,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()
-        .map_err(|err| uv_requirements::Error::ClientError(err.into()))?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
+
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+        })
+        .transpose()
+        .ok()
+        .flatten();
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1808,7 +1887,7 @@ pub(crate) async fn resolve_names(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -1875,7 +1954,7 @@ pub(crate) async fn resolve_environment(
     python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
@@ -1903,6 +1982,7 @@ pub(crate) async fn resolve_environment(
         upgrade: _,
         build_options,
         sources,
+        torch_backend,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -1911,27 +1991,45 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = pip::resolution_tags(None, python_platform, interpreter)?;
     let marker_env = pip::resolution_markers(None, python_platform, interpreter);
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2025,7 +2123,7 @@ pub(crate) async fn resolve_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2036,6 +2134,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2070,7 +2169,7 @@ pub(crate) async fn sync_environment(
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
@@ -2097,12 +2196,7 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(keyring_provider);
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2111,8 +2205,7 @@ pub(crate) async fn sync_environment(
     let tags = venv.interpreter().tags()?;
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(index_strategy)
         .markers(interpreter.markers())
@@ -2179,6 +2272,7 @@ pub(crate) async fn sync_environment(
     pip::operations::install(
         resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
@@ -2231,7 +2325,7 @@ pub(crate) async fn update_environment(
     build_constraints: Constraints,
     extra_build_requires: ExtraBuildRequires,
     settings: &ResolverInstallerSettings,
-    network_settings: &NetworkSettings,
+    client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     resolve: Box<dyn ResolveLogger>,
     install: Box<dyn InstallLogger>,
@@ -2264,18 +2358,14 @@ pub(crate) async fn update_environment(
                 prerelease,
                 resolution,
                 sources,
+                torch_backend,
                 upgrade,
             },
         compile_bytecode,
         reinstall,
     } = settings;
 
-    let client_builder = BaseClientBuilder::new()
-        .retries_from_env()?
-        .connectivity(network_settings.connectivity)
-        .native_tls(network_settings.native_tls)
-        .keyring(*keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {
@@ -2283,6 +2373,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2303,6 +2394,7 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
+            InstallationStrategy::Permissive,
             &marker_env,
             &tags,
             config_setting,
@@ -2337,11 +2429,33 @@ pub(crate) async fn update_environment(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend
+        .map(|mode| {
+            let source = if uv_auth::PyxTokenStore::from_settings()
+                .is_ok_and(|store| store.has_credentials())
+            {
+                TorchSource::Pyx
+            } else {
+                TorchSource::default()
+            };
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                python_platform
+                    .map(|t| t.platform())
+                    .as_ref()
+                    .unwrap_or(interpreter.platform())
+                    .os(),
+            )
+        })
+        .transpose()?;
+
     // Initialize the registry client.
-    let client = RegistryClientBuilder::try_from(client_builder)?
-        .cache(cache.clone())
+    let client = RegistryClientBuilder::new(client_builder, cache.clone())
         .index_locations(index_locations.clone())
         .index_strategy(*index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2404,7 +2518,7 @@ pub(crate) async fn update_environment(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache,
         concurrency,
         preview,
@@ -2415,6 +2529,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2449,6 +2564,7 @@ pub(crate) async fn update_environment(
     let changelog = pip::operations::install(
         &resolution,
         site_packages,
+        InstallationStrategy::Permissive,
         modifications,
         reinstall,
         build_options,
@@ -2495,7 +2611,7 @@ pub(crate) async fn init_script_python_requirement(
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
-        PythonRequest::parse(request)
+        Some(PythonRequest::parse(request))
     } else if let (false, Some(request)) = (
         no_pin_python,
         PythonVersionFile::discover(
@@ -2506,14 +2622,14 @@ pub(crate) async fn init_script_python_requirement(
         .and_then(PythonVersionFile::into_version),
     ) {
         // (2) Request from `.python-version`
-        request
+        Some(request)
     } else {
-        // (3) Assume any Python version
-        PythonRequest::Any
+        // (3) No explicit request
+        None
     };
 
     let interpreter = PythonInstallation::find_or_download(
-        Some(&python_request),
+        python_request.as_ref(),
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
@@ -2534,7 +2650,7 @@ pub(crate) async fn init_script_python_requirement(
 }
 
 /// Returns the default dependency groups from the [`PyProjectToml`].
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
     pyproject_toml: &PyProjectToml,
 ) -> Result<DefaultGroups, ProjectError> {
@@ -2562,7 +2678,7 @@ pub(crate) fn default_dependency_groups(
 
 /// Validate that we aren't trying to install extras or groups that
 /// are declared as conflicting.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
     target: &InstallTarget,
     extras: &ExtrasSpecification,
@@ -2605,18 +2721,19 @@ pub(crate) fn detect_conflicts(
 }
 
 /// Determine the [`RequirementsSpecification`] for a script.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
     };
 
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     let requirements = dependencies
         .iter()
@@ -2628,6 +2745,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2648,6 +2766,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2668,6 +2787,7 @@ pub(crate) fn script_specification(
                 script_sources,
                 script_indexes,
                 &settings.index_locations,
+                credentials_cache,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2681,14 +2801,15 @@ pub(crate) fn script_specification(
 }
 
 /// Determine the extra build requires for a script.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
+    credentials_cache: &CredentialsCache,
 ) -> Result<LoweredExtraBuildDependencies, ProjectError> {
     let script_dir = script.directory()?;
-    let script_indexes = script.indexes(settings.sources);
-    let script_sources = script.sources(settings.sources);
+    let script_indexes = script.indexes(&settings.sources);
+    let script_sources = script.sources(&settings.sources);
 
     // Collect any `tool.uv.extra-build-dependencies` from the script.
     let empty = BTreeMap::default();
@@ -2717,6 +2838,7 @@ pub(crate) fn script_extra_build_requires(
                         script_sources,
                         script_indexes,
                         &settings.index_locations,
+                        credentials_cache,
                     )
                     .map_ok(move |requirement| ExtraBuildRequirement {
                         requirement: requirement.into_inner(),

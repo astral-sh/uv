@@ -16,6 +16,7 @@ fn help() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -56,8 +57,7 @@ fn help() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -65,9 +65,9 @@ fn help() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -97,6 +97,7 @@ fn help_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -136,8 +137,7 @@ fn help_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -145,9 +145,9 @@ fn help_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -176,6 +176,7 @@ fn help_short_flag() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth     Manage authentication
       run      Run a command or script
       init     Create a new project
       add      Add dependencies to the project
@@ -215,8 +216,7 @@ fn help_short_flag() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -224,9 +224,9 @@ fn help_short_flag() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -269,6 +269,8 @@ fn help_subcommand() {
 
     - `<version>` e.g. `3`, `3.12`, `3.12.3`
     - `<version-specifier>` e.g. `>=3.12,<3.13`
+    - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
+    - `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
     - `<implementation>` e.g. `cpython` or `cp`
     - `<implementation>@<version>` e.g. `cpython@3.12`
     - `<implementation><version>` e.g. `cpython3.12` or `cp312`
@@ -326,14 +328,14 @@ fn help_subcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -364,7 +366,7 @@ fn help_subcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -373,14 +375,14 @@ fn help_subcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -401,7 +403,7 @@ fn help_subcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -410,9 +412,11 @@ fn help_subcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
-              Run the command within the given project directory.
+              Discover a project in the given directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
@@ -447,7 +451,6 @@ fn help_subcommand() {
               Display the concise help for this command
 
     Use `uv help python <command>` for more information on a specific command.
-
 
     ----- stderr -----
     "#);
@@ -524,8 +527,6 @@ fn help_subsubcommand() {
               `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYTHON_INSTALL_MIRROR=]
 
           --pypy-mirror <PYPY_MIRROR>
               Set the URL to use as the source for downloading PyPy installations.
@@ -534,15 +535,9 @@ fn help_subsubcommand() {
               `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
-              
-              [env: UV_PYPY_INSTALL_MIRROR=]
 
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations.
-              
-              Note that currently, only local paths are supported.
-              
-              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+              URL pointing to JSON of custom Python installations
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
@@ -556,6 +551,18 @@ fn help_subsubcommand() {
               
               Implies `--reinstall`.
 
+      -U, --upgrade
+              Upgrade existing Python installations to the latest patch version.
+              
+              By default, uv will not upgrade already-installed Python versions to newer patch releases.
+              With `--upgrade`, uv will upgrade to the latest available patch version for the specified
+              minor version(s).
+              
+              If the requested versions are not yet installed, uv will install them.
+              
+              This option is only supported for minor version requests, e.g., `3.12`; uv will exit with
+              an error if a patch version, e.g., `3.12.2`, is requested.
+
           --default
               Use as the default Python version.
               
@@ -564,10 +571,24 @@ fn help_subsubcommand() {
               executables are also installed.
               
               Alternative Python variants will still include their tag. For example, installing
-              3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-              and `python`.
+              3.13+freethreaded with `--default` will include `python3t` and `pythont` instead of
+              `python3` and `python`.
               
               If multiple Python versions are requested, uv will exit with an error.
+
+          --compile-bytecode
+              Compile Python's standard library to bytecode after installation.
+              
+              By default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`);
+              instead, compilation is performed lazily the first time a module is imported. For
+              use-cases in which start time is important, such as CLI applications and Docker
+              containers, this option can be enabled to trade longer installation times and some
+              additional disk space for faster start times.
+              
+              When enabled, uv will process the Python version's `stdlib` directory. It will ignore any
+              compilation errors.
+              
+              [env: UV_COMPILE_BYTECODE=]
 
     Cache options:
       -n, --no-cache
@@ -593,14 +614,14 @@ fn help_subsubcommand() {
               By default, uv prefers using Python versions it manages. However, it will use system
               Python versions if a uv-managed Python is not installed. This option disables use of
               system Python versions.
-              
+
               [env: UV_MANAGED_PYTHON=]
 
           --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
-              
+
               [env: UV_NO_MANAGED_PYTHON=]
 
           --no-python-downloads
@@ -631,7 +652,7 @@ fn help_subsubcommand() {
               - never:  Disables colored output
 
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store.
+              Whether to load TLS certificates from the platform's native store.
               
               By default, uv loads certificates from the bundled `webpki-roots` crate. The
               `webpki-roots` are a reliable set of trust roots from Mozilla, and including them in uv
@@ -640,14 +661,14 @@ fn help_subsubcommand() {
               However, in some cases, you may want to use the platform's native certificate store,
               especially if you're relying on a corporate trust root (e.g., for a mandatory proxy)
               that's included in your system's certificate store.
-              
+
               [env: UV_NATIVE_TLS=]
 
           --offline
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
-              
+
               [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -668,7 +689,7 @@ fn help_subsubcommand() {
               Hide all progress outputs.
               
               For example, spinners or progress bars.
-              
+
               [env: UV_NO_PROGRESS=]
 
           --directory <DIRECTORY>
@@ -677,9 +698,11 @@ fn help_subsubcommand() {
               Relative paths are resolved with the given directory as the base.
               
               See `--project` to only change the project root directory.
+              
+              [env: UV_WORKING_DIR=]
 
           --project <PROJECT>
-              Run the command within the given project directory.
+              Discover a project in the given directory.
               
               All `pyproject.toml`, `uv.toml`, and `.python-version` files will be discovered by walking
               up the directory tree from the project root, as will the project's virtual environment
@@ -712,7 +735,6 @@ fn help_subsubcommand() {
 
       -h, --help
               Display the concise help for this command
-
 
     ----- stderr -----
     "#);
@@ -759,8 +781,7 @@ fn help_flag_subcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -768,9 +789,9 @@ fn help_flag_subcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -807,19 +828,22 @@ fn help_flag_subsubcommand() {
           --no-registry
               Do not register the Python installation in the Windows registry
           --mirror <MIRROR>
-              Set the URL to use as the source for downloading Python installations [env:
-              UV_PYTHON_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading Python installations
           --pypy-mirror <PYPY_MIRROR>
-              Set the URL to use as the source for downloading PyPy installations [env:
-              UV_PYPY_INSTALL_MIRROR=]
+              Set the URL to use as the source for downloading PyPy installations
           --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
-              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+              URL pointing to JSON of custom Python installations
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed
       -f, --force
               Replace existing Python executables during installation
+      -U, --upgrade
+              Upgrade existing Python installations to the latest patch version
           --default
               Use as the default Python version
+          --compile-bytecode
+              Compile Python's standard library to bytecode after installation [env:
+              UV_COMPILE_BYTECODE=]
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -840,8 +864,7 @@ fn help_flag_subsubcommand() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -849,9 +872,9 @@ fn help_flag_subsubcommand() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -867,13 +890,14 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: There is no command `foobar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -895,13 +919,14 @@ fn help_unknown_subcommand() {
         generate-shell-completion
     ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     error: There is no command `foo bar` for `uv`. Did you mean one of:
+        auth
         run
         init
         add
@@ -928,7 +953,7 @@ fn help_unknown_subcommand() {
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -959,6 +984,7 @@ fn help_with_global_option() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -999,8 +1025,7 @@ fn help_with_global_option() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1008,9 +1033,9 @@ fn help_with_global_option() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1031,7 +1056,7 @@ fn help_with_global_option() {
 fn help_with_help() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--help"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1043,14 +1068,14 @@ fn help_with_help() {
       --no-pager Disable pager when printing help
 
     ----- stderr -----
-    "###);
+    ");
 }
 
 #[test]
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1081,6 +1106,7 @@ fn help_with_no_pager() {
     Usage: uv [OPTIONS] <COMMAND>
 
     Commands:
+      auth                       Manage authentication
       run                        Run a command or script
       init                       Create a new project
       add                        Add dependencies to the project
@@ -1121,8 +1147,7 @@ fn help_with_no_pager() {
           --color <COLOR_CHOICE>
               Control the use of color in output [possible values: auto, always, never]
           --native-tls
-              Whether to load TLS certificates from the platform's native certificate store [env:
-              UV_NATIVE_TLS=]
+              Whether to load TLS certificates from the platform's native store [env: UV_NATIVE_TLS=]
           --offline
               Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
@@ -1130,9 +1155,9 @@ fn help_with_no_pager() {
           --no-progress
               Hide all progress outputs [env: UV_NO_PROGRESS=]
           --directory <DIRECTORY>
-              Change to the given directory prior to running the command
+              Change to the given directory prior to running the command [env: UV_WORKING_DIR=]
           --project <PROJECT>
-              Run the command within the given project directory [env: UV_PROJECT=]
+              Discover a project in the given directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config

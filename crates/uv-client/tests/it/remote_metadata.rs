@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Result;
 
 use uv_cache::Cache;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_pep508::VerbatimUrl;
@@ -11,8 +11,8 @@ use uv_redacted::DisplaySafeUrl;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
-    let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(cache).build();
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
 
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run.
@@ -21,11 +21,11 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let filename = WheelFilename::from_str(url.rsplit_once('/').unwrap().1)?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
-            location: Box::new(DisplaySafeUrl::parse(url).unwrap()),
-            url: VerbatimUrl::from_str(url).unwrap(),
+            location: Box::new(DisplaySafeUrl::parse(url)?),
+            url: VerbatimUrl::from_str(url)?,
         });
         let capabilities = IndexCapabilities::default();
-        let metadata = client.wheel_metadata(&dist, &capabilities).await.unwrap();
+        let metadata = client.wheel_metadata(&dist, &capabilities).await?;
         assert_eq!(metadata.version.to_string(), "4.66.1");
     }
 

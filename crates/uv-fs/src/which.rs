@@ -5,7 +5,7 @@ use std::path::Path;
 fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::GetBinaryTypeW;
-    use windows_core::PCWSTR;
+    use windows::core::PCWSTR;
 
     // References:
     // https://github.com/denoland/deno/blob/01a6379505712be34ebf2cdc874fa7f54a6e9408/runtime/permissions/which.rs#L131-L154

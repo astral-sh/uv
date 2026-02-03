@@ -152,7 +152,7 @@ impl PubGrubPriorities {
                     Some(tiebreaker) => *tiebreaker,
                     None => {
                         if cfg!(debug_assertions) {
-                            panic!("Virtual package not known: `{package}`")
+                            panic!("Package not registered in prioritization: `{package:?}`")
                         } else {
                             PubGrubTiebreaker(Reverse(u32::MAX))
                         }

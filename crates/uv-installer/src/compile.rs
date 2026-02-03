@@ -20,7 +20,7 @@ use uv_warnings::warn_user;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
-const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 
 #[derive(Debug, Error)]
 pub enum CompileError {

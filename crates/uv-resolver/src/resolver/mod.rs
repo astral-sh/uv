@@ -20,13 +20,13 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Overrides};
-use uv_distribution::DistributionDatabase;
+use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
     IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -34,8 +34,9 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::Tags;
+use uv_platform_tags::{IncompatibleTag, Tags};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
+use uv_torch::TorchStrategy;
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -56,7 +57,8 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
-    ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
+    ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 pub use crate::resolver::derivation::DerivationChainBuilder;
@@ -81,7 +83,6 @@ use crate::{
     marker,
 };
 pub(crate) use provider::MetadataUnavailable;
-use uv_torch::TorchStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -110,6 +111,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     requirements: Vec<Requirement>,
     constraints: Constraints,
     overrides: Overrides,
+    excludes: Excludes,
     preferences: Preferences,
     git: GitResolver,
     capabilities: IndexCapabilities,
@@ -239,6 +241,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             requirements: manifest.requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
+            excludes: manifest.excludes,
             preferences: manifest.preferences,
             exclusions: manifest.exclusions,
             hasher: hasher.clone(),
@@ -910,7 +913,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Convert the dependency [`Fork`]s into [`ForkState`]s.
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn version_forks_to_fork_states(
         &self,
         current_state: ForkState,
@@ -1106,7 +1109,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Package { name, .. } => {
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
-                    self.choose_version_url(name, range, url, python_requirement)
+                    self.choose_version_url(id, name, range, url, env, python_requirement, pubgrub)
                 } else {
                     self.choose_version_registry(
                         package,
@@ -1131,10 +1134,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// that version if it is in range and `None` otherwise.
     fn choose_version_url(
         &self,
+        id: Id<PubGrubPackage>,
         name: &PackageName,
         range: &Range<Version>,
         url: &VerbatimParsedUrl,
+        env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
+        pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
         debug!(
             "Searching for a compatible version of {name} @ {} ({range})",
@@ -1175,8 +1181,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // The version is incompatible due to its Python requirement.
+        // If the URL points to a pre-built wheel, and the wheel's supported Python versions don't
+        // match our `Requires-Python`, mark it as incompatible.
+        let dist = Dist::from_url(name.clone(), url.clone())?;
+        if let Dist::Built(dist) = dist {
+            let filename = match &dist {
+                BuiltDist::Registry(dist) => &dist.best_wheel().filename,
+                BuiltDist::DirectUrl(dist) => &dist.filename,
+                BuiltDist::Path(dist) => &dist.filename,
+            };
+
+            // If the wheel does _not_ cover a required platform, it's incompatible.
+            if env.marker_environment().is_none() && !self.options.required_environments.is_empty()
+            {
+                let wheel_marker = implied_markers(filename);
+                // If the user explicitly marked a platform as required, ensure it has coverage.
+                for environment_marker in self.options.required_environments.iter().copied() {
+                    // If the platform is part of the current environment...
+                    if env.included_by_marker(environment_marker)
+                        && !find_environments(id, pubgrub).is_disjoint(environment_marker)
+                    {
+                        // ...but the wheel doesn't support it, it's incompatible.
+                        if wheel_marker.is_disjoint(environment_marker) {
+                            return Ok(Some(ResolverVersion::Unavailable(
+                                version.clone(),
+                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                    IncompatibleWheel::MissingPlatform(environment_marker),
+                                )),
+                            )));
+                        }
+                    }
+                }
+            }
+
+            // If the wheel's Python tag doesn't match the target Python, it's incompatible.
+            if !python_requirement.target().matches_wheel_tag(filename) {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    filename.version.clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion),
+                    )),
+                )));
+            }
+        }
+
+        // The version is incompatible due to its `Requires-Python` requirement.
         if let Some(requires_python) = metadata.requires_python.as_ref() {
+            // TODO(charlie): We only care about this for source distributions.
             if !python_requirement
                 .installed()
                 .is_contained_by(requires_python)
@@ -1203,6 +1254,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )));
             }
         }
+
+        // If this is a wheel, and the implied Python version doesn't overlap, raise an error.
 
         Ok(Some(ResolverVersion::Unforked(version.clone())))
     }
@@ -1865,6 +1918,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
+                    .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .flat_map(|requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
@@ -2371,6 +2425,53 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => {
+                if let Some(version) = dist.version() {
+                    if let Some(index) = dist.index() {
+                        // Check the implicit indexes for pre-provided metadata.
+                        let versions_response = self.index.implicit().get(dist.name());
+                        if let Some(VersionsResponse::Found(version_maps)) =
+                            versions_response.as_deref()
+                        {
+                            for version_map in version_maps {
+                                if version_map.index() == Some(index) {
+                                    let Some(metadata) = version_map.get_metadata(version) else {
+                                        continue;
+                                    };
+                                    debug!("Found registry-provided metadata for: {dist}");
+                                    return Ok(Some(Response::Dist {
+                                        dist,
+                                        metadata: MetadataResponse::Found(
+                                            ArchiveMetadata::from_metadata23(metadata.clone()),
+                                        ),
+                                    }));
+                                }
+                            }
+                        }
+
+                        // Check the explicit indexes for pre-provided metadata.
+                        let versions_response = self
+                            .index
+                            .explicit()
+                            .get(&(dist.name().clone(), index.clone()));
+                        if let Some(VersionsResponse::Found(version_maps)) =
+                            versions_response.as_deref()
+                        {
+                            for version_map in version_maps {
+                                let Some(metadata) = version_map.get_metadata(version) else {
+                                    continue;
+                                };
+                                debug!("Found registry-provided metadata for: {dist}");
+                                return Ok(Some(Response::Dist {
+                                    dist,
+                                    metadata: MetadataResponse::Found(
+                                        ArchiveMetadata::from_metadata23(metadata.clone()),
+                                    ),
+                                }));
+                            }
+                        }
+                    }
+                }
+
                 let metadata = provider
                     .get_or_build_wheel_metadata(&dist)
                     .boxed_local()
@@ -2462,6 +2563,42 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 let Some(dist) = candidate.compatible() else {
                     return Ok(None);
                 };
+
+                // If the registry provided metadata for this distribution, use it.
+                for version_map in version_map {
+                    if let Some(metadata) = version_map.get_metadata(candidate.version()) {
+                        let dist = dist.for_resolution();
+                        if version_map.index() == dist.index() {
+                            debug!("Found registry-provided metadata for: {dist}");
+
+                            let metadata = MetadataResponse::Found(
+                                ArchiveMetadata::from_metadata23(metadata.clone()),
+                            );
+
+                            let dist = dist.to_owned();
+                            if &package_name != dist.name() {
+                                return Err(ResolveError::MismatchedPackageName {
+                                    request: "distribution",
+                                    expected: package_name,
+                                    actual: dist.name().clone(),
+                                });
+                            }
+
+                            let response = match dist {
+                                ResolvedDist::Installable { dist, .. } => Response::Dist {
+                                    dist: (*dist).clone(),
+                                    metadata,
+                                },
+                                ResolvedDist::Installed { dist } => Response::Installed {
+                                    dist: (*dist).clone(),
+                                    metadata,
+                                },
+                            };
+
+                            return Ok(Some(response));
+                        }
+                    }
+                }
 
                 // Avoid prefetching source distributions with unbounded lower-bound ranges. This
                 // often leads to failed attempts to build legacy versions of packages that are
@@ -2854,18 +2991,42 @@ impl ForkState {
                     resolution_strategy,
                     ResolutionStrategy::Lowest | ResolutionStrategy::LowestDirect(..)
                 );
+
                 if !has_url && missing_lower_bound && strategy_lowest {
-                    warn_user_once!(
-                        "The direct dependency `{name}` is unpinned. \
-                        Consider setting a lower bound when using `--resolution lowest` \
-                        or `--resolution lowest-direct` to avoid using outdated versions.",
-                        name = package.name_no_root().unwrap(),
-                    );
+                    let name = package.name_no_root().unwrap();
+                    // Handle cases where a package is listed both without and with a lower bound.
+                    // Example:
+                    // ```
+                    // "coverage[toml] ; python_version < '3.11'",
+                    // "coverage >= 7.10.0",
+                    // ```
+                    let bound_on_other_package = dependencies.iter().any(|other| {
+                        Some(name) == other.package.name()
+                            && !other
+                                .version
+                                .bounding_range()
+                                .map(|(lowest, _highest)| lowest == Bound::Unbounded)
+                                .unwrap_or(true)
+                    });
+
+                    if !bound_on_other_package {
+                        warn_user_once!(
+                            "The direct dependency `{name}` is unpinned. \
+                            Consider setting a lower bound when using `--resolution lowest` \
+                            or `--resolution lowest-direct` to avoid using outdated versions.",
+                        );
+                    }
                 }
             }
 
             // Update the package priorities.
             self.priorities.insert(package, version, &self.fork_urls);
+            // As we're adding an incompatibility from the proxy package to the base package,
+            // we need to register the base package.
+            if let Some(base_package) = package.base_package() {
+                self.priorities
+                    .insert(&base_package, version, &self.fork_urls);
+            }
         }
 
         Ok(())
@@ -2878,6 +3039,24 @@ impl ForkState {
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
     ) {
+        for dependency in &dependencies {
+            let PubGrubDependency {
+                package,
+                version,
+                parent: _,
+                url: _,
+            } = dependency;
+
+            let Some(base_package) = package.base_package() else {
+                continue;
+            };
+
+            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
+            self.pubgrub
+                .add_proxy_package(proxy_package, base_package_id, version.clone());
+        }
+
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
@@ -3335,7 +3514,7 @@ impl ResolutionDependencyEdge {
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3404,7 +3583,7 @@ impl Display for Request {
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
     Package(PackageName, Option<IndexUrl>, VersionsResponse),

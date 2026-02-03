@@ -1,0 +1,43 @@
+---
+source: crates/uv-publish/src/lib.rs
+expression: groups
+---
+[
+    UploadDistribution {
+        file: "dist/acme-1.2.3-py3-none-any.whl",
+        raw_filename: "acme-1.2.3-py3-none-any.whl",
+        filename: WheelFilename(
+            WheelFilename {
+                name: PackageName(
+                    "acme",
+                ),
+                version: "1.2.3",
+                tags: Small {
+                    small: WheelTagSmall {
+                        python_tag: Python {
+                            major: 3,
+                            minor: None,
+                        },
+                        abi_tag: None,
+                        platform_tag: Any,
+                    },
+                },
+            },
+        ),
+        attestations: [],
+    },
+    UploadDistribution {
+        file: "dist/acme-1.2.3.tar.gz",
+        raw_filename: "acme-1.2.3.tar.gz",
+        filename: SourceDistFilename(
+            SourceDistFilename {
+                name: PackageName(
+                    "acme",
+                ),
+                version: "1.2.3",
+                extension: TarGz,
+            },
+        ),
+        attestations: [],
+    },
+]

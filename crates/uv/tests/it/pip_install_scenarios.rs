@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.47/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -34,7 +34,6 @@ fn command(context: &TestContext) -> Command {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_exact_version_does_not_exist() {
@@ -46,7 +45,7 @@ fn requires_exact_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-exact-version-does-not-exist-a==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -70,9 +69,7 @@ fn requires_exact_version_does_not_exist() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_greater_version_does_not_exist() {
@@ -84,7 +81,7 @@ fn requires_greater_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-greater-version-does-not-exist-a>1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -108,11 +105,8 @@ fn requires_greater_version_does_not_exist() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-2.0.0
-///     │   └── requires python>=3.8
 ///     ├── a-3.0.0
-///     │   └── requires python>=3.8
 ///     └── a-4.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_less_version_does_not_exist() {
@@ -124,7 +118,7 @@ fn requires_less_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-less-version-does-not-exist-a<2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -157,7 +151,7 @@ fn requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-does-not-exist-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -181,9 +175,8 @@ fn requires_package_does_not_exist() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         ├── requires b
+///         └── requires b
 ///             └── unsatisfied: no versions for package
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_requires_package_does_not_exist() {
@@ -195,7 +188,7 @@ fn transitive_requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-requires-package-does-not-exist-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -231,53 +224,41 @@ fn transitive_requires_package_does_not_exist() {
 /// │       └── satisfied by c-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b==1.0.0
-/// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
 /// │   ├── a-2.0.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   ├── a-2.1.0
 /// │   │   ├── requires b==2.0.0
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   ├── requires d
+/// │   │   └── requires d
 /// │   │       └── unsatisfied: no versions for package
-/// │   │   └── requires python>=3.8
 /// │   ├── a-2.2.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   ├── a-2.3.0
 /// │   │   ├── requires b==2.0.0
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   ├── requires d
+/// │   │   └── requires d
 /// │   │       └── unsatisfied: no versions for package
-/// │   │   └── requires python>=3.8
 /// │   ├── a-2.4.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   └── a-3.0.0
-/// │       ├── requires b==3.0.0
-/// │       │   └── satisfied by b-3.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.0
-/// │   │   └── requires python>=3.8
 /// │   └── b-3.0.0
-/// │       └── requires python>=3.8
 /// └── c
 ///     ├── c-1.0.0
-///     │   ├── requires a<2.0.0
-///     │   │   └── satisfied by a-1.0.0
-///     │   └── requires python>=3.8
+///     │   └── requires a<2.0.0
+///     │       └── satisfied by a-1.0.0
 ///     └── c-2.0.0
-///         ├── requires a>=3.0.0
-///         │   └── satisfied by a-3.0.0
-///         └── requires python>=3.8
+///         └── requires a>=3.0.0
+///             └── satisfied by a-3.0.0
 /// ```
 #[test]
 fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
@@ -294,7 +275,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-a")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-c")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -303,7 +284,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0
+              package-a>=2.0.0
           we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
@@ -353,45 +334,34 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 /// │       └── satisfied by c-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b==1.0.0
-/// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
 /// │   ├── a-2.0.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   ├── a-2.1.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   ├── a-2.2.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   ├── a-2.3.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   └── a-3.0.0
-/// │       ├── requires b==3.0.0
-/// │       │   └── satisfied by b-3.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.0
-/// │   │   └── requires python>=3.8
 /// │   └── b-3.0.0
-/// │       └── requires python>=3.8
 /// └── c
 ///     ├── c-1.0.0
-///     │   ├── requires a<2.0.0
-///     │   │   └── satisfied by a-1.0.0
-///     │   └── requires python>=3.8
+///     │   └── requires a<2.0.0
+///     │       └── satisfied by a-1.0.0
 ///     └── c-2.0.0
-///         ├── requires a>=3.0.0
-///         │   └── satisfied by a-3.0.0
-///         └── requires python>=3.8
+///         └── requires a>=3.0.0
+///             └── satisfied by a-3.0.0
 /// ```
 #[test]
 fn dependency_excludes_range_of_compatible_versions() {
@@ -408,7 +378,7 @@ fn dependency_excludes_range_of_compatible_versions() {
         .arg("dependency-excludes-range-of-compatible-versions-a")
                 .arg("dependency-excludes-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-range-of-compatible-versions-c")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -417,7 +387,7 @@ fn dependency_excludes_range_of_compatible_versions() {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0
+              package-a>=2.0.0
           we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
           And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
@@ -457,24 +427,18 @@ fn dependency_excludes_range_of_compatible_versions() {
 /// │       └── satisfied by b-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b==1.0.0
-/// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==1.0.0
+/// │   │       └── satisfied by b-1.0.0
 /// │   ├── a-2.0.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       └── satisfied by b-2.0.0
 /// │   └── a-3.0.0
-/// │       ├── requires b==3.0.0
-/// │       │   └── satisfied by b-3.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires b==3.0.0
+/// │           └── satisfied by b-3.0.0
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.8
 ///     ├── b-2.0.0
-///     │   └── requires python>=3.8
 ///     └── b-3.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn excluded_only_compatible_version() {
@@ -487,7 +451,7 @@ fn excluded_only_compatible_version() {
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-compatible-version-a!=2.0.0")
                 .arg("excluded-only-compatible-version-b<3.0.0,>=2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -528,7 +492,6 @@ fn excluded_only_compatible_version() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn excluded_only_version() {
@@ -540,7 +503,7 @@ fn excluded_only_version() {
 
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-version-a!=1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -571,7 +534,6 @@ fn excluded_only_version() {
 /// │       └── satisfied by a-1.0.0[extra_c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-1.0.0[all]
 /// │   │   ├── requires a[extra_b]
 /// │   │   │   ├── satisfied by a-1.0.0
@@ -591,10 +553,8 @@ fn excluded_only_version() {
 /// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn all_extras_required() {
@@ -606,7 +566,7 @@ fn all_extras_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("all-extras-required-a[all]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -639,17 +599,13 @@ fn all_extras_required() {
 /// │       └── satisfied by a-1.0.0[extra]
 /// ├── a
 /// │   ├── a-2.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-3.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   └── a-1.0.0[extra]
 /// │       └── requires b==1.0.0
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     └── b-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn extra_does_not_exist_backtrack() {
@@ -661,7 +617,7 @@ fn extra_does_not_exist_backtrack() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-does-not-exist-backtrack-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -691,7 +647,6 @@ fn extra_does_not_exist_backtrack() {
 /// │       └── satisfied by a-1.0.0[extra_c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-1.0.0[extra_b]
 /// │   │   └── requires b==1.0.0
 /// │   │       └── satisfied by b-1.0.0
@@ -700,9 +655,7 @@ fn extra_does_not_exist_backtrack() {
 /// │           └── satisfied by b-2.0.0
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn extra_incompatible_with_extra_not_requested() {
@@ -714,7 +667,7 @@ fn extra_incompatible_with_extra_not_requested() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-not-requested-a[extra_c]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -745,7 +698,6 @@ fn extra_incompatible_with_extra_not_requested() {
 /// │       └── satisfied by a-1.0.0[extra_c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-1.0.0[extra_b]
 /// │   │   └── requires b==1.0.0
 /// │   │       └── satisfied by b-1.0.0
@@ -754,9 +706,7 @@ fn extra_incompatible_with_extra_not_requested() {
 /// │           └── satisfied by b-2.0.0
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn extra_incompatible_with_extra() {
@@ -768,7 +718,7 @@ fn extra_incompatible_with_extra() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-a[extra_b,extra_c]")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -798,15 +748,12 @@ fn extra_incompatible_with_extra() {
 /// │       └── satisfied by b-2.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   └── a-1.0.0[extra]
 /// │       └── requires b==1.0.0
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn extra_incompatible_with_root() {
@@ -819,7 +766,7 @@ fn extra_incompatible_with_root() {
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-root-a[extra]")
                 .arg("extra-incompatible-with-root-b==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -847,13 +794,11 @@ fn extra_incompatible_with_root() {
 /// │       └── satisfied by a-1.0.0[extra]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   └── a-1.0.0[extra]
 /// │       └── requires b
 /// │           └── satisfied by b-1.0.0
 /// └── b
 ///     └── b-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn extra_required() {
@@ -865,7 +810,7 @@ fn extra_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-required-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -893,7 +838,6 @@ fn extra_required() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn missing_extra() {
@@ -905,7 +849,7 @@ fn missing_extra() {
 
     uv_snapshot!(filters, command(&context)
         .arg("missing-extra-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -935,7 +879,6 @@ fn missing_extra() {
 /// │       └── satisfied by a-1.0.0[extra_c]
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires python>=3.8
 /// │   ├── a-1.0.0[extra_b]
 /// │   │   └── requires b
 /// │   │       └── satisfied by b-1.0.0
@@ -944,10 +887,8 @@ fn missing_extra() {
 /// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn multiple_extras_required() {
@@ -959,7 +900,7 @@ fn multiple_extras_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("multiple-extras-required-a[extra_b,extra_c]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -991,9 +932,7 @@ fn multiple_extras_required() {
 /// │       └── satisfied by a-2.0.0
 /// └── a
 ///     ├── a-1.0.0
-///     │   └── requires python>=3.8
 ///     └── a-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn direct_incompatible_versions() {
@@ -1006,7 +945,7 @@ fn direct_incompatible_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("direct-incompatible-versions-a==1.0.0")
                 .arg("direct-incompatible-versions-a==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1033,9 +972,8 @@ fn direct_incompatible_versions() {
 ///     └── a-1.0.0
 ///         ├── requires b==2.0.0
 ///             └── unsatisfied: no versions for package
-///         ├── requires b==1.0.0
+///         └── requires b==1.0.0
 ///             └── unsatisfied: no versions for package
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_incompatible_versions() {
@@ -1047,7 +985,7 @@ fn transitive_incompatible_versions() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-versions-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1074,14 +1012,11 @@ fn transitive_incompatible_versions() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b==2.0.0
-/// │       │   └── satisfied by b-2.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires b==2.0.0
+/// │           └── satisfied by b-2.0.0
 /// └── b
 ///     ├── b-1.0.0
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_incompatible_with_root_version() {
@@ -1094,7 +1029,7 @@ fn transitive_incompatible_with_root_version() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-root-version-a")
                 .arg("transitive-incompatible-with-root-version-b==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1122,19 +1057,15 @@ fn transitive_incompatible_with_root_version() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c==1.0.0
+/// │           └── satisfied by c-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c==2.0.0
-/// │       │   └── satisfied by c-2.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c==2.0.0
+/// │           └── satisfied by c-2.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_incompatible_with_transitive() {
@@ -1147,7 +1078,7 @@ fn transitive_incompatible_with_transitive() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-transitive-a")
                 .arg("transitive-incompatible-with-transitive-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1175,9 +1106,7 @@ fn transitive_incompatible_with_transitive() {
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
 ///     ├── a-1.2.3+bar
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_greater_than_or_equal() {
@@ -1189,7 +1118,7 @@ fn local_greater_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-or-equal-a>=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1216,7 +1145,6 @@ fn local_greater_than_or_equal() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_greater_than() {
@@ -1228,7 +1156,7 @@ fn local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1253,9 +1181,7 @@ fn local_greater_than() {
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
 ///     ├── a-1.2.3+bar
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_less_than_or_equal() {
@@ -1267,7 +1193,7 @@ fn local_less_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-or-equal-a<=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1294,7 +1220,6 @@ fn local_less_than_or_equal() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_less_than() {
@@ -1306,7 +1231,7 @@ fn local_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-a<1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1332,11 +1257,8 @@ fn local_less_than() {
 /// │       └── satisfied by a-1.2.1+foo
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     ├── a-1.2.2+foo
-///     │   └── requires python>=3.8
 ///     └── a-1.2.1+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_not_latest() {
@@ -1348,7 +1270,7 @@ fn local_not_latest() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-latest-a>=1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1375,9 +1297,7 @@ fn local_not_latest() {
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_not_used_with_sdist() {
@@ -1389,7 +1309,7 @@ fn local_not_used_with_sdist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-used-with-sdist-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1417,9 +1337,7 @@ fn local_not_used_with_sdist() {
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
 ///     ├── a-1.2.3+bar
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_simple() {
@@ -1431,7 +1349,7 @@ fn local_simple() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-simple-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1461,19 +1379,15 @@ fn local_simple() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   ├── requires b==2.0.0
-/// │   │   │   ├── satisfied by b-2.0.0+bar
-/// │   │   │   └── satisfied by b-2.0.0+foo
-/// │   │   └── requires python>=3.8
+/// │   │   └── requires b==2.0.0
+/// │   │       ├── satisfied by b-2.0.0+bar
+/// │   │       └── satisfied by b-2.0.0+foo
 /// │   └── a-2.0.0
-/// │       ├── requires b==2.0.0+bar
-/// │       │   └── satisfied by b-2.0.0+bar
-/// │       └── requires python>=3.8
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_backtrack() {
@@ -1486,7 +1400,7 @@ fn local_transitive_backtrack() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-backtrack-a")
                 .arg("local-transitive-backtrack-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1517,14 +1431,11 @@ fn local_transitive_backtrack() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b==2.0.0+bar
-/// │       │   └── satisfied by b-2.0.0+bar
-/// │       └── requires python>=3.8
+/// │       └── requires b==2.0.0+bar
+/// │           └── satisfied by b-2.0.0+bar
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_conflicting() {
@@ -1537,7 +1448,7 @@ fn local_transitive_conflicting() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-conflicting-a")
                 .arg("local-transitive-conflicting-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1563,18 +1474,14 @@ fn local_transitive_conflicting() {
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b==2.0.0
-/// │       │   ├── satisfied by b-2.0.0
-/// │       │   ├── satisfied by b-2.0.0+bar
-/// │       │   └── satisfied by b-2.0.0+foo
-/// │       └── requires python>=3.8
+/// │       └── requires b==2.0.0
+/// │           ├── satisfied by b-2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
+/// │           └── satisfied by b-2.0.0+foo
 /// └── b
 ///     ├── b-2.0.0
-///     │   └── requires python>=3.8
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_confounding() {
@@ -1586,7 +1493,7 @@ fn local_transitive_confounding() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-confounding-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1617,15 +1524,12 @@ fn local_transitive_confounding() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b>=2.0.0
-/// │       │   ├── satisfied by b-2.0.0+bar
-/// │       │   └── satisfied by b-2.0.0+foo
-/// │       └── requires python>=3.8
+/// │       └── requires b>=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
+/// │           └── satisfied by b-2.0.0+foo
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_greater_than_or_equal() {
@@ -1638,7 +1542,7 @@ fn local_transitive_greater_than_or_equal() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-or-equal-a")
                 .arg("local-transitive-greater-than-or-equal-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1669,14 +1573,11 @@ fn local_transitive_greater_than_or_equal() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b>2.0.0
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b>2.0.0
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_greater_than() {
@@ -1689,7 +1590,7 @@ fn local_transitive_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-a")
                 .arg("local-transitive-greater-than-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1717,15 +1618,12 @@ fn local_transitive_greater_than() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b<=2.0.0
-/// │       │   ├── satisfied by b-2.0.0+bar
-/// │       │   └── satisfied by b-2.0.0+foo
-/// │       └── requires python>=3.8
+/// │       └── requires b<=2.0.0
+/// │           ├── satisfied by b-2.0.0+bar
+/// │           └── satisfied by b-2.0.0+foo
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_less_than_or_equal() {
@@ -1738,7 +1636,7 @@ fn local_transitive_less_than_or_equal() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-or-equal-a")
                 .arg("local-transitive-less-than-or-equal-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1769,14 +1667,11 @@ fn local_transitive_less_than_or_equal() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b<2.0.0
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b<2.0.0
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-2.0.0+bar
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive_less_than() {
@@ -1789,7 +1684,7 @@ fn local_transitive_less_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-a")
                 .arg("local-transitive-less-than-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1817,15 +1712,12 @@ fn local_transitive_less_than() {
 /// │       └── satisfied by b-2.0.0+foo
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires b==2.0.0
-/// │       │   ├── satisfied by b-2.0.0+foo
-/// │       │   └── satisfied by b-2.0.0+bar
-/// │       └── requires python>=3.8
+/// │       └── requires b==2.0.0
+/// │           ├── satisfied by b-2.0.0+foo
+/// │           └── satisfied by b-2.0.0+bar
 /// └── b
 ///     ├── b-2.0.0+foo
-///     │   └── requires python>=3.8
 ///     └── b-2.0.0+bar
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_transitive() {
@@ -1838,7 +1730,7 @@ fn local_transitive() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-a")
                 .arg("local-transitive-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1868,9 +1760,7 @@ fn local_transitive() {
 /// │       └── satisfied by a-1.2.3+foo
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3+foo
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn local_used_without_sdist() {
@@ -1882,7 +1772,7 @@ fn local_used_without_sdist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-used-without-sdist-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1909,9 +1799,7 @@ fn local_used_without_sdist() {
 /// │       └── satisfied by a-1.2.3.post0
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_equal_available() {
@@ -1923,7 +1811,7 @@ fn post_equal_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-equal-available-a==1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1950,9 +1838,7 @@ fn post_equal_available() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_equal_not_available() {
@@ -1964,7 +1850,7 @@ fn post_equal_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-equal-not-available-a==1.2.3.post0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1989,9 +1875,7 @@ fn post_equal_not_available() {
 /// │       └── satisfied by a-1.2.3.post1
 /// └── a
 ///     ├── a-1.2.3.post0
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_greater_than_or_equal_post() {
@@ -2003,7 +1887,7 @@ fn post_greater_than_or_equal_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-or-equal-post-a>=1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2030,7 +1914,6 @@ fn post_greater_than_or_equal_post() {
 /// │       └── satisfied by a-1.2.3.post1
 /// └── a
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_greater_than_or_equal() {
@@ -2042,7 +1925,7 @@ fn post_greater_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-or-equal-a>=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2069,11 +1952,8 @@ fn post_greater_than_or_equal() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-1.2.3
-///     │   └── requires python>=3.8
 ///     ├── a-1.2.3.post0
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_greater_than_post_not_available() {
@@ -2085,7 +1965,7 @@ fn post_greater_than_post_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-post-not-available-a>1.2.3.post2")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2109,9 +1989,7 @@ fn post_greater_than_post_not_available() {
 /// │       └── satisfied by a-1.2.3.post1
 /// └── a
 ///     ├── a-1.2.3.post0
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_greater_than_post() {
@@ -2123,7 +2001,7 @@ fn post_greater_than_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-post-a>1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2150,7 +2028,6 @@ fn post_greater_than_post() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_greater_than() {
@@ -2162,7 +2039,7 @@ fn post_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2186,7 +2063,6 @@ fn post_greater_than() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_less_than_or_equal() {
@@ -2198,7 +2074,7 @@ fn post_less_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-or-equal-a<=1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2222,7 +2098,6 @@ fn post_less_than_or_equal() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_less_than() {
@@ -2234,7 +2109,7 @@ fn post_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-a<1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2258,9 +2133,7 @@ fn post_less_than() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-1.2.3.post1
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1+local
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_local_greater_than_post() {
@@ -2272,7 +2145,7 @@ fn post_local_greater_than_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-post-a>1.2.3.post1")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2296,9 +2169,7 @@ fn post_local_greater_than_post() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-1.2.3.post1
-///     │   └── requires python>=3.8
 ///     └── a-1.2.3.post1+local
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_local_greater_than() {
@@ -2310,7 +2181,7 @@ fn post_local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2334,7 +2205,6 @@ fn post_local_greater_than() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.2.3.post1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn post_simple() {
@@ -2346,7 +2216,7 @@ fn post_simple() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-simple-a==1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2372,11 +2242,8 @@ fn post_simple() {
 /// │       └── satisfied by a-1.0.0rc1
 /// └── a
 ///     ├── a-1.0.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-1.0.0b1
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0rc1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_multiple_prereleases_kinds() {
@@ -2388,7 +2255,7 @@ fn package_multiple_prereleases_kinds() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-kinds-a>=1.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2417,11 +2284,8 @@ fn package_multiple_prereleases_kinds() {
 /// │       └── satisfied by a-1.0.0a3
 /// └── a
 ///     ├── a-1.0.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-1.0.0a2
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0a3
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_multiple_prereleases_numbers() {
@@ -2433,7 +2297,7 @@ fn package_multiple_prereleases_numbers() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-numbers-a>=1.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2460,11 +2324,8 @@ fn package_multiple_prereleases_numbers() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_only_prereleases_boundary() {
@@ -2476,7 +2337,7 @@ fn package_only_prereleases_boundary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2503,9 +2364,7 @@ fn package_only_prereleases_boundary() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_only_prereleases_in_range() {
@@ -2517,14 +2376,14 @@ fn package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-in-range-a>0.1.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a<0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only package-a<=0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -2544,7 +2403,6 @@ fn package_only_prereleases_in_range() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_only_prereleases() {
@@ -2556,7 +2414,7 @@ fn package_only_prereleases() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2586,13 +2444,9 @@ fn package_only_prereleases() {
 /// │       └── satisfied by a-1.0.0a1
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-0.3.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prerelease_specified_mixed_available() {
@@ -2604,7 +2458,7 @@ fn package_prerelease_specified_mixed_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-mixed-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2633,11 +2487,8 @@ fn package_prerelease_specified_mixed_available() {
 /// │       └── satisfied by a-0.3.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prerelease_specified_only_final_available() {
@@ -2652,7 +2503,7 @@ fn package_prerelease_specified_only_final_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-only-final-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2684,11 +2535,8 @@ fn package_prerelease_specified_only_final_available() {
 /// │       └── satisfied by a-0.3.0a1
 /// └── a
 ///     ├── a-0.1.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prerelease_specified_only_prerelease_available() {
@@ -2703,7 +2551,7 @@ fn package_prerelease_specified_only_prerelease_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-only-prerelease-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2733,11 +2581,8 @@ fn package_prerelease_specified_only_prerelease_available() {
 /// │       └── satisfied by a-0.1.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prereleases_boundary() {
@@ -2750,7 +2595,7 @@ fn package_prereleases_boundary() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("package-prereleases-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2777,11 +2622,8 @@ fn package_prereleases_boundary() {
 /// │       └── satisfied by a-0.1.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prereleases_global_boundary() {
@@ -2794,7 +2636,7 @@ fn package_prereleases_global_boundary() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("package-prereleases-global-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2822,17 +2664,11 @@ fn package_prereleases_global_boundary() {
 /// │       └── satisfied by a-0.2.0a1
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a1
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a2
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0a3
-///     │   └── requires python>=3.8
 ///     └── a-0.3.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_prereleases_specifier_boundary() {
@@ -2844,7 +2680,7 @@ fn package_prereleases_specifier_boundary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prereleases-specifier-boundary-a<0.2.0a2")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2871,9 +2707,7 @@ fn package_prereleases_specifier_boundary() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_package_only_prereleases_in_range_global_opt_in() {
@@ -2889,7 +2723,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("requires-package-only-prereleases-in-range-global-opt-in-a>0.1.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2918,9 +2752,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
 /// │       └── satisfied by a-0.1.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_package_prerelease_and_final_any() {
@@ -2932,7 +2764,7 @@ fn requires_package_prerelease_and_final_any() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-prerelease-and-final-any-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2962,14 +2794,11 @@ fn requires_package_prerelease_and_final_any() {
 /// │       └── satisfied by b-1.0.0a1
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.8
 ///     └── b-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_prereleases_in_range_opt_in() {
@@ -2985,7 +2814,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-opt-in-a")
                 .arg("transitive-package-only-prereleases-in-range-opt-in-b>0.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3020,14 +2849,11 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.8
 ///     └── b-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_prereleases_in_range() {
@@ -3039,14 +2865,14 @@ fn transitive_package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-b<0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
+      ╰─▶ Because only package-b<=0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -3067,12 +2893,10 @@ fn transitive_package_only_prereleases_in_range() {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     └── b-1.0.0a1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_prereleases() {
@@ -3084,7 +2908,7 @@ fn transitive_package_only_prereleases() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3115,61 +2939,40 @@ fn transitive_package_only_prereleases() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
-/// │       │   ├── satisfied by c-2.0.0a1
-/// │       │   ├── satisfied by c-2.0.0a2
-/// │       │   ├── satisfied by c-2.0.0a3
-/// │       │   ├── satisfied by c-2.0.0a4
-/// │       │   ├── satisfied by c-2.0.0a8
-/// │       │   ├── satisfied by c-2.0.0a9
-/// │       │   ├── satisfied by c-2.0.0b2
-/// │       │   ├── satisfied by c-2.0.0b3
-/// │       │   └── satisfied by c-2.0.0b4
-/// │       └── requires python>=3.8
+/// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
+/// │           ├── satisfied by c-2.0.0a1
+/// │           ├── satisfied by c-2.0.0a2
+/// │           ├── satisfied by c-2.0.0a3
+/// │           ├── satisfied by c-2.0.0a4
+/// │           ├── satisfied by c-2.0.0a8
+/// │           ├── satisfied by c-2.0.0a9
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           └── satisfied by c-2.0.0b4
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a1
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a2
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a3
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a4
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a5
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a6
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a7
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a8
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a9
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b1
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b2
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b3
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b4
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b5
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b6
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b7
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b8
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0b9
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
@@ -3185,7 +2988,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3193,7 +2996,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-c are available:
-              package-c<1.0.0
+              package-c<=1.0.0
               package-c>=2.0.0a5,<=2.0.0a7
               package-c==2.0.0b1
               package-c>=2.0.0b5
@@ -3231,61 +3034,40 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c>=2.0.0b1
-/// │       │   ├── satisfied by c-2.0.0b1
-/// │       │   ├── satisfied by c-2.0.0b2
-/// │       │   ├── satisfied by c-2.0.0b3
-/// │       │   ├── satisfied by c-2.0.0b4
-/// │       │   ├── satisfied by c-2.0.0b5
-/// │       │   ├── satisfied by c-2.0.0b6
-/// │       │   ├── satisfied by c-2.0.0b7
-/// │       │   ├── satisfied by c-2.0.0b8
-/// │       │   └── satisfied by c-2.0.0b9
-/// │       └── requires python>=3.8
+/// │       └── requires c>=2.0.0b1
+/// │           ├── satisfied by c-2.0.0b1
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           ├── satisfied by c-2.0.0b4
+/// │           ├── satisfied by c-2.0.0b5
+/// │           ├── satisfied by c-2.0.0b6
+/// │           ├── satisfied by c-2.0.0b7
+/// │           ├── satisfied by c-2.0.0b8
+/// │           └── satisfied by c-2.0.0b9
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a1
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a2
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a3
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a4
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a5
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a6
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a7
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a8
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0a9
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b1
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b2
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b3
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b4
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b5
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b6
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b7
-///     │   └── requires python>=3.8
 ///     ├── c-2.0.0b8
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0b9
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_many_versions() {
@@ -3301,7 +3083,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3337,19 +3119,15 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 /// │       └── satisfied by c-2.0.0b1
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0b1
-/// │       │   └── satisfied by c-2.0.0b1
-/// │       └── requires python>=3.8
+/// │       └── requires c==2.0.0b1
+/// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0b1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency_opt_in() {
@@ -3366,7 +3144,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
         .arg("transitive-prerelease-and-stable-dependency-opt-in-a")
                 .arg("transitive-prerelease-and-stable-dependency-opt-in-b")
                 .arg("transitive-prerelease-and-stable-dependency-opt-in-c>=0.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3408,19 +3186,15 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0b1
-/// │       │   └── satisfied by c-2.0.0b1
-/// │       └── requires python>=3.8
+/// │       └── requires c==2.0.0b1
+/// │           └── satisfied by c-2.0.0b1
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0b1
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_prerelease_and_stable_dependency() {
@@ -3433,7 +3207,7 @@ fn transitive_prerelease_and_stable_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-a")
                 .arg("transitive-prerelease-and-stable-dependency-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3482,7 +3256,7 @@ fn python_greater_than_current_backtrack() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-backtrack-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3527,7 +3301,7 @@ fn python_greater_than_current_excluded() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-excluded-a>=2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3597,7 +3371,7 @@ fn python_greater_than_current_many() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-many-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3615,18 +3389,18 @@ fn python_greater_than_current_many() {
 /// ```text
 /// python-greater-than-current-patch
 /// ├── environment
-/// │   └── python3.9.12
+/// │   └── python3.13.0
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.9.14 (incompatible with environment)
+///         └── requires python>=3.13.2 (incompatible with environment)
 /// ```
 #[cfg(feature = "python-patch")]
 #[test]
 fn python_greater_than_current_patch() {
-    let context = TestContext::new("3.9.12");
+    let context = TestContext::new("3.13.0");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3641,7 +3415,7 @@ fn python_greater_than_current_patch() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.12) does not satisfy Python>=3.9.14 and package-a==1.0.0 depends on Python>=3.9.14, we can conclude that package-a==1.0.0 cannot be used.
+      ╰─▶ Because the current Python version (3.13) does not satisfy Python>=3.13.2 and package-a==1.0.0 depends on Python>=3.13.2, we can conclude that package-a==1.0.0 cannot be used.
           And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -3671,7 +3445,7 @@ fn python_greater_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3708,7 +3482,7 @@ fn python_less_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-less-than-current-a==1.0.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3746,7 +3520,7 @@ fn python_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-version-does-not-exist-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3771,7 +3545,6 @@ fn python_version_does_not_exist() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_binary() {
@@ -3785,7 +3558,7 @@ fn no_binary() {
         .arg("--no-binary")
         .arg("no-binary-a")
         .arg("no-binary-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3811,7 +3584,6 @@ fn no_binary() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_build() {
@@ -3825,7 +3597,7 @@ fn no_build() {
         .arg("--only-binary")
         .arg("no-build-a")
         .arg("no-build-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3851,7 +3623,6 @@ fn no_build() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_abi() {
@@ -3864,7 +3635,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3891,7 +3662,6 @@ fn no_sdist_no_wheels_with_matching_abi() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_platform() {
@@ -3904,7 +3674,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3931,7 +3701,6 @@ fn no_sdist_no_wheels_with_matching_platform() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_sdist_no_wheels_with_matching_python() {
@@ -3944,7 +3713,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3971,7 +3740,6 @@ fn no_sdist_no_wheels_with_matching_python() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_wheels_no_build() {
@@ -3985,7 +3753,7 @@ fn no_wheels_no_build() {
         .arg("--only-binary")
         .arg("no-wheels-no-build-a")
         .arg("no-wheels-no-build-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4012,7 +3780,6 @@ fn no_wheels_no_build() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_wheels_with_matching_platform() {
@@ -4024,7 +3791,7 @@ fn no_wheels_with_matching_platform() {
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-with-matching-platform-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4048,7 +3815,6 @@ fn no_wheels_with_matching_platform() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn no_wheels() {
@@ -4060,7 +3826,7 @@ fn no_wheels() {
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4084,7 +3850,6 @@ fn no_wheels() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn only_wheels_no_binary() {
@@ -4098,7 +3863,7 @@ fn only_wheels_no_binary() {
         .arg("--no-binary")
         .arg("only-wheels-no-binary-a")
         .arg("only-wheels-no-binary-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4125,7 +3890,6 @@ fn only_wheels_no_binary() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn only_wheels() {
@@ -4137,7 +3901,7 @@ fn only_wheels() {
 
     uv_snapshot!(filters, command(&context)
         .arg("only-wheels-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4161,7 +3925,6 @@ fn only_wheels() {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn specific_tag_and_default() {
@@ -4173,7 +3936,7 @@ fn specific_tag_and_default() {
 
     uv_snapshot!(filters, command(&context)
         .arg("specific-tag-and-default-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4197,9 +3960,7 @@ fn specific_tag_and_default() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_only_yanked_in_range() {
@@ -4211,7 +3972,7 @@ fn package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-in-range-a>0.1.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4219,7 +3980,7 @@ fn package_only_yanked_in_range() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-a are available:
-              package-a<0.1.0
+              package-a<=0.1.0
               package-a==1.0.0
           and package-a==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-a>0.1.0 cannot be used.
           And because you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
@@ -4240,7 +4001,6 @@ fn package_only_yanked_in_range() {
 /// │       └── unsatisfied: no matching version
 /// └── a
 ///     └── a-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_only_yanked() {
@@ -4252,7 +4012,7 @@ fn package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4279,13 +4039,9 @@ fn package_only_yanked() {
 /// │       └── satisfied by a-0.3.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     ├── a-0.2.0 (yanked)
-///     │   └── requires python>=3.8
 ///     ├── a-0.3.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn package_yanked_specified_mixed_available() {
@@ -4297,7 +4053,7 @@ fn package_yanked_specified_mixed_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-yanked-specified-mixed-available-a>=0.1.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4324,9 +4080,7 @@ fn package_yanked_specified_mixed_available() {
 /// │       └── satisfied by a-0.1.0
 /// └── a
 ///     ├── a-0.1.0
-///     │   └── requires python>=3.8
 ///     └── a-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn requires_package_yanked_and_unyanked_any() {
@@ -4338,7 +4092,7 @@ fn requires_package_yanked_and_unyanked_any() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-yanked-and-unyanked-any-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4367,14 +4121,11 @@ fn requires_package_yanked_and_unyanked_any() {
 /// │       └── unsatisfied: no matching version
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.8
 ///     └── b-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_yanked_in_range_opt_in() {
@@ -4420,14 +4171,11 @@ fn transitive_package_only_yanked_in_range_opt_in() {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b>0.1
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b>0.1
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     ├── b-0.1.0
-///     │   └── requires python>=3.8
 ///     └── b-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_yanked_in_range() {
@@ -4439,7 +4187,7 @@ fn transitive_package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-in-range-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4447,7 +4195,7 @@ fn transitive_package_only_yanked_in_range() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of package-b are available:
-              package-b<0.1
+              package-b<=0.1
               package-b==1.0.0
           and package-b==1.0.0 was yanked (reason: Yanked for testing), we can conclude that package-b>0.1 cannot be used.
           And because package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
@@ -4469,12 +4217,10 @@ fn transitive_package_only_yanked_in_range() {
 /// │       └── satisfied by a-0.1.0
 /// ├── a
 /// │   └── a-0.1.0
-/// │       ├── requires b
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires b
+/// │           └── unsatisfied: no matching version
 /// └── b
 ///     └── b-1.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_package_only_yanked() {
@@ -4486,7 +4232,7 @@ fn transitive_package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4517,19 +4263,15 @@ fn transitive_package_only_yanked() {
 /// │       └── unsatisfied: no matching version
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires c==2.0.0
+/// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_yanked_and_unyanked_dependency_opt_in() {
@@ -4589,19 +4331,15 @@ fn transitive_yanked_and_unyanked_dependency_opt_in() {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       ├── requires c==2.0.0
-/// │       │   └── unsatisfied: no matching version
-/// │       └── requires python>=3.8
+/// │       └── requires c==2.0.0
+/// │           └── unsatisfied: no matching version
 /// ├── b
 /// │   └── b-1.0.0
-/// │       ├── requires c<=3.0.0,>=1.0.0
-/// │       │   └── satisfied by c-1.0.0
-/// │       └── requires python>=3.8
+/// │       └── requires c<=3.0.0,>=1.0.0
+/// │           └── satisfied by c-1.0.0
 /// └── c
 ///     ├── c-1.0.0
-///     │   └── requires python>=3.8
 ///     └── c-2.0.0 (yanked)
-///         └── requires python>=3.8
 /// ```
 #[test]
 fn transitive_yanked_and_unyanked_dependency() {
@@ -4614,7 +4352,7 @@ fn transitive_yanked_and_unyanked_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-yanked-and-unyanked-dependency-a")
                 .arg("transitive-yanked-and-unyanked-dependency-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----

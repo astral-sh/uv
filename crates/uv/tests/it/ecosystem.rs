@@ -80,7 +80,7 @@ fn airflow() -> Result<()> {
 }
 
 /// Does a lock on the given ecosystem package for the given name. That
-/// is, there should be a directory at `./ecosystem/{name}` from the
+/// is, there should be a directory at `./test/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     let context = TestContext::new(python_version);
@@ -92,24 +92,16 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
 
     // Custom command since we need to change the cache dir.
     let mut command = Command::new(get_bin());
-    command
-        .arg("lock")
-        .arg("--cache-dir")
-        .arg(&cache_dir)
-        // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
-        .env_remove(EnvVars::VIRTUAL_ENV)
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .env(EnvVars::HOME, context.home_dir.as_os_str())
-        .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-        .env(EnvVars::UV_TEST_PYTHON_PATH, context.python_path())
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
-        .current_dir(context.temp_dir.path());
+    context.add_shared_env(&mut command, false);
+    command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
+    command.arg("lock").arg("--cache-dir").arg(&cache_dir);
 
     let (snapshot, _) = common::run_and_format(
         &mut command,
         context.filters(),
         name,
         Some(common::WindowsFilters::Platform),
+        None,
     );
 
     let lock = context.read("uv.lock");

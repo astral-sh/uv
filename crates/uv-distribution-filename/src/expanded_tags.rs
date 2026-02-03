@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use uv_platform_tags::{
     AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
-    PlatformTag, Tags,
+    PlatformTag, TagCompatibility, Tags,
 };
 
 use crate::splitter::MemchrSplitter;
@@ -38,6 +38,30 @@ impl ExpandedTags {
         self.0.iter().any(|tag| {
             compatible_tags.is_compatible(tag.python_tags(), tag.abi_tags(), tag.platform_tags())
         })
+    }
+
+    /// Return the Python tags in this expanded tag set.
+    pub fn python_tags(&self) -> impl Iterator<Item = &LanguageTag> {
+        self.0.iter().flat_map(WheelTag::python_tags)
+    }
+
+    /// Return the ABI tags in this expanded tag set.
+    pub fn abi_tags(&self) -> impl Iterator<Item = &AbiTag> {
+        self.0.iter().flat_map(WheelTag::abi_tags)
+    }
+
+    /// Return the platform tags in this expanded tag set.
+    pub fn platform_tags(&self) -> impl Iterator<Item = &PlatformTag> {
+        self.0.iter().flat_map(WheelTag::platform_tags)
+    }
+
+    /// Return the [`TagCompatibility`] of the wheel with the given tags
+    pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
+        compatible_tags.compatibility(
+            self.python_tags().copied().collect::<Vec<_>>().as_slice(),
+            self.abi_tags().copied().collect::<Vec<_>>().as_slice(),
+            self.platform_tags().cloned().collect::<Vec<_>>().as_slice(),
+        )
     }
 }
 
@@ -128,7 +152,7 @@ mod tests {
     fn test_parse_simple_expanded_tag() {
         let tags = ExpandedTags::parse(vec!["py3-none-any"]).unwrap();
 
-        insta::assert_debug_snapshot!(tags, @r"
+        insta::assert_debug_snapshot!(tags, @"
         ExpandedTags(
             [
                 Small {
@@ -155,7 +179,7 @@ mod tests {
         ])
         .unwrap();
 
-        insta::assert_debug_snapshot!(tags, @r"
+        insta::assert_debug_snapshot!(tags, @"
         ExpandedTags(
             [
                 Small {
@@ -359,7 +383,7 @@ mod tests {
         assert!(result.is_ok());
         let tag = result.unwrap();
 
-        insta::assert_debug_snapshot!(tag, @r"
+        insta::assert_debug_snapshot!(tag, @"
         Small {
             small: WheelTagSmall {
                 python_tag: Python {

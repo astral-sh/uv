@@ -24,7 +24,7 @@ use crate::{Installable, LockError};
 pub struct RequirementsTxtExport<'lock> {
     nodes: Vec<ExportableRequirement<'lock>>,
     hashes: bool,
-    editable: EditableMode,
+    editable: Option<EditableMode>,
 }
 
 impl<'lock> RequirementsTxtExport<'lock> {
@@ -34,7 +34,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
-        editable: EditableMode,
+        editable: Option<EditableMode>,
         hashes: bool,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, LockError> {
@@ -46,7 +46,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
             dev,
             annotate,
             install_options,
-        );
+        )?;
 
         // Sort the nodes, such that unnamed URLs (editables) appear at the top.
         nodes.sort_unstable_by(|a, b| {
@@ -91,6 +91,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         url,
                         GitReference::from(git.kind.clone()),
                         git.precise,
+                        git.lfs,
                     )
                     .expect("Internal Git URLs must have supported schemes");
 
@@ -129,10 +130,10 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     }
                 }
                 Source::Editable(path) => match self.editable {
-                    EditableMode::Editable => {
+                    None | Some(EditableMode::Editable) => {
                         write!(f, "-e {}", anchor(path).portable_display())?;
                     }
-                    EditableMode::NonEditable => {
+                    Some(EditableMode::NonEditable) => {
                         if path.is_absolute() {
                             write!(
                                 f,
