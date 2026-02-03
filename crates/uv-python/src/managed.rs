@@ -29,6 +29,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
+use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
@@ -380,6 +381,28 @@ impl ManagedPythonInstallation {
             sha256: None,
             build,
         })
+    }
+
+    /// Try to create a [`ManagedPythonInstallation`] from an [`Interpreter`].
+    ///
+    /// Returns `None` if the interpreter is not a managed installation.
+    pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
+        let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
+
+        let suffix = interpreter
+            .sys_base_prefix()
+            .strip_prefix(managed_root.root())
+            .ok()?;
+
+        let first_component = suffix.components().next()?;
+        let name = first_component.as_os_str().to_str()?;
+
+        // Verify it's a valid installation key
+        PythonInstallationKey::from_str(name).ok()?;
+
+        // Construct the installation path
+        let path = managed_root.root().join(name);
+        Self::from_path(path).ok()
     }
 
     /// The path to this managed installation's Python executable.
@@ -773,7 +796,7 @@ impl PythonMinorVersionLink {
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
     /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
     /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
-    pub fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
+    fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
             implementation.as_ref(),
