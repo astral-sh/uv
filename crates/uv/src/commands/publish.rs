@@ -6,7 +6,7 @@ use console::Term;
 use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -171,7 +171,6 @@ pub(crate) async fn publish(
         keyring_provider,
         &token_store,
         &oidc_client,
-        &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
@@ -374,7 +373,6 @@ async fn gather_credentials(
     keyring_provider: KeyringProviderType,
     token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
-    base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
@@ -400,22 +398,6 @@ async fn gather_credentials(
             .expect("Failed to clear publish URL username");
     }
 
-    // If the user is publishing to pyx, load the credentials from the store.
-    if username.is_none() && password.is_none() {
-        if token_store.is_known_url(&publish_url) {
-            if let Some(token) = token_store
-                .access_token(
-                    base_client.for_host(token_store.api()).raw_client(),
-                    DEFAULT_TOLERANCE_SECS,
-                )
-                .await?
-            {
-                debug!("Using authentication token from the store");
-                return Ok((publish_url, Credentials::from(token)));
-            }
-        }
-    }
-
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
         username.as_deref(),
@@ -433,9 +415,14 @@ async fn gather_credentials(
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
             if username.is_none() && password.is_none() {
-                match prompt {
-                    Prompt::Enabled => prompt_username_and_password()?,
-                    Prompt::Disabled => (None, None),
+                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
+                if token_store.is_known_url(&publish_url) {
+                    (None, None)
+                } else {
+                    match prompt {
+                        Prompt::Enabled => prompt_username_and_password()?,
+                        Prompt::Disabled => (None, None),
+                    }
                 }
             } else {
                 (username, password)
@@ -450,7 +437,10 @@ async fn gather_credentials(
         );
     }
 
-    if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
+    if username.is_none()
+        && password.is_none()
+        && keyring_provider == KeyringProviderType::Disabled
+        && !token_store.is_known_url(&publish_url)
     {
         if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
             // The user has configured something incorrectly:
@@ -546,7 +536,6 @@ mod tests {
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
             &token_store,
-            &client,
             &client,
             None,
             Prompt::Disabled,
