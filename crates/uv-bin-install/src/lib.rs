@@ -152,9 +152,18 @@ const VERSIONS_MANIFEST_URL: &str = "https://raw.githubusercontent.com/astral-sh
 /// Binary version information from the versions manifest.
 #[derive(Debug, Deserialize)]
 struct BinVersionInfo {
-    version: String,
+    #[serde(deserialize_with = "deserialize_version")]
+    version: Version,
     date: jiff::Timestamp,
     artifacts: Vec<BinArtifact>,
+}
+
+fn deserialize_version<'de, D>(deserializer: D) -> Result<Version, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Version::from_str(&s).map_err(serde::de::Error::custom)
 }
 
 /// Binary artifact information.
@@ -231,18 +240,18 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    #[error("Failed to parse version: {version}")]
-    VersionParse {
-        version: String,
-        #[source]
-        source: uv_pep440::VersionParseError,
-    },
-
     #[error("Invalid UTF-8 in version manifest")]
     ManifestUtf8(#[from] std::str::Utf8Error),
 
-    #[error("No version of {binary} found matching: {constraints}")]
-    NoMatchingVersion { binary: Binary, constraints: String },
+    #[error("No version of {binary} found matching `{constraints}` for platform `{platform}`")]
+    NoMatchingVersion {
+        binary: Binary,
+        constraints: uv_pep440::VersionSpecifiers,
+        platform: String,
+    },
+
+    #[error("No version of {binary} found for platform `{platform}`")]
+    NoVersionForPlatform { binary: Binary, platform: String },
 
     #[error("No artifact found for {binary} {version} on platform {platform}")]
     NoArtifactForPlatform {
@@ -385,13 +394,9 @@ async fn fetch_and_find_matching_version(
 
             buffer.drain(..=newline_pos);
 
-            if let Some(resolved) = check_version_match(
-                binary,
-                &version_info,
-                constraints,
-                exclude_newer,
-                platform_name,
-            )? {
+            if let Some(resolved) =
+                check_version_match(&version_info, constraints, exclude_newer, platform_name)
+            {
                 return Ok(resolved);
             }
         }
@@ -404,96 +409,83 @@ async fn fetch_and_find_matching_version(
             let version_info: BinVersionInfo =
                 serde_json::from_str(line_str).map_err(|source| Error::ManifestParse { source })?;
 
-            if let Some(resolved) = check_version_match(
-                binary,
-                &version_info,
-                constraints,
-                exclude_newer,
-                platform_name,
-            )? {
+            if let Some(resolved) =
+                check_version_match(&version_info, constraints, exclude_newer, platform_name)
+            {
                 return Ok(resolved);
             }
         }
     }
 
     // No matching version found
-    Err(Error::NoMatchingVersion {
-        binary,
-        constraints: constraints
-            .map(ToString::to_string)
-            .unwrap_or_else(|| "*".to_string()),
-    })
+    match constraints {
+        Some(constraints) => Err(Error::NoMatchingVersion {
+            binary,
+            constraints: constraints.clone(),
+            platform: platform_name.to_string(),
+        }),
+        None => Err(Error::NoVersionForPlatform {
+            binary,
+            platform: platform_name.to_string(),
+        }),
+    }
 }
 
 /// Check if a version matches the constraints and find the artifact for the platform.
 ///
 /// Returns `Ok(Some(resolved))` if the version matches and an artifact is found,
-/// `Ok(None)` if the version doesn't match or no artifact is available for the platform,
-/// or an error if parsing fails.
+/// `Ok(None)` if the version doesn't match or no artifact is available for the platform.
 fn check_version_match(
-    binary: Binary,
     version_info: &BinVersionInfo,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
     exclude_newer: Option<jiff::Timestamp>,
     platform_name: &str,
-) -> Result<Option<ResolvedVersion>, Error> {
+) -> Option<ResolvedVersion> {
     // Skip versions newer than the exclude_newer cutoff
-    if let Some(cutoff) = exclude_newer {
-        if version_info.date > cutoff {
-            return Ok(None);
-        }
+    if let Some(cutoff) = exclude_newer
+        && version_info.date > cutoff
+    {
+        return None;
     }
 
-    let version =
-        Version::from_str(&version_info.version).map_err(|source| Error::VersionParse {
-            version: version_info.version.clone(),
-            source,
-        })?;
-
-    // Check if this version matches the constraints
-    if constraints.is_none_or(|c| c.contains(&version)) {
-        // Find the artifact for our platform
-        if let Some(resolved) =
-            find_artifact_for_platform(binary, version_info, &version, platform_name)?
-        {
-            return Ok(Some(resolved));
-        }
+    // Skip versions that don't match the constraints
+    if let Some(constraints) = constraints
+        && !constraints.contains(&version_info.version)
+    {
+        return None;
     }
 
-    Ok(None)
+    find_artifact_for_platform(version_info, platform_name)
 }
 
 /// Find an artifact for the given platform from the version info.
 fn find_artifact_for_platform(
-    _binary: Binary,
     version_info: &BinVersionInfo,
-    version: &Version,
     platform_name: &str,
-) -> Result<Option<ResolvedVersion>, Error> {
+) -> Option<ResolvedVersion> {
     for artifact in &version_info.artifacts {
-        if artifact.platform == platform_name {
-            let artifact_url = Url::parse(&artifact.url).map_err(|source| Error::UrlParse {
-                url: artifact.url.clone(),
-                source,
-            })?;
-
-            let archive_format = match artifact.archive_format.as_str() {
-                "tar.gz" => ArchiveFormat::TarGz,
-                "zip" => ArchiveFormat::Zip,
-                other => return Err(Error::UnsupportedArchiveFormat(other.to_string())),
-            };
-
-            return Ok(Some(ResolvedVersion {
-                version: version.clone(),
-                artifact_url,
-                archive_format,
-            }));
+        if artifact.platform != platform_name {
+            continue;
         }
+
+        let Ok(artifact_url) = Url::parse(&artifact.url) else {
+            continue;
+        };
+
+        let archive_format = match artifact.archive_format.as_str() {
+            "tar.gz" => ArchiveFormat::TarGz,
+            "zip" => ArchiveFormat::Zip,
+            _ => continue,
+        };
+
+        return Some(ResolvedVersion {
+            version: version_info.version.clone(),
+            artifact_url,
+            archive_format,
+        });
     }
 
-    // No artifact found for this platform - this is not an error, just means
-    // we should try the next version
-    Ok(None)
+    None
 }
 
 /// Install the given binary using the artifact URL from a resolved version.

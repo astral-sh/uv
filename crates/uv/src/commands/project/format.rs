@@ -97,7 +97,9 @@ pub(crate) async fn format(
         }
         BinVersion::Pinned(version) => {
             // Use the exact version directly without manifest lookup.
-            // Note: `exclude_newer` is not respected for pinned versions.
+            if exclude_newer.is_some() {
+                debug!("`--exclude-newer` is ignored for pinned version `{version}`");
+            }
             let path = bin_install(
                 Binary::Ruff,
                 &version,

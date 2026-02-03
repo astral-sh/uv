@@ -609,7 +609,12 @@ fn format_no_matching_version() -> Result<()> {
     "})?;
 
     // Run format with impossible version constraints - should fail
-    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
+    let mut filters = context.filters();
+    filters.push((
+        r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
+        "[PLATFORM]",
+    ));
+    uv_snapshot!(filters, context.format().arg("--version").arg(">=999.0.0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -617,7 +622,7 @@ fn format_no_matching_version() -> Result<()> {
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
     error: Failed to find ruff version matching: >=999.0.0
-      Caused by: No version of ruff found matching: >=999.0.0
+      Caused by: No version of ruff found matching `>=999.0.0` for platform `[PLATFORM]`
     ");
 
     Ok(())
