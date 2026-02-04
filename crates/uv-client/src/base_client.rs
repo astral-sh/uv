@@ -537,31 +537,38 @@ impl<'a> BaseClientBuilder<'a> {
 
                     // Load certificates from existing directories
                     for dir in existing {
-                        if let Ok(entries) = fs::read_dir(dir) {
-                            for entry in entries.flatten() {
-                                let path = entry.path();
-                                // Only process files with .crt, .pem, or .cer extensions
-                                if let Some(ext) = path.extension() {
-                                    if matches!(ext.to_str(), Some("crt" | "pem" | "cer")) {
-                                        if let Ok(cert_data) = fs::read(&path) {
-                                            match Self::try_load_certificates(&cert_data) {
-                                                Some(loaded_certs) => {
-                                                    debug!(
-                                                        "Loaded {} certificate(s) from SSL_CERT_DIR: {}",
-                                                        loaded_certs.len(),
-                                                        path.simplified_display()
-                                                    );
-                                                    certs.extend(loaded_certs);
-                                                }
-                                                None => {
-                                                    debug!(
-                                                        "Failed to parse certificate from {}",
-                                                        path.simplified_display()
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
+                        let Ok(entries) = fs::read_dir(dir) else {
+                            continue;
+                        };
+
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            // Only process files with .crt, .pem, or .cer extensions
+                            let Some(ext) = path.extension() else {
+                                continue;
+                            };
+                            if !matches!(ext.to_str(), Some("crt" | "pem" | "cer")) {
+                                continue;
+                            }
+
+                            let Ok(cert_data) = fs::read(&path) else {
+                                continue;
+                            };
+
+                            match Self::try_load_certificates(&cert_data) {
+                                Some(loaded_certs) => {
+                                    debug!(
+                                        "Loaded {} certificate(s) from SSL_CERT_DIR: {}",
+                                        loaded_certs.len(),
+                                        path.simplified_display()
+                                    );
+                                    certs.extend(loaded_certs);
+                                }
+                                None => {
+                                    debug!(
+                                        "Failed to parse certificate from {}",
+                                        path.simplified_display()
+                                    );
                                 }
                             }
                         }
