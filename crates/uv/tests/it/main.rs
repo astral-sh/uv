@@ -20,6 +20,9 @@ mod cache;
 mod cache_clean;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
+mod cache_df;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
 mod cache_prune;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
