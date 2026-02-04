@@ -68,6 +68,7 @@ url = { workspace = true }
 which = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+junction = { workspace = true }
 windows-registry = { workspace = true }
 windows = { workspace = true }
 

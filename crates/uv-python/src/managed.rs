@@ -357,7 +357,10 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        // Normalize the path to handle Windows path quirks (trailing separators, \\?\ prefix, etc.)
+        let path = dunce::simplified(path.as_ref()).to_path_buf();
+
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
@@ -389,18 +392,24 @@ impl ManagedPythonInstallation {
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
 
-        let suffix = interpreter
-            .sys_base_prefix()
-            .strip_prefix(managed_root.root())
-            .ok()?;
+        // Canonicalize both paths to handle Windows path format differences
+        // (e.g., \\?\ prefix, different casing, junction vs actual path)
+        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix()).ok()?;
+        let root = dunce::canonicalize(managed_root.root()).ok()?;
+
+        // Verify the interpreter's base prefix is within the managed root
+        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
 
         let first_component = suffix.components().next()?;
         let name = first_component.as_os_str().to_str()?;
 
-        // Verify it's a valid installation key
+        // With canonicalization above, symlinks/junctions are resolved, so `name` should
+        // be the actual installation directory (e.g., `cpython-3.12.12-windows-x86_64-none`).
+        // Verify it's a valid installation key.
         PythonInstallationKey::from_str(name).ok()?;
 
-        // Construct the installation path
+        // Construct the path within the managed root (not the canonicalized path,
+        // which might resolve to a different location if there are symlinks in the root)
         let path = managed_root.root().join(name);
         Self::from_path(path).ok()
     }
@@ -883,9 +892,8 @@ impl PythonMinorVersionLink {
                 .symlink_metadata()
                 .is_ok_and(|metadata| metadata.file_type().is_symlink())
                 && self
-                    .symlink_directory
-                    .read_link()
-                    .is_ok_and(|target| target == self.target_directory)
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
         }
         #[cfg(windows)]
         {
@@ -897,9 +905,24 @@ impl PythonMinorVersionLink {
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
                 && self
-                    .symlink_directory
-                    .read_link()
-                    .is_ok_and(|target| target == self.target_directory)
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
+        }
+    }
+
+    /// Read the target of the minor version link.
+    ///
+    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
+    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
+    /// uses internally for junction targets.
+    pub fn read_target(&self) -> Option<PathBuf> {
+        #[cfg(unix)]
+        {
+            self.symlink_directory.read_link().ok()
+        }
+        #[cfg(windows)]
+        {
+            junction::get_target(&self.symlink_directory).ok()
         }
     }
 }
