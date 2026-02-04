@@ -21,9 +21,13 @@ pub fn init(preview: Preview) -> Result<(), ()> {
 
 /// Get the current global preview configuration.
 ///
-/// Returns the default (disabled) preview if not initialized.
+/// # Panics
+///
+/// Panics if called before [`init`] has been called.
 pub fn get() -> Preview {
-    *PREVIEW.get_or_init(Preview::default)
+    *PREVIEW
+        .get()
+        .expect("preview configuration has not been initialized")
 }
 
 /// Check if a specific preview feature is enabled globally.
