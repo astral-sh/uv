@@ -1200,6 +1200,12 @@ impl EnvVars {
     #[attr_added_in("0.7.13")]
     pub const UV_NO_GITHUB_FAST_PATH: &'static str = "UV_NO_GITHUB_FAST_PATH";
 
+    /// Disable `git ls-remote` fast path that allows uv to check if a cached Git checkout
+    /// is up-to-date without performing a full fetch. This optimization works with any Git
+    /// host (GitHub, GitLab, Bitbucket, self-hosted, etc.).
+    #[attr_added_in("0.9.27")]
+    pub const UV_NO_GIT_LS_REMOTE_FAST_PATH: &'static str = "UV_NO_GIT_LS_REMOTE_FAST_PATH";
+
     /// Authentication token for Hugging Face requests. When set, uv will use this token
     /// when making requests to `https://huggingface.co/` and any subdomains.
     #[attr_added_in("0.8.1")]
