@@ -414,7 +414,6 @@ impl<'a> BaseClientBuilder<'a> {
     fn load_certs_from_env() -> Vec<Certificate> {
         let mut certs = Vec::new();
 
-        // SSL_CERT_FILE
         if let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) {
             let cert_path = Path::new(&cert_file);
             if !cert_path.exists() {
@@ -450,7 +449,6 @@ impl<'a> BaseClientBuilder<'a> {
             }
         }
 
-        // SSL_CERT_DIR
         if let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) {
             if !cert_dirs.is_empty() {
                 let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
