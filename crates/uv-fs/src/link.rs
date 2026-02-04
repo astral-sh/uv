@@ -882,3 +882,824 @@ fn create_symlink(original: &Path, link: &Path) -> io::Result<()> {
         fs_err::os::windows::fs::symlink_file(original, link)
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::print_stderr)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// Create a test directory structure with some files.
+    fn create_test_tree(root: &Path) {
+        fs_err::create_dir_all(root.join("subdir")).unwrap();
+        fs_err::write(root.join("file1.txt"), "content1").unwrap();
+        fs_err::write(root.join("file2.txt"), "content2").unwrap();
+        fs_err::write(root.join("subdir/nested.txt"), "nested content").unwrap();
+    }
+
+    /// Verify the destination has the expected structure and content.
+    fn verify_test_tree(root: &Path) {
+        assert!(root.join("file1.txt").exists());
+        assert!(root.join("file2.txt").exists());
+        assert!(root.join("subdir/nested.txt").exists());
+        assert_eq!(
+            fs_err::read_to_string(root.join("file1.txt")).unwrap(),
+            "content1"
+        );
+        assert_eq!(
+            fs_err::read_to_string(root.join("file2.txt")).unwrap(),
+            "content2"
+        );
+        assert_eq!(
+            fs_err::read_to_string(root.join("subdir/nested.txt")).unwrap(),
+            "nested content"
+        );
+    }
+
+    #[test]
+    fn test_copy_dir_basic() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Copy);
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    fn test_hardlink_dir_basic() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Hardlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // May fall back to copy on some filesystems
+        assert!(result == LinkMode::Hardlink || result == LinkMode::Copy);
+        verify_test_tree(dst_dir.path());
+
+        // If hardlink succeeded, verify files share the same inode
+        #[cfg(unix)]
+        if result == LinkMode::Hardlink {
+            use std::os::unix::fs::MetadataExt;
+            let src_meta = fs_err::metadata(src_dir.path().join("file1.txt")).unwrap();
+            let dst_meta = fs_err::metadata(dst_dir.path().join("file1.txt")).unwrap();
+            assert_eq!(src_meta.ino(), dst_meta.ino());
+        }
+    }
+
+    #[test]
+    #[cfg(unix)] // Symlinks require special permissions on Windows
+    fn test_symlink_dir_basic() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Symlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // May fall back to copy on some filesystems
+        assert!(result == LinkMode::Symlink || result == LinkMode::Copy);
+        verify_test_tree(dst_dir.path());
+
+        // If symlink succeeded, verify files are symlinks
+        if result == LinkMode::Symlink {
+            assert!(dst_dir.path().join("file1.txt").is_symlink());
+        }
+    }
+
+    #[test]
+    fn test_clone_dir_basic() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Clone may fall back to hardlink or copy depending on filesystem
+        assert!(
+            result == LinkMode::Clone || result == LinkMode::Hardlink || result == LinkMode::Copy
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Check if reflink is supported by attempting to reflink a test file.
+    /// Returns true if reflink is supported on this filesystem.
+    fn reflink_supported(dir: &Path) -> bool {
+        let src = dir.join("reflink_test_src");
+        let dst = dir.join("reflink_test_dst");
+        fs_err::write(&src, "test").unwrap();
+        let supported = reflink_copy::reflink(&src, &dst).is_ok();
+        let _ = fs_err::remove_file(&src);
+        let _ = fs_err::remove_file(&dst);
+        supported
+    }
+
+    #[test]
+    fn test_reflink_file_when_supported() {
+        let tmp_dir = TempDir::new().unwrap();
+
+        if !reflink_supported(tmp_dir.path()) {
+            eprintln!("Skipping test: reflink not supported on this filesystem");
+            return;
+        }
+
+        // Create source file
+        let src = tmp_dir.path().join("src.txt");
+        let dst = tmp_dir.path().join("dst.txt");
+        fs_err::write(&src, "reflink content").unwrap();
+
+        // Reflink should succeed
+        reflink_copy::reflink(&src, &dst).unwrap();
+
+        assert_eq!(fs_err::read_to_string(&dst).unwrap(), "reflink content");
+
+        // Modifying dst should not affect src (copy-on-write)
+        fs_err::write(&dst, "modified").unwrap();
+        assert_eq!(fs_err::read_to_string(&src).unwrap(), "reflink content");
+        assert_eq!(fs_err::read_to_string(&dst).unwrap(), "modified");
+    }
+
+    #[test]
+    fn test_clone_dir_reflink_when_supported() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        if !reflink_supported(src_dir.path()) {
+            eprintln!("Skipping test: reflink not supported on this filesystem");
+            return;
+        }
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // On supported filesystems, clone should succeed
+        assert_eq!(result, LinkMode::Clone);
+        verify_test_tree(dst_dir.path());
+
+        // Verify copy-on-write: modifying dst should not affect src
+        fs_err::write(dst_dir.path().join("file1.txt"), "modified").unwrap();
+        assert_eq!(
+            fs_err::read_to_string(src_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+    }
+
+    #[test]
+    fn test_clone_merge_when_supported() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        if !reflink_supported(src_dir.path()) {
+            eprintln!("Skipping test: reflink not supported on this filesystem");
+            return;
+        }
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with some existing content
+        fs_err::create_dir_all(dst_dir.path()).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old content").unwrap();
+        fs_err::write(dst_dir.path().join("extra.txt"), "extra").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Clone);
+
+        // Source files should overwrite destination
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+        // Extra file should remain
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("extra.txt")).unwrap(),
+            "extra"
+        );
+    }
+
+    #[test]
+    fn test_reflink_fallback_to_hardlink() {
+        // This test verifies the fallback behavior when reflink fails.
+        // We can't easily force reflink to fail on a supporting filesystem,
+        // so we just verify the clone path works and returns a valid mode.
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Should succeed with one of the valid modes
+        assert!(matches!(
+            result,
+            LinkMode::Clone | LinkMode::Hardlink | LinkMode::Copy
+        ));
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    fn test_merge_overwrites_existing_files() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create source
+        create_test_tree(src_dir.path());
+
+        // Create destination with different content
+        fs_err::create_dir_all(dst_dir.path().join("subdir")).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old content").unwrap();
+        fs_err::write(dst_dir.path().join("existing.txt"), "should remain").unwrap();
+
+        let options =
+            LinkOptions::new(LinkMode::Copy).with_on_existing_directory(OnExistingDirectory::Merge);
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Verify source files overwrote destination
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+        // Verify existing file that wasn't in source remains
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("existing.txt")).unwrap(),
+            "should remain"
+        );
+    }
+
+    #[test]
+    fn test_fail_mode_errors_on_existing_hardlink() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Create conflicting file in destination
+        fs_err::write(dst_dir.path().join("file1.txt"), "existing").unwrap();
+
+        // Hardlink mode with Fail should error when target exists
+        let options = LinkOptions::new(LinkMode::Hardlink)
+            .with_on_existing_directory(OnExistingDirectory::Fail);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        // Should either fail with AlreadyExists error, or fall back to copy
+        // (which overwrites). The key is it doesn't do atomic overwrite.
+        // On filesystems where hardlink works, this should fail.
+        // We can't guarantee the error because hardlink might fall back to copy.
+        if result.is_ok() {
+            // If it succeeded, hardlink must have fallen back to copy
+            // which overwrites the file
+            assert_eq!(
+                fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+                "content1"
+            );
+        }
+    }
+
+    #[test]
+    fn test_copy_mode_overwrites_in_fail_mode() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Create conflicting file in destination
+        fs_err::write(dst_dir.path().join("file1.txt"), "existing").unwrap();
+
+        // Copy mode always overwrites, even in Fail mode
+        // (Fail mode only affects link operations that naturally fail on AlreadyExists)
+        let options =
+            LinkOptions::new(LinkMode::Copy).with_on_existing_directory(OnExistingDirectory::Fail);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+    }
+
+    #[test]
+    fn test_mutable_copy_filter() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+        // Add a RECORD file that should be copied, not linked
+        fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Hardlink)
+            .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"));
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Verify RECORD exists
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("RECORD")).unwrap(),
+            "record content"
+        );
+
+        // If hardlink succeeded, RECORD should NOT be a hardlink (different inode)
+        if result == LinkMode::Hardlink {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let src_meta = fs_err::metadata(src_dir.path().join("RECORD")).unwrap();
+                let dst_meta = fs_err::metadata(dst_dir.path().join("RECORD")).unwrap();
+                // RECORD should be copied, not hardlinked
+                assert_ne!(src_meta.ino(), dst_meta.ino());
+
+                // But regular files should be hardlinked
+                let src_file_meta = fs_err::metadata(src_dir.path().join("file1.txt")).unwrap();
+                let dst_file_meta = fs_err::metadata(dst_dir.path().join("file1.txt")).unwrap();
+                assert_eq!(src_file_meta.ino(), dst_file_meta.ino());
+            }
+        }
+    }
+
+    #[test]
+    fn test_synchronized_copy() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        let locks = CopyLocks::default();
+        let options = LinkOptions::new(LinkMode::Copy).with_copy_locks(&locks);
+
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    fn test_empty_directory() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create empty subdirectory
+        fs_err::create_dir_all(src_dir.path().join("empty_subdir")).unwrap();
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert!(dst_dir.path().join("empty_subdir").is_dir());
+    }
+
+    #[test]
+    fn test_nested_directories() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create deeply nested structure
+        let deep_path = src_dir.path().join("a/b/c/d/e");
+        fs_err::create_dir_all(&deep_path).unwrap();
+        fs_err::write(deep_path.join("deep.txt"), "deep content").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("a/b/c/d/e/deep.txt")).unwrap(),
+            "deep content"
+        );
+    }
+
+    #[test]
+    fn test_hardlink_merge_with_existing() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing file
+        fs_err::create_dir_all(dst_dir.path()).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Hardlink)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert!(result == LinkMode::Hardlink || result == LinkMode::Copy);
+
+        // Content should be overwritten
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+    }
+
+    #[test]
+    fn test_copy_locks_synchronization() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create a file to copy
+        fs_err::write(src_dir.path().join("file.txt"), "content").unwrap();
+
+        let locks = Arc::new(CopyLocks::default());
+        let src = src_dir.path().to_path_buf();
+        let dst = dst_dir.path().to_path_buf();
+
+        // Spawn multiple threads that try to copy concurrently
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let locks = Arc::clone(&locks);
+                let src = src.clone();
+                let dst = dst.clone();
+                thread::spawn(move || {
+                    let options = LinkOptions::new(LinkMode::Copy)
+                        .with_copy_locks(&locks)
+                        .with_on_existing_directory(OnExistingDirectory::Merge);
+                    link_dir(&src, &dst, &options)
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().unwrap().unwrap();
+        }
+
+        // Verify file is intact
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file.txt")).unwrap(),
+            "content"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_merge_with_existing() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing file
+        fs_err::create_dir_all(dst_dir.path()).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert!(result == LinkMode::Symlink || result == LinkMode::Copy);
+
+        // Content should come from source (via symlink or copy)
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+
+        // If symlink succeeded, verify it's a symlink
+        if result == LinkMode::Symlink {
+            assert!(dst_dir.path().join("file1.txt").is_symlink());
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_mutable_copy_filter() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+        fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink)
+            .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"));
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Verify RECORD exists and has correct content
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("RECORD")).unwrap(),
+            "record content"
+        );
+
+        // If symlink succeeded, RECORD should NOT be a symlink (it was copied)
+        if result == LinkMode::Symlink {
+            assert!(!dst_dir.path().join("RECORD").is_symlink());
+            // But regular files should be symlinks
+            assert!(dst_dir.path().join("file1.txt").is_symlink());
+        }
+    }
+
+    #[test]
+    fn test_source_not_found() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Don't create any files in src_dir, just use a non-existent path
+        let nonexistent = src_dir.path().join("nonexistent");
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        let result = link_dir(&nonexistent, dst_dir.path(), &options);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_clone_mutable_copy_filter_ignored() {
+        // The mutable_copy filter only applies to hardlink/symlink modes.
+        // For clone/copy modes, all files are already mutable (copy-on-write or full copy).
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+        fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
+
+        // Even with filter, clone mode should work (filter is ignored)
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"));
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("RECORD")).unwrap(),
+            "record content"
+        );
+    }
+
+    #[test]
+    fn test_copy_mutable_copy_filter_ignored() {
+        // For copy mode, all files are already mutable, so filter is ignored
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+        fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Copy)
+            .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"));
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("RECORD")).unwrap(),
+            "record content"
+        );
+    }
+
+    #[test]
+    fn test_special_characters_in_filenames() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create files with special characters (that are valid on most filesystems)
+        fs_err::write(src_dir.path().join("file with spaces.txt"), "spaces").unwrap();
+        fs_err::write(src_dir.path().join("file-with-dashes.txt"), "dashes").unwrap();
+        fs_err::write(
+            src_dir.path().join("file_with_underscores.txt"),
+            "underscores",
+        )
+        .unwrap();
+        fs_err::write(src_dir.path().join("file.multiple.dots.txt"), "dots").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file with spaces.txt")).unwrap(),
+            "spaces"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file-with-dashes.txt")).unwrap(),
+            "dashes"
+        );
+    }
+
+    #[test]
+    fn test_hidden_files() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create hidden files (dotfiles)
+        fs_err::write(src_dir.path().join(".hidden"), "hidden content").unwrap();
+        fs_err::write(src_dir.path().join(".gitignore"), "*.pyc").unwrap();
+        fs_err::create_dir_all(src_dir.path().join(".hidden_dir")).unwrap();
+        fs_err::write(src_dir.path().join(".hidden_dir/file.txt"), "nested hidden").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join(".hidden")).unwrap(),
+            "hidden content"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join(".gitignore")).unwrap(),
+            "*.pyc"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join(".hidden_dir/file.txt")).unwrap(),
+            "nested hidden"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_clone_directory_recursive() {
+        // Test the macOS-specific directory cloning via clonefile
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // On macOS with APFS, this should use clonefile for entire directories
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // On APFS, should succeed with Clone mode
+        assert_eq!(result, LinkMode::Clone);
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_clone_dir_merge_nested() {
+        // Test the macOS clone_dir_merge with nested directory structure
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create nested structure in source
+        fs_err::create_dir_all(src_dir.path().join("a/b/c")).unwrap();
+        fs_err::write(src_dir.path().join("a/file1.txt"), "a1").unwrap();
+        fs_err::write(src_dir.path().join("a/b/file2.txt"), "b2").unwrap();
+        fs_err::write(src_dir.path().join("a/b/c/file3.txt"), "c3").unwrap();
+
+        // Pre-create partial destination structure to force merge
+        fs_err::create_dir_all(dst_dir.path().join("a/b")).unwrap();
+        fs_err::write(dst_dir.path().join("a/existing.txt"), "existing").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Clone);
+
+        // Source files should be cloned
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("a/file1.txt")).unwrap(),
+            "a1"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("a/b/file2.txt")).unwrap(),
+            "b2"
+        );
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("a/b/c/file3.txt")).unwrap(),
+            "c3"
+        );
+        // Existing file should remain
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("a/existing.txt")).unwrap(),
+            "existing"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_clone_merge_overwrites_files() {
+        // Test that clone merge properly overwrites existing files on macOS
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        fs_err::write(src_dir.path().join("file.txt"), "new content").unwrap();
+
+        // Create existing file with different content
+        fs_err::write(dst_dir.path().join("file.txt"), "old content").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Clone);
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file.txt")).unwrap(),
+            "new content"
+        );
+    }
+
+    #[test]
+    fn test_clone_fail_mode_on_existing() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing file
+        fs_err::write(dst_dir.path().join("file1.txt"), "existing").unwrap();
+
+        let options =
+            LinkOptions::new(LinkMode::Clone).with_on_existing_directory(OnExistingDirectory::Fail);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        // Clone in Fail mode should error when destination exists
+        // (may fall back to hardlink which also fails, or to copy which overwrites)
+        // The behavior depends on filesystem support
+        if result.is_ok() {
+            // If it succeeded, it fell back to copy which overwrites
+            assert_eq!(
+                fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+                "content1"
+            );
+        }
+        // If it failed, that's the expected Fail mode behavior
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_fail_mode_on_existing() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing file
+        fs_err::write(dst_dir.path().join("file1.txt"), "existing").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink)
+            .with_on_existing_directory(OnExistingDirectory::Fail);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        // Symlink in Fail mode should error or fall back to copy
+        if result.is_ok() {
+            // Fell back to copy which overwrites
+            assert_eq!(
+                fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+                "content1"
+            );
+        }
+    }
+
+    #[test]
+    fn test_clone_fallback_when_reflink_unsupported() {
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        if reflink_supported(src_dir.path()) {
+            eprintln!("Skipping test: reflink is supported on this filesystem");
+            return;
+        }
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // When reflink is not supported, should fall back to hardlink or copy
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback to Hardlink or Copy, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_windows_symlink_file_vs_dir() {
+        // Test that Windows correctly uses symlink_file for files and symlink_dir for directories
+        let src_dir = TempDir::new().unwrap();
+        let dst_dir = TempDir::new().unwrap();
+
+        // Create a file and a directory
+        fs_err::write(src_dir.path().join("file.txt"), "content").unwrap();
+        fs_err::create_dir_all(src_dir.path().join("subdir")).unwrap();
+        fs_err::write(src_dir.path().join("subdir/nested.txt"), "nested").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Symlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options);
+
+        // Symlinks may require elevated permissions on Windows
+        if let Ok(mode) = result {
+            if mode == LinkMode::Symlink {
+                // Verify the files are accessible through symlinks
+                assert_eq!(
+                    fs_err::read_to_string(dst_dir.path().join("file.txt")).unwrap(),
+                    "content"
+                );
+                assert_eq!(
+                    fs_err::read_to_string(dst_dir.path().join("subdir/nested.txt")).unwrap(),
+                    "nested"
+                );
+            }
+        }
+        // If symlink failed (permissions), that's expected on Windows without elevation
+    }
+}

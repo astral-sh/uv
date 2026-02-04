@@ -199,6 +199,42 @@ pub(crate) async fn publish(
     let mut error_count: usize = 0;
 
     for group in groups {
+        // Check if the filename is normalized (e.g., version `2025.09.4` should be `2025.9.4`).
+        let normalized_filename = group.filename.to_string();
+        if group.raw_filename != normalized_filename {
+            if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+                warn_user_once!(
+                    "`{}` has a non-normalized filename (expected `{normalized_filename}`), skipping",
+                    group.raw_filename
+                );
+                continue;
+            }
+            warn_user_once!(
+                "`{}` has a non-normalized filename (expected `{normalized_filename}`). \
+                Pass `--preview-features {}` to skip such files.",
+                group.raw_filename,
+                PreviewFeature::PublishRequireNormalized
+            );
+        }
+
+        // Check if the compressed tag sets are sorted per PEP 425.
+        // See: https://github.com/pypi/warehouse/issues/18129
+        if !group.filename.has_sorted_tags() {
+            if preview.is_enabled(PreviewFeature::PublishRequireNormalized) {
+                warn_user_once!(
+                    "`{}` has unsorted tags (see PEP 425), skipping",
+                    group.raw_filename
+                );
+                continue;
+            }
+            warn_user_once!(
+                "`{}` has unsorted tags (see PEP 425). \
+                Pass `--preview-features {}` to skip such files.",
+                group.raw_filename,
+                PreviewFeature::PublishRequireNormalized
+            );
+        }
+
         if let Some(check_url_client) = &check_url_client {
             match uv_publish::check_url(
                 check_url_client,
