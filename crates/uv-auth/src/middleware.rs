@@ -803,14 +803,18 @@ impl AuthMiddleware {
         // Text credential store support.
         } else if let Some(credentials) = self.text_store.get().await.and_then(|text_store| {
             debug!("Checking text store for credentials for {url}");
-            text_store
-                .get_credentials(
-                    url,
-                    credentials
-                        .as_ref()
-                        .and_then(|credentials| credentials.username()),
-                )
-                .cloned()
+            match text_store.get_credentials(
+                url,
+                credentials
+                    .as_ref()
+                    .and_then(|credentials| credentials.username()),
+            ) {
+                Ok(credentials) => credentials.cloned(),
+                Err(err) => {
+                    debug!("Failed to get credentials from text store: {err}");
+                    None
+                }
+            }
         }) {
             debug!("Found credentials in plaintext store for {url}");
             Some(credentials)
