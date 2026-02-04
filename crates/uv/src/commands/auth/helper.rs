@@ -6,7 +6,9 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use uv_auth::{
+    AuthBackend, Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore, is_default_pyx_domain,
+};
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
@@ -76,7 +78,7 @@ async fn credentials_for_url(
         debug!("URL '{url}' contain a password; ignoring");
     }
 
-    if pyx_store.is_known_domain(url) {
+    if pyx_store.is_known_domain(url) || is_default_pyx_domain(url) {
         if username.is_some() {
             bail!(
                 "Cannot specify a username for URLs under {}",
