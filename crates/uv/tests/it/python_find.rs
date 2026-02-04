@@ -1423,12 +1423,12 @@ fn python_find_prerelease_version_specifiers() {
 
     // `<3.14.0rc3` should match rc2
     uv_snapshot!(context.filters(), context.python_find().arg("<3.14.0rc3").arg("--resolve-links"), @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
-    error: No interpreter found for Python <3.14.0rc3 in [PYTHON SOURCES]
     ");
 
     // `<=3.14.0rc3` should match rc3

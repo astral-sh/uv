@@ -724,16 +724,7 @@ async fn perform_install(
         );
 
     for installation in minor_versions.values() {
-        if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) {
-            // During an upgrade, update existing symlinks but avoid
-            // creating new ones.
-            installation.update_minor_version_link()?;
-        } else {
-            installation.ensure_minor_version_link()?;
-        }
+        installation.ensure_minor_version_link()?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {

@@ -160,7 +160,7 @@ $ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 
     Upgrades are only supported for uv-managed Python versions.
 
-    Upgrades are not currently supported for PyPy and GraalPy.
+    Upgrades are not currently supported for PyPy, GraalPy, and Pyodide.
 
 uv allows transparently upgrading Python versions to the latest patch release, e.g., 3.13.4 to
 3.13.5. uv does not allow transparently upgrading across minor Python versions, e.g., 3.12 to 3.13,

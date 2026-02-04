@@ -238,7 +238,7 @@ async fn do_uninstall(
         .iter()
         .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
     {
-        installation.update_minor_version_link()?;
+        installation.ensure_minor_version_link()?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory

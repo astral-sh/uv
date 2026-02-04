@@ -592,18 +592,6 @@ impl ManagedPythonInstallation {
     /// If the environment contains a symlink directory (or junction on Windows),
     /// update it to the latest patch directory for this minor version.
     ///
-    /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
-    /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
-            if !minor_version_link.exists() {
-                return Ok(());
-            }
-            minor_version_link.create_directory()?;
-        }
-        Ok(())
-    }
-
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
@@ -882,13 +870,22 @@ impl PythonMinorVersionLink {
         Ok(())
     }
 
+    /// Check if the minor version link exists and points to the expected target directory.
+    ///
+    /// This verifies both that the symlink/junction exists AND that it points to the
+    /// `target_directory` specified in this struct. This is important because the link
+    /// may exist but point to a different installation (e.g., after an upgrade), in which
+    /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
-                .map(|metadata| metadata.file_type().is_symlink())
-                .unwrap_or(false)
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                && self
+                    .symlink_directory
+                    .read_link()
+                    .is_ok_and(|target| target == self.target_directory)
         }
         #[cfg(windows)]
         {
@@ -899,6 +896,10 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
+                && self
+                    .symlink_directory
+                    .read_link()
+                    .is_ok_and(|target| target == self.target_directory)
         }
     }
 }
