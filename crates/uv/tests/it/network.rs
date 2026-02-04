@@ -1,13 +1,21 @@
+use std::convert::Infallible;
 use std::io;
-use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
+use bytes::Bytes;
 use http::StatusCode;
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, StreamBody};
+use hyper::body::Frame;
+use hyper::service::service_fn;
+use hyper_util::rt::TokioIo;
 use serde_json::json;
-use uv_static::EnvVars;
+use tokio_stream::wrappers::ReceiverStream;
 use wiremock::matchers::{any, method};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+
+use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot};
 
@@ -167,6 +175,63 @@ async fn mixed_error_server() -> (MockServer, String) {
 
     let mock_server_uri = server.uri();
     (server, mock_server_uri)
+}
+
+async fn time_out_response(
+    _req: hyper::Request<hyper::body::Incoming>,
+) -> Result<hyper::Response<BoxBody<Bytes, Infallible>>, Infallible> {
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        let _ = tx.send(Ok(Frame::data(Bytes::new()))).await;
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    });
+    let body = StreamBody::new(ReceiverStream::new(rx)).boxed();
+    Ok(hyper::Response::builder()
+        .header("Content-Type", "text/html")
+        .body(body)
+        .unwrap())
+}
+
+/// Returns the server URL and a drop guard that shuts down the server.
+///
+/// The server runs im a thread with its own tokio runtime, so it
+/// won't be starved by the subprocess blocking the test thread. Dropping the
+/// guard shuts down the runtime and all tasks running in it.
+fn read_timeout_server() -> (String, impl Drop) {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            tokio::select! {
+                _ = async {
+                    loop {
+                        let (stream, _) = listener.accept().await.unwrap();
+                        let io = TokioIo::new(stream);
+
+                        tokio::spawn(async move {
+                           let _ = hyper_util::server::conn::auto::Builder::new(
+                                hyper_util::rt::TokioExecutor::new(),
+                            )
+                            .serve_connection(io, service_fn(time_out_response))
+                            .await;
+                        });
+                    }
+                } => {}
+                _ = shutdown_rx => {}
+            }
+        });
+    });
+
+    (server, shutdown_tx)
 }
 
 /// Check the simple index error message when the server returns HTTP status 500, a retryable error.
@@ -928,11 +993,11 @@ async fn proxy_schemeless_url_in_uv_toml() {
 }
 
 #[test]
-fn connect_timeout() {
+fn connect_timeout_index() {
     let context = TestContext::new("3.12");
 
     // Create a server that just times out.
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let server = listener.local_addr().unwrap().to_string();
 
     let start = Instant::now();
@@ -960,4 +1025,91 @@ fn connect_timeout() {
         elapsed < Duration::from_secs(3),
         "Test with 1s connect timeout took too long"
     );
+}
+
+#[test]
+fn connect_timeout_stream() {
+    let context = TestContext::new("3.12");
+
+    // Create a server that just times out.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let server = listener.local_addr().unwrap().to_string();
+
+    let start = Instant::now();
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("https://{server}/tqdm-0.1-py3-none-any.whl"))
+        .env(EnvVars::UV_HTTP_CONNECT_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ error sending request for url (https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl)
+      ├─▶ client error (Connect)
+      ╰─▶ operation timed out
+    ");
+
+    // Assumption: There's less than 2s overhead for this test and startup.
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "Test with 1s connect timeout took too long"
+    );
+}
+
+#[tokio::test]
+async fn retry_read_timeout_index() {
+    let context = TestContext::new("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(server)
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Request failed after 1 retry
+      Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
+      Caused by: error decoding response body
+      Caused by: request or response body error
+      Caused by: operation timed out
+    ");
+}
+
+#[tokio::test]
+async fn retry_read_timeout_stream() {
+    let context = TestContext::new("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(format!("{server}/tqdm-0.1-py3-none-any.whl"))
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Request failed after 1 retry
+      ├─▶ Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      ├─▶ Failed to read from zip file
+      ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+    ");
 }
