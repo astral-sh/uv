@@ -41,8 +41,8 @@ pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
 pub const LATEST_PYTHON_3_15: &str = "3.15.0a5";
-pub const LATEST_PYTHON_3_14: &str = "3.14.2";
-pub const LATEST_PYTHON_3_13: &str = "3.13.11";
+pub const LATEST_PYTHON_3_14: &str = "3.14.3";
+pub const LATEST_PYTHON_3_13: &str = "3.13.12";
 pub const LATEST_PYTHON_3_12: &str = "3.12.12";
 pub const LATEST_PYTHON_3_11: &str = "3.11.14";
 pub const LATEST_PYTHON_3_10: &str = "3.10.19";
@@ -456,6 +456,8 @@ impl TestContext {
       \.
       (?:
         \[X\]               # A previously filtered patch version [X]
+        |                   # OR
+        \[LATEST\]          # A previously filtered latest patch version [LATEST]
         |                   # OR
         \d+                 # An actual patch version
       )
