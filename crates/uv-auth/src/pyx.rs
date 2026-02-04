@@ -853,4 +853,18 @@ mod tests {
             "example.com"
         ));
     }
+
+    #[test]
+    fn test_is_default_pyx_domain_staging() {
+        // Staging URLs should NOT be recognized as default pyx domain.
+        // Users must set PYX_API_URL to use staging environments.
+        assert!(!is_default_pyx_domain(
+            &Url::parse("https://astral-sh-staging-api.pyx.dev").unwrap()
+        ));
+
+        // Other non-default pyx subdomains should also not match.
+        assert!(!is_default_pyx_domain(
+            &Url::parse("https://beta.pyx.dev").unwrap()
+        ));
+    }
 }
