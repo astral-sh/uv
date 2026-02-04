@@ -153,7 +153,7 @@ nix = { workspace = true }
 uv-unix = { workspace = true }
 
 [features]
-default = ["performance", "uv-distribution/static", "default-tests"]
+default = ["performance", "uv-distribution/static", "test-defaults"]
 native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
@@ -167,7 +167,7 @@ self-update = ["axoupdater", "uv-cli/self-update"]
 tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
-default-tests = [
+test-defaults = [
     "test-crates-io",
     "test-git",
     "test-git-lfs",
