@@ -176,7 +176,7 @@ default-tests = [
     "test-python",
     "test-python-managed",
     "test-python-eol",
-    "test-slow-tests",
+    "test-slow",
     "test-ecosystem"
 ]
 # Introduces a testing dependency on crates.io.
@@ -198,7 +198,7 @@ test-python-eol = []
 # Introduces a testing dependency on managed Python installations.
 test-python-managed = []
 # Include "slow" test cases.
-test-slow-tests = []
+test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
 # Build uvw binary on Windows

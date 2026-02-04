@@ -9816,7 +9816,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/9743>
 #[test]
-#[cfg(all(feature = "test-slow-tests", feature = "test-git"))]
+#[cfg(all(feature = "test-slow", feature = "test-git"))]
 fn sync_stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.13");
 

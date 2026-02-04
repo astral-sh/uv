@@ -9151,7 +9151,7 @@ fn switch_python_version() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/pull/6714>
 #[test]
-#[cfg(feature = "test-slow-tests")]
+#[cfg(feature = "test-slow")]
 fn stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.12");
 
