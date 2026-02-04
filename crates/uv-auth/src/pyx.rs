@@ -19,6 +19,12 @@ use uv_static::EnvVars;
 use crate::credentials::Token;
 use crate::{AccessToken, Credentials, Realm};
 
+/// The default pyx API URL.
+const PYX_DEFAULT_API_URL: &str = "https://api.pyx.dev";
+
+/// The default pyx CDN domain.
+const PYX_DEFAULT_CDN_DOMAIN: &str = "astralhosted.com";
+
 /// Retrieve the pyx API key from the environment variable, or return `None`.
 fn read_pyx_api_key() -> Option<String> {
     std::env::var(EnvVars::PYX_API_KEY)
@@ -221,12 +227,12 @@ impl PyxTokenStore {
         let api = if let Ok(api_url) = std::env::var(EnvVars::PYX_API_URL) {
             DisplaySafeUrl::parse(&api_url)
         } else {
-            DisplaySafeUrl::parse("https://api.pyx.dev")
+            DisplaySafeUrl::parse(PYX_DEFAULT_API_URL)
         }?;
         let cdn = std::env::var(EnvVars::PYX_CDN_DOMAIN)
             .ok()
             .map(SmallString::from)
-            .unwrap_or_else(|| SmallString::from(arcstr::literal!("astralhosted.com")));
+            .unwrap_or_else(|| SmallString::from(arcstr::literal!(PYX_DEFAULT_CDN_DOMAIN)));
 
         // Determine the root directory for the token store.
         let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(&api)?;
@@ -647,6 +653,15 @@ fn is_known_domain(url: &Url, api: &DisplaySafeUrl, cdn: &str) -> bool {
     is_known_url(url, api, cdn)
 }
 
+/// Returns `true` if the URL is on the default pyx domain.
+///
+/// This is used in auth commands to recognize `pyx.dev` as a pyx domain even when
+/// `PYX_API_URL` points elsewhere (e.g., to a local development server).
+pub fn is_default_pyx_domain(url: &Url) -> bool {
+    let api = DisplaySafeUrl::parse(PYX_DEFAULT_API_URL).expect("default API URL should be valid");
+    is_known_domain(url, &api, PYX_DEFAULT_CDN_DOMAIN)
+}
+
 /// Returns `true` if the target URL is on the given domain.
 fn matches_domain(url: &Url, domain: &str) -> bool {
     url.domain().is_some_and(|subdomain| {
@@ -775,6 +790,38 @@ mod tests {
             &Url::parse("https://pyx.com/").unwrap(),
             &api_url,
             cdn_domain
+        ));
+    }
+
+    #[test]
+    fn test_is_default_pyx_domain() {
+        // pyx.dev is the default domain.
+        assert!(is_default_pyx_domain(
+            &Url::parse("https://pyx.dev").unwrap()
+        ));
+
+        // Subdomains of pyx.dev are also recognized.
+        assert!(is_default_pyx_domain(
+            &Url::parse("https://api.pyx.dev").unwrap()
+        ));
+
+        // The default CDN domain is also recognized.
+        assert!(is_default_pyx_domain(
+            &Url::parse("https://astralhosted.com").unwrap()
+        ));
+        assert!(is_default_pyx_domain(
+            &Url::parse("https://files.astralhosted.com").unwrap()
+        ));
+
+        // Other domains are not.
+        assert!(!is_default_pyx_domain(
+            &Url::parse("http://localhost:8000").unwrap()
+        ));
+        assert!(!is_default_pyx_domain(
+            &Url::parse("https://pypi.org").unwrap()
+        ));
+        assert!(!is_default_pyx_domain(
+            &Url::parse("https://pyx.com").unwrap()
         ));
     }
 

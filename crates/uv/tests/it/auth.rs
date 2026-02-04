@@ -1,7 +1,6 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
-#[cfg(feature = "native-auth")]
 use uv_static::EnvVars;
 
 use crate::common::{TestContext, uv_snapshot};
@@ -2136,5 +2135,107 @@ fn bazel_helper_unknown_username_in_uri() {
     ----- stderr -----
     warning: The `uv auth helper` command is experimental and may change without warning. Pass `--preview-features auth-helper` to disable this warning
     "#
+    );
+}
+
+/// Test that `pyx.dev` is recognized as a pyx domain even when `PYX_API_URL` points elsewhere.
+///
+/// When `PYX_API_URL` is set to a different URL (e.g., localhost for development),
+/// `pyx.dev` should still be recognized as a pyx domain and use the OAuth flow.
+#[test]
+fn login_pyx_dev_with_custom_api_url() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // When PYX_API_URL is set to localhost, `pyx.dev` should still be recognized as pyx
+    // and reject username/password (because pyx uses OAuth, not basic auth).
+    uv_snapshot!(context.auth_login()
+        .arg("pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+
+    // Same for api.pyx.dev
+    uv_snapshot!(context.auth_login()
+        .arg("api.pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+
+    // Same for any subdomain of pyx.dev
+    uv_snapshot!(context.auth_login()
+        .arg("beta.pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .arg("--password")
+        .arg("testpass")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
+    );
+}
+
+/// Test that logout recognizes `pyx.dev` even with custom `PYX_API_URL`.
+#[test]
+fn logout_pyx_dev_with_custom_api_url() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Logout for pyx.dev should use the pyx flow (will fail because no credentials exist,
+    // but verifies it's recognized as pyx).
+    uv_snapshot!(context.auth_logout()
+        .arg("pyx.dev")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Not logged in to http://localhost:8000/
+    "
+    );
+}
+
+/// Test that `uv auth token` recognizes `pyx.dev` even with custom `PYX_API_URL`.
+#[test]
+fn token_pyx_dev_with_custom_api_url() {
+    let context = TestContext::new_with_versions(&[]);
+
+    // Token for pyx.dev should use the pyx flow and reject username.
+    uv_snapshot!(context.auth_token()
+        .arg("pyx.dev")
+        .arg("--username")
+        .arg("testuser")
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot specify a username when logging in to pyx
+    "
     );
 }

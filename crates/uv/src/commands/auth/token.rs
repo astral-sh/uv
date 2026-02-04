@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{Result, bail};
 use tracing::debug;
 
-use uv_auth::{AuthBackend, Service};
+use uv_auth::{AuthBackend, Service, is_default_pyx_domain};
 use uv_auth::{Credentials, PyxTokenStore};
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_preview::Preview;
@@ -21,7 +21,7 @@ pub(crate) async fn token(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }

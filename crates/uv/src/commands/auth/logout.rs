@@ -3,7 +3,10 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::{AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username};
+use uv_auth::{
+    AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username,
+    is_default_pyx_domain,
+};
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
@@ -22,7 +25,7 @@ pub(crate) async fn logout(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         return pyx_logout(&pyx_store, client_builder, printer).await;
     }
 
