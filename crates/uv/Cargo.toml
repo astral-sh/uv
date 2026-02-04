@@ -168,37 +168,37 @@ tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing
 
 # Features that only apply when running tests, no-ops otherwise.
 default-tests = [
-    "crates-io",
-    "git",
-    "git-lfs",
-    "pypi",
-    "r2",
-    "python",
-    "python-managed",
-    "python-eol",
-    "slow-tests",
+    "test-crates-io",
+    "test-git",
+    "test-git-lfs",
+    "test-pypi",
+    "test-r2",
+    "test-python",
+    "test-python-managed",
+    "test-python-eol",
+    "test-slow-tests",
     "test-ecosystem"
 ]
 # Introduces a testing dependency on crates.io.
-crates-io = []
+test-crates-io = []
 # Introduces a testing dependency on Git.
-git = []
+test-git = []
 # Introduces a testing dependency on Git LFS.
-git-lfs = ["git"]
+test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
-pypi = []
+test-pypi = []
 # Introduces a testing dependency on R2.
-r2 = []
+test-r2 = []
 # Introduces a testing dependency on a local Python installation.
-python = []
+test-python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.
-python-patch = []
+test-python-patch = []
 # Introduces a testing dependency on a local Python installation with an EOL version.
-python-eol = []
+test-python-eol = []
 # Introduces a testing dependency on managed Python installations.
-python-managed = []
+test-python-managed = []
 # Include "slow" test cases.
-slow-tests = []
+test-slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
 # Build uvw binary on Windows

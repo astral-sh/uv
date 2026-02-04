@@ -2113,7 +2113,7 @@ fn omit_non_matching_annotation() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn compile_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -2222,7 +2222,7 @@ fn compile_sdist_url_dependency() -> Result<()> {
 
 /// Resolve a specific source distribution via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2255,7 +2255,7 @@ fn compile_git_https_dependency() -> Result<()> {
 
 /// Resolve a specific branch via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_branch_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2283,7 +2283,7 @@ fn compile_git_branch_https_dependency() -> Result<()> {
 
 /// Resolve a specific tag via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_tag_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2313,7 +2313,7 @@ fn compile_git_tag_https_dependency() -> Result<()> {
 ///
 /// In this case, the tag is a date, and thus could feasibly refer to a short commit hash.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_date_tag_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2341,7 +2341,7 @@ fn compile_git_date_tag_https_dependency() -> Result<()> {
 
 /// Resolve a specific commit via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_long_commit_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2369,7 +2369,7 @@ fn compile_git_long_commit_https_dependency() -> Result<()> {
 
 /// Resolve a specific commit via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_short_commit_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2397,7 +2397,7 @@ fn compile_git_short_commit_https_dependency() -> Result<()> {
 
 /// Resolve a specific ref via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_refs_https_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2424,7 +2424,7 @@ fn compile_git_refs_https_dependency() -> Result<()> {
 
 /// Resolve a specific Git dependency with a subdirectory.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_subdirectory_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2450,7 +2450,7 @@ fn compile_git_subdirectory_dependency() -> Result<()> {
 
 /// Resolve two packages from a `requirements.in` file with the same Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_concurrent_access() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2479,7 +2479,7 @@ fn compile_git_concurrent_access() -> Result<()> {
 
 /// Resolve two packages from a `requirements.in` file with the same Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_unnamed_concurrent_access() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2508,7 +2508,7 @@ fn compile_git_unnamed_concurrent_access() -> Result<()> {
 
 /// Resolve a Git dependency with a declared name that differs from the true name of the package.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_mismatched_name() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2533,7 +2533,7 @@ fn compile_git_mismatched_name() -> Result<()> {
 /// Resolve a specific Git dependency with a subdirectory, where the root directory contains a
 /// static `pyproject.toml` file.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_git_subdirectory_static_metadata() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2704,7 +2704,7 @@ fn conflicting_repeated_url_dependency_markers() -> Result<()> {
 /// Request Werkzeug via two different URLs at the same version. Despite mapping to the same
 /// version, it should still result in a conflict.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn conflicting_repeated_url_dependency_version_match() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2751,7 +2751,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 }
 
 /// Request `uv-public-pypackage` via two different URLs which resolve to the same canonical version.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn compatible_repeated_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2781,7 +2781,7 @@ fn compatible_repeated_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via two different URLs which resolve to the same repository, but
 /// different commits.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn conflicting_repeated_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2809,7 +2809,7 @@ fn conflicting_repeated_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via three different URLs: `0.0.2`, a short SHA, and a precise SHA.
 /// All three are compatible, since they resolve to the same canonical version.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn compatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2840,7 +2840,7 @@ fn compatible_narrowed_url_dependency() -> Result<()> {
 
 /// Request `uv-public-pypackage` via three different URLs: a precise SHA, a short SHA, and `4.3.0`.
 /// All three are compatible, since they resolve to the same canonical version.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn compatible_broader_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2872,7 +2872,7 @@ fn compatible_broader_url_dependency() -> Result<()> {
 /// Request `uv-public-pypackage` via two different URLs: `0.0.2`, and a precise SHA, followed by
 /// `0.0.2` again. All three are compatible, since they resolve to the same canonical version.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -2905,7 +2905,7 @@ fn compatible_repeated_narrowed_url_dependency() -> Result<()> {
 ///
 /// Although `0.0.2` and the precise SHA resolve to the same canonical version, `test-branch`
 /// resolves to a different version, so there should be a conflict.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn incompatible_narrowed_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -2934,7 +2934,7 @@ fn incompatible_narrowed_url_dependency() -> Result<()> {
 
 /// Request `hatchling_editable`, which depends on `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn allowed_transitive_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2964,7 +2964,7 @@ fn allowed_transitive_git_dependency() -> Result<()> {
 /// Request `transitive_url_dependency`, which depends on `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`.
 /// Since this URL is declared as a constraint, we should accept it.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn allowed_transitive_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3002,7 +3002,7 @@ fn allowed_transitive_url_dependency() -> Result<()> {
 /// Since this `iniconfig @ git+https://github.com/pytest-dev/iniconfig.git@9cae43103df70bac6fde7b9f35ad11a9f1be0cb4.git` is declared as a constraint, and
 /// those map to the same canonical URL, we should accept it.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn allowed_transitive_canonical_url_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3039,7 +3039,7 @@ fn allowed_transitive_canonical_url_dependency() -> Result<()> {
 /// Request `hatchling_editable`, which depends on `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`.
 /// Since `hatchling_editable` is a path (local) dependency, we should accept it.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn allowed_transitive_url_path_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4938,7 +4938,7 @@ fn recursive_extras_direct_url() -> Result<()> {
 
 /// Compile an editable package with a direct URL requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn compile_editable_url_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5181,7 +5181,7 @@ fn generate_hashes_built_distribution_url() -> Result<()> {
 
 /// Given a VCS dependency, include hashes for its dependencies, but not the repository itself.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn generate_hashes_git() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5636,7 +5636,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 ///
 /// `voluptuous==0.15.1` requires Python 3.9 or later, so we should resolve to an earlier version
 /// and avoiding building 0.15.1 at all.
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn requires_python_prefetch() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -11669,7 +11669,7 @@ fn unnamed_path_requirement() -> Result<()> {
 
 /// Detect the package name from an unnamed Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn unnamed_git_requirement() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -11778,7 +11778,7 @@ fn dynamic_dependencies() -> Result<()> {
 
 /// This tests the marker expressions emitted when depending on a package with
 /// exciting markers like 'anyio'.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn emit_marker_expression_exciting_linux() -> Result<()> {
     let context = TestContext::new("3.12.9");
@@ -11814,7 +11814,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
 
 /// This tests that the marker expression emitted accounts for markers directly
 /// in `requirements.in`.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn emit_marker_expression_direct() -> Result<()> {
     let context = TestContext::new("3.12.9");
@@ -11884,7 +11884,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
 /// This tests the marker expressions emitted when depending on a package with
 /// a non-pypy dependency. Specifically, `pendulum` depends on `time-machine`,
 /// but not when using pypy.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn emit_marker_expression_pypy() -> Result<()> {
     let context = TestContext::new("3.12.9");
@@ -13007,7 +13007,7 @@ fn python_platform() -> Result<()> {
 
 /// Resolve a specific source distribution via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_default_branch() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13049,7 +13049,7 @@ fn git_source_default_branch() -> Result<()> {
 
 /// Resolve a specific branch via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_branch() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13085,7 +13085,7 @@ fn git_source_branch() -> Result<()> {
 
 /// Resolve a specific tag via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13121,7 +13121,7 @@ fn git_source_tag() -> Result<()> {
 
 /// Resolve a specific commit via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_long_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13157,7 +13157,7 @@ fn git_source_long_commit() -> Result<()> {
 
 /// Resolve a specific commit via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_short_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13193,7 +13193,7 @@ fn git_source_short_commit() -> Result<()> {
 
 /// Resolve a specific ref via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_source_refs() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13229,7 +13229,7 @@ fn git_source_refs() -> Result<()> {
 
 /// Request a non-existent tag via a Git HTTPS dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[cfg_attr(windows, ignore = "Git error messages differ on Windows")]
 fn git_source_missing_tag() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -13350,7 +13350,7 @@ fn dont_warn_missing_constraint_without_sources() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn tool_uv_sources() -> Result<()> {
     let context = TestContext::new("3.12");
     // Use a subdir to test path normalization.
@@ -13728,7 +13728,7 @@ build-constraint-dependencies = [
 }
 
 /// Include `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -14561,7 +14561,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 /// dynamic metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -15079,7 +15079,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -15180,7 +15180,7 @@ fn dynamic_version_source_dist() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -16216,7 +16216,7 @@ fn group_target_does_not_exist() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/10957>
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -16713,7 +16713,7 @@ fn pep_751_compile_directory() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn pep_751_compile_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -17758,7 +17758,7 @@ fn pubgrub_panic_double_self_dependency_extra() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/13020>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn git_path_transitive_dependency() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -18077,7 +18077,7 @@ fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Resu
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python() -> Result<()> {
     let context = TestContext::new("3.12")
@@ -18111,7 +18111,7 @@ fn compile_missing_python() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python_version() -> Result<()> {
     let context = TestContext::new("3.12")
@@ -18144,7 +18144,7 @@ fn compile_missing_python_version() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python_version_patch_fallback() -> Result<()> {
     let context = TestContext::new("3.12")
@@ -18183,7 +18183,7 @@ fn compile_missing_python_version_patch_fallback() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn compile_missing_python_version_default_fallback() -> Result<()> {
     let context = TestContext::new_with_versions(&[])
@@ -18224,7 +18224,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
 }
 
 /// Test that pip compile warns on download errors
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[tokio::test]
 async fn compile_missing_python_download_error_warning() {
     let context = TestContext::new("3.12")

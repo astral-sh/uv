@@ -6,7 +6,7 @@ use insta::assert_snapshot;
 use std::io::BufReader;
 use url::Url;
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 use crate::common::{
     TestContext, build_vendor_links_url, download_to_disk, packse_index_url, uv_snapshot,
@@ -242,7 +242,7 @@ fn lock_sdist_registry() -> Result<()> {
 
 /// Lock a Git requirement using `tool.uv.sources`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -512,7 +512,7 @@ fn lock_sdist_git() -> Result<()> {
 
 /// Lock a Git requirement using PEP 508.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_subdirectory() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -606,7 +606,7 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
 
 /// Lock a Git requirement using PEP 508.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -841,7 +841,7 @@ fn lock_sdist_git_pep508() -> Result<()> {
 
 /// Lock a Git requirement using `tool.uv.sources` with a short revision.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_sdist_git_short_rev() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2421,7 +2421,7 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4750,7 +4750,7 @@ fn lock_preference() -> Result<()> {
 
 /// If the user includes `git+` in a `tool.uv.sources` entry, we shouldn't fail.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_git_plus_prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4836,7 +4836,7 @@ fn lock_git_plus_prefix() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_partial_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -5077,7 +5077,7 @@ fn lock_unsupported_tag() -> Result<()> {
 
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_git_sha() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -6004,7 +6004,7 @@ fn lock_requires_python_upper() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with an exact Python bound.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_exact() -> Result<()> {
     let context = TestContext::new("3.13.0");
@@ -6084,7 +6084,7 @@ fn lock_requires_python_exact() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with a compatible release Python bound.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_compatible_specifier() -> Result<()> {
     let context = TestContext::new("3.13.0");
@@ -10024,7 +10024,7 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -10109,7 +10109,7 @@ fn lock_redact_git_pep508() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -10197,7 +10197,7 @@ fn lock_redact_git_sources() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -13508,7 +13508,7 @@ fn lock_transitive_extra() -> Result<()> {
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_mismatched_sources() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13622,7 +13622,7 @@ fn lock_mismatched_sources() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4604>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_mismatched_versions() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13709,7 +13709,7 @@ fn lock_mismatched_versions() -> Result<()> {
 
 /// Test that `--no-sources-package` allows selectively disabling sources for specific packages.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13814,7 +13814,7 @@ fn lock_no_sources_package() -> Result<()> {
 
 /// Test that `--no-sources-package` works with multiple packages.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -13932,7 +13932,7 @@ fn lock_no_sources_package_multiple() -> Result<()> {
 
 /// Test that `--no-sources` takes precedence over `--no-sources-package`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_with_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -14042,7 +14042,7 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 
 /// Test that `UV_NO_SOURCES_PACKAGE` environment variable works.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_no_sources_package_env_var() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -21248,7 +21248,7 @@ fn lock_dependency_metadata() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_dependency_metadata_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -24827,7 +24827,7 @@ fn lock_group_workspace() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_transitive_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -28116,7 +28116,7 @@ fn lock_split_on_windows() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn lock_missing_git_prefix() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -31219,7 +31219,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 }
 
 /// Check that we hint if the resolution failed for a different platform.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
     // N.B. These versions were selected based on what was

@@ -2489,7 +2489,7 @@ fn version_get_workspace() -> Result<()> {
 ///
 /// Also check that --locked/--frozen/--no-sync do what they say
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn version_set_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2831,7 +2831,7 @@ fn version_set_workspace() -> Result<()> {
 /// It would be nice to have a case where we still get a package dependency, but
 /// this still demonstrates the non-trivial "hazard" of a version change.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn version_set_evil_constraints() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3208,7 +3208,7 @@ fn add_virtual_dependency_group() -> Result<()> {
 /// Bump the version with conflicting extras, to ensure we're activating the correct subset of
 /// extras during the resolve.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn version_extras() -> Result<()> {
     let context = TestContext::new("3.12");
 
