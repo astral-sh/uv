@@ -3,7 +3,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::FileTouch;
 use assert_fs::prelude::PathChild;
-
+use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 
 #[test]
@@ -770,5 +770,64 @@ fn python_upgrade_implementation() {
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
     All versions already on latest supported patch release
+    ");
+}
+
+#[test]
+fn python_upgrade_build_version() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install Python 3.12
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+    ");
+
+    // Should be a no-op when already installed at latest version
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.12 is already on the latest supported patch release
+    ");
+
+    // Overwrite the BUILD file with an older build version
+    let installation_dir = context.temp_dir.child("managed").child(format!(
+        "cpython-3.12.12-{}",
+        platform_key_from_env().unwrap()
+    ));
+    let build_file = installation_dir.join("BUILD");
+    fs_err::write(&build_file, "19000101").unwrap();
+
+    // Now upgrade should detect the outdated build version and reinstall
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     ~ cpython-3.12.12-[PLATFORM]
+    ");
+
+    // Should be a no-op again after upgrade
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("--preview").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.12 is already on the latest supported patch release
     ");
 }

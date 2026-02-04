@@ -38,7 +38,7 @@ impl GroupName {
     /// Create a validated, normalized group name.
     ///
     /// At present, this is no more efficient than calling [`GroupName::from_str`].
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
     }

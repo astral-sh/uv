@@ -1,5 +1,7 @@
 use itertools::{Either, Itertools};
+use owo_colors::AnsiColors;
 use regex::Regex;
+use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::borrow::Cow;
@@ -10,6 +12,7 @@ use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
+use uv_client::BaseClient;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -18,10 +21,11 @@ use uv_pep440::{
 };
 use uv_preview::Preview;
 use uv_static::EnvVars;
+use uv_warnings::anstream;
 use uv_warnings::warn_user_once;
 use which::{which, which_all};
 
-use crate::downloads::{PlatformRequest, PythonDownloadRequest};
+use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
@@ -281,8 +285,9 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>()
--> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>(
+    preview: Preview,
+) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -292,8 +297,8 @@ fn python_executables_from_virtual_environments<'a>()
     .flatten();
 
     // N.B. we prefer the conda environment over discovered virtual environments
-    let from_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Child)
+    let from_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Child, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -520,15 +525,15 @@ fn python_executables<'a>(
     .flatten();
 
     // Check if the base conda environment is active
-    let from_base_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Base)
+    let from_base_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Base, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments();
+    let from_virtual_environments = python_executables_from_virtual_environments(preview);
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference, preview);
 
@@ -1443,34 +1448,31 @@ pub(crate) fn find_python_installation(
 /// without comparing the patch version number. If that cannot be found, we fall back to
 /// the first available version.
 ///
+/// At all points, if the specified version cannot be found, we will attempt to
+/// download it if downloads are enabled.
+///
 /// See [`find_python_installation`] for more details on installation discovery.
 #[instrument(skip_all, fields(request))]
-pub(crate) fn find_best_python_installation(
+pub(crate) async fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    downloads_enabled: bool,
+    download_list: &ManagedPythonDownloadList,
+    client: &BaseClient,
+    retry_policy: &ExponentialBackoff,
     cache: &Cache,
+    reporter: Option<&dyn crate::downloads::Reporter>,
+    python_install_mirror: Option<&str>,
+    pypy_install_mirror: Option<&str>,
     preview: Preview,
-) -> Result<FindPythonResult, Error> {
-    debug!("Starting Python discovery for {}", request);
+) -> Result<PythonInstallation, crate::Error> {
+    debug!("Starting Python discovery for {request}");
+    let original_request = request;
 
-    // First, check for an exact match (or the first available version if no Python version was provided)
-    debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache, preview);
-    match result {
-        Ok(Ok(installation)) => {
-            warn_on_unsupported_python(installation.interpreter());
-            return Ok(Ok(installation));
-        }
-        // Continue if we can't find a matching Python and ignore non-critical discovery errors
-        Ok(Err(_)) => {}
-        Err(ref err) if !err.is_critical() => {}
-        _ => return result,
-    }
+    let mut previous_fetch_failed = false;
 
-    // If that fails, and a specific patch version was requested try again allowing a
-    // different patch version
-    if let Some(request) = match request {
+    let request_without_patch = match request {
         PythonRequest::Version(version) => {
             if version.has_patch() {
                 Some(PythonRequest::Version(version.clone().without_patch()))
@@ -1482,36 +1484,119 @@ pub(crate) fn find_best_python_installation(
             PythonRequest::ImplementationVersion(*implementation, version.clone().without_patch()),
         ),
         _ => None,
-    } {
-        debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache, preview);
-        match result {
+    };
+
+    for (attempt, request) in iter::once(original_request)
+        .chain(request_without_patch.iter())
+        .chain(iter::once(&PythonRequest::Default))
+        .enumerate()
+    {
+        debug!(
+            "Looking for {request}{}",
+            if request != original_request {
+                format!(" attempt {attempt} (fallback after failing to find: {original_request})")
+            } else {
+                String::new()
+            }
+        );
+        let result = find_python_installation(request, environments, preference, cache, preview);
+        let error = match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
-                return Ok(Ok(installation));
+                return Ok(installation);
             }
             // Continue if we can't find a matching Python and ignore non-critical discovery errors
-            Ok(Err(_)) => {}
-            Err(ref err) if !err.is_critical() => {}
-            _ => return result,
-        }
-    }
+            Ok(Err(error)) => error.into(),
+            Err(error) if !error.is_critical() => error.into(),
+            Err(error) => return Err(error.into()),
+        };
 
-    // If a Python version was requested but cannot be fulfilled, just take any version
-    debug!("Looking for a default Python installation");
-    let request = PythonRequest::Default;
-    Ok(
-        find_python_installation(&request, environments, preference, cache, preview)?.map_err(
-            |err| {
-                // Use a more general error in this case since we looked for multiple versions
-                PythonNotFound {
-                    request,
+        // Attempt to download the version if downloads are enabled
+        if downloads_enabled
+            && !previous_fetch_failed
+            && let Some(download_request) = PythonDownloadRequest::from_request(request)
+        {
+            let download = download_request
+                .clone()
+                .fill()
+                .map(|request| download_list.find(&request));
+
+            let result = match download {
+                Ok(Ok(download)) => PythonInstallation::fetch(
+                    download,
+                    client,
+                    retry_policy,
+                    cache,
+                    reporter,
+                    python_install_mirror,
+                    pypy_install_mirror,
+                    preview,
+                )
+                .await
+                .map(Some),
+                Ok(Err(crate::downloads::Error::NoDownloadFound(_))) => Ok(None),
+                Ok(Err(error)) => Err(error.into()),
+                Err(error) => Err(error.into()),
+            };
+            if let Ok(Some(installation)) = result {
+                return Ok(installation);
+            }
+            // Emit a warning instead of failing since we may find a suitable
+            // interpreter on the system after relaxing the request further.
+            // Additionally, uv did not previously attempt downloads in this
+            // code path and we want to minimize the fatal cases for
+            // backwards compatibility.
+            // Errors encountered here are either network errors or quirky
+            // configuration problems.
+            if let Err(error) = result {
+                // This is a hack to get `write_error_chain` to format things the way we want.
+                #[derive(Debug, thiserror::Error)]
+                #[error(
+                    "A managed Python download is available for {0}, but an error occurred when attempting to download it."
+                )]
+                struct WrappedError<'a>(&'a PythonRequest, #[source] crate::Error);
+
+                // If the request was for the default or any version, propagate
+                // the error as nothing else we are about to do will help the
+                // situation.
+                if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                    return Err(error);
+                }
+
+                let mut error_chain = String::new();
+                // Writing to a string can't fail with errors (panics on allocation failure)
+                uv_warnings::write_error_chain(
+                    &WrappedError(request, error),
+                    &mut error_chain,
+                    "warning",
+                    AnsiColors::Yellow,
+                )
+                .unwrap();
+                anstream::eprint!("{}", error_chain);
+                previous_fetch_failed = true;
+            }
+        }
+
+        // If this was a request for the Default or Any version, this means that
+        // either that's what we were called with, or we're on the last
+        // iteration.
+        //
+        // The most recent find error therefore becomes a fatal one.
+        if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+            return Err(match error {
+                crate::Error::MissingPython(err, _) => PythonNotFound {
+                    // Use a more general error in this case since we looked for multiple versions
+                    request: original_request.clone(),
                     python_preference: err.python_preference,
                     environment_preference: err.environment_preference,
                 }
-            },
-        ),
-    )
+                .into(),
+                other => other,
+            });
+        }
+    }
+
+    unreachable!("The loop should have terminated when it reached PythonRequest::Default");
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.
@@ -2135,6 +2220,19 @@ impl PythonRequest {
                 format!("{implementation}@{version}")
             }
             Self::Key(request) => request.to_string(),
+        }
+    }
+
+    /// Convert an interpreter request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` if the request doesn't carry an exact version
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Version(v) | Self::ImplementationVersion(_, v) => v.as_pep440_version(),
+            Self::Key(download_request) => download_request
+                .version()
+                .and_then(VersionRequest::as_pep440_version),
+            _ => None,
         }
     }
 }
@@ -2972,6 +3070,28 @@ impl VersionRequest {
             | Self::Range(_, variant) => Some(*variant),
         }
     }
+
+    /// Convert this request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` for non-concrete requests
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Default | Self::Any | Self::Range(_, _) => None,
+            Self::Major(major, _) => Some(Version::new([u64::from(*major)])),
+            Self::MajorMinor(major, minor, _) => {
+                Some(Version::new([u64::from(*major), u64::from(*minor)]))
+            }
+            Self::MajorMinorPatch(major, minor, patch, _) => Some(Version::new([
+                u64::from(*major),
+                u64::from(*minor),
+                u64::from(*patch),
+            ])),
+            // Pre-releases of Python versions are always for the zero patch version
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => Some(
+                Version::new([u64::from(*major), u64::from(*minor), 0]).with_pre(Some(*prerelease)),
+            ),
+        }
+    }
 }
 
 impl FromStr for VersionRequest {
@@ -3369,7 +3489,7 @@ mod tests {
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
-    use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
+    use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
     use crate::{
         discovery::{PythonRequest, VersionRequest},
@@ -4034,5 +4154,135 @@ mod tests {
         );
         // @ is not allowed if the prefix is empty.
         assert!(PythonRequest::try_split_prefix_and_version("", "@3").is_err());
+    }
+
+    #[test]
+    fn version_request_as_pep440_version() {
+        // Non-concrete requests return `None`
+        assert_eq!(VersionRequest::Default.as_pep440_version(), None);
+        assert_eq!(VersionRequest::Any.as_pep440_version(), None);
+        assert_eq!(
+            VersionRequest::from_str(">=3.10")
+                .unwrap()
+                .as_pep440_version(),
+            None
+        );
+
+        // `VersionRequest::Major`
+        assert_eq!(
+            VersionRequest::Major(3, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3").unwrap())
+        );
+
+        // `VersionRequest::MajorMinor`
+        assert_eq!(
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3.12").unwrap())
+        );
+
+        // `VersionRequest::MajorMinorPatch`
+        assert_eq!(
+            VersionRequest::MajorMinorPatch(3, 12, 5, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3.12.5").unwrap())
+        );
+
+        // `VersionRequest::MajorMinorPrerelease`
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                14,
+                Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 1
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.14.0a1").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                14,
+                Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 2
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.14.0b2").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 3
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.13.0rc3").unwrap())
+        );
+
+        // Variant is ignored
+        assert_eq!(
+            VersionRequest::Major(3, PythonVariant::Freethreaded).as_pep440_version(),
+            Some(Version::from_str("3").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinor(3, 13, PythonVariant::Freethreaded).as_pep440_version(),
+            Some(Version::from_str("3.13").unwrap())
+        );
+    }
+
+    #[test]
+    fn python_request_as_pep440_version() {
+        // `PythonRequest::Any` and `PythonRequest::Default` return `None`
+        assert_eq!(PythonRequest::Any.as_pep440_version(), None);
+        assert_eq!(PythonRequest::Default.as_pep440_version(), None);
+
+        // `PythonRequest::Version` delegates to `VersionRequest`
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::MajorMinor(3, 11, PythonVariant::Default))
+                .as_pep440_version(),
+            Some(Version::from_str("3.11").unwrap())
+        );
+
+        // `PythonRequest::ImplementationVersion` extracts version
+        assert_eq!(
+            PythonRequest::ImplementationVersion(
+                ImplementationName::CPython,
+                VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default),
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.12.1").unwrap())
+        );
+
+        // `PythonRequest::Implementation` returns `None` (no version)
+        assert_eq!(
+            PythonRequest::Implementation(ImplementationName::CPython).as_pep440_version(),
+            None
+        );
+
+        // `PythonRequest::Key` with version
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2").as_pep440_version(),
+            Some(Version::from_str("3.13.2").unwrap())
+        );
+
+        // `PythonRequest::Key` without version returns `None`
+        assert_eq!(
+            PythonRequest::parse("cpython-macos-aarch64-none").as_pep440_version(),
+            None
+        );
+
+        // Range versions return `None`
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
+            None
+        );
     }
 }

@@ -140,7 +140,7 @@ pub fn read_archive_metadata(
 
     let mut file = archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?;
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     let mut buffer = Vec::with_capacity(file.size() as usize);
     file.read_to_end(&mut buffer).map_err(Error::Io)?;
 

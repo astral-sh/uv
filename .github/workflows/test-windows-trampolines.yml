@@ -10,6 +10,21 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  # Verify windows crate version matches between workspaces
+  windows-version-check:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    name: "check windows crate version"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+
+      - name: "Check windows crate versions match"
+        run: uv run scripts/check-trampoline-version-consistency.py
+
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 15
@@ -20,7 +35,7 @@ jobs:
       matrix:
         target-arch: ["x86_64", "i686", "aarch64"]
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -43,7 +58,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
         with:
           tool: cargo-bloat
 
@@ -81,7 +96,7 @@ jobs:
           - { runner: windows-latest, target-arch: "i686" }
           - { runner: windows-11-arm, target-arch: "aarch64" }
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Setup Dev Drive

@@ -1524,6 +1524,60 @@ requires-python = ">=3.12"
     Ok(())
 }
 
+// --bump dev but it decreases the version from a stable
+#[test]
+fn bump_decrease_dev_stable() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("dev"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: 2.3.4 => 2.3.4.dev1 didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`
+    ");
+    Ok(())
+}
+
+// --bump dev but it decreases the version from a pre-release
+#[test]
+fn bump_decrease_dev_prerelease() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4a1"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("dev"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: 2.3.4a1 => 2.3.4a1.dev1 didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`
+    ");
+    Ok(())
+}
+
 // --bump major twice
 #[test]
 fn bump_double_major() -> Result<()> {

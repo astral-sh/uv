@@ -331,6 +331,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package: _,
                 upgrade,
                 upgrade_package,
                 reinstall,
@@ -706,7 +707,7 @@ impl EnvironmentOptions {
             )?
             .map(Duration::from_secs)
             .or(http_timeout)
-            .unwrap_or(Duration::from_secs(15 * 60)),
+            .unwrap_or(Duration::from_mins(15)),
             http_timeout: http_timeout.unwrap_or(Duration::from_secs(30)),
             http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
                 .unwrap_or(uv_client::DEFAULT_RETRIES),

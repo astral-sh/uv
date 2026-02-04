@@ -25,7 +25,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
@@ -53,7 +53,7 @@ use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
     Unchanged(Lock),
@@ -78,7 +78,6 @@ impl LockResult {
 }
 
 /// Resolve the project requirements into a lockfile.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -473,12 +472,12 @@ async fn do_lock(
         torch_backend: _,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 
@@ -498,25 +497,25 @@ async fn do_lock(
     let requirements = target.lower(
         requirements,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let overrides = target.lower(
         overrides,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let constraints = target.lower(
         constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let build_constraints = target.lower(
         build_constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let dependency_groups = dependency_groups
@@ -525,7 +524,7 @@ async fn do_lock(
             let requirements = target.lower(
                 group.requirements,
                 index_locations,
-                *sources,
+                sources,
                 client_builder.credentials_cache(),
             )?;
             Ok((name, requirements))
@@ -543,7 +542,7 @@ async fn do_lock(
     }
 
     // Check if any conflicts contain project-level conflicts
-    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+    if !preview.is_enabled(PreviewFeature::PackageConflicts)
         && conflicts.iter().any(|set| {
             set.iter()
                 .any(|item| matches!(item.kind(), ConflictKind::Project))
@@ -551,7 +550,7 @@ async fn do_lock(
     {
         warn_user_once!(
             "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::PACKAGE_CONFLICTS
+            PreviewFeature::PackageConflicts
         );
     }
 
@@ -741,7 +740,7 @@ async fn do_lock(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
-            *sources,
+            sources,
             client.credentials_cache(),
         )?,
         LockTarget::Script(script) => {
@@ -774,7 +773,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,

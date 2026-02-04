@@ -115,7 +115,7 @@ fn generate() -> String {
     output
 }
 
-#[allow(clippy::format_push_string)]
+#[expect(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;

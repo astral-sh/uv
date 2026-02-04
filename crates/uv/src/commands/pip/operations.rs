@@ -217,7 +217,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 pyproject_path,
                 None,
                 build_dispatch.locations(),
-                build_dispatch.sources(),
+                build_dispatch.sources().clone(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
             )
@@ -385,7 +385,7 @@ pub(crate) enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),
@@ -483,7 +483,7 @@ impl Changelog {
     {
         // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
         // the inner `kind`, and omits the types that rely on internal mutability.
-        #[allow(clippy::mutable_key_type)]
+        #[expect(clippy::mutable_key_type)]
         let mut uninstalled: HashSet<_> = uninstalled.into_iter().collect();
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
             .into_iter()
@@ -832,7 +832,7 @@ async fn execute_plan(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -894,7 +894,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -937,7 +937,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -1010,7 +1010,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -1028,7 +1028,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

@@ -52,7 +52,7 @@ struct PrintData {
 }
 
 /// List available Python installations.
-#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+#[expect(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
     request: Option<String>,
     kinds: PythonListKinds,
@@ -252,7 +252,7 @@ pub(crate) async fn list(
                     Ok(PrintData {
                         key: key.to_string(),
                         version: version.version().clone(),
-                        #[allow(clippy::get_first)]
+                        #[expect(clippy::get_first)]
                         version_parts: NamedVersionParts {
                             major: release.get(0).copied().unwrap_or(0),
                             minor: release.get(1).copied().unwrap_or(0),

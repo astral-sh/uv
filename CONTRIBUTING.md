@@ -50,7 +50,23 @@ sudo dnf install gcc
 
 For running tests, we recommend [nextest](https://nexte.st/).
 
-If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-json-schema`.
+To run a specific test by name:
+
+```shell
+cargo nextest run -E 'test(test_name)'
+```
+
+To run all tests and accept snapshot changes:
+
+```shell
+cargo insta test --accept --test-runner nextest
+```
+
+To update snapshots for a specific test:
+
+```shell
+cargo insta test --accept --test-runner nextest -- <test_name>
+```
 
 ### Python
 
@@ -140,6 +156,22 @@ uvx typos
 
 # Unused Rust dependencies
 cargo shear
+```
+
+### Compiling for Windows from Unix
+
+To run clippy for a Windows target from Linux or macOS, you can use
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+
+```shell
+# Install cargo-xwin
+cargo install cargo-xwin --locked
+
+# Add the Windows target
+rustup target add x86_64-pc-windows-msvc
+
+# Run clippy for Windows
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure
@@ -240,6 +272,48 @@ Documentation is deployed automatically on release by publishing to the
 Cloudflare Pages.
 
 After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
+
+## Development code signing on macOS
+
+Code signing can only be performed by Astral team members.
+
+Code signing on macOS can improve developer experience when running tests, e.g., when running tests
+that access the macOS keychain, a signed binary can be approved once but an unsigned binary will
+need to be approved on each re-compile.
+
+### Acquiring a development certificate
+
+1. Generate a
+   [request for the certificate](https://developer.apple.com/help/account/certificates/create-a-certificate-signing-request)
+2. Create a certificate in the
+   [Apple Developer portal](https://developer.apple.com/account/resources/certificates/list)
+3. Download and install the certificate to your login keychain
+
+   ```shell
+   security import ~/Downloads/mac_development.cer -k ~/Library/Keychains/login.keychain-db
+   ```
+
+4. Identify your code signing identity
+
+   ```shell
+   security find-identity -v -p codesigning
+   ```
+
+5. If the above fails to find your identity, install the intermediate certificates
+
+   ```shell
+   curl -sLO "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"
+   security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+   rm AppleWWDRCAG3.cer
+   ```
+
+6. Set `UV_TEST_CODESIGN_IDENTITY`
+
+   ```shell
+   export UV_TEST_CODESIGN_IDENTITY="Mac Developer: Your Name (TEAM_ID)"
+   ```
+
+Note `UV_TEST_CODESIGN_IDENTITY` is only supported via `nextest`.
 
 ## Releases
 

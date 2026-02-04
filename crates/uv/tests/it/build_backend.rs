@@ -6,7 +6,6 @@ use flate2::bufread::GzDecoder;
 use fs_err::File;
 use indoc::{formatdoc, indoc};
 use insta::{assert_json_snapshot, assert_snapshot};
-use std::env;
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
@@ -1224,6 +1223,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "pypi")]
 #[test]
 fn build_with_all_metadata() -> Result<()> {
     let context = TestContext::new("3.12");

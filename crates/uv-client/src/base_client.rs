@@ -97,6 +97,8 @@ pub struct BaseClientBuilder<'a> {
     custom_client: Option<Client>,
     /// uv subcommand in which this client is being used
     subcommand: Option<Vec<String>>,
+    /// Optional name for this client, used in debug logging.
+    client_name: Option<&'static str>,
 }
 
 /// The policy for handling HTTP redirects.
@@ -159,6 +161,7 @@ impl Default for BaseClientBuilder<'_> {
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
             subcommand: None,
+            client_name: None,
         }
     }
 }
@@ -314,6 +317,12 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn client_name(mut self, name: &'static str) -> Self {
+        self.client_name = Some(name);
+        self
+    }
+
     pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
@@ -347,7 +356,14 @@ impl<'a> BaseClientBuilder<'a> {
 
     pub fn build(&self) -> BaseClient {
         let timeout = self.timeout;
-        debug!("Using request timeout of {}s", timeout.as_secs());
+        if let Some(name) = self.client_name {
+            debug!(
+                "Using request timeout of {}s for {name} client",
+                timeout.as_secs()
+            );
+        } else {
+            debug!("Using request timeout of {}s", timeout.as_secs());
+        }
 
         // Use the custom client if provided, otherwise create a new one
         let (raw_client, raw_dangerous_client) = match &self.custom_client {
@@ -421,14 +437,31 @@ impl<'a> BaseClientBuilder<'a> {
         // Certificate loading support is delegated to `rustls-native-certs`.
         // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
         let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-            let path_exists = Path::new(&path).exists();
-            if !path_exists {
-                warn_user_once!(
-                    "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
-                    path.simplified_display().cyan()
-                );
+            let path = Path::new(&path);
+            match path.metadata() {
+                Ok(metadata) if metadata.is_file() => true,
+                Ok(_) => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path is not a file: {}.",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path does not exist: {}.",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
+                Err(err) => {
+                    warn_user_once!(
+                        "Ignoring invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}).",
+                        path.simplified_display().cyan()
+                    );
+                    false
+                }
             }
-            path_exists
         });
 
         // Checks for the presence of `SSL_CERT_DIR`.
@@ -1540,10 +1573,11 @@ mod tests {
             }
         }
 
-        assert_debug_snapshot!(retried, @"
+        assert_debug_snapshot!(retried, @r"
         [
             100,
             102,
+            103,
             408,
             429,
             500,

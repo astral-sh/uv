@@ -5,7 +5,7 @@ use anyhow::Result;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
 use tokio::sync::Semaphore;
 use tracing::debug;
@@ -36,10 +36,9 @@ use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 
 /// Enumerate the installed packages in the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_list(
     editable: Option<bool>,
-    exclude: &[PackageName],
+    exclude: &FxHashSet<PackageName>,
     format: &ListFormat,
     outdated: bool,
     prerelease: PrereleaseMode,

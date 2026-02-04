@@ -14,7 +14,8 @@ use uv_distribution_types::{
     IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
@@ -535,11 +536,30 @@ impl PubGrubReportFormatter<'_> {
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         tags: Option<&Tags>,
         workspace_members: &BTreeSet<PackageName>,
         options: &Options,
         output_hints: &mut IndexSet<PubGrubHint>,
     ) {
+        // Check for disjoint target hints (only applicable to universal resolution).
+        if let Some(markers) = env.fork_markers() {
+            // TODO(konsti): This is a crude approximation to telling the user the difference
+            // between their Python version and the relevant Python version range from the marker.
+            let current_python_version = current_environment.python_version().version.clone();
+            let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonVersion,
+                specifier: VersionSpecifier::equals_version(current_python_version.clone()),
+            });
+            if markers.is_disjoint(current_python_marker) {
+                output_hints.insert(PubGrubHint::DisjointPythonVersion {
+                    python_version: current_python_version,
+                });
+            } else if !markers.evaluate(current_environment, &[]) {
+                output_hints.insert(PubGrubHint::DisjointEnvironment);
+            }
+        }
+
         match derivation_tree {
             DerivationTree::External(External::Custom(package, set, reason)) => {
                 if let Some(name) = package.name_no_root() {
@@ -683,6 +703,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    current_environment,
                     tags,
                     workspace_members,
                     options,
@@ -700,6 +721,7 @@ impl PubGrubReportFormatter<'_> {
                     fork_urls,
                     fork_indexes,
                     env,
+                    current_environment,
                     tags,
                     workspace_members,
                     options,
@@ -1182,6 +1204,13 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         tags: BTreeSet<PlatformTag>,
     },
+    /// The resolution failed for a Python version that is different from the current Python version.
+    DisjointPythonVersion {
+        // excluded from `PartialEq` and `Hash`
+        python_version: Version,
+    },
+    /// The resolution failed for an environment that is different from the current environment.
+    DisjointEnvironment,
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1258,6 +1287,8 @@ enum PubGrubHintCore {
     PlatformTags {
         package: PackageName,
     },
+    DisjointPythonVersion,
+    DisjointEnvironment,
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1324,6 +1355,8 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::LanguageTags { package, .. } => Self::LanguageTags { package },
             PubGrubHint::AbiTags { package, .. } => Self::AbiTags { package },
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
+            PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
+            PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
     }
 }
@@ -1752,6 +1785,27 @@ impl std::fmt::Display for PubGrubHint {
                     tags.iter()
                         .map(|tag| format!("`{}`", tag.cyan()))
                         .join(", "),
+                )
+            }
+            Self::DisjointPythonVersion { python_version } => {
+                write!(
+                    f,
+                    "{}{} While the active Python version is {}, \
+                    the resolution failed for other Python versions supported by your \
+                    project. Consider limiting your project's supported Python versions \
+                    using `requires-python`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    python_version.cyan(),
+                )
+            }
+            Self::DisjointEnvironment => {
+                write!(
+                    f,
+                    "{}{} The resolution failed for an environment that is not the current one, \
+                    consider limiting the environments with `tool.uv.environments`.",
+                    "hint".bold().cyan(),
+                    ":".bold(),
                 )
             }
         }

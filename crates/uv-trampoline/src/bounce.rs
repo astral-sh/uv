@@ -1,5 +1,5 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{CString, c_void};
+use std::ffi::CString;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
@@ -9,15 +9,8 @@ use windows::Win32::{
         CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
-    System::Console::{
-        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
-    },
+    System::Console::{GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle},
     System::Environment::GetCommandLineA,
-    System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
-    },
     System::LibraryLoader::{FindResourceW, LoadResource, LockResource, SizeofResource},
     System::Threading::{
         CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
@@ -29,7 +22,9 @@ use windows::Win32::{
         PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
-use windows::core::{BOOL, PSTR, s};
+use windows::core::{PSTR, s};
+
+use uv_windows::{Job, install_ctrl_handler};
 
 use uv_static::EnvVars;
 
@@ -151,20 +146,35 @@ fn make_child_cmdline() -> CString {
                 // be correctly detected when using trampolines.
                 std::env::set_var(EnvVars::PYVENV_LAUNCHER, &executable_name);
 
-                // If this is not a virtual environment and `PYTHONHOME` has
-                // not been set, then set `PYTHONHOME` to the parent directory of
-                // the executable. This ensures that the correct installation
-                // directories are added to `sys.path` when running with a junction
-                // trampoline.
-                let python_home_set =
-                    std::env::var(EnvVars::PYTHONHOME).is_ok_and(|home| !home.is_empty());
-                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
-                    std::env::set_var(
-                        EnvVars::PYTHONHOME,
-                        python_exe
+                // If this is not a virtual environment, set `PYTHONHOME` to
+                // the parent directory of the executable. This ensures that
+                // the correct installation directories are added to `sys.path`
+                // when running with a junction trampoline.
+                //
+                // We use a marker variable (`UV_INTERNAL__PYTHONHOME`) to track
+                // whether `PYTHONHOME` was set by uv. This allows us to:
+                // - Override inherited `PYTHONHOME` from parent Python processes
+                // - Preserve user-defined `PYTHONHOME` values
+                if !is_virtualenv(python_exe.as_path()) {
+                    let python_home = std::env::var(EnvVars::PYTHONHOME).ok();
+                    let marker = std::env::var(EnvVars::UV_INTERNAL__PYTHONHOME).ok();
+
+                    // Only set `PYTHONHOME` if:
+                    // - It's not set, OR
+                    // - It was set by uv (marker matches current `PYTHONHOME`)
+                    let should_override = match (&python_home, &marker) {
+                        (None, _) => true,
+                        (Some(home), Some(m)) if home == m => true,
+                        _ => false,
+                    };
+
+                    if should_override {
+                        let home = python_exe
                             .parent()
-                            .expect("Python executable should have a parent directory"),
-                    );
+                            .expect("Python executable should have a parent directory");
+                        std::env::set_var(EnvVars::PYTHONHOME, home);
+                        std::env::set_var(EnvVars::UV_INTERNAL__PYTHONHOME, home);
+                    }
                 }
             }
         }
@@ -263,39 +273,24 @@ fn skip_one_argument(arguments: &[u8]) -> &[u8] {
     &arguments[offset..]
 }
 
-fn make_job_object() -> HANDLE {
-    let job = unsafe { CreateJobObjectA(None, None) }
-        .unwrap_or_else(|_| print_last_error_and_exit("Job creation failed"));
-    let mut job_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-    let mut retlen = 0u32;
-    if unsafe {
-        QueryInformationJobObject(
-            Some(job),
-            JobObjectExtendedLimitInformation,
-            &mut job_info as *mut _ as *mut c_void,
-            size_of_val(&job_info) as u32,
-            Some(&mut retlen),
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information querying failed");
-    }
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    job_info.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
-    if unsafe {
-        SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            &job_info as *const _ as *const c_void,
-            size_of_val(&job_info) as u32,
-        )
-    }
-    .is_err()
-    {
-        print_last_error_and_exit("Job information setting failed");
-    }
-    job
+#[cold]
+fn print_job_error_and_exit(context: &str, err: uv_windows::JobError) -> ! {
+    let message = format!(
+        "(uv internal error) {}: {} (os error {})",
+        context,
+        err.message(),
+        err.code()
+    );
+    error_and_exit(&message);
+}
+
+#[cold]
+fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
+    let message = format!(
+        "(uv internal error) Control handler setting failed (os error {})",
+        err.code()
+    );
+    error_and_exit(&message);
 }
 
 fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
@@ -340,7 +335,6 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
-#[allow(clippy::ptr_eq)]
 fn close_handles(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
@@ -448,10 +442,13 @@ pub fn bounce(is_gui: bool) -> ! {
     unsafe { GetStartupInfoA(&mut si) }
 
     let child_handle = spawn_child(&si, child_cmdline);
-    let job = make_job_object();
+    let job = Job::new().unwrap_or_else(|e| {
+        print_job_error_and_exit("Job object setup failed", e);
+    });
 
-    if unsafe { AssignProcessToJobObject(job, child_handle) }.is_err() {
-        print_last_error_and_exit("Failed to assign child process to the job")
+    // SAFETY: child_handle is a valid process handle returned by spawn_child.
+    if let Err(e) = unsafe { job.assign_process(child_handle) } {
+        print_job_error_and_exit("Failed to assign child process to the job", e);
     }
 
     // (best effort) Close all the handles that we can
@@ -465,13 +462,9 @@ pub fn bounce(is_gui: bool) -> ! {
 
     // We want to ignore control-C/control-Break/logout/etc.; the same event will
     // be delivered to the child, so we let them decide whether to exit or not.
-    unsafe extern "system" fn control_key_handler(_: u32) -> BOOL {
-        TRUE
+    if let Err(e) = install_ctrl_handler() {
+        print_ctrl_handler_error_and_exit(e);
     }
-    // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
-        print_last_error_and_exit("Control handler setting failed");
-    });
 
     if is_gui {
         clear_app_starting_state(child_handle);

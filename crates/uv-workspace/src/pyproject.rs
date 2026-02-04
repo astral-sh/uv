@@ -35,6 +35,7 @@ use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_warnings::warn_user_once;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -276,10 +277,11 @@ pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-/// Validates that index names in the `tool.uv.index` field are unique.
+/// Validates the `tool.uv.index` field.
 ///
-/// This custom deserializer function checks for duplicate index names
-/// and returns an error if any duplicates are found.
+/// This custom deserializer function checks for:
+/// - Duplicate index names
+/// - Multiple indexes marked as default
 fn deserialize_index_vec<'de, D>(deserializer: D) -> Result<Option<Vec<Index>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -287,6 +289,7 @@ where
     let indexes = Option::<Vec<Index>>::deserialize(deserializer)?;
     if let Some(indexes) = indexes.as_ref() {
         let mut seen_names = FxHashSet::with_capacity_and_hasher(indexes.len(), FxBuildHasher);
+        let mut seen_default = false;
         for index in indexes {
             if let Some(name) = index.name.as_ref() {
                 if !seen_names.insert(name) {
@@ -294,6 +297,16 @@ where
                         "duplicate index name `{name}`"
                     )));
                 }
+            }
+            if index.default {
+                if seen_default {
+                    warn_user_once!(
+                        "Found multiple indexes with `default = true`; \
+                        only one index may be marked as default. \
+                        This will become an error in the future.",
+                    );
+                }
+                seen_default = true;
             }
         }
     }
@@ -1009,7 +1022,6 @@ impl IntoIterator for Sources {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
-#[allow(clippy::large_enum_variant)]
 enum SourcesWire {
     One(Source),
     Many(Vec<Source>),

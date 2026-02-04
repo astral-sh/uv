@@ -118,7 +118,7 @@ impl ExtraName {
     /// Create a validated, normalized extra name.
     ///
     /// At present, this is no more efficient than calling [`ExtraName::from_str`].
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
         validate_and_normalize_ref(&name).map(Self)
     }

@@ -8845,6 +8845,56 @@ fn sync_no_sources_missing_member() -> Result<()> {
     Ok(())
 }
 
+/// Test `--no-sources-package` with sync to selectively disable sources.
+#[test]
+#[cfg(feature = "git")]
+fn sync_no_sources_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio", "iniconfig"]
+
+        [tool.uv.sources]
+        anyio = { git = "https://github.com/agronholm/anyio", tag = "3.7.0" }
+        iniconfig = { git = "https://github.com/pytest-dev/iniconfig", tag = "v2.0.0" }
+        "#,
+    )?;
+
+    // First lock the project
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Sync with sources disabled for anyio only
+    uv_snapshot!(context.filters(), context.sync().arg("--no-sources-package").arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_python_version() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
@@ -8958,6 +9008,52 @@ fn sync_python_version() -> Result<()> {
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
     Creating virtual environment at: .venv
     Resolved 4 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Test that a global `.python-version` pin that conflicts with the project's
+/// `requires-python` is ignored, falling back to the project's requirement.
+#[test]
+fn sync_ignores_incompatible_global_python_version() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.10", "3.11"]);
+
+    // Create a global pin before creating the project (to avoid pin compatibility check)
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.10`
+
+    ----- stderr -----
+    ");
+
+    // Now create a project that requires a different Python version
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==3.7.0
      + idna==3.6
@@ -13952,7 +14048,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS), @"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14045,7 +14141,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14181,7 +14277,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should be primed with non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14239,7 +14335,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should hit non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----

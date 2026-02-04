@@ -1,6 +1,6 @@
 use core::fmt;
 use std::borrow::Cow;
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::ffi::OsStr;
 use std::io::{self, Write};
 #[cfg(windows)]
@@ -12,7 +12,7 @@ use fs_err as fs;
 use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -111,6 +111,18 @@ pub enum Error {
     #[error(transparent)]
     MacOsDylib(#[from] macos_dylib::Error),
 }
+
+/// Compare two build version strings.
+///
+/// Build versions are typically YYYYMMDD date strings. Comparison is done numerically
+/// if both values parse as integers, otherwise falls back to lexicographic comparison.
+pub fn compare_build_versions(a: &str, b: &str) -> Ordering {
+    match (a.parse::<u64>(), b.parse::<u64>()) {
+        (Ok(a_num), Ok(b_num)) => a_num.cmp(&b_num),
+        _ => a.cmp(b),
+    }
+}
+
 /// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ManagedPythonInstallations {
@@ -690,14 +702,26 @@ impl ManagedPythonInstallation {
             return false;
         }
         // If the patch versions are the same, we're handling a pre-release upgrade
+        // or a build version upgrade
         if self.key.patch == other.key.patch {
             return match (self.key.prerelease, other.key.prerelease) {
                 // Require a newer pre-release, if present on both
                 (Some(self_pre), Some(other_pre)) => self_pre > other_pre,
                 // Allow upgrade from pre-release to stable
                 (None, Some(_)) => true,
-                // Do not upgrade from pre-release to stable, or for matching versions
-                (_, None) => false,
+                // Do not upgrade from stable to pre-release
+                (Some(_), None) => false,
+                // For matching stable versions (same patch, no prerelease), check build version
+                (None, None) => match (self.build.as_deref(), other.build.as_deref()) {
+                    // Download has build, installation doesn't -> upgrade (legacy)
+                    (Some(_), None) => true,
+                    // Both have build, compare them
+                    (Some(self_build), Some(other_build)) => {
+                        compare_build_versions(self_build, other_build) == Ordering::Greater
+                    }
+                    // Download doesn't have build -> no upgrade
+                    (None, _) => false,
+                },
             };
         }
         // Require a newer patch version
@@ -807,7 +831,7 @@ impl PythonMinorVersionLink {
         // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
-        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) && !minor_version_link.exists() {
+        if !preview.is_enabled(PreviewFeature::PythonUpgrade) && !minor_version_link.exists() {
             return None;
         }
         Some(minor_version_link)
@@ -937,7 +961,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 
         // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
         // error context anyway
-        #[allow(clippy::disallowed_types)]
+        #[expect(clippy::disallowed_types)]
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
@@ -995,6 +1019,7 @@ mod tests {
         patch: u8,
         prerelease: Option<Prerelease>,
         variant: PythonVariant,
+        build: Option<&str>,
     ) -> ManagedPythonInstallation {
         let platform = Platform::from_str("linux-x86_64-gnu").unwrap();
         let key = PythonInstallationKey::new(
@@ -1011,7 +1036,7 @@ mod tests {
             key,
             url: None,
             sha256: None,
-            build: None,
+            build: build.map(|s| Cow::Owned(s.to_owned())),
         }
     }
 
@@ -1024,6 +1049,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
 
         // Same patch version should not be an upgrade
@@ -1039,6 +1065,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
         let newer = create_test_installation(
             ImplementationName::CPython,
@@ -1047,6 +1074,7 @@ mod tests {
             9,
             None,
             PythonVariant::Default,
+            None,
         );
 
         // Newer patch version should be an upgrade
@@ -1064,6 +1092,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
         let py311 = create_test_installation(
             ImplementationName::CPython,
@@ -1072,6 +1101,7 @@ mod tests {
             0,
             None,
             PythonVariant::Default,
+            None,
         );
 
         // Different minor versions should not be upgrades
@@ -1088,6 +1118,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
         let pypy = create_test_installation(
             ImplementationName::PyPy,
@@ -1096,6 +1127,7 @@ mod tests {
             9,
             None,
             PythonVariant::Default,
+            None,
         );
 
         // Different implementations should not be upgrades
@@ -1112,6 +1144,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
         let freethreaded = create_test_installation(
             ImplementationName::CPython,
@@ -1120,6 +1153,7 @@ mod tests {
             9,
             None,
             PythonVariant::Freethreaded,
+            None,
         );
 
         // Different variants should not be upgrades
@@ -1136,6 +1170,7 @@ mod tests {
             8,
             None,
             PythonVariant::Default,
+            None,
         );
         let prerelease = create_test_installation(
             ImplementationName::CPython,
@@ -1147,6 +1182,7 @@ mod tests {
                 number: 1,
             }),
             PythonVariant::Default,
+            None,
         );
 
         // A stable version is an upgrade from prerelease
@@ -1168,6 +1204,7 @@ mod tests {
                 number: 1,
             }),
             PythonVariant::Default,
+            None,
         );
         let alpha2 = create_test_installation(
             ImplementationName::CPython,
@@ -1179,6 +1216,7 @@ mod tests {
                 number: 2,
             }),
             PythonVariant::Default,
+            None,
         );
 
         // Later prerelease should be an upgrade
@@ -1199,9 +1237,107 @@ mod tests {
                 number: 1,
             }),
             PythonVariant::Default,
+            None,
         );
 
         // Same prerelease should not be an upgrade
         assert!(!prerelease.is_upgrade_of(&prerelease));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_version() {
+        let older_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+        let newer_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240201"),
+        );
+
+        // Newer build version should be an upgrade
+        assert!(newer_build.is_upgrade_of(&older_build));
+        // Older build version should not be an upgrade
+        assert!(!older_build.is_upgrade_of(&newer_build));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_version_same() {
+        let installation = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Same build version should not be an upgrade
+        assert!(!installation.is_upgrade_of(&installation));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_build_with_legacy_installation() {
+        let legacy = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            None,
+        );
+        let with_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Installation with build should upgrade legacy installation without build
+        assert!(with_build.is_upgrade_of(&legacy));
+        // Legacy installation should not upgrade installation with build
+        assert!(!legacy.is_upgrade_of(&with_build));
+    }
+
+    #[test]
+    fn test_is_upgrade_of_patch_takes_precedence_over_build() {
+        let older_patch_newer_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            8,
+            None,
+            PythonVariant::Default,
+            Some("20240201"),
+        );
+        let newer_patch_older_build = create_test_installation(
+            ImplementationName::CPython,
+            3,
+            10,
+            9,
+            None,
+            PythonVariant::Default,
+            Some("20240101"),
+        );
+
+        // Newer patch version should be an upgrade regardless of build
+        assert!(newer_patch_older_build.is_upgrade_of(&older_patch_newer_build));
+        // Older patch version should not be an upgrade even with newer build
+        assert!(!older_patch_newer_build.is_upgrade_of(&newer_patch_older_build));
     }
 }

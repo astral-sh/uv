@@ -53,7 +53,7 @@ pub(crate) fn self_version(
 }
 
 /// Read or update project version (`uv version`)
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
     mut bump: Vec<VersionBumpSpec>,
@@ -294,6 +294,11 @@ pub(crate) async fn project_version(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
+                ));
+            }
             return Err(anyhow!(
                 "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));
@@ -516,7 +521,6 @@ async fn print_frozen_version(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,

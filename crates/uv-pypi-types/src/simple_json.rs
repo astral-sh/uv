@@ -135,6 +135,9 @@ impl<'de> Deserialize<'de> for PypiFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PyxFile`]s available for download sorted by filename.
     pub files: Vec<PyxFile>,
     /// The core metadata for the project, keyed by version.

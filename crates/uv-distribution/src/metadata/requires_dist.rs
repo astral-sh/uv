@@ -3,8 +3,9 @@ use std::path::Path;
 use std::slice;
 
 use rustc_hash::FxHashSet;
+
 use uv_auth::CredentialsCache;
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -46,7 +47,7 @@ impl RequiresDist {
         install_path: &Path,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        sources: SourceStrategy,
+        sources: NoSources,
         cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
@@ -58,9 +59,10 @@ impl RequiresDist {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
-            members: match sources {
-                SourceStrategy::Enabled => MemberDiscovery::default(),
-                SourceStrategy::Disabled => MemberDiscovery::None,
+            members: if sources.is_none() {
+                MemberDiscovery::default()
+            } else {
+                MemberDiscovery::None
             },
             ..DiscoveryOptions::default()
         };
@@ -75,7 +77,7 @@ impl RequiresDist {
             &project_workspace,
             git_member,
             locations,
-            sources,
+            &sources,
             credentials_cache,
         )
     }
@@ -85,37 +87,31 @@ impl RequiresDist {
         project_workspace: &ProjectWorkspace,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: &NoSources,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.index.as_deref())
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_indexes = project_workspace
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.index.as_deref())
+            .unwrap_or(&empty);
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .map(ToolUvSources::inner)
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_sources = project_workspace
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .unwrap_or(&empty);
 
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
             project_workspace.current_project().root(),
@@ -130,14 +126,18 @@ impl RequiresDist {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, flat_group)| {
-                let requirements = match source_strategy {
-                    SourceStrategy::Enabled => flat_group
-                        .requirements
-                        .into_iter()
-                        .flat_map(|requirement| {
+                let requirements = flat_group
+                    .requirements
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        // Check if sources should be disabled for this specific package
+                        if no_sources.for_package(&requirement.name) {
+                            vec![Ok(Requirement::from(requirement))].into_iter()
+                        } else {
                             let requirement_name = requirement.name.clone();
                             let group = name.clone();
                             let extra = None;
+
                             LoweredRequirement::from_requirement(
                                 requirement,
                                 Some(&metadata.name),
@@ -151,36 +151,35 @@ impl RequiresDist {
                                 git_member,
                                 credentials_cache,
                             )
-                            .map(
-                                move |requirement| match requirement {
-                                    Ok(requirement) => Ok(requirement.into_inner()),
-                                    Err(err) => Err(MetadataError::GroupLoweringError(
-                                        group.clone(),
-                                        requirement_name.clone(),
-                                        Box::new(err),
-                                    )),
-                                },
-                            )
-                        })
-                        .collect::<Result<Box<_>, _>>(),
-                    SourceStrategy::Disabled => Ok(flat_group
-                        .requirements
-                        .into_iter()
-                        .map(Requirement::from)
-                        .collect()),
-                }?;
+                            .map(move |requirement| match requirement {
+                                Ok(requirement) => Ok(requirement.into_inner()),
+                                Err(err) => Err(MetadataError::GroupLoweringError(
+                                    group.clone(),
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                        }
+                    })
+                    .collect::<Result<Box<_>, _>>()?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         // Lower the requirements.
         let requires_dist = Box::into_iter(metadata.requires_dist);
-        let requires_dist = match source_strategy {
-            SourceStrategy::Enabled => requires_dist
-                .flat_map(|requirement| {
+        let requires_dist = requires_dist
+            .flat_map(|requirement| {
+                // Check if sources should be disabled for this specific package
+                if no_sources.for_package(&requirement.name) {
+                    vec![Ok(Requirement::from(requirement))].into_iter()
+                } else {
                     let requirement_name = requirement.name.clone();
                     let extra = requirement.marker.top_level_extra_name();
                     let group = None;
+
                     LoweredRequirement::from_requirement(
                         requirement,
                         Some(&metadata.name),
@@ -201,10 +200,11 @@ impl RequiresDist {
                             Box::new(err),
                         )),
                     })
-                })
-                .collect::<Result<Box<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
-        };
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                }
+            })
+            .collect::<Result<Box<_>, _>>()?;
 
         Ok(Self {
             name: metadata.name,
@@ -443,8 +443,9 @@ mod test {
     use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
+
     use uv_auth::CredentialsCache;
-    use uv_configuration::SourceStrategy;
+    use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
@@ -478,7 +479,7 @@ mod test {
             &project_workspace,
             None,
             &IndexLocations::default(),
-            SourceStrategy::default(),
+            &NoSources::default(),
             &CredentialsCache::new(),
         )?)
     }

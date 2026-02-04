@@ -1,5 +1,3 @@
-use std::env;
-
 use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;

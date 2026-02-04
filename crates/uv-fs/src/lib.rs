@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use tempfile::NamedTempFile;
@@ -11,24 +10,6 @@ pub mod cachedir;
 mod locked_file;
 mod path;
 pub mod which;
-
-/// Append an extension to a [`PathBuf`].
-///
-/// Unlike [`Path::with_extension`], this function does not replace an existing extension.
-///
-/// If there is no file name, the path is returned unchanged.
-///
-/// This mimics the behavior of the unstable [`Path::with_added_extension`] method.
-pub fn with_added_extension<'a>(path: &'a Path, extension: &str) -> Cow<'a, Path> {
-    let Some(name) = path.file_name() else {
-        // If there is no file name, we cannot add an extension.
-        return Cow::Borrowed(path);
-    };
-    let mut name = name.to_os_string();
-    name.push(".");
-    name.push(extension.trim_start_matches('.'));
-    Cow::Owned(path.with_file_name(name))
-}
 
 /// Attempt to check if the two paths refer to the same file.
 ///
@@ -281,12 +262,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
     // This amounts to 10 total seconds of trying the operation.
-    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
-    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
-    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
+    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
+    // attempts combined should equal the length of the last attempt (because it's a sum of powers
+    // of 2), so 10 seconds overall.
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(9)
+        .with_max_times(10)
         .build()
 }
 
@@ -714,46 +696,4 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_with_added_extension() {
-        // Test with simple package name (no dots)
-        let path = PathBuf::from("python");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("python.exe"));
-
-        // Test with package name containing single dot
-        let path = PathBuf::from("awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("awslabs.cdk-mcp-server.exe"));
-
-        // Test with package name containing multiple dots
-        let path = PathBuf::from("org.example.tool");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, PathBuf::from("org.example.tool.exe"));
-
-        // Test with different extensions
-        let path = PathBuf::from("script");
-        let result = with_added_extension(&path, "ps1");
-        assert_eq!(result, PathBuf::from("script.ps1"));
-
-        // Test with path that has directory components
-        let path = PathBuf::from("some/path/to/awslabs.cdk-mcp-server");
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(
-            result,
-            PathBuf::from("some/path/to/awslabs.cdk-mcp-server.exe")
-        );
-
-        // Test with empty path (edge case)
-        let path = PathBuf::new();
-        let result = with_added_extension(&path, "exe");
-        assert_eq!(result, path); // Should return unchanged
-    }
 }

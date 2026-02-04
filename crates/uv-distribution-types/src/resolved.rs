@@ -16,7 +16,6 @@ use crate::{
 ///
 /// Either an already-installed distribution or a distribution that can be installed.
 #[derive(Debug, Clone, Hash)]
-#[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
     Installed {
         dist: Arc<InstalledDist>,

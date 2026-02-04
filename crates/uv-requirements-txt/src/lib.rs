@@ -982,7 +982,7 @@ fn parse_requirement_and_hashes(
     //
     // While `requirements.txt` is a valid package name (per the spec), PyPI disallows
     // `requirements.txt` and some other variants anyway.
-    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    #[expect(clippy::case_sensitive_file_extension_comparisons)]
     if requirement.ends_with(".txt") || requirement.ends_with(".in") {
         let path = Path::new(requirement);
         let path = if path.is_absolute() {

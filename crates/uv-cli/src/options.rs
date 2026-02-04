@@ -31,7 +31,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
                 format!("--no-{name}").green(),
             );
             // No error forwarding since should eventually be solved on the clap side.
-            #[allow(clippy::exit)]
+            #[expect(clippy::exit)]
             {
                 std::process::exit(2);
             }
@@ -176,7 +176,7 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
             display_a.green(),
             display_b.green(),
         );
-        #[allow(clippy::exit)]
+        #[expect(clippy::exit)]
         {
             std::process::exit(2);
         }
@@ -216,6 +216,7 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer,
             link_mode,
             no_sources,
+            no_sources_package,
             exclude_newer_package,
         } = args;
 
@@ -244,6 +245,7 @@ impl From<ResolverArgs> for PipOptions {
             exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
             link_mode,
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..Self::from(index_args)
         }
     }
@@ -267,6 +269,7 @@ impl From<InstallerArgs> for PipOptions {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
             exclude_newer_package,
         } = args;
 
@@ -288,6 +291,7 @@ impl From<InstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..Self::from(index_args)
         }
     }
@@ -319,6 +323,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             compile_bytecode,
             no_compile_bytecode,
             no_sources,
+            no_sources_package,
             exclude_newer_package,
         } = args;
 
@@ -350,6 +355,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             link_mode,
             compile_bytecode: flag(compile_bytecode, no_compile_bytecode, "compile-bytecode"),
             no_sources: if no_sources { Some(true) } else { None },
+            no_sources_package: Some(no_sources_package),
             ..Self::from(index_args)
         }
     }
@@ -438,6 +444,7 @@ pub fn resolver_options(
         exclude_newer,
         link_mode,
         no_sources,
+        no_sources_package,
         exclude_newer_package,
     } = resolver_args;
 
@@ -518,6 +525,7 @@ pub fn resolver_options(
         no_binary: flag(no_binary, binary, "binary"),
         no_binary_package: Some(no_binary_package),
         no_sources: if no_sources { Some(true) } else { None },
+        no_sources_package: Some(no_sources_package),
     }
 }
 
@@ -551,6 +559,7 @@ pub fn resolver_installer_options(
         compile_bytecode,
         no_compile_bytecode,
         no_sources,
+        no_sources_package,
     } = resolver_installer_args;
 
     let BuildOptionsArgs {
@@ -642,6 +651,11 @@ pub fn resolver_installer_options(
             Some(no_binary_package)
         },
         no_sources: if no_sources { Some(true) } else { None },
+        no_sources_package: if no_sources_package.is_empty() {
+            None
+        } else {
+            Some(no_sources_package)
+        },
         torch_backend: None,
     }
 }

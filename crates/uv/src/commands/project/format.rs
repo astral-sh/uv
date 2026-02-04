@@ -8,7 +8,7 @@ use uv_bin_install::{Binary, bin_install};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_pep440::Version;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
@@ -31,10 +31,10 @@ pub(crate) async fn format(
     no_project: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
-    if !preview.is_enabled(PreviewFeatures::FORMAT) {
+    if !preview.is_enabled(PreviewFeature::Format) {
         warn_user!(
             "`uv format` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::FORMAT
+            PreviewFeature::Format
         );
     }
 

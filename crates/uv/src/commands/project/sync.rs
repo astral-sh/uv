@@ -25,7 +25,7 @@ use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
@@ -56,7 +56,6 @@ use crate::settings::{
 };
 
 /// Sync the project environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
@@ -86,11 +85,10 @@ pub(crate) async fn sync(
     preview: Preview,
     output_format: SyncFormat,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::JSON_OUTPUT) && matches!(output_format, SyncFormat::Json)
-    {
+    if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::JSON_OUTPUT
+            PreviewFeature::JsonOutput
         );
     }
 
@@ -464,7 +462,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
@@ -548,7 +546,7 @@ fn identify_installation_target<'a>(
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
     Project(VirtualProject),
@@ -601,7 +599,6 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -642,12 +639,12 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 
@@ -661,7 +658,7 @@ pub(super) async fn do_sync(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
-                sources,
+                &sources,
                 client_builder.credentials_cache(),
             )?
         }
@@ -683,7 +680,7 @@ pub(super) async fn do_sync(
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
-                sources,
+                sources: sources.clone(),
                 torch_backend: None,
                 upgrade: Upgrade::default(),
             };
@@ -825,7 +822,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,

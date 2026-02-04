@@ -81,7 +81,7 @@ impl<'a> Trie<'a> {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     fn collect_patterns(
         &self,
         pattern_prefix: PathBuf,
@@ -109,7 +109,6 @@ impl<'a> Trie<'a> {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn collect_groups(&self, prefix: PathBuf, groups: &mut Vec<(PathBuf, Vec<PathBuf>)>) {
         // LCP-style grouping of patterns
         if self.patterns.is_empty() {

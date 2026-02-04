@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
-    KeyringProviderType, NoBinary, NoBuild, SourceStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -58,7 +58,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
@@ -190,7 +190,7 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+    let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
         && python_request
             .as_ref()
             .is_none_or(|request| !request.includes_patch());
@@ -248,7 +248,7 @@ pub(crate) async fn venv(
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
-        let sources = SourceStrategy::Disabled;
+        let sources = NoSources::All;
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);

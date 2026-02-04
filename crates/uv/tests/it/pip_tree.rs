@@ -1,17 +1,12 @@
 #![cfg(not(windows))]
 
 use assert_cmd::assert::OutputAssertExt;
-use std::process::Command;
-
 use assert_fs::fixture::FileTouch;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::fixture::PathCreateDir;
 use indoc::indoc;
 
-use uv_static::EnvVars;
-
-use crate::common::get_bin;
 use crate::common::{TestContext, uv_snapshot};
 
 #[test]
@@ -303,16 +298,9 @@ fn depth() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("0")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -322,16 +310,9 @@ fn depth() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("1")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -346,16 +327,9 @@ fn depth() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--depth")
-        .arg("2")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -403,16 +377,9 @@ fn prune() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
-        .arg("werkzeug")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("werkzeug"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -427,18 +394,11 @@ fn prune() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
         .arg("werkzeug")
         .arg("--prune")
-        .arg("jinja2")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("jinja2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -452,16 +412,9 @@ fn prune() {
     "
     );
 
-    uv_snapshot!(context.filters(), Command::new(get_bin())
-        .arg("pip")
-        .arg("tree")
-        .arg("--cache-dir")
-        .arg(context.cache_dir.path())
+    uv_snapshot!(context.filters(), context.pip_tree()
         .arg("--prune")
-        .arg("werkzeug")
-        .env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str())
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .current_dir(&context.temp_dir), @"
+        .arg("werkzeug"), @"
     success: true
     exit_code: 0
     ----- stdout -----

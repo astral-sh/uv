@@ -34,7 +34,7 @@ use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
 
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
