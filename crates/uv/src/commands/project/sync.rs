@@ -797,25 +797,12 @@ pub(super) async fn do_sync(
     // distribution builds use the exact same build deps (with full distribution
     // info) that were resolved during `uv lock`, skipping re-resolution entirely.
     let locked_build_resolutions = {
-        let mut map = std::collections::BTreeMap::new();
-        for package in target.lock().packages() {
-            if package.build_dependencies().is_empty() {
-                continue;
-            }
-            if let Some(resolution) = target.lock().build_resolution(
-                package.name(),
-                package.version(),
-                target.install_path(),
-                &tags,
-                build_options,
-                venv.interpreter().markers(),
-            )? {
-                map.insert(
-                    (package.name().clone(), package.version().cloned()),
-                    resolution,
-                );
-            }
-        }
+        let map = target.lock().all_build_resolutions(
+            target.install_path(),
+            &tags,
+            build_options,
+            venv.interpreter().markers(),
+        )?;
         LockedBuildResolutions::new(map)
     };
 

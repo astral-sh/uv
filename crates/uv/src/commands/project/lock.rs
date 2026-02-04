@@ -792,6 +792,14 @@ async fn do_lock(
     )
     .with_build_preferences(build_preferences);
 
+    // Use universal resolution for build dependencies when locking, so the
+    // resolved build deps work on all platforms.
+    let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+        build_dispatch.with_universal_resolution()
+    } else {
+        build_dispatch
+    };
+
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
     // If any of the resolution-determining settings changed, invalidate the lock.

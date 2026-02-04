@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, NoSources};
-use uv_distribution_types::Resolution;
+use uv_distribution_types::{Resolution, ResolvedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
+use uv_pypi_types::HashDigest;
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
@@ -86,10 +88,28 @@ impl<T> BuildArena<T> {
     }
 }
 
-/// Previously resolved build dependencies from the lock file, stored as complete
-/// [`Resolution`] objects that can be used directly without re-resolving.
-///
-/// Used during `uv sync` to skip the resolver entirely for build dependencies.
+/// A resolved build dependency with its marker.
+#[derive(Debug, Clone)]
+pub struct ResolvedBuildDep {
+    /// The resolved distribution.
+    pub dist: ResolvedDist,
+    /// The hashes for verification.
+    pub hashes: Vec<HashDigest>,
+    /// The marker indicating when this dependency is needed.
+    pub marker: MarkerTree,
+}
+
+/// Captured build resolution info with markers for each dependency.
+#[derive(Debug, Clone, Default)]
+pub struct BuildResolutionInfo {
+    /// The resolved build dependencies with their markers.
+    pub deps: Vec<ResolvedBuildDep>,
+}
+
+/// Map of build dependency keys to their resolution info (with markers).
+type BuildResolutionInfoMap = BTreeMap<(PackageName, Option<Version>), BuildResolutionInfo>;
+
+/// Locked build dependency resolutions, indexed by package name and version.
 #[derive(Debug, Default, Clone)]
 pub struct LockedBuildResolutions(BTreeMap<(PackageName, Option<Version>), Resolution>);
 
@@ -120,14 +140,7 @@ type BuildDepKey = (PackageName, Option<Version>);
 /// Map of build dependency keys to their resolved build dependency (name, version) pairs.
 type BuildPreferencesMap = BTreeMap<BuildDepKey, Vec<(PackageName, Version)>>;
 
-/// Map of build dependency keys to their full resolutions.
-type BuildResolutionsMap = BTreeMap<BuildDepKey, Resolution>;
-
-/// Previously resolved build dependency versions, used as preferences during
-/// subsequent resolutions to prefer the same versions.
-///
-/// Used during `uv lock` so the resolver prefers previously locked build dep
-/// versions but can deviate if needed (e.g., when constraints change).
+/// Build dependency version preferences, indexed by package name and version.
 #[derive(Debug, Default, Clone)]
 pub struct BuildPreferences(BuildPreferencesMap);
 
@@ -156,26 +169,23 @@ impl BuildPreferences {
     }
 }
 
-/// A collection of build dependency resolutions, keyed by (package name, optional version).
-///
-/// During the resolution process, when source distributions need to be built,
-/// their build dependencies are resolved. This type captures those full resolutions
-/// (including distribution URLs, hashes, etc.) so they can be persisted in the lock file
-/// and reused directly during subsequent builds without re-resolving.
+/// Captured build dependency resolutions with markers.
 #[derive(Debug, Default, Clone)]
-pub struct BuildResolutions(Arc<Mutex<BuildResolutionsMap>>);
+pub struct BuildResolutions(Arc<Mutex<BuildResolutionInfoMap>>);
 
 impl BuildResolutions {
     /// Record a build resolution for the given package name and optional version.
-    pub fn insert(&self, package: PackageName, version: Option<Version>, resolution: Resolution) {
-        self.0
-            .lock()
-            .unwrap()
-            .insert((package, version), resolution);
+    pub fn insert(
+        &self,
+        package: PackageName,
+        version: Option<Version>,
+        info: BuildResolutionInfo,
+    ) {
+        self.0.lock().unwrap().insert((package, version), info);
     }
 
     /// Get a snapshot of the current build resolutions.
-    pub fn snapshot(&self) -> BuildResolutionsMap {
+    pub fn snapshot(&self) -> BuildResolutionInfoMap {
         self.0.lock().unwrap().clone()
     }
 }

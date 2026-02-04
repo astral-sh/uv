@@ -598,6 +598,50 @@ impl ResolverOutput {
             })
     }
 
+    /// Extract build dependency info with markers for each resolved package.
+    ///
+    /// Returns a list of (dist, hashes, marker) tuples for all resolved packages.
+    /// The marker indicates when each package is needed.
+    pub fn build_deps_with_markers(
+        &self,
+    ) -> Vec<(
+        ResolvedDist,
+        Vec<uv_pypi_types::HashDigest>,
+        uv_pep508::MarkerTree,
+    )> {
+        let mut result = Vec::new();
+
+        for node_index in self.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &self.graph[node_index] else {
+                continue;
+            };
+            if !dist.is_base() {
+                continue;
+            }
+
+            // Find the marker for this package by looking at incoming edges from root
+            // or combining markers from all incoming edges.
+            let mut combined_marker = uv_pep508::MarkerTree::FALSE;
+            for edge in self
+                .graph
+                .edges_directed(node_index, petgraph::Direction::Incoming)
+            {
+                let edge_marker = edge.weight();
+                // Convert UniversalMarker to MarkerTree (pep508 side only)
+                // .or() modifies in-place
+                combined_marker.or(edge_marker.pep508());
+            }
+
+            result.push((
+                dist.dist.clone(),
+                dist.hashes.clone().into_iter().collect(),
+                combined_marker,
+            ));
+        }
+
+        result
+    }
+
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
         self.dists().filter(|dist| dist.is_base()).count()

@@ -899,46 +899,64 @@ impl Lock {
     /// Populate build dependencies from captured build resolutions.
     ///
     /// Maps the collected build resolutions (keyed by package name) to the
-    /// corresponding packages in the lock file.
+    /// corresponding packages in the lock file, including markers.
     pub fn with_build_resolutions(
         mut self,
-        build_resolutions: &BTreeMap<
-            (PackageName, Option<Version>),
-            uv_distribution_types::Resolution,
-        >,
+        build_resolutions: &BTreeMap<(PackageName, Option<Version>), uv_types::BuildResolutionInfo>,
         root: &Path,
     ) -> Result<Self, LockError> {
         // Build a map from (name, version) to the build resolution for that package.
         // For each resolution, convert distributions to Package entries and collect
-        // BuildDependency references.
+        // BuildDependency references with markers.
         let mut build_dep_refs: BTreeMap<(PackageName, Option<Version>), Vec<BuildDependency>> =
             BTreeMap::new();
         let mut build_packages: Vec<Package> = Vec::new();
 
-        for ((parent_name, parent_version), resolution) in build_resolutions {
+        for ((parent_name, parent_version), info) in build_resolutions {
             let mut deps = Vec::new();
-            for (resolved_dist, hashes) in resolution.hashes() {
+            for build_dep in &info.deps {
+                let resolved_dist = &build_dep.dist;
+                let hashes = &build_dep.hashes;
+                let marker = &build_dep.marker;
+
                 let Some(version) = resolved_dist.version() else {
                     continue;
                 };
-                deps.push(BuildDependency::new(
-                    resolved_dist.name().clone(),
-                    version.clone(),
-                ));
 
-                // Only add the package if it's not already in the lock.
+                // Simplify marker against requires-python for consistency with regular deps.
+                // SimplifiedMarkerTree removes redundant python version constraints.
+                let simplified = SimplifiedMarkerTree::new(&self.requires_python, *marker);
+                // Only include marker if it's not always true after simplification.
+                let marker_opt = simplified
+                    .try_to_string()
+                    .map(|_| simplified.as_simplified_marker_tree());
+
+                // Check if the package already exists in the lock or in our collected build packages.
                 let already_exists = self.packages.iter().any(|p| {
                     p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
+                }) || build_packages.iter().any(|p| {
+                    p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
                 });
-                if !already_exists
-                    && !build_packages.iter().any(|p| {
-                        p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
-                    })
+
+                if already_exists {
+                    // Package exists, safe to add the dependency reference.
+                    deps.push(BuildDependency::new(
+                        resolved_dist.name().clone(),
+                        version.clone(),
+                        marker_opt,
+                    ));
+                } else if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root)
                 {
-                    if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) {
-                        build_packages.push(package);
-                    }
+                    // Package was successfully created, add both the package and the dependency.
+                    build_packages.push(package);
+                    deps.push(BuildDependency::new(
+                        resolved_dist.name().clone(),
+                        version.clone(),
+                        marker_opt,
+                    ));
                 }
+                // If the package doesn't exist and can't be created, skip this dependency
+                // to avoid dangling references in the lock file.
             }
             build_dep_refs.insert((parent_name.clone(), parent_version.clone()), deps);
         }
@@ -1018,6 +1036,82 @@ impl Lock {
         }
 
         Ok(Some(uv_distribution_types::Resolution::new(graph)))
+    }
+
+    /// Construct all build resolutions for packages that have build dependencies.
+    ///
+    /// This is more efficient than calling `build_resolution` for each package
+    /// individually, as it builds a package lookup map once and reuses it.
+    pub fn all_build_resolutions(
+        &self,
+        workspace_root: &Path,
+        tags: &Tags,
+        build_options: &BuildOptions,
+        markers: &MarkerEnvironment,
+    ) -> Result<
+        BTreeMap<(PackageName, Option<Version>), uv_distribution_types::Resolution>,
+        LockError,
+    > {
+        // Build a lookup map from (name, version) to package for O(1) lookups.
+        let package_map: std::collections::HashMap<(&PackageName, Option<&Version>), &Package> =
+            self.packages
+                .iter()
+                .map(|p| ((&p.id.name, p.id.version.as_ref()), p))
+                .collect();
+
+        let mut resolutions = BTreeMap::new();
+        let tag_policy = TagPolicy::Required(tags);
+
+        for package in &self.packages {
+            if package.build_dependencies.is_empty() {
+                continue;
+            }
+
+            let mut graph = petgraph::graph::DiGraph::new();
+            let mut all_deps_found = true;
+
+            for build_dep in &package.build_dependencies {
+                // Skip build deps whose markers don't match the current environment.
+                // Complexify the marker (add back requires-python constraints) before evaluation,
+                // since we store simplified markers in the lock file.
+                if let Some(marker) = build_dep.marker() {
+                    let complexified = self.requires_python.complexify_markers(*marker);
+                    if !complexified.evaluate(markers, &[]) {
+                        continue;
+                    }
+                }
+
+                // Look up the build dep's full package entry using the map.
+                let dep_package = package_map.get(&(&build_dep.name, Some(&build_dep.version)));
+                let Some(dep_package) = dep_package else {
+                    // Build dep package not found in lock — skip this package's resolution.
+                    all_deps_found = false;
+                    break;
+                };
+
+                let HashedDist { dist, hashes } =
+                    dep_package.to_dist(workspace_root, tag_policy, build_options, markers)?;
+                let version = dep_package.version().cloned();
+                let resolved_dist = ResolvedDist::Installable {
+                    dist: std::sync::Arc::new(dist),
+                    version,
+                };
+                graph.add_node(Node::Dist {
+                    dist: resolved_dist,
+                    hashes,
+                    install: true,
+                });
+            }
+
+            if all_deps_found {
+                resolutions.insert(
+                    (package.id.name.clone(), package.id.version.clone()),
+                    uv_distribution_types::Resolution::new(graph),
+                );
+            }
+        }
+
+        Ok(resolutions)
     }
 
     /// Record the conflicting groups that were used to generate this lock.
@@ -3789,8 +3883,8 @@ impl PackageWire {
             build_dependencies: self
                 .build_dependencies
                 .into_iter()
-                .map(BuildDependency::from)
-                .collect(),
+                .map(BuildDependencyWire::unwire)
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -5278,12 +5372,17 @@ impl TryFrom<WheelWire> for Wheel {
 pub struct BuildDependency {
     name: PackageName,
     version: Version,
+    marker: Option<MarkerTree>,
 }
 
 impl BuildDependency {
     /// Create a new build dependency.
-    pub fn new(name: PackageName, version: Version) -> Self {
-        Self { name, version }
+    pub fn new(name: PackageName, version: Version, marker: Option<MarkerTree>) -> Self {
+        Self {
+            name,
+            version,
+            marker,
+        }
     }
 
     /// Returns the package name.
@@ -5296,11 +5395,21 @@ impl BuildDependency {
         &self.version
     }
 
+    /// Returns the marker, if any.
+    pub fn marker(&self) -> Option<&MarkerTree> {
+        self.marker.as_ref()
+    }
+
     /// Returns the TOML representation of this build dependency.
     fn to_toml(&self) -> Table {
         let mut table = Table::new();
         table.insert("name", value(self.name.to_string()));
         table.insert("version", value(self.version.to_string()));
+        if let Some(marker) = &self.marker {
+            if let Some(marker_str) = marker.try_to_string() {
+                table.insert("marker", value(marker_str));
+            }
+        }
         table
     }
 }
@@ -5310,14 +5419,26 @@ impl BuildDependency {
 struct BuildDependencyWire {
     name: PackageName,
     version: Version,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    marker: Option<String>,
 }
 
-impl From<BuildDependencyWire> for BuildDependency {
-    fn from(wire: BuildDependencyWire) -> Self {
-        Self {
-            name: wire.name,
-            version: wire.version,
-        }
+impl BuildDependencyWire {
+    fn unwire(self) -> Result<BuildDependency, LockError> {
+        let marker_str = self.marker;
+        let marker = marker_str
+            .as_ref()
+            .map(|s| s.parse::<MarkerTree>())
+            .transpose()
+            .map_err(|err| LockErrorKind::InvalidMarker {
+                marker: marker_str.clone().unwrap_or_default(),
+                err,
+            })?;
+        Ok(BuildDependency {
+            name: self.name,
+            version: self.version,
+            marker,
+        })
     }
 }
 
@@ -5326,6 +5447,7 @@ impl From<&BuildDependency> for BuildDependencyWire {
         Self {
             name: dep.name.clone(),
             version: dep.version.clone(),
+            marker: dep.marker.as_ref().and_then(|m| m.try_to_string()),
         }
     }
 }
@@ -6178,6 +6300,13 @@ enum LockErrorKind {
     /// rather than an installable one.
     #[error("Build dependency is an installed distribution, expected an installable one")]
     InstalledBuildDep,
+    /// An error that occurs when a marker string cannot be parsed.
+    #[error("Invalid marker `{marker}`: {err}")]
+    InvalidMarker {
+        marker: String,
+        #[source]
+        err: uv_pep508::Pep508Error,
+    },
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]
