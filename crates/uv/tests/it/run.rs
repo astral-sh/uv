@@ -3573,6 +3573,106 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
     Ok(())
 }
 
+/// Test that `--isolated` with `--resolution lowest` resolves all dependencies to their lowest
+/// versions and does not modify an existing lock file.
+#[test]
+fn run_isolated_with_resolution_lowest() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "anyio>=3,<5",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import importlib.metadata
+        print(importlib.metadata.version("anyio"))
+       "#
+    })?;
+
+    // Create initial lock with default (highest) resolution
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Read the lock file content
+    let pre_uv_lock = context.read("uv.lock");
+
+    // Run with --isolated (default highest resolution) to show it uses highest versions
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    4.3.0
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    // Run with --isolated and --resolution lowest to force different resolution
+    // This should use anyio 3.x and lowest versions of all transitive deps,
+    // but not modify the lock file
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--resolution")
+        .arg("lowest")
+        .arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.0.0
+
+    ----- stderr -----
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest`
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.0.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==2.8
+     + sniffio==1.1.0
+    ");
+
+    // Verify the lock file hasn't changed
+    let post_uv_lock = context.read("uv.lock");
+    assert_eq!(
+        pre_uv_lock, post_uv_lock,
+        "Lock file should not be modified with --isolated"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn run_isolated_with_frozen() -> Result<()> {
     let context = TestContext::new("3.12");
