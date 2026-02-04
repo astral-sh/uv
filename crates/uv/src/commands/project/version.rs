@@ -294,6 +294,11 @@ pub(crate) async fn project_version(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
+                ));
+            }
             return Err(anyhow!(
                 "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));

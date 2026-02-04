@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.16"
+version = "0.0.18"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }

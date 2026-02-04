@@ -153,6 +153,7 @@ impl<'a> ComponentBuilder<'a> {
     fn create_synthetic_root_component(&mut self, root: Option<&Package>) -> Component {
         let name = root.map(Self::get_package_name).unwrap_or("uv-workspace");
         let bom_ref = self.create_bom_ref(name, None);
+        let properties = Properties(vec![Property::new("uv:package:is_synthetic_root", "true")]);
 
         // No need to register as we manually add dependencies in `if all_packages` check in `from_lock`
         Component {
@@ -176,7 +177,7 @@ impl<'a> ComponentBuilder<'a> {
             modified: None,
             pedigree: None,
             external_references: None,
-            properties: None,
+            properties: Some(properties),
             components: None,
             evidence: None,
             signature: None,
@@ -204,7 +205,10 @@ impl<'a> ComponentBuilder<'a> {
                     &PortablePath::from(path).to_string(),
                 ));
             }
-            PackageType::Root | PackageType::Dependency => {}
+            PackageType::Root => {
+                properties.push(Property::new("uv:package:is_project_root", "true"));
+            }
+            PackageType::Dependency => {}
         }
 
         if let Some(marker_contents) = marker.and_then(|marker| marker.contents()) {
@@ -349,9 +353,10 @@ pub fn from_lock<'lock>(
 
     let mut dependencies = create_dependencies(&nodes, &component_builder);
 
-    // With `--all-packages`, use synthetic root which depends on root and all workspace members.
-    // This ensures that we don't have any dangling components resulting from workspace packages not depended on by the workspace root.
-    if all_packages {
+    // Use a synthetic root in two cases:
+    // 1. With `--all-packages`: ensures no dangling components from workspace packages not depended on by the workspace root.
+    // 2. For virtual workspaces (no root project): provides an anchor for the dependency graph.
+    if all_packages || metadata.component.is_none() {
         let synthetic_root = component_builder.create_synthetic_root_component(root);
         let synthetic_root_bom_ref = synthetic_root
             .bom_ref

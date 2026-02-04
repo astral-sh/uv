@@ -1,6 +1,5 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
@@ -157,7 +156,7 @@ pub(crate) async fn pin(
     };
 
     if let Some(virtual_project) = &virtual_project {
-        if let Some(request_version) = pep440_version_from_request(&request) {
+        if let Some(request_version) = request.as_pep440_version() {
             assert_pin_compatible_with_project(
                 &Pin {
                     request: &request,
@@ -244,29 +243,6 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
-fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-    let version_request = match request {
-        PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version) => {
-            version
-        }
-        PythonRequest::Key(download_request) => download_request.version()?,
-        _ => {
-            return None;
-        }
-    };
-
-    if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
-        return None;
-    }
-
-    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`
-    // and does not have a Python variant (e.g., freethreaded) attached.
-    Some(
-        uv_pep440::Version::from_str(&version_request.clone().without_python_variant().to_string())
-            .unwrap(),
-    )
-}
-
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
 fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
@@ -277,7 +253,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
-    if let Some(pin_version) = pep440_version_from_request(pin) {
+    if let Some(pin_version) = pin.as_pep440_version() {
         if let Err(err) = assert_pin_compatible_with_project(
             &Pin {
                 request: pin,

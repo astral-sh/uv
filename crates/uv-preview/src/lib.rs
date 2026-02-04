@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     ops::BitOr,
     str::FromStr,
 };
@@ -35,6 +35,8 @@ pub enum PreviewFeature {
     MetadataJson = 1 << 20,
     GcsEndpoint = 1 << 21,
     AdjustUlimit = 1 << 22,
+    SpecialCondaEnvNames = 1 << 23,
+    RelocatableEnvsDefault = 1 << 24,
 }
 
 impl PreviewFeature {
@@ -64,6 +66,8 @@ impl PreviewFeature {
             Self::MetadataJson => "metadata-json",
             Self::GcsEndpoint => "gcs-endpoint",
             Self::AdjustUlimit => "adjust-ulimit",
+            Self::SpecialCondaEnvNames => "special-conda-env-names",
+            Self::RelocatableEnvsDefault => "relocatable-envs-default",
         }
     }
 }
@@ -106,14 +110,23 @@ impl FromStr for PreviewFeature {
             "target-workspace-discovery" => Self::TargetWorkspaceDiscovery,
             "metadata-json" => Self::MetadataJson,
             "adjust-ulimit" => Self::AdjustUlimit,
+            "special-conda-env-names" => Self::SpecialCondaEnvNames,
+            "relocatable-envs-default" => Self::RelocatableEnvsDefault,
             _ => return Err(PreviewFeatureParseError),
         })
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
     flags: BitFlags<PreviewFeature>,
+}
+
+impl Debug for Preview {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let flags: Vec<_> = self.flags.iter().collect();
+        f.debug_struct("Preview").field("flags", &flags).finish()
+    }
 }
 
 impl Preview {
@@ -322,5 +335,13 @@ mod tests {
         assert_eq!(PreviewFeature::MetadataJson.as_str(), "metadata-json");
         assert_eq!(PreviewFeature::GcsEndpoint.as_str(), "gcs-endpoint");
         assert_eq!(PreviewFeature::AdjustUlimit.as_str(), "adjust-ulimit");
+        assert_eq!(
+            PreviewFeature::SpecialCondaEnvNames.as_str(),
+            "special-conda-env-names"
+        );
+        assert_eq!(
+            PreviewFeature::RelocatableEnvsDefault.as_str(),
+            "relocatable-envs-default"
+        );
     }
 }

@@ -6,7 +6,7 @@ use console::Term;
 use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::{Credentials, DEFAULT_TOLERANCE_SECS, PyxTokenStore};
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
@@ -140,12 +140,14 @@ pub(crate) async fn publish(
         // Rely on custom redirect logic instead.
         .redirect(RedirectPolicy::NoRedirect)
         .timeout(environment.upload_http_timeout)
+        .client_name("upload")
         .build();
     // For OIDC (trusted publishing), we need retries (GitHub's networking is unreliable)
     // and default timeouts.
     let oidc_client = client_builder
         .clone()
         .auth_integration(AuthIntegration::NoAuthMiddleware)
+        .client_name("oidc")
         .build();
     // For S3 uploads, we roll our own retry loop, use upload timeouts, and no auth middleware.
     let s3_client = client_builder
@@ -153,6 +155,7 @@ pub(crate) async fn publish(
         .retries(0)
         .auth_integration(AuthIntegration::NoAuthMiddleware)
         .timeout(environment.upload_http_timeout)
+        .client_name("s3")
         .build();
 
     let retry_policy = client_builder.retry_policy();
@@ -168,7 +171,6 @@ pub(crate) async fn publish(
         keyring_provider,
         &token_store,
         &oidc_client,
-        &upload_client,
         check_url.as_ref(),
         Prompt::Enabled,
         printer,
@@ -192,22 +194,35 @@ pub(crate) async fn publish(
         None
     };
 
+    let mut error_count: usize = 0;
+
     for group in groups {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(
+            match uv_publish::check_url(
                 check_url_client,
                 &group.file,
                 &group.filename,
                 &download_concurrency,
             )
-            .await?
+            .await
             {
-                writeln!(
-                    printer.stderr(),
-                    "File {} already exists, skipping",
-                    group.filename
-                )?;
-                continue;
+                Ok(true) => {
+                    writeln!(
+                        printer.stderr(),
+                        "File {} already exists, skipping",
+                        group.filename
+                    )?;
+                    continue;
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    if dry_run {
+                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
+                }
             }
         }
 
@@ -232,14 +247,25 @@ pub(crate) async fn publish(
         }
 
         // Collect the metadata for the file.
-        let form_metadata = FormMetadata::read_from_file(&group.file, &group.filename)
+        let form_metadata = match FormMetadata::read_from_file(&group.file, &group.filename)
             .await
-            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))?;
+            .map_err(|err| PublishError::PublishPrepare(group.file.clone(), Box::new(err)))
+        {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if dry_run {
+                    write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                    error_count += 1;
+                    continue;
+                }
+                return Err(err.into());
+            }
+        };
 
         let uploaded = if direct {
             if dry_run {
                 // For dry run, call validate since we won't call reserve.
-                let should_upload = uv_publish::validate(
+                match uv_publish::validate(
                     &group.file,
                     &form_metadata,
                     &group.raw_filename,
@@ -248,13 +274,27 @@ pub(crate) async fn publish(
                     &upload_client,
                     &credentials,
                 )
-                .await?;
-                if !should_upload {
-                    writeln!(
-                        printer.stderr(),
-                        "{}",
-                        "File already exists, skipping".dimmed()
-                    )?;
+                .await
+                {
+                    Ok(should_upload) => {
+                        if !should_upload {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                "File already exists, skipping".dimmed()
+                            )?;
+                        }
+                    }
+                    Err(err) => {
+                        let err: anyhow::Error = err.into();
+                        write_error_chain(
+                            err.as_ref(),
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                        )?;
+                        error_count += 1;
+                    }
                 }
                 continue;
             }
@@ -275,7 +315,7 @@ pub(crate) async fn publish(
             .await?
         } else {
             // Run validation checks on the file, but don't upload it (if possible).
-            let should_upload = uv_publish::validate(
+            match uv_publish::validate(
                 &group.file,
                 &form_metadata,
                 &group.raw_filename,
@@ -284,30 +324,47 @@ pub(crate) async fn publish(
                 &upload_client,
                 &credentials,
             )
-            .await?;
+            .await
+            {
+                Ok(should_upload) => {
+                    if dry_run {
+                        continue;
+                    }
 
-            if dry_run {
-                continue;
-            }
-
-            // If validation indicates the file already exists, skip the upload.
-            if !should_upload {
-                false
-            } else {
-                let reporter = PublishReporter::single(printer);
-                upload(
-                    &group,
-                    &form_metadata,
-                    &publish_url,
-                    &upload_client,
-                    retry_policy,
-                    &credentials,
-                    check_url_client.as_ref(),
-                    &download_concurrency,
-                    // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
-                    Arc::new(reporter),
-                )
-                .await? // Filename and/or URL are already attached, if applicable.
+                    // If validation indicates the file already exists, skip the upload.
+                    if !should_upload {
+                        false
+                    } else {
+                        let reporter = PublishReporter::single(printer);
+                        upload(
+                            &group,
+                            &form_metadata,
+                            &publish_url,
+                            &upload_client,
+                            retry_policy,
+                            &credentials,
+                            check_url_client.as_ref(),
+                            &download_concurrency,
+                            // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
+                            Arc::new(reporter),
+                        )
+                        .await? // Filename and/or URL are already attached, if applicable.
+                    }
+                }
+                Err(err) => {
+                    if dry_run {
+                        let err: anyhow::Error = err.into();
+                        write_error_chain(
+                            err.as_ref(),
+                            printer.stderr(),
+                            "error",
+                            AnsiColors::Red,
+                        )?;
+                        error_count += 1;
+                        continue;
+                    }
+                    return Err(err.into());
+                }
             }
         };
         info!("Upload succeeded");
@@ -319,6 +376,12 @@ pub(crate) async fn publish(
                 "File already exists, skipping".dimmed()
             )?;
         }
+    }
+
+    if error_count > 0 {
+        let failed = if error_count == 1 { "file" } else { "files" };
+        writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
+        return Ok(ExitStatus::Failure);
     }
 
     Ok(ExitStatus::Success)
@@ -371,7 +434,6 @@ async fn gather_credentials(
     keyring_provider: KeyringProviderType,
     token_store: &PyxTokenStore,
     oidc_client: &BaseClient,
-    base_client: &BaseClient,
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
@@ -397,22 +459,6 @@ async fn gather_credentials(
             .expect("Failed to clear publish URL username");
     }
 
-    // If the user is publishing to pyx, load the credentials from the store.
-    if username.is_none() && password.is_none() {
-        if token_store.is_known_url(&publish_url) {
-            if let Some(token) = token_store
-                .access_token(
-                    base_client.for_host(token_store.api()).raw_client(),
-                    DEFAULT_TOLERANCE_SECS,
-                )
-                .await?
-            {
-                debug!("Using authentication token from the store");
-                return Ok((publish_url, Credentials::from(token)));
-            }
-        }
-    }
-
     // If applicable, attempt obtaining a token for trusted publishing.
     let trusted_publishing_token = check_trusted_publishing(
         username.as_deref(),
@@ -430,9 +476,14 @@ async fn gather_credentials(
             (Some("__token__".to_string()), Some(password.to_string()))
         } else {
             if username.is_none() && password.is_none() {
-                match prompt {
-                    Prompt::Enabled => prompt_username_and_password()?,
-                    Prompt::Disabled => (None, None),
+                // Skip prompting for pyx URLs; the auth middleware will handle authentication.
+                if token_store.is_known_url(&publish_url) {
+                    (None, None)
+                } else {
+                    match prompt {
+                        Prompt::Enabled => prompt_username_and_password()?,
+                        Prompt::Disabled => (None, None),
+                    }
                 }
             } else {
                 (username, password)
@@ -447,7 +498,10 @@ async fn gather_credentials(
         );
     }
 
-    if username.is_none() && password.is_none() && keyring_provider == KeyringProviderType::Disabled
+    if username.is_none()
+        && password.is_none()
+        && keyring_provider == KeyringProviderType::Disabled
+        && !token_store.is_known_url(&publish_url)
     {
         if let TrustedPublishResult::Ignored(err) = trusted_publishing_token {
             // The user has configured something incorrectly:
@@ -543,7 +597,6 @@ mod tests {
             TrustedPublishing::Never,
             KeyringProviderType::Disabled,
             &token_store,
-            &client,
             &client,
             None,
             Prompt::Disabled,

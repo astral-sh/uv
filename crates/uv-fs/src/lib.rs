@@ -262,12 +262,13 @@ pub fn copy_atomic_sync(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io
 fn backoff_file_move() -> backon::ExponentialBackoff {
     use backon::BackoffBuilder;
     // This amounts to 10 total seconds of trying the operation.
-    // We start at 10 milliseconds and try 9 times, doubling each time, so the last try will take
-    // about 10*(2^9) milliseconds ~= 5 seconds. All other attempts combined should equal
-    // the length of the last attempt (because it's a sum of powers of 2), so 10 seconds overall.
+    // We retry 10 times, starting at 10*(2^0) milliseconds for the first retry, doubling with each
+    // retry, so the last (10th) one will take about 10*(2^9) milliseconds ~= 5 seconds. All other
+    // attempts combined should equal the length of the last attempt (because it's a sum of powers
+    // of 2), so 10 seconds overall.
     backon::ExponentialBuilder::default()
         .with_min_delay(std::time::Duration::from_millis(10))
-        .with_max_times(9)
+        .with_max_times(10)
         .build()
 }
 

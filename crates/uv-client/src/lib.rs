@@ -4,7 +4,7 @@ pub use base_client::{
     RetryParsingError, RetryState, UvRetryableStrategy,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
-pub use error::{Error, ErrorKind, WrappedReqwestError};
+pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use linehaul::LineHaul;
 pub use registry_client::{

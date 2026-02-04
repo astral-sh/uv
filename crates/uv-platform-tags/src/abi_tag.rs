@@ -208,8 +208,10 @@ impl FromStr for AbiTag {
             // Ex) `cp39m`, `cp310t`
             let version_end = cp.find(|c: char| !c.is_ascii_digit()).unwrap_or(cp.len());
             let version_str = &cp[..version_end];
+            let abi_suffixes = &cp[version_end..];
             let (major, minor) = parse_python_version(version_str, "CPython", s)?;
-            let gil_disabled = cp.ends_with('t');
+            // TODO(konsti): Handle all ABI tags
+            let gil_disabled = abi_suffixes.contains('t');
             Ok(Self::CPython {
                 gil_disabled,
                 python_version: (major, minor),

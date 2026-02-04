@@ -99,6 +99,8 @@ pub struct BaseClientBuilder<'a> {
     custom_client: Option<Client>,
     /// uv subcommand in which this client is being used
     subcommand: Option<Vec<String>>,
+    /// Optional name for this client, used in debug logging.
+    client_name: Option<&'static str>,
 }
 
 /// The policy for handling HTTP redirects.
@@ -160,6 +162,7 @@ impl Default for BaseClientBuilder<'_> {
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
             subcommand: None,
+            client_name: None,
         }
     }
 }
@@ -309,6 +312,12 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    #[must_use]
+    pub fn client_name(mut self, name: &'static str) -> Self {
+        self.client_name = Some(name);
+        self
+    }
+
     pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
@@ -342,7 +351,14 @@ impl<'a> BaseClientBuilder<'a> {
 
     pub fn build(&self) -> BaseClient {
         let timeout = self.timeout;
-        debug!("Using request timeout of {}s", timeout.as_secs());
+        if let Some(name) = self.client_name {
+            debug!(
+                "Using request timeout of {}s for {name} client",
+                timeout.as_secs()
+            );
+        } else {
+            debug!("Using request timeout of {}s", timeout.as_secs());
+        }
 
         // Use the custom client if provided, otherwise create a new one
         let (raw_client, raw_dangerous_client) = match &self.custom_client {

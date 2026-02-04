@@ -285,8 +285,9 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>()
--> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>(
+    preview: Preview,
+) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -296,8 +297,8 @@ fn python_executables_from_virtual_environments<'a>()
     .flatten();
 
     // N.B. we prefer the conda environment over discovered virtual environments
-    let from_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Child)
+    let from_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Child, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::CondaPrefix, path)))
@@ -524,15 +525,15 @@ fn python_executables<'a>(
     .flatten();
 
     // Check if the base conda environment is active
-    let from_base_conda_environment = iter::once_with(|| {
-        conda_environment_from_env(CondaEnvironmentKind::Base)
+    let from_base_conda_environment = iter::once_with(move || {
+        conda_environment_from_env(CondaEnvironmentKind::Base, preview)
             .into_iter()
             .map(virtualenv_python_executable)
             .map(|path| Ok((PythonSource::BaseCondaPrefix, path)))
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments();
+    let from_virtual_environments = python_executables_from_virtual_environments(preview);
     let from_installed =
         python_executables_from_installed(version, implementation, platform, preference, preview);
 
@@ -2221,6 +2222,19 @@ impl PythonRequest {
             Self::Key(request) => request.to_string(),
         }
     }
+
+    /// Convert an interpreter request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` if the request doesn't carry an exact version
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Version(v) | Self::ImplementationVersion(_, v) => v.as_pep440_version(),
+            Self::Key(download_request) => download_request
+                .version()
+                .and_then(VersionRequest::as_pep440_version),
+            _ => None,
+        }
+    }
 }
 
 impl PythonSource {
@@ -3056,6 +3070,28 @@ impl VersionRequest {
             | Self::Range(_, variant) => Some(*variant),
         }
     }
+
+    /// Convert this request into a concrete PEP 440 `Version` when possible.
+    ///
+    /// Returns `None` for non-concrete requests
+    pub fn as_pep440_version(&self) -> Option<Version> {
+        match self {
+            Self::Default | Self::Any | Self::Range(_, _) => None,
+            Self::Major(major, _) => Some(Version::new([u64::from(*major)])),
+            Self::MajorMinor(major, minor, _) => {
+                Some(Version::new([u64::from(*major), u64::from(*minor)]))
+            }
+            Self::MajorMinorPatch(major, minor, patch, _) => Some(Version::new([
+                u64::from(*major),
+                u64::from(*minor),
+                u64::from(*patch),
+            ])),
+            // Pre-releases of Python versions are always for the zero patch version
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => Some(
+                Version::new([u64::from(*major), u64::from(*minor), 0]).with_pre(Some(*prerelease)),
+            ),
+        }
+    }
 }
 
 impl FromStr for VersionRequest {
@@ -3453,7 +3489,7 @@ mod tests {
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
-    use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
+    use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
     use crate::{
         discovery::{PythonRequest, VersionRequest},
@@ -4118,5 +4154,135 @@ mod tests {
         );
         // @ is not allowed if the prefix is empty.
         assert!(PythonRequest::try_split_prefix_and_version("", "@3").is_err());
+    }
+
+    #[test]
+    fn version_request_as_pep440_version() {
+        // Non-concrete requests return `None`
+        assert_eq!(VersionRequest::Default.as_pep440_version(), None);
+        assert_eq!(VersionRequest::Any.as_pep440_version(), None);
+        assert_eq!(
+            VersionRequest::from_str(">=3.10")
+                .unwrap()
+                .as_pep440_version(),
+            None
+        );
+
+        // `VersionRequest::Major`
+        assert_eq!(
+            VersionRequest::Major(3, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3").unwrap())
+        );
+
+        // `VersionRequest::MajorMinor`
+        assert_eq!(
+            VersionRequest::MajorMinor(3, 12, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3.12").unwrap())
+        );
+
+        // `VersionRequest::MajorMinorPatch`
+        assert_eq!(
+            VersionRequest::MajorMinorPatch(3, 12, 5, PythonVariant::Default).as_pep440_version(),
+            Some(Version::from_str("3.12.5").unwrap())
+        );
+
+        // `VersionRequest::MajorMinorPrerelease`
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                14,
+                Prerelease {
+                    kind: PrereleaseKind::Alpha,
+                    number: 1
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.14.0a1").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                14,
+                Prerelease {
+                    kind: PrereleaseKind::Beta,
+                    number: 2
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.14.0b2").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                Prerelease {
+                    kind: PrereleaseKind::Rc,
+                    number: 3
+                },
+                PythonVariant::Default
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.13.0rc3").unwrap())
+        );
+
+        // Variant is ignored
+        assert_eq!(
+            VersionRequest::Major(3, PythonVariant::Freethreaded).as_pep440_version(),
+            Some(Version::from_str("3").unwrap())
+        );
+        assert_eq!(
+            VersionRequest::MajorMinor(3, 13, PythonVariant::Freethreaded).as_pep440_version(),
+            Some(Version::from_str("3.13").unwrap())
+        );
+    }
+
+    #[test]
+    fn python_request_as_pep440_version() {
+        // `PythonRequest::Any` and `PythonRequest::Default` return `None`
+        assert_eq!(PythonRequest::Any.as_pep440_version(), None);
+        assert_eq!(PythonRequest::Default.as_pep440_version(), None);
+
+        // `PythonRequest::Version` delegates to `VersionRequest`
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::MajorMinor(3, 11, PythonVariant::Default))
+                .as_pep440_version(),
+            Some(Version::from_str("3.11").unwrap())
+        );
+
+        // `PythonRequest::ImplementationVersion` extracts version
+        assert_eq!(
+            PythonRequest::ImplementationVersion(
+                ImplementationName::CPython,
+                VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default),
+            )
+            .as_pep440_version(),
+            Some(Version::from_str("3.12.1").unwrap())
+        );
+
+        // `PythonRequest::Implementation` returns `None` (no version)
+        assert_eq!(
+            PythonRequest::Implementation(ImplementationName::CPython).as_pep440_version(),
+            None
+        );
+
+        // `PythonRequest::Key` with version
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2").as_pep440_version(),
+            Some(Version::from_str("3.13.2").unwrap())
+        );
+
+        // `PythonRequest::Key` without version returns `None`
+        assert_eq!(
+            PythonRequest::parse("cpython-macos-aarch64-none").as_pep440_version(),
+            None
+        );
+
+        // Range versions return `None`
+        assert_eq!(
+            PythonRequest::Version(VersionRequest::from_str(">=3.10").unwrap()).as_pep440_version(),
+            None
+        );
     }
 }

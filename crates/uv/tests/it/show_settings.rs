@@ -76,9 +76,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -283,9 +281,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -491,9 +487,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -731,9 +725,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -940,9 +932,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1125,9 +1115,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1359,9 +1347,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1601,9 +1587,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -1901,9 +1885,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2132,9 +2114,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2322,9 +2302,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2562,9 +2540,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -2825,9 +2801,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3005,9 +2979,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3185,9 +3157,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3367,9 +3337,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3568,9 +3536,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3764,9 +3730,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -3978,9 +3942,7 @@ fn resolve_both() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4231,9 +4193,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4563,9 +4523,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -4870,9 +4828,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5053,9 +5009,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5255,9 +5209,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5449,9 +5401,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5691,9 +5641,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -5939,9 +5887,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6182,9 +6128,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6432,9 +6376,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6675,9 +6617,7 @@ fn index_priority() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -6931,9 +6871,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7104,9 +7042,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7275,9 +7211,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7448,9 +7382,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7619,9 +7551,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7791,9 +7721,7 @@ fn verify_hashes() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -7978,10 +7906,33 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b11111111111111111111111,
-                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit,
-            },
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+                JsonOutput,
+                Pylock,
+                AddBounds,
+                PackageConflicts,
+                ExtraBuildDependencies,
+                DetectModuleConflicts,
+                Format,
+                NativeAuth,
+                S3Endpoint,
+                CacheSize,
+                InitProjectFlag,
+                WorkspaceMetadata,
+                WorkspaceDir,
+                WorkspaceList,
+                SbomExport,
+                AuthHelper,
+                DirectPublish,
+                TargetWorkspaceDiscovery,
+                MetadataJson,
+                GcsEndpoint,
+                AdjustUlimit,
+                SpecialCondaEnvNames,
+                RelocatableEnvsDefault,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8098,9 +8049,7 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8217,10 +8166,33 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b11111111111111111111111,
-                flags: PythonInstallDefault | PythonUpgrade | JsonOutput | Pylock | AddBounds | PackageConflicts | ExtraBuildDependencies | DetectModuleConflicts | Format | NativeAuth | S3Endpoint | CacheSize | InitProjectFlag | WorkspaceMetadata | WorkspaceDir | WorkspaceList | SbomExport | AuthHelper | DirectPublish | TargetWorkspaceDiscovery | MetadataJson | GcsEndpoint | AdjustUlimit,
-            },
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+                JsonOutput,
+                Pylock,
+                AddBounds,
+                PackageConflicts,
+                ExtraBuildDependencies,
+                DetectModuleConflicts,
+                Format,
+                NativeAuth,
+                S3Endpoint,
+                CacheSize,
+                InitProjectFlag,
+                WorkspaceMetadata,
+                WorkspaceDir,
+                WorkspaceList,
+                SbomExport,
+                AuthHelper,
+                DirectPublish,
+                TargetWorkspaceDiscovery,
+                MetadataJson,
+                GcsEndpoint,
+                AdjustUlimit,
+                SpecialCondaEnvNames,
+                RelocatableEnvsDefault,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8337,10 +8309,10 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b11,
-                flags: PythonInstallDefault | PythonUpgrade,
-            },
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8457,10 +8429,10 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b11,
-                flags: PythonInstallDefault | PythonUpgrade,
-            },
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+            ],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8579,9 +8551,7 @@ fn preview_features() {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8719,9 +8689,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -8900,9 +8868,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9104,9 +9070,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9283,9 +9247,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9456,9 +9418,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9630,9 +9590,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9869,9 +9827,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -9993,9 +9949,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10140,9 +10094,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10262,9 +10214,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10374,9 +10324,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10487,9 +10435,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10664,9 +10610,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
@@ -10840,9 +10784,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
         },
         show_settings: true,
         preview: Preview {
-            flags: BitFlags<PreviewFeature> {
-                bits: 0b0,
-            },
+            flags: [],
         },
         python_preference: Managed,
         python_downloads: Automatic,
