@@ -24,6 +24,8 @@ use walkdir::WalkDir;
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum LinkMode {
     /// Clone (i.e., copy-on-write) packages from the source into the destination.
+    #[cfg_attr(feature = "serde", serde(alias = "reflink"))]
+    #[cfg_attr(feature = "clap", value(alias = "reflink"))]
     Clone,
     /// Copy packages from the source into the destination.
     Copy,
@@ -103,6 +105,8 @@ impl CopyLocks {
     /// same directory from corrupting files.
     pub fn synchronized_copy(&self, from: &Path, to: &Path) -> io::Result<()> {
         // Ensure we have a lock for the directory.
+        // TODO(zanieb): This unwrap was copied from `uv-install-wheel`; consider propagating the
+        // error instead of panicking if `to` has no parent.
         let dir_lock = {
             let mut locks_guard = self.dir_locks.lock().unwrap();
             locks_guard
@@ -216,7 +220,7 @@ impl<'a, F> LinkOptions<'a, F> {
 /// errors are not due to lack of OS/filesystem support. If it fails, we'll switch
 /// to copying for the rest of the operation.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum Attempt {
+enum Attempt {
     #[default]
     Initial,
     Subsequent,
@@ -266,9 +270,8 @@ pub enum LinkError {
 ///
 /// On macOS with APFS, tries to clone the entire directory in a single syscall.
 ///
-/// NOTE: On Linux, we do not yet support cloning and immediately fallback to hard links.
-///
-/// On failure, falls back to hard linking individual files, then copying if hard links fail.
+/// On all platforms, attempts to reflink individual files. If reflinking is not supported,
+/// falls back to hard linking, then copying.
 fn clone_dir<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
@@ -280,7 +283,7 @@ where
             Ok(()) => return Ok(LinkMode::Clone),
             Err(e) => {
                 debug!(
-                    "Failed to clone `{}` to `{}`: {}, falling back to hard links",
+                    "Failed to clone `{}` to `{}`: {}, falling back to per-file reflink",
                     src.display(),
                     dst.display(),
                     e
@@ -289,8 +292,128 @@ where
         }
     }
 
-    // fallback to hard linking individual files
-    hardlink_dir(src, dst, options)
+    // Try per-file reflinking, with fallback to hardlink then copy
+    reflink_dir(src, dst, options)
+}
+
+/// Reflink individual files in a directory tree.
+///
+/// Attempts to reflink each file. If reflinking fails (e.g., unsupported filesystem),
+/// falls back to hard linking, then copying.
+fn reflink_dir<F>(
+    src: &Path,
+    dst: &Path,
+    options: &LinkOptions<'_, F>,
+) -> Result<LinkMode, LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    let mut attempt = Attempt::Initial;
+
+    for entry in WalkDir::new(src) {
+        let entry = entry.map_err(|err| LinkError::WalkDir {
+            path: src.to_path_buf(),
+            err,
+        })?;
+
+        let path = entry.path();
+        let relative = path.strip_prefix(src).expect("walkdir starts with root");
+        let target = dst.join(relative);
+
+        if entry.file_type().is_dir() {
+            fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {
+                path: target.clone(),
+                err,
+            })?;
+            continue;
+        }
+
+        match attempt {
+            Attempt::Initial => {
+                match reflink_copy::reflink(path, &target) {
+                    Ok(()) => {
+                        attempt = Attempt::Subsequent;
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                        if options.on_existing_directory == OnExistingDirectory::Merge {
+                            // File exists, overwrite atomically via temp file
+                            let parent = target.parent().unwrap();
+                            let tempdir = tempfile::tempdir_in(parent)?;
+                            let tempfile = tempdir.path().join(target.file_name().unwrap());
+                            if reflink_copy::reflink(path, &tempfile).is_ok() {
+                                fs_err::rename(&tempfile, &target)?;
+                                attempt = Attempt::Subsequent;
+                            } else {
+                                // Reflink to temp failed, fallback to hardlink
+                                debug!(
+                                    "Failed to reflink `{}` to temp location, falling back to hardlink",
+                                    path.display()
+                                );
+                                return hardlink_dir(src, dst, options);
+                            }
+                        } else {
+                            return Err(LinkError::Reflink {
+                                from: path.to_path_buf(),
+                                to: target,
+                                err,
+                            });
+                        }
+                    }
+                    Err(err) => {
+                        debug!(
+                            "Failed to reflink `{}` to `{}`: {}, falling back to hardlink",
+                            path.display(),
+                            target.display(),
+                            err
+                        );
+                        // Fallback to hardlinking (hardlink_dir handles AlreadyExists for
+                        // files we already reflinked when in Merge mode)
+                        return hardlink_dir(src, dst, options);
+                    }
+                }
+            }
+            Attempt::Subsequent => match reflink_copy::reflink(path, &target) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                    if options.on_existing_directory == OnExistingDirectory::Merge {
+                        let parent = target.parent().unwrap();
+                        let tempdir = tempfile::tempdir_in(parent)?;
+                        let tempfile = tempdir.path().join(target.file_name().unwrap());
+                        reflink_copy::reflink(path, &tempfile).map_err(|err| {
+                            LinkError::Reflink {
+                                from: path.to_path_buf(),
+                                to: tempfile.clone(),
+                                err,
+                            }
+                        })?;
+                        fs_err::rename(&tempfile, &target)?;
+                    } else {
+                        return Err(LinkError::Reflink {
+                            from: path.to_path_buf(),
+                            to: target,
+                            err,
+                        });
+                    }
+                }
+                Err(err) => {
+                    return Err(LinkError::Reflink {
+                        from: path.to_path_buf(),
+                        to: target,
+                        err,
+                    });
+                }
+            },
+            Attempt::UseCopyFallback => {
+                // We've fallen back to hardlinking; this is handled by returning
+                // early to hardlink_dir, so this branch should not be reached.
+                unreachable!(
+                    "reflink_dir should return to hardlink_dir before reaching UseCopyFallback"
+                );
+            }
+        }
+    }
+
+    Ok(LinkMode::Clone)
 }
 
 /// Try to clone a directory, handling `merge_directories` option.
@@ -329,7 +452,11 @@ where
 
 /// Clone a directory by merging into an existing destination.
 #[cfg(target_os = "macos")]
-fn clone_dir_merge<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
+fn clone_dir_merge<F>(
+    src: &Path,
+    dst: &Path,
+    _options: &LinkOptions<'_, F>,
+) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -339,12 +466,20 @@ where
         let dst_path = dst.join(entry.file_name());
 
         if entry.file_type()?.is_dir() {
-            // Recursively handle directories
-            fs_err::create_dir_all(&dst_path).map_err(|err| LinkError::CreateDir {
-                path: dst_path.clone(),
-                err,
-            })?;
-            try_clone_dir_recursive(&src_path, &dst_path, options)?;
+            // Try to clone the directory directly first; if it already exists, merge recursively
+            match reflink_copy::reflink(&src_path, &dst_path) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                    clone_dir_merge(&src_path, &dst_path, _options)?;
+                }
+                Err(err) => {
+                    return Err(LinkError::Reflink {
+                        from: src_path,
+                        to: dst_path,
+                        err,
+                    });
+                }
+            }
         } else {
             // Try to clone the file
             match reflink_copy::reflink(&src_path, &dst_path) {
@@ -419,7 +554,7 @@ where
 
         match attempt {
             Attempt::Initial => {
-                if let Err(err) = try_hardlink_file(path, &target, options) {
+                if let Err(err) = try_hardlink_file(path, &target) {
                     if err.kind() == io::ErrorKind::AlreadyExists
                         && options.on_existing_directory == OnExistingDirectory::Merge
                     {
@@ -450,7 +585,7 @@ where
                 }
             }
             Attempt::Subsequent => {
-                if let Err(err) = try_hardlink_file(path, &target, options) {
+                if let Err(err) = try_hardlink_file(path, &target) {
                     if err.kind() == io::ErrorKind::AlreadyExists
                         && options.on_existing_directory == OnExistingDirectory::Merge
                     {
@@ -483,10 +618,7 @@ where
 }
 
 /// Try to create a hard link, returning the `io::Error` on failure.
-fn try_hardlink_file<F>(src: &Path, dst: &Path, _options: &LinkOptions<'_, F>) -> io::Result<()>
-where
-    F: Fn(&Path) -> bool,
-{
+fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
     fs_err::hard_link(src, dst)
 }
 
@@ -500,6 +632,8 @@ fn atomic_hardlink_overwrite<F>(
 where
     F: Fn(&Path) -> bool,
 {
+    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
+    // instead of panicking if `dst` has no parent or file name.
     let parent = dst.parent().unwrap();
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
@@ -532,6 +666,8 @@ fn atomic_copy_overwrite<F>(
 where
     F: Fn(&Path) -> bool,
 {
+    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
+    // instead of panicking if `dst` has no parent or file name.
     let parent = dst.parent().unwrap();
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
@@ -706,6 +842,8 @@ fn atomic_symlink_overwrite<F>(
 where
     F: Fn(&Path) -> bool,
 {
+    // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
+    // instead of panicking if `dst` has no parent or file name.
     let parent = dst.parent().unwrap();
     let tempdir = tempfile::tempdir_in(parent)?;
     let tempfile = tempdir.path().join(dst.file_name().unwrap());
