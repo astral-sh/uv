@@ -824,7 +824,7 @@ pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
-    BrokenSymlink(BrokenSymlink),
+    BrokenLink(BrokenLink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -861,19 +861,30 @@ pub enum Error {
 }
 
 #[derive(Debug, Error)]
-pub struct BrokenSymlink {
+pub struct BrokenLink {
     pub path: PathBuf,
+    /// Whether we have a broken symlink (Unix) or whether the shim returned that the underlying
+    /// Python went away (Windows).
+    pub unix: bool,
     /// Whether the interpreter path looks like a virtual environment.
     pub venv: bool,
 }
 
-impl Display for BrokenSymlink {
+impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
-            self.path.user_display()
-        )?;
+        if self.unix {
+            write!(
+                f,
+                "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )?;
+        } else {
+            write!(
+                f,
+                "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )?;
+        }
         if self.venv {
             write!(
                 f,
@@ -994,6 +1005,15 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
+            // Handle uninstalled Python interpreters on Windows
+            if output.status.code() == Some(103) && stderr.contains("did not find executable at") {
+                return Err(Error::BrokenLink(BrokenLink {
+                    path: interpreter.to_path_buf(),
+                    unix: false,
+                    venv: uv_fs::is_virtualenv_executable(interpreter),
+                }));
+            }
+
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
                 return Err(Error::QueryScript {
@@ -1092,8 +1112,9 @@ impl InterpreterInfo {
                     .symlink_metadata()
                     .is_ok_and(|metadata| metadata.is_symlink())
                 {
-                    Error::BrokenSymlink(BrokenSymlink {
+                    Error::BrokenLink(BrokenLink {
                         path: executable.to_path_buf(),
+                        unix: true,
                         venv: uv_fs::is_virtualenv_executable(executable),
                     })
                 } else {
