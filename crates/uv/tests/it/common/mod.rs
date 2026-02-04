@@ -457,6 +457,8 @@ impl TestContext {
       (?:
         \[X\]               # A previously filtered patch version [X]
         |                   # OR
+        \[LATEST\]          # A previously filtered latest patch version [LATEST]
+        |                   # OR
         \d+                 # An actual patch version
       )
     )?                      # (we allow the patch version to be missing entirely, e.g., in a request)

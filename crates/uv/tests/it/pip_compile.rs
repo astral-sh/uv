@@ -18189,11 +18189,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
     let context = TestContext::new_with_versions(&[])
         .with_python_download_cache()
         .with_managed_python_dirs()
-        // Filter the version which will get downloaded
-        .with_filter((
-            r" \d\+\.\d\+(\.\d+)? will be used",
-            " [DEFAULT] will be used".to_string(),
-        ));
+        .with_filtered_latest_python_versions();
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio==3.7.0")?;
@@ -18216,7 +18212,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    warning: The requested Python version 3.99.99 is not available; 3.14.2 will be used to build dependencies instead.
+    warning: The requested Python version 3.99.99 is not available; 3.14.[LATEST] will be used to build dependencies instead.
     Resolved 3 packages in [TIME]
     ");
 
