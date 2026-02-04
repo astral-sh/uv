@@ -15,8 +15,8 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep440::{LocalVersionSlice, LowerBound, Version};
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
 use uv_redacted::DisplaySafeUrl;
@@ -48,9 +48,6 @@ pub enum ResolveError {
 
     #[error("The channel closed unexpectedly")]
     ChannelClosed,
-
-    #[error(transparent)]
-    Join(#[from] tokio::task::JoinError),
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
@@ -103,9 +100,6 @@ pub enum ResolveError {
 
     #[error(transparent)]
     DistributionType(#[from] uv_distribution_types::Error),
-
-    #[error(transparent)]
-    ParsedUrl(#[from] uv_pypi_types::ParsedUrlError),
 
     #[error("{0} `{1}`")]
     Dist(
@@ -378,44 +372,6 @@ impl NoSolutionError {
         &self.error
     }
 
-    /// Hint at limiting the resolver environment if universal resolution failed for a target
-    /// that is not the current platform or not the current Python version.
-    fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
-        // Only applicable to universal resolution.
-        let Some(markers) = self.env.fork_markers() else {
-            return Ok(());
-        };
-
-        // TODO(konsti): This is a crude approximation to telling the user the difference
-        // between their Python version and the relevant Python version range from the marker.
-        let current_python_version = self.current_environment.python_version().version.clone();
-        let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
-            key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::equals_version(current_python_version.clone()),
-        });
-        if markers.is_disjoint(current_python_marker) {
-            write!(
-                f,
-                "\n\n{}{} While the active Python version is {}, \
-                the resolution failed for other Python versions supported by your \
-                project. Consider limiting your project's supported Python versions \
-                using `requires-python`.",
-                "hint".bold().cyan(),
-                ":".bold(),
-                current_python_version,
-            )?;
-        } else if !markers.evaluate(&self.current_environment, &[]) {
-            write!(
-                f,
-                "\n\n{}{} The resolution failed for an environment that is not the current one, \
-                consider limiting the environments with `tool.uv.environments`.",
-                "hint".bold().cyan(),
-                ":".bold(),
-            )?;
-        }
-        Ok(())
-    }
-
     /// Get the packages that are involved in this error.
     pub fn packages(&self) -> impl Iterator<Item = &PackageName> {
         self.error
@@ -537,6 +493,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.fork_urls,
             &self.fork_indexes,
             &self.env,
+            &self.current_environment,
             self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
@@ -546,13 +503,11 @@ impl std::fmt::Display for NoSolutionError {
             write!(f, "\n\n{hint}")?;
         }
 
-        self.hint_disjoint_targets(f)?;
-
         Ok(())
     }
 }
 
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 fn display_tree(
     error: &DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
     name: &str,

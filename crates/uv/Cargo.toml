@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.9.26"
+version = "0.9.29"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -114,6 +114,7 @@ zip = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
+uv-windows = { workspace = true }
 windows = { workspace = true }
 
 [build-dependencies]

@@ -757,7 +757,6 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
-    #[allow(clippy::match_like_matches_macro)]
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {

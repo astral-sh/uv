@@ -23,7 +23,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -50,7 +50,7 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 
 /// Install packages into the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -106,12 +106,12 @@ pub(crate) async fn pip_install(
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 
@@ -146,10 +146,10 @@ pub(crate) async fn pip_install(
     .await?;
 
     if pylock.is_some() {
-        if !preview.is_enabled(PreviewFeatures::PYLOCK) {
+        if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
                 "The `--pylock` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                PreviewFeatures::PYLOCK
+                PreviewFeature::Pylock
             );
         }
     }

@@ -146,6 +146,8 @@ impl OperationDiagnostic {
 }
 
 /// Render a distribution failure (read, download or build) with a help message.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 pub(crate) fn dist_error(
     kind: DistErrorKind,
     dist: Box<Dist>,
@@ -194,6 +196,8 @@ pub(crate) fn dist_error(
 }
 
 /// Render a requested distribution failure (read, download or build) with a help message.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 pub(crate) fn requested_dist_error(
     kind: DistErrorKind,
     dist: Box<RequestedDist>,
@@ -242,6 +246,8 @@ pub(crate) fn requested_dist_error(
 }
 
 /// Render an error in fetching a package's dependencies.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 pub(crate) fn dependencies_error(
     error: Box<uv_resolver::ResolveError>,
     name: &PackageName,
@@ -302,6 +308,8 @@ pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: String) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{header}")]
@@ -325,6 +333,8 @@ pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: Str
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
 pub(crate) fn native_tls_hint(err: uv_client::Error) {
     #[derive(Debug, miette::Diagnostic)]
     #[diagnostic()]

@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeatures;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -340,7 +340,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Adjust open file limits on Unix if the preview feature is enabled.
     #[cfg(unix)]
-    if globals.preview.is_enabled(PreviewFeatures::ADJUST_ULIMIT) {
+    if globals.preview.is_enabled(PreviewFeature::AdjustUlimit) {
         match uv_unix::adjust_open_file_limit() {
             Ok(_) | Err(uv_unix::OpenFileLimitError::AlreadySufficient { .. }) => {}
             // TODO(zanieb): When moving out of preview, consider changing this to a log instead of
@@ -976,6 +976,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             commands::pip_freeze(
                 args.exclude_editable,
+                &args.exclude,
                 args.settings.strict,
                 args.settings.python.as_deref(),
                 args.settings.system,
@@ -1179,13 +1180,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             if args.no_system {
                 warn_user_once!(
-                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                    "The `--no-system` flag has no effect, `uv venv` always ignores virtual environments when finding a Python interpreter; did you mean `--managed-python`?"
                 );
             }
 
             if args.system {
                 warn_user_once!(
-                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                    "The `--system` flag has no effect, `uv venv` always ignores virtual environments when finding a Python interpreter; did you mean `--no-managed-python`?"
                 );
             }
 
@@ -1246,7 +1247,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.no_project,
                 &cache,
                 printer,
-                args.relocatable,
+                args.relocatable
+                    || (globals
+                        .preview
+                        .is_enabled(PreviewFeature::RelocatableEnvsDefault)
+                        && !args.no_relocatable),
                 globals.preview,
             )
             .await
@@ -1961,10 +1966,7 @@ async fn run_project(
 
             // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
             if explicit_project {
-                if globals
-                    .preview
-                    .is_enabled(PreviewFeatures::INIT_PROJECT_FLAG)
-                {
+                if globals.preview.is_enabled(PreviewFeature::InitProjectFlag) {
                     bail!(
                         "The `--project` option cannot be used in `uv init`. {}",
                         if args.path.is_some() {

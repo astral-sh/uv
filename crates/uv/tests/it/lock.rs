@@ -5232,9 +5232,9 @@ fn lock_requires_python() -> Result<()> {
           And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-
           hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+
+          hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -19245,6 +19245,45 @@ fn lock_repeat_named_index() -> Result<()> {
     8 |         [[tool.uv.index]]
       |         ^^^^^^^^^^^^^^^^^
     duplicate index name `pytorch`
+    ");
+
+    Ok(())
+}
+
+/// If multiple indexes are marked as default within a single file, we should raise an error.
+#[test]
+fn lock_multiple_default_indexes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "first"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[tool.uv.index]]
+        name = "second"
+        url = "https://example.com"
+        default = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Found multiple indexes with `default = true`; only one index may be marked as default. This will become an error in the future.
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -33274,6 +33313,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
     ----- stdout -----
 
     ----- stderr -----
+    warning: Found multiple indexes with `default = true`; only one index may be marked as default. This will become an error in the future.
     Resolved 2 packages in [TIME]
     ");
 
@@ -33324,6 +33364,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
     ----- stdout -----
 
     ----- stderr -----
+    warning: Found multiple indexes with `default = true`; only one index may be marked as default. This will become an error in the future.
     Resolved 2 packages in [TIME]
     ");
 

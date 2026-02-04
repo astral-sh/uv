@@ -77,7 +77,7 @@ impl TagCompatibility {
 #[derive(Debug, Clone)]
 pub struct Tags {
     /// `python_tag` |--> `abi_tag` |--> `platform_tag` |--> priority
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     map: Arc<FxHashMap<LanguageTag, FxHashMap<AbiTag, FxHashMap<PlatformTag, TagPriority>>>>,
     /// The highest-priority tag for the Python version and platform.
     best: Option<(LanguageTag, AbiTag, PlatformTag)>,
@@ -296,9 +296,17 @@ impl Tags {
         wheel_abi_tags: &[AbiTag],
         wheel_platform_tags: &[PlatformTag],
     ) -> TagCompatibility {
-        // The stable ABI (abi3) is not supported on free-threaded Python
-        if self.is_freethreaded && wheel_abi_tags.iter().all(|abi| *abi == AbiTag::Abi3) {
-            return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+        // On free-threaded Python, check if any wheel ABI tag is compatible.
+        // Only `none` (pure Python) and free-threaded CPython ABIs (e.g., `cp313t`) are compatible.
+        if self.is_freethreaded {
+            let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
+                AbiTag::None => true,
+                AbiTag::CPython { gil_disabled, .. } => *gil_disabled,
+                _ => false,
+            });
+            if !has_compatible_abi {
+                return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+            }
         }
 
         let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);

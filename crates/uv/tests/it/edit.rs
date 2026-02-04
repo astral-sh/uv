@@ -564,8 +564,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
         .add()
         .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env_remove(EnvVars::UV_HTTP_RETRIES), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13194,41 +13193,45 @@ fn add_ignore_error_codes() -> Result<()> {
 }
 
 /// uv should only fall through on 404s if an empty list is specified
-/// in `ignore-error-codes`, even for pytorch.
-#[test]
-fn add_empty_ignore_error_codes() -> Result<()> {
+/// in `ignore-error-codes`, even for indexes that normally ignore 403s.
+#[tokio::test]
+async fn add_empty_ignore_error_codes() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server)
+        .await;
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc! { r#"
         [project]
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.11, <4"
         dependencies = []
 
-        [tool.uv.sources]
-        jinja2 = { index = "pytorch" }
-
         [[tool.uv.index]]
-        name = "pytorch"
-        url = "https://download.pytorch.org/whl/cpu"
+        name = "my-index"
+        url = "{server_url}"
         ignore-error-codes = []
-        "#
+        "#,
+        server_url = server.uri(),
     })?;
 
-    // The default behavior of ignoring pytorch 403s has been overridden
-    // by the empty ignore-error-codes list.
-    uv_snapshot!(context.add().arg("flask"), @"
+    // The empty `ignore-error-codes` list means 403 errors should NOT be ignored.
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://download.pytorch.org/whl/cpu) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
+          hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -13295,7 +13298,6 @@ async fn add_unexpected_error_code() -> Result<()> {
     })?;
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri())
-        .env_remove(EnvVars::UV_HTTP_RETRIES)
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: false
     exit_code: 2
@@ -13874,8 +13876,7 @@ fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
         .url
         .path_segments()
         .expect("path has segments")
-        .filter(|segment| !segment.is_empty())
-        .next_back()
+        .rfind(|segment| !segment.is_empty())
         .expect("path has a package segment");
     format!("{base}{last_path_segment}/")
 }

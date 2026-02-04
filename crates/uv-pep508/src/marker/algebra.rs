@@ -1161,7 +1161,6 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-#[allow(clippy::large_enum_variant)] // Nodes are interned.
 pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.

@@ -24,8 +24,6 @@ pub enum Error {
     NoBuild,
 
     // Network error
-    #[error("Expected an absolute path, but received: {}", _0.user_display())]
-    RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
@@ -126,14 +124,10 @@ pub enum Error {
     MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
-    #[error("Failed to extract metadata from `requires.txt`")]
-    RequiresTxt(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]
     PyprojectToml(#[source] uv_pypi_types::MetadataError),
-    #[error("Unsupported scheme in URL: {0}")]
-    UnsupportedScheme(String),
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]

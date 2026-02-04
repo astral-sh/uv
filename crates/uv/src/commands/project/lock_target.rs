@@ -243,7 +243,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Return the `Requires-Python` bound for the [`LockTarget`].
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => {

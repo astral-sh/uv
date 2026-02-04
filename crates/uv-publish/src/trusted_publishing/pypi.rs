@@ -61,7 +61,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         Ok(audience.audience)
     }
 
-    async fn publish_token(
+    async fn exchange_token(
         &self,
         oidc_token: ambient_id::IdToken,
     ) -> Result<super::TrustedPublishingToken, super::TrustedPublishingError> {
@@ -107,7 +107,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
                     // configuration, so we're showing the body and the JWT claims for more context, see
                     // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
                     // for what the body can mean.
-                    Err(TrustedPublishingError::Pypi(
+                    Err(TrustedPublishingError::TokenRejected(
                         status,
                         String::from_utf8_lossy(&body).to_string(),
                         claims,

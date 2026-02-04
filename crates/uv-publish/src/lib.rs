@@ -40,7 +40,10 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::pypi::PyPIPublishingService;
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
+use crate::trusted_publishing::pyx::PyxPublishingService;
+use crate::trusted_publishing::{
+    TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
+};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -63,7 +66,7 @@ pub enum PublishError {
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
     ),
-    #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
     Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
@@ -123,10 +126,12 @@ pub enum PublishPrepareError {
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
     ReqwestMiddleware(#[source] reqwest_middleware::Error),
-    #[error("Upload failed with status {0}")]
+    #[error("Server returned status code {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}. Server says: {1}")]
+    #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("Server returned status code {0}. {1}")]
+    StatusProblemDetails(StatusCode, String),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
     )]
@@ -330,7 +335,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
                 // I've never seen these in upper case
-                #[allow(clippy::case_sensitive_file_extension_comparisons)]
+                #[expect(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
                     || filename.ends_with(".zip")
                     // Catch all compressed tar variants, e.g., `.tar.gz`
@@ -402,6 +407,7 @@ pub async fn check_trusted_publishing(
     username: Option<&str>,
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
+    token_store: &PyxTokenStore,
     trusted_publishing: TrustedPublishing,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -417,9 +423,21 @@ pub async fn check_trusted_publishing(
             }
 
             debug!("Attempting to get a token for trusted publishing");
+
             // Attempt to get a token for trusted publishing.
-            let service = PyPIPublishingService::new(registry, client);
-            match trusted_publishing::get_token(&service).await {
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            };
+
+            match token {
                 // Success: we have a token for trusted publishing.
                 Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
                 // Failed to discover an ambient OIDC token.
@@ -447,11 +465,22 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            let service = PyPIPublishingService::new(registry, client);
-            let Some(token) = trusted_publishing::get_token(&service)
-                .await
-                .map_err(Box::new)?
-            else {
+            // Attempt to get a token for trusted publishing.
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+                    .map_err(Box::new)?
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+                    .map_err(Box::new)?
+            };
+
+            let Some(token) = token else {
                 return Err(PublishError::TrustedPublishing(
                     TrustedPublishingError::NoToken.into(),
                 ));
@@ -612,7 +641,9 @@ pub async fn upload(
     }
 }
 
-/// Validate a file against a registry.
+/// Validate a distribution before uploading.
+///
+/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
 pub async fn validate(
     file: &Path,
     form_metadata: &FormMetadata,
@@ -621,7 +652,7 @@ pub async fn validate(
     store: &PyxTokenStore,
     client: &BaseClient,
     credentials: &Credentials,
-) -> Result<(), PublishError> {
+) -> Result<bool, PublishError> {
     if store.is_known_url(registry) {
         debug!("Performing validation request for {registry}");
 
@@ -647,16 +678,45 @@ pub async fn validate(
             )
         })?;
 
+        let status_code = response.status();
+        debug!("Response code for {validation_url}: {status_code}");
+
+        if status_code.is_success() {
+            #[derive(Deserialize)]
+            struct ValidateResponse {
+                exists: bool,
+            }
+
+            // Check if the file already exists.
+            match response.text().await {
+                Ok(body) => {
+                    trace!("Response content for {validation_url}: {body}");
+                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
+                        if response.exists {
+                            debug!("File already uploaded: {raw_filename}");
+                            return Ok(false);
+                        }
+                    }
+                }
+                Err(err) => {
+                    trace!("Failed to read response content for {validation_url}: {err}");
+                }
+            }
+            return Ok(true);
+        }
+
+        // Handle error response.
         handle_response(&validation_url, response)
             .await
             .map_err(|err| {
                 PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
             })?;
+
+        Ok(true)
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
+        Ok(true)
     }
-
-    Ok(())
 }
 
 /// Upload a file using the two-phase upload protocol for pyx.
@@ -1392,6 +1452,18 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
         ));
     }
 
+    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
+    if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
+        && let Some(problem) =
+            uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
+        && let Some(description) = problem.description()
+    {
+        return Err(PublishSendError::StatusProblemDetails(
+            status_code,
+            description,
+        ));
+    }
+
     // Raced uploads of the same file are handled by the caller.
     Err(PublishSendError::Status(
         status_code,
@@ -1406,7 +1478,6 @@ mod tests {
 
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
-    use thiserror::__private17::AsDynError;
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
@@ -1477,7 +1548,6 @@ mod tests {
         fn shuffle<T>(vec: &mut [T]) {
             let n: usize = vec.len();
             for i in 0..(n - 1) {
-                #[allow(clippy::cast_possible_truncation)]
                 let j = (fastrand::usize(..)) % (n - i) + i;
                 vec.swap(i, j);
             }
@@ -2076,7 +2146,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2104,7 +2174,7 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2113,6 +2183,75 @@ mod tests {
             @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
           Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+        "
+        );
+    }
+
+    /// PyPI returns `application/json` with a `code` field.
+    #[tokio::test]
+    async fn upload_error_pypi_json() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header("content-type", "application/json")
+                    .set_body_raw(
+                        r#"{"message": "The server could not comply with the request since it is either malformed or otherwise incorrect.\n\n\nError: Use 'source' as Python version for an sdist.\n\n", "code": "400 Error: Use 'source' as Python version for an sdist.", "title": "Bad Request"}"#,
+                        "application/json",
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+        "
+        );
+    }
+
+    /// pyx returns `application/problem+json` with RFC 9457 Problem Details.
+    #[tokio::test]
+    async fn upload_error_problem_details() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header(
+                        "content-type",
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    )
+                    .set_body_raw(
+                        r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#,
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

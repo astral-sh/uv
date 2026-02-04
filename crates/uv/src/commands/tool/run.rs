@@ -95,7 +95,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 }
 
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
@@ -682,7 +682,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
     Python {
         executable: String,
@@ -715,7 +715,6 @@ impl std::fmt::Display for ToolRequirement {
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
-#[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],

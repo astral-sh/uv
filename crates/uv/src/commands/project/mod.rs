@@ -27,7 +27,7 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
@@ -487,7 +487,7 @@ impl PlatformState {
 ///
 /// For a [`Workspace`] with multiple packages, the `Requires-Python` bound is the union of the
 /// `Requires-Python` bounds of all the packages.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
@@ -531,7 +531,7 @@ pub(crate) fn find_requires_python(
 ///
 /// If no [`Workspace`] is provided, the `requires-python` will be validated against the originating
 /// source (e.g., a `.python-version` file or a `--python` command-line argument).
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn validate_project_requires_python(
     interpreter: &Interpreter,
     workspace: Option<&Workspace>,
@@ -584,7 +584,7 @@ pub(crate) fn validate_project_requires_python(
 }
 
 /// Returns an error if the [`Interpreter`] does not satisfy script or workspace `requires-python`.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 fn validate_script_requires_python(
     interpreter: &Interpreter,
     requires_python: &RequiresPython,
@@ -618,7 +618,7 @@ fn validate_script_requires_python(
 
 /// An interpreter suitable for a PEP 723 script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptInterpreter {
     /// An interpreter to use to create a new script environment.
     Interpreter(Interpreter),
@@ -938,7 +938,7 @@ fn environment_is_usable(
 
 /// An interpreter suitable for the project.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ProjectInterpreter {
     /// An interpreter from outside the project, to create a new project virtual environment.
     Interpreter(Interpreter),
@@ -1196,10 +1196,21 @@ impl WorkspacePython {
                 .with_no_config(no_config),
         )
         .await?
-        {
+        .filter(|file| {
+            // Ignore global version files that are incompatible with requires-python
+            if !file.is_global() {
+                return true;
+            }
+            match (file.version(), requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => request
+                    .as_pep440_version()
+                    .is_none_or(|version| requires_python.contains(&version)),
+                _ => true,
+            }
+        }) {
             // (2) Request from `.python-version`
             let source = PythonRequestSource::DotPythonVersion(file.clone());
-            let request = file.into_version();
+            let request = file.version().cloned();
             (source, request)
         } else {
             // (3) `requires-python` in `pyproject.toml`
@@ -1351,7 +1362,7 @@ impl ProjectEnvironment {
             })
             .ok();
 
-        let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
+        let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
             && python
                 .as_ref()
                 .is_none_or(|request| !request.includes_patch());
@@ -1501,7 +1512,7 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -1697,7 +1708,7 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
@@ -2625,7 +2636,7 @@ pub(crate) async fn init_script_python_requirement(
 }
 
 /// Returns the default dependency groups from the [`PyProjectToml`].
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
     pyproject_toml: &PyProjectToml,
 ) -> Result<DefaultGroups, ProjectError> {
@@ -2653,7 +2664,7 @@ pub(crate) fn default_dependency_groups(
 
 /// Validate that we aren't trying to install extras or groups that
 /// are declared as conflicting.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
     target: &InstallTarget,
     extras: &ExtrasSpecification,
@@ -2696,7 +2707,7 @@ pub(crate) fn detect_conflicts(
 }
 
 /// Determine the [`RequirementsSpecification`] for a script.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,
@@ -2776,7 +2787,7 @@ pub(crate) fn script_specification(
 }
 
 /// Determine the extra build requires for a script.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn script_extra_build_requires(
     script: Pep723ItemRef<'_>,
     settings: &ResolverSettings,

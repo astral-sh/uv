@@ -1,0 +1,75 @@
+# Publish uv version information to the versions repository.
+#
+# Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a post-announce
+# job within `cargo-dist`.
+name: publish-versions
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  publish-versions:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: "Set branch name"
+        run: echo "BRANCH_NAME=update-versions-$VERSION-$(date +%s)" >> $GITHUB_ENV
+
+      - name: "Clone versions repo"
+        run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+
+      - name: "Update versions"
+        env:
+          PLAN: ${{ inputs.plan }}
+        run: printf '%s' "$PLAN" | uv run astral-versions/scripts/convert-cargo-dist-plan.py | uv run astral-versions/scripts/insert-versions.py --name uv
+
+      - name: "Commit versions"
+        working-directory: astral-versions
+        run: |
+          git config user.name "astral-versions-bot"
+          git config user.email "176161322+astral-versions-bot@users.noreply.github.com"
+
+          git checkout -b "$BRANCH_NAME"
+          git add -A
+          git commit -m "Update uv to version $VERSION"
+
+      - name: "Create Pull Request"
+        working-directory: astral-versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+        run: |
+          pull_request_title="Add uv $VERSION"
+
+          gh pr list --state open --json title --jq ".[] | select(.title == \"$pull_request_title\") | .number" | \
+            xargs -I {} gh pr close {}
+
+          git push origin "$BRANCH_NAME"
+
+          gh pr create --base main --head "$BRANCH_NAME" \
+            --title "$pull_request_title" \
+            --body "Automated versions update for $VERSION" \
+            --label "automation"
+
+      - name: "Merge Pull Request"
+        if: ${{ !fromJson(inputs.plan).announcement_tag_is_implicit }}
+        working-directory: astral-versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+        run: |
+          # Wait for PR to be created before merging
+          sleep 10
+          gh pr merge --squash "$BRANCH_NAME"

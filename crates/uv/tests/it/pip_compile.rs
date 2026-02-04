@@ -3437,7 +3437,7 @@ fn compile_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time "26:00:00+00": hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
     "#
@@ -14580,9 +14580,9 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
       × No solution found when resolving dependencies for split (markers: python_full_version >= '3.10'):
       ╰─▶ Because source-distribution==0.0.3 requires Python >=3.10 and you require source-distribution{python_full_version >= '3.10'}==0.0.3, we can conclude that your requirements are unsatisfiable.
 
-          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
-
           hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+
+          hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
     ");
 
     Ok(())

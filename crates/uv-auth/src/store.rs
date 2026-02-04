@@ -5,8 +5,8 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use uv_fs::{LockedFile, LockedFileError, LockedFileMode, with_added_extension};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 
 use uv_state::{StateBucket, StateStore};
@@ -30,7 +30,7 @@ pub enum AuthBackend {
 impl AuthBackend {
     pub async fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
         // If preview is enabled, we'll use the system-native store
-        if preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+        if preview.is_enabled(PreviewFeature::NativeAuth) {
             return Ok(Self::System(KeyringProvider::native()));
         }
 
@@ -258,7 +258,7 @@ impl TextCredentialStore {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let lock = with_added_extension(path, ".lock");
+        let lock = path.with_added_extension("lock");
         Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
     }
 

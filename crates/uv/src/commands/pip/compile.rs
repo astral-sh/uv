@@ -29,7 +29,7 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -60,7 +60,7 @@ use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -123,12 +123,12 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
+    if !preview.is_enabled(PreviewFeature::ExtraBuildDependencies)
         && !extra_build_dependencies.is_empty()
     {
         warn_user_once!(
             "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
+            PreviewFeature::ExtraBuildDependencies
         );
     }
 
@@ -794,7 +794,6 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the uv command used to generate the output file.
-#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
     include_find_links: bool,

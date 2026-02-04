@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -68,7 +68,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - uses: conda-incubator/setup-miniconda@835234971496cad1653abb28a638a281cf32541f # v3.2.0
@@ -303,7 +303,7 @@ jobs:
     timeout-minutes: 10
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -320,7 +320,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -444,7 +444,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -568,7 +568,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -614,6 +614,43 @@ jobs:
           source ./venv-pyodide2/bin/activate
           ./uv pip install packaging
           python -c 'import packaging'
+
+  integration-test-pyodide-windows:
+    name: "pyodide on windows"
+    timeout-minutes: 10
+    runs-on: windows-latest
+    # Github Actions Windows runner uses D drive as pwd.
+    # Pyodide CLI has an issue running cross-drive,
+    # So ensure that cache and Pyodide paths are on D drive as well.
+    env:
+      UV_CACHE_DIR: D:\uv-cache
+      PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Create a native virtual environment"
+        run: |
+          .\uv.exe venv venv-native -p 3.13
+          .\uv.exe pip install -p venv-native\Scripts\python.exe pyodide-build==0.31.1 pip
+
+      - name: "Install Pyodide interpreter"
+        run: |
+          & .\venv-native\Scripts\Activate.ps1
+          pyodide xbuildenv install 0.29.2
+          $env:PYODIDE_PYTHON = pyodide config get interpreter
+          $env:PYODIDE_INDEX = pyodide config get package_index
+          echo "PYODIDE_PYTHON=$env:PYODIDE_PYTHON" >> $env:GITHUB_ENV
+          echo "PYODIDE_INDEX=$env:PYODIDE_INDEX" >> $env:GITHUB_ENV
+
+      - name: "Create Pyodide virtual environment"
+        run: |
+          .\uv.exe venv -p $env:PYODIDE_PYTHON venv-pyodide
+          & .\venv-pyodide\Scripts\Activate.ps1
+          .\uv.exe pip install --extra-index-url=$env:PYODIDE_INDEX --no-build numpy
+          python -c 'import numpy'
 
   integration-test-github-actions:
     name: "github actions"
@@ -716,7 +753,7 @@ jobs:
     runs-on: windows-latest
     if: ${{ github.event.pull_request.head.repo.fork != true }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -770,7 +807,7 @@ jobs:
     env:
       PYTHON_VERSION: 3.12
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -874,7 +911,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -923,7 +960,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
@@ -950,7 +987,7 @@ jobs:
     timeout-minutes: 10
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 

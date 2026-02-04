@@ -582,7 +582,7 @@ fn install_requirements_txt() -> Result<()> {
 
 /// Install a package from a `requirements.txt` passed via `-r -` into a virtual environment.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -620,7 +620,7 @@ fn install_from_stdin() -> Result<()> {
 /// Install a package from a `requirements.txt` passed via `-r /dev/stdin` into a virtual environment.
 #[test]
 #[cfg(not(windows))]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_from_dev_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2272,8 +2272,7 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .env_remove(EnvVars::UV_HTTP_RETRIES), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3625,7 +3624,7 @@ fn install_constraints_txt() -> Result<()> {
 
 /// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_constraints_txt_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -7401,7 +7400,7 @@ fn require_hashes_override() -> Result<()> {
 
 /// Install with overrides from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_with_overrides_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -7432,7 +7431,7 @@ fn install_with_overrides_from_stdin() -> Result<()> {
 
 /// Install with excludes from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn install_with_excludes_from_stdin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -8758,7 +8757,7 @@ fn incompatible_build_constraint() -> Result<()> {
 
 /// Include a `build_constraints.txt` file with an incompatible constraint from stdin.
 #[test]
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 fn incompatible_build_constraint_from_stdin() -> Result<()> {
     let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
@@ -13161,7 +13160,9 @@ fn overlapping_packages_warning() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
-    warning: The module `built_by_uv` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing your dependency on either `built-by-uv` (v0.1.0) or `also-built-by-uv` (v0.1.0).
+    warning: The file `built_by_uv/__init__.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
+    * also-built-by-uv (also_built_by_uv-0.1.0-py3-none-any.whl)
+    * built-by-uv (built_by_uv-0.1.0-py3-none-any.whl)
     Installed 2 packages in [TIME]
      + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
      + built-by-uv==0.1.0 (from file://[WORKSPACE]/test/packages/built-by-uv)
@@ -13238,6 +13239,260 @@ fn overlapping_packages_warning() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also-built-by-uv)
+    "
+    );
+
+    Ok(())
+}
+
+/// Don't warn for improperly built namespace packages with overlapping empty `__init__.py`.
+#[test]
+fn overlapping_empty_init_py() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu-a");
+    gpu_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "gpu"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_a
+        .child("src")
+        .child("gpu")
+        .child("__init__.py")
+        .touch()?;
+
+    gpu_a
+        .child("src")
+        .child("gpu")
+        .child("a")
+        .child("__init__.py")
+        .write_str("print('a')")?;
+
+    let gpu_b = context.temp_dir.child("gpu-b");
+    gpu_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "gpu"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_b
+        .child("src")
+        .child("gpu")
+        .child("__init__.py")
+        .touch()?;
+
+    gpu_b
+        .child("src")
+        .child("gpu")
+        .child("b")
+        .child("__init__.py")
+        .write_str("print('b')")?;
+
+    // Check that overlapping packages don't show a warning by default
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg("./gpu-a")
+        .arg("./gpu-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
+     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+    "
+    );
+
+    Ok(())
+}
+
+/// Warn for conflicting files even nested in namespace packages.
+#[test]
+fn overlapping_nested_files() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu-a");
+    gpu_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "gpu"
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_a
+        .child("src")
+        .child("gpu")
+        .child("accelerator")
+        .child("matrix")
+        .child("product.py")
+        .write_str("print('Hi!')")?;
+    // This file collides too, but we always show the first file.
+    gpu_a
+        .child("src")
+        .child("gpu")
+        .child("bccelerator")
+        .child("sum.py")
+        .write_str("print('Hi!')")?;
+
+    let gpu_b = context.temp_dir.child("gpu-b");
+    gpu_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "gpu"
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_b
+        .child("src")
+        .child("gpu")
+        .child("accelerator")
+        .child("matrix")
+        .child("product.py")
+        .write_str("print('Hello world')")?;
+    // This file collides too, but we always show the first file.
+    gpu_b
+        .child("src")
+        .child("gpu")
+        .child("bccelerator")
+        .child("sum.py")
+        .write_str("print('Hi!')")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg("./gpu-a")
+        .arg("./gpu-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The file `gpu/accelerator/matrix/product.py` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
+    * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
+    * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
+    Installed 2 packages in [TIME]
+     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
+     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
+    "
+    );
+
+    Ok(())
+}
+
+/// Warn for conflicting files directly in site-packages without a folder containing them.
+///
+/// There are some packages which are just a Python file or just a shared library, not contained
+/// in a module directory.
+#[test]
+fn overlapping_file_without_enclosing_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let gpu_a = context.temp_dir.child("gpu-a");
+    gpu_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = ""
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_a
+        .child("src")
+        .child("gpu.abi3.so")
+        .write_str("ELF file contents")?;
+
+    let gpu_b = context.temp_dir.child("gpu-b");
+    gpu_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "gpu-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = ""
+        namespace = true
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    gpu_b
+        .child("src")
+        .child("gpu.abi3.so")
+        .write_str("DT_NEEDED libblas.so")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("detect-module-conflicts")
+        .arg("./gpu-a")
+        .arg("./gpu-b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The file `gpu.abi3.so` is provided by more than one package, which causes an install race condition and can result in a broken module. Packages containing the file:
+    * gpu-a (gpu_a-0.1.0-py3-none-any.whl)
+    * gpu-b (gpu_b-0.1.0-py3-none-any.whl)
+    Installed 2 packages in [TIME]
+     + gpu-a==0.1.0 (from file://[TEMP_DIR]/gpu-a)
+     + gpu-b==0.1.0 (from file://[TEMP_DIR]/gpu-b)
     "
     );
 
@@ -13774,13 +14029,11 @@ fn record_uses_forward_slashes() -> Result<()> {
     Ok(())
 }
 
-/// Test that abi3 wheels are rejected on free-threaded Python with a helpful error message.
+/// Test ABI compatibility checking on free-threaded Python.
 ///
-/// The stable ABI (abi3) is not supported by free-threaded Python, so we should provide
-/// a clear error message when a user tries to install an abi3 wheel.
+/// Free-threaded Python has a different ABI, so wheels must be built specifically for it.
 #[test]
-#[cfg(unix)]
-fn abi3_wheel_on_freethreaded_python() {
+fn abi_compatibility_on_freethreaded_python() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
@@ -13805,12 +14058,14 @@ fn abi3_wheel_on_freethreaded_python() {
         .assert()
         .success();
 
-    // Try to install an abi3 wheel - this should fail with a helpful error
+    // An abi3 wheel should fail with a helpful error
     let wheel_path = context
         .workspace_root
         .join("test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl");
 
-    uv_snapshot!(context.filters(), context.pip_install().arg(wheel_path), @r"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13820,6 +14075,45 @@ fn abi3_wheel_on_freethreaded_python() {
     error: Failed to determine installation plan
       Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/abi3_package-1.0.0-cp37-abi3-manylinux_2_17_x86_64.whl
 
-    hint: The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible
+    hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter
+    ");
+
+    // A GIL-enabled wheel for the same Python version should also fail
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to determine installation plan
+      Caused by: A path dependency is incompatible with the current platform: [WORKSPACE]/test/links/cpython_package-1.0.0-cp314-cp314-manylinux_2_17_x86_64.whl
+
+    hint: You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter
+    ");
+
+    // A wheel with both cp314t (compatible) and abi3 (incompatible) should succeed
+    let wheel_path = context
+        .workspace_root
+        .join("test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg(wheel_path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + multi-abi-package==1.0.0 (from file://[WORKSPACE]/test/links/multi_abi_package-1.0.0-cp314-cp314t.abi3-manylinux_2_17_x86_64.whl)
     ");
 }

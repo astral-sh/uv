@@ -3,6 +3,110 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.29
+
+Released on 2026-02-03.
+
+### Python
+
+- Update to Pyodide 0.29.3 ([#17730](https://github.com/astral-sh/uv/pull/17730))
+
+### Enhancements
+
+- Add wheel-tag-style aliases for manylinux platform names ([#17750](https://github.com/astral-sh/uv/pull/17750))
+- Hint on `uv version --bump dev` similar to pre-release bumps ([#17796](https://github.com/astral-sh/uv/pull/17796))
+- Improve display of RFC 9457 Problem Detail responses in `uv publish` server errors ([#17787](https://github.com/astral-sh/uv/pull/17787))
+- Improve the wording of publish errors during dry-run ([#17782](https://github.com/astral-sh/uv/pull/17782))
+- Set backoff to 10 retries ([#17816](https://github.com/astral-sh/uv/pull/17816))
+- Add properties to synthentic and project roots in Cyclone DX exports ([#17820](https://github.com/astral-sh/uv/pull/17820))
+- Identify the invidividual clients in `uv publish` trace logs ([#17784](https://github.com/astral-sh/uv/pull/17784))
+
+### Preview features
+
+- Remove special casing for `base` and `default` conda environment names ([#17758](https://github.com/astral-sh/uv/pull/17758))
+
+### Bug fixes
+
+- Fix `PYTHONHOME` inheritance when spawning different Python versions ([#17821](https://github.com/astral-sh/uv/pull/17821))
+- Fix wheel rejections on freethreading+debug builds ([#17812](https://github.com/astral-sh/uv/pull/17812))
+- Pad with zeros during comparisons in `EqualStar` and `NotEqualStar` operators ([#17751](https://github.com/astral-sh/uv/pull/17751))
+- Reject unknown field names in conflict declarations ([#17727](https://github.com/astral-sh/uv/pull/17727))
+- Fix panics in `system-configuration` in sandboxes ([#17829](https://github.com/astral-sh/uv/pull/17829))
+
+### Documentation
+
+- Update pip pre-release compatibility information ([#17788](https://github.com/astral-sh/uv/pull/17788))
+
+### Security
+
+- Hide a subset of environment variable values in `--help` ([#17745](https://github.com/astral-sh/uv/pull/17745))
+
+## 0.9.28
+
+Released on 2026-01-29.
+
+### Python
+
+- Update CPython to use [OpenSSL 3.5.5](https://github.com/openssl/openssl/releases/tag/openssl-3.5.5) which includes fixes for high severity CVEs ([python-build-standalone#960](https://github.com/astral-sh/python-build-standalone/pull/960))
+
+### Enhancements
+
+- Add support for Pyodide interpreter on Windows ([#17658](https://github.com/astral-sh/uv/pull/17658))
+- Warn if multiple indexes include `default = true` ([#17713](https://github.com/astral-sh/uv/pull/17713))
+- Skip uploads when validation reports 'Already uploaded' ([#17412](https://github.com/astral-sh/uv/pull/17412))
+
+### Configuration
+
+- Add a reflink alias for the "clone" link mode ([#17724](https://github.com/astral-sh/uv/pull/17724))
+
+### Bug fixes
+
+- Ensure `uv.exe` exits when `uvw.exe` or `uvx.exe` is killed ([#17500](https://github.com/astral-sh/uv/pull/17500))
+
+## 0.9.27
+
+Released on 2026-01-26.
+
+### Python
+
+- Upgrade Pyodide to 0.29.2 ([#17652](https://github.com/astral-sh/uv/pull/17652))
+- Upgrade to GraalPy 25.0.2 ([#17634](https://github.com/astral-sh/uv/pull/17634))
+
+### Enhancements
+
+- Add `-t` shortform for `--target` to `uv pip` subcommands ([#17501](https://github.com/astral-sh/uv/pull/17501))
+- Add support for ROCm 7.0 and 7.1 accelerator backends ([#17681](https://github.com/astral-sh/uv/pull/17681))
+- Further improve free-threading ABI incompatibility errors ([#17491](https://github.com/astral-sh/uv/pull/17491))
+- Implement `uv pip freeze --exclude` flag ([#17045](https://github.com/astral-sh/uv/pull/17045))
+- Improve warnings for `--system` and `--no-system` in `uv venv` ([#17647](https://github.com/astral-sh/uv/pull/17647))
+- Make `uv pip compile` attempt to download a specified `--python-version` if it can. ([#17249](https://github.com/astral-sh/uv/pull/17249))
+- Support Trusted Publishing with pyx ([#17438](https://github.com/astral-sh/uv/pull/17438))
+- Fix JSON schema for `exclude-newer-package` ([#17665](https://github.com/astral-sh/uv/pull/17665))
+
+### Preview features
+
+- Better detection for conflicting packages ([#17623](https://github.com/astral-sh/uv/pull/17623))
+- Upgrade based on outdated build versions in `uv python upgrade` ([#17653](https://github.com/astral-sh/uv/pull/17653))
+
+### Bug fixes
+
+- Change chocolatey system test to ensure uv uses the right python ([#17533](https://github.com/astral-sh/uv/pull/17533))
+- Fix infinite loop when `SSL_CERT_FILE` is a directory ([#17503](https://github.com/astral-sh/uv/pull/17503))
+
+### Documentation
+
+- Add cargo-xwin to the CONTRIBUTING guide ([#17507](https://github.com/astral-sh/uv/pull/17507))
+- Fix typo in the documentation of UV_PUBLISH_INDEX ([#17672](https://github.com/astral-sh/uv/pull/17672))
+- Move MSRV to platform support section ([#17534](https://github.com/astral-sh/uv/pull/17534))
+- Update the testing instructions in the CONTRIBUTING guide ([#17528](https://github.com/astral-sh/uv/pull/17528))
+- Use `--locked` to install `cargo-xwin` in guide ([#17530](https://github.com/astral-sh/uv/pull/17530))
+- Warn about PyPy being unmaintained ([#17643](https://github.com/astral-sh/uv/pull/17643))
+- docs: Correct gitlab-ci.yml to .gitlab-ci.yml ([#17682](https://github.com/astral-sh/uv/pull/17682))
+
+### Other changes
+
+- Update MSRV to 1.91 ([#17677](https://github.com/astral-sh/uv/pull/17677))
+
 ## 0.9.26
 
 Released on 2026-01-15.

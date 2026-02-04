@@ -15,6 +15,7 @@ use predicates::prelude::predicate;
 use tracing::debug;
 
 use uv_fs::Simplified;
+use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 use walkdir::WalkDir;
 
@@ -124,7 +125,7 @@ fn python_install() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -760,7 +761,7 @@ fn python_install_preview() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -895,7 +896,7 @@ fn python_install_preview_no_bin() {
     ----- stderr -----
     error: the argument '--no-bin' cannot be used with '--default'
 
-    Usage: uv python install --no-bin --install-dir <INSTALL_DIR> [TARGETS]...
+    Usage: uv python install --cache-dir [CACHE_DIR] --no-bin --install-dir <INSTALL_DIR> [TARGETS]...
 
     For more information, try '--help'.
     ");
@@ -2348,7 +2349,7 @@ fn python_install_default_from_env() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -2376,7 +2377,7 @@ fn python_install_default_from_env() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -2390,7 +2391,7 @@ fn python_install_default_from_env() {
     ----- stderr -----
     error: the argument '--all' cannot be used with '<TARGETS>...'
 
-    Usage: uv python uninstall --all --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --all --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -2712,7 +2713,7 @@ fn python_install_no_cache() {
     error: the following required arguments were not provided:
       <TARGETS>...
 
-    Usage: uv python uninstall --install-dir <INSTALL_DIR> <TARGETS>...
+    Usage: uv python uninstall --cache-dir [CACHE_DIR] --install-dir <INSTALL_DIR> <TARGETS>...
 
     For more information, try '--help'.
     ");
@@ -2765,7 +2766,7 @@ fn python_install_emulated_macos() {
     if !arch_status.is_ok_and(|x| x.success()) {
         // Rosetta is not available to run the x86_64 interpreter
         // fail the test in CI, otherwise skip it
-        #[allow(clippy::manual_assert)]
+        #[expect(clippy::manual_assert)]
         if env::var(EnvVars::CI).is_ok() {
             panic!("x86_64 emulation is not available on this CI runner");
         }
@@ -4148,6 +4149,65 @@ fn python_install_compile_bytecode_upgrade() {
     Installed Python 3.14.2 in [TIME]
      + cpython-3.14.2-[PLATFORM] (python3.14)
     Bytecode compiled [COUNT] files in [TIME]
+    ");
+}
+
+#[test]
+fn python_install_upgrade_build_version() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install Python 3.12
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+    ");
+
+    // Should be a no-op when already installed at latest version
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.12 is already on the latest supported patch release
+    ");
+
+    // Overwrite the BUILD file with an older build version
+    let installation_dir = context.temp_dir.child("managed").child(format!(
+        "cpython-3.12.12-{}",
+        platform_key_from_env().unwrap()
+    ));
+    let build_file = installation_dir.join("BUILD");
+    fs_err::write(&build_file, "19000101").unwrap();
+
+    // Now upgrade should detect the outdated build version and reinstall
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     ~ cpython-3.12.12-[PLATFORM]
+    ");
+
+    // Should be a no-op again after upgrade
+    uv_snapshot!(context.filters(), context.python_install().arg("--upgrade").arg("3.12"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python 3.12 is already on the latest supported patch release
     ");
 }
 

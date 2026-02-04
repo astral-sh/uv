@@ -997,7 +997,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: failed to parse "P4Z" as an ISO 8601 duration string: expected to find date unit designator suffix (Y, M, W or D), but found "Z" instead
+    error: invalid value 'P4Z' for '--exclude-newer <EXCLUDE_NEWER>': `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     For more information, try '--help'.
     "#);
@@ -1039,7 +1039,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a duration: failed to parse "2 weak" in the "friendly" format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
+    error: invalid value '2 weak' for '--exclude-newer <EXCLUDE_NEWER>': `2 weak` could not be parsed as a duration: failed to parse input in the "friendly" duration format: parsed value 'P2W', but unparsed input "eak" remains (expected no unparsed input)
 
     For more information, try '--help'.
     "#);
@@ -1067,7 +1067,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse "1000000 years" in the "friendly" format: failed to set value 1000000 as year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
+    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
 
     For more information, try '--help'.
     "#);
@@ -1135,7 +1135,7 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         |
       9 |         exclude-newer = "2 foos"
         |                         ^^^^^^^^
-      `2 foos` could not be parsed as a duration: failed to parse "2 foos" in the "friendly" format: expected to find unit designator suffix (e.g., 'years' or 'secs'), but found input beginning with "foos" instead
+      `2 foos` could not be parsed as a duration: failed to parse input in the "friendly" duration format: expected to find unit designator suffix (e.g., `years` or `secs`) after parsing integer
 
     Resolved 2 packages in [TIME]
     "#);
@@ -1165,7 +1165,7 @@ fn lock_exclude_newer_relative_values_pyproject() -> Result<()> {
         |
       9 |         exclude-newer = "P4Z"
         |                         ^^^^^
-      `P4Z` could not be parsed as an ISO 8601 duration: failed to parse "P4Z" as an ISO 8601 duration string: expected to find date unit designator suffix (Y, M, W or D), but found "Z" instead
+      `P4Z` could not be parsed as an ISO 8601 duration: expected to find date unit designator suffix (`Y`, `M`, `W` or `D`), but found `Z` instead
 
     Resolved 2 packages in [TIME]
     "#);

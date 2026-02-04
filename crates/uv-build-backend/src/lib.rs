@@ -453,7 +453,7 @@ mod tests {
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
-    use uv_preview::{Preview, PreviewFeatures};
+    use uv_preview::{Preview, PreviewFeature};
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -1810,7 +1810,7 @@ mod tests {
         let build = build(
             src.path(),
             dist.path(),
-            Preview::new(PreviewFeatures::METADATA_JSON),
+            Preview::new(&[PreviewFeature::MetadataJson]),
         )
         .unwrap();
 

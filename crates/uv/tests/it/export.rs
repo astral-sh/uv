@@ -2,7 +2,7 @@
 
 #[cfg(feature = "git")]
 use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use crate::common::{TestContext, apply_filters, uv_snapshot};
+use crate::common::{TestContext, apply_filters, copy_dir_ignore, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -1286,8 +1286,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 
         fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
     }
-    #[cfg(windows)]
-    {
+    if cfg!(windows) {
         use std::process::Command;
 
         // https://superuser.com/a/1489152
@@ -1299,7 +1298,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!("{}:R", whoami::username()))
+            .arg(format!("{}:R", whoami::username()?))
             .assert()
             .success();
     }
@@ -4919,7 +4918,13 @@ fn cyclonedx_export_basic() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -4995,7 +5000,13 @@ fn cyclonedx_export_direct_url() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5072,7 +5083,13 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5148,7 +5165,13 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "standalone-project-1@1.0.0",
           "name": "standalone-project",
-          "version": "1.0.0"
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [],
@@ -5215,7 +5238,13 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
           "type": "library",
           "bom-ref": "mixed-project-1@0.1.0",
           "name": "mixed-project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5319,7 +5348,13 @@ fn cyclonedx_export_project_extra() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5399,7 +5434,13 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5536,7 +5577,13 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5680,7 +5727,13 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
           "type": "library",
           "bom-ref": "child-1@0.1.0",
           "name": "child",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5781,7 +5834,13 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5851,7 +5910,13 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6003,7 +6068,13 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-5",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6037,7 +6108,13 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -6153,7 +6230,13 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-7",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6206,7 +6289,13 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -6300,7 +6389,13 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "my-project-3",
-          "name": "my-project"
+          "name": "my-project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6315,7 +6410,13 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
           "type": "library",
           "bom-ref": "my-project-1@0.1.0",
           "name": "my-project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -6428,7 +6529,13 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6567,7 +6674,13 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6664,7 +6777,13 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6784,7 +6903,13 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6915,7 +7040,13 @@ fn cyclonedx_export_prune() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7094,7 +7225,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7159,7 +7296,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7206,7 +7349,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7304,10 +7453,26 @@ fn cyclonedx_export_non_project() -> Result<()> {
             "name": "uv",
             "version": "[VERSION]"
           }
-        ]
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-1",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
       },
       "components": [],
-      "dependencies": []
+      "dependencies": [
+        {
+          "ref": "uv-workspace-1",
+          "dependsOn": []
+        }
+      ]
     }
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
@@ -7333,7 +7498,18 @@ fn cyclonedx_export_non_project() -> Result<()> {
             "name": "uv",
             "version": "[VERSION]"
           }
-        ]
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-2",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
       },
       "components": [
         {
@@ -7347,6 +7523,10 @@ fn cyclonedx_export_non_project() -> Result<()> {
       "dependencies": [
         {
           "ref": "urllib3-1@2.2.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "uv-workspace-2",
           "dependsOn": []
         }
       ]
@@ -7425,7 +7605,13 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7496,7 +7682,13 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7613,7 +7805,13 @@ fn cyclonedx_export_relative_path() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7701,7 +7899,13 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7899,7 +8103,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7965,7 +8175,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8019,7 +8235,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8116,7 +8338,13 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-3",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8136,7 +8364,13 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -8238,7 +8472,13 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8408,6 +8648,178 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
     }
     ----- stderr -----
     Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let workspace = context.temp_dir.child("workspace");
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-virtual-workspace"),
+        &workspace,
+    )?;
+
+    // Lock from the workspace root
+    context.lock().current_dir(&workspace).assert().success();
+
+    // Export from the virtual workspace root (no [project] section) without --all-packages
+    // This should create a synthetic root in metadata.component
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&workspace), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-8",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "albatross-1@0.1.0",
+          "name": "albatross",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/albatross"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "anyio-2@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "bird-feeder-3@1.0.0",
+          "name": "bird-feeder",
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/bird-feeder"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "idna-4@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-5@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "seeds-6@1.0.0",
+          "name": "seeds",
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/seeds"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "sniffio-7@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "albatross-1@0.1.0",
+          "dependsOn": [
+            "bird-feeder-3@1.0.0",
+            "iniconfig-5@2.0.0"
+          ]
+        },
+        {
+          "ref": "anyio-2@4.3.0",
+          "dependsOn": [
+            "idna-4@3.6",
+            "sniffio-7@1.3.1"
+          ]
+        },
+        {
+          "ref": "bird-feeder-3@1.0.0",
+          "dependsOn": [
+            "anyio-2@4.3.0",
+            "seeds-6@1.0.0"
+          ]
+        },
+        {
+          "ref": "idna-4@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "iniconfig-5@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "seeds-6@1.0.0",
+          "dependsOn": [
+            "idna-4@3.6"
+          ]
+        },
+        {
+          "ref": "sniffio-7@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "uv-workspace-8",
+          "dependsOn": [
+            "albatross-1@0.1.0",
+            "bird-feeder-3@1.0.0",
+            "seeds-6@1.0.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 

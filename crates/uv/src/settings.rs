@@ -5,6 +5,8 @@ use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
+use rustc_hash::FxHashSet;
+
 use crate::commands::{PythonUpgrade, PythonUpgradeSource};
 use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
@@ -384,7 +386,6 @@ pub(crate) struct InitSettings {
 
 impl InitSettings {
     /// Resolve the [`InitSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: InitArgs,
         filesystem: Option<FilesystemOptions>,
@@ -562,7 +563,6 @@ impl RunSettings {
     const DEFAULT_MAX_RECURSION_DEPTH: u32 = 100;
 
     /// Resolve the [`RunSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: RunArgs,
         filesystem: Option<FilesystemOptions>,
@@ -722,7 +722,6 @@ pub(crate) struct ToolRunSettings {
 
 impl ToolRunSettings {
     /// Resolve the [`ToolRunSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: ToolRunArgs,
         filesystem: Option<FilesystemOptions>,
@@ -873,7 +872,6 @@ pub(crate) struct ToolInstallSettings {
 
 impl ToolInstallSettings {
     /// Resolve the [`ToolInstallSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: ToolInstallArgs,
         filesystem: Option<FilesystemOptions>,
@@ -983,7 +981,6 @@ pub(crate) struct ToolUpgradeSettings {
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: ToolUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1095,7 +1092,7 @@ pub(crate) struct ToolListSettings {
 
 impl ToolListSettings {
     /// Resolve the [`ToolListSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolListArgs {
             show_paths,
@@ -1125,7 +1122,6 @@ pub(crate) struct ToolUninstallSettings {
 
 impl ToolUninstallSettings {
     /// Resolve the [`ToolUninstallSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolUninstallArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolUninstallArgs { name, all } = args;
 
@@ -1143,7 +1139,7 @@ pub(crate) struct ToolDirSettings {
 
 impl ToolDirSettings {
     /// Resolve the [`ToolDirSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: ToolDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let ToolDirArgs { bin } = args;
 
@@ -1178,7 +1174,7 @@ pub(crate) struct PythonListSettings {
 
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonListArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1260,7 +1256,7 @@ pub(crate) struct PythonDirSettings {
 
 impl PythonDirSettings {
     /// Resolve the [`PythonDirSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonDirArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonDirArgs { bin } = args;
 
@@ -1287,7 +1283,6 @@ pub(crate) struct PythonInstallSettings {
 
 impl PythonInstallSettings {
     /// Resolve the [`PythonInstallSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonInstallArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1353,7 +1348,7 @@ impl PythonInstallSettings {
 }
 
 /// The resolved settings to use for a `python upgrade` invocation.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonUpgradeSettings {
     pub(crate) install_dir: Option<PathBuf>,
@@ -1371,7 +1366,6 @@ pub(crate) struct PythonUpgradeSettings {
 
 impl PythonUpgradeSettings {
     /// Resolve the [`PythonUpgradeSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonUpgradeArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1438,7 +1432,6 @@ pub(crate) struct PythonUninstallSettings {
 
 impl PythonUninstallSettings {
     /// Resolve the [`PythonUninstallSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonUninstallArgs,
         _filesystem: Option<FilesystemOptions>,
@@ -1469,7 +1462,6 @@ pub(crate) struct PythonFindSettings {
 
 impl PythonFindSettings {
     /// Resolve the [`PythonFindSettings`] from the CLI and workspace configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonFindArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1525,7 +1517,6 @@ pub(crate) struct PythonPinSettings {
 
 impl PythonPinSettings {
     /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: PythonPinArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1558,7 +1549,7 @@ impl PythonPinSettings {
 }
 
 /// The resolved settings to use for a `sync` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
+#[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct SyncSettings {
     pub(crate) lock_check: LockCheck,
@@ -1583,7 +1574,6 @@ pub(crate) struct SyncSettings {
 
 impl SyncSettings {
     /// Resolve the [`SyncSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: SyncArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1715,7 +1705,6 @@ impl SyncSettings {
 }
 
 /// The resolved settings to use for a `lock` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct LockSettings {
     pub(crate) lock_check: LockCheck,
@@ -1730,7 +1719,6 @@ pub(crate) struct LockSettings {
 
 impl LockSettings {
     /// Resolve the [`LockSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: LockArgs,
         filesystem: Option<FilesystemOptions>,
@@ -1782,7 +1770,7 @@ impl LockSettings {
 }
 
 /// The resolved settings to use for a `add` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct AddSettings {
     pub(crate) lock_check: LockCheck,
@@ -1822,7 +1810,6 @@ pub(crate) struct AddSettings {
 
 impl AddSettings {
     /// Resolve the [`AddSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: AddArgs,
         filesystem: Option<FilesystemOptions>,
@@ -2008,7 +1995,7 @@ impl AddSettings {
 }
 
 /// The resolved settings to use for a `remove` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
+#[expect(dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct RemoveSettings {
     pub(crate) lock_check: LockCheck,
@@ -2027,7 +2014,6 @@ pub(crate) struct RemoveSettings {
 
 impl RemoveSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: RemoveArgs,
         filesystem: Option<FilesystemOptions>,
@@ -2108,7 +2094,6 @@ impl RemoveSettings {
 }
 
 /// The resolved settings to use for a `version` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct VersionSettings {
     pub(crate) value: Option<String>,
@@ -2129,7 +2114,6 @@ pub(crate) struct VersionSettings {
 
 impl VersionSettings {
     /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: VersionArgs,
         filesystem: Option<FilesystemOptions>,
@@ -2293,7 +2277,7 @@ impl TreeSettings {
 }
 
 /// The resolved settings to use for an `export` invocation.
-#[allow(clippy::struct_excessive_bools, dead_code)]
+#[expect(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
     pub(crate) format: Option<ExportFormat>,
@@ -2319,7 +2303,6 @@ pub(crate) struct ExportSettings {
 
 impl ExportSettings {
     /// Resolve the [`ExportSettings`] from the CLI and filesystem configuration.
-    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(
         args: ExportArgs,
         filesystem: Option<FilesystemOptions>,
@@ -3024,6 +3007,7 @@ impl PipUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
+    pub(crate) exclude: FxHashSet<PackageName>,
     pub(crate) paths: Option<Vec<PathBuf>>,
     pub(crate) settings: PipSettings,
 }
@@ -3037,6 +3021,7 @@ impl PipFreezeSettings {
     ) -> Self {
         let PipFreezeArgs {
             exclude_editable,
+            exclude,
             strict,
             no_strict,
             python,
@@ -3050,6 +3035,7 @@ impl PipFreezeSettings {
 
         Self {
             exclude_editable,
+            exclude: exclude.into_iter().collect(),
             paths,
             settings: PipSettings::combine(
                 PipOptions {
@@ -3071,7 +3057,7 @@ impl PipFreezeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PipListSettings {
     pub(crate) editable: Option<bool>,
-    pub(crate) exclude: Vec<PackageName>,
+    pub(crate) exclude: FxHashSet<PackageName>,
     pub(crate) format: ListFormat,
     pub(crate) outdated: bool,
     pub(crate) settings: PipSettings,
@@ -3104,7 +3090,7 @@ impl PipListSettings {
 
         Self {
             editable: flag(editable, exclude_editable, "exclude-editable"),
-            exclude,
+            exclude: exclude.into_iter().collect(),
             format,
             outdated: flag(outdated, no_outdated, "outdated").unwrap_or(false),
             settings: PipSettings::combine(
@@ -3361,6 +3347,7 @@ pub(crate) struct VenvSettings {
     pub(crate) prompt: Option<String>,
     pub(crate) system_site_packages: bool,
     pub(crate) relocatable: bool,
+    pub(crate) no_relocatable: bool,
     pub(crate) no_project: bool,
     pub(crate) refresh: Refresh,
     pub(crate) settings: PipSettings,
@@ -3385,6 +3372,7 @@ impl VenvSettings {
             prompt,
             system_site_packages,
             relocatable,
+            no_relocatable,
             index_args,
             index_strategy,
             keyring_provider,
@@ -3410,6 +3398,7 @@ impl VenvSettings {
             system_site_packages,
             no_project,
             relocatable,
+            no_relocatable,
             refresh: Refresh::from(refresh),
             settings: PipSettings::combine(
                 PipOptions {
@@ -4251,7 +4240,7 @@ where
 }
 
 /// Prints a parse error and exits the process.
-#[allow(clippy::exit, clippy::print_stderr)]
+#[expect(clippy::exit, clippy::print_stderr)]
 fn parse_failure(name: &str, expected: &str) -> ! {
     eprintln!("error: invalid value for {name}, expected {expected}");
     process::exit(1)

@@ -4,12 +4,14 @@ use std::path::PathBuf;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, InstalledDistKind, Name};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_normalize::PackageName;
 use uv_preview::Preview;
 use uv_python::PythonPreference;
 use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
@@ -21,6 +23,7 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
     exclude_editable: bool,
+    exclude: &FxHashSet<PackageName>,
     strict: bool,
     python: Option<&str>,
     system: bool,
@@ -80,7 +83,15 @@ pub(crate) fn pip_freeze(
     site_packages
         .iter()
         .flat_map(uv_installer::SitePackages::iter)
-        .filter(|dist| !(exclude_editable && dist.is_editable()))
+        .filter(|dist| {
+            if exclude_editable && dist.is_editable() {
+                return false;
+            }
+            if exclude.contains(dist.name()) {
+                return false;
+            }
+            true
+        })
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .map(|dist| match &dist.kind {
             InstalledDistKind::Registry(dist) => {

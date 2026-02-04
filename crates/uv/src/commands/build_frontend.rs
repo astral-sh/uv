@@ -96,7 +96,7 @@ enum Error {
 }
 
 /// Build source distributions and wheels.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
@@ -168,7 +168,9 @@ enum BuildResult {
     Success,
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
@@ -440,7 +442,7 @@ async fn build_impl(
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,

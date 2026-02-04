@@ -284,7 +284,7 @@ impl EnvVars {
     pub const UV_PUBLISH_TOKEN: &'static str = "UV_PUBLISH_TOKEN";
 
     /// Equivalent to the `--index` command-line argument in `uv publish`. If
-    /// set, uv the index with this name in the configuration for publishing.
+    /// set, uv will use the index with this name in the configuration for publishing.
     #[attr_added_in("0.5.8")]
     pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
 
@@ -567,6 +567,12 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
+
+    /// Marker variable to track whether `PYTHONHOME` was set by uv.
+    /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
+    #[attr_hidden]
+    #[attr_added_in("0.9.29")]
+    pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
 
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]

@@ -9017,6 +9017,52 @@ fn sync_python_version() -> Result<()> {
     Ok(())
 }
 
+/// Test that a global `.python-version` pin that conflicts with the project's
+/// `requires-python` is ignored, falling back to the project's requirement.
+#[test]
+fn sync_ignores_incompatible_global_python_version() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.10", "3.11"]);
+
+    // Create a global pin before creating the project (to avoid pin compatibility check)
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global").arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.10`
+
+    ----- stderr -----
+    ");
+
+    // Now create a project that requires a different Python version
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc::indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})?;
+
+    // Ensure sync succeeds and uses a compatible interpreter (ignoring the conflicting global pin)
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_explicit() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -9292,6 +9338,45 @@ fn sync_all_extras() -> Result<()> {
     Resolved 8 packages in [TIME]
     error: Extra `foo` is not defined in any project's `optional-dependencies` table
     ");
+
+    Ok(())
+}
+
+#[test]
+fn sync_extra_comma_separated() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        types = ["typing-extensions>=4"]
+        async = ["anyio>3"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("types,async"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "#);
 
     Ok(())
 }
@@ -14002,7 +14087,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS), @"
+    uv_snapshot!(context.filters(), context.sync(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14095,7 +14180,7 @@ fn sync_git_lfs() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14231,7 +14316,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should be primed with non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14289,7 +14374,7 @@ fn sync_git_lfs() -> Result<()> {
     ");
 
     // Cache should hit non-LFS sources
-    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_GIT_LFS).arg("--reinstall"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----

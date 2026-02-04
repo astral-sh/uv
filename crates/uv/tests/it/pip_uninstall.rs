@@ -1,18 +1,15 @@
-use std::process::Command;
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{TestContext, get_bin, uv_snapshot};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn no_arguments() {
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .env_clear(), @"
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_uninstall(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -21,7 +18,7 @@ fn no_arguments() {
     error: the following required arguments were not provided:
       <PACKAGE|--requirements <REQUIREMENTS>>
 
-    Usage: uv pip uninstall <PACKAGE|--requirements <REQUIREMENTS>>
+    Usage: uv pip uninstall --cache-dir [CACHE_DIR] <PACKAGE|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
     "
@@ -29,14 +26,11 @@ fn no_arguments() {
 }
 
 #[test]
-fn invalid_requirement() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
+fn invalid_requirement() {
+    let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
-        .arg("flask==1.0.x")
-        .current_dir(&temp_dir), @"
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("flask==1.0.x"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -47,20 +41,15 @@ fn invalid_requirement() -> Result<()> {
     flask==1.0.x
          ^^^^^^^
     ");
-
-    Ok(())
 }
 
 #[test]
-fn missing_requirements_txt() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
+fn missing_requirements_txt() {
+    let context = TestContext::new("3.12");
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-r")
-        .arg("requirements.txt")
-        .current_dir(&temp_dir), @"
+        .arg("requirements.txt"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -69,22 +58,18 @@ fn missing_requirements_txt() -> Result<()> {
     error: File not found: `requirements.txt`
     "
     );
-
-    Ok(())
 }
 
 #[test]
 fn invalid_requirements_txt_requirement() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let requirements_txt = temp_dir.child("requirements.txt");
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask==1.0.x")?;
 
-    uv_snapshot!(Command::new(get_bin())
-        .arg("pip")
-        .arg("uninstall")
+    uv_snapshot!(context.filters(), context.pip_uninstall()
         .arg("-r")
-        .arg("requirements.txt")
-        .current_dir(&temp_dir), @"
+        .arg("requirements.txt"), @"
     success: false
     exit_code: 2
     ----- stdout -----
