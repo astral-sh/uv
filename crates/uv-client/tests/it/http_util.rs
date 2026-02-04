@@ -239,6 +239,11 @@ impl<'a> TestServerBuilder<'a> {
 
     /// Starts the HTTP(S) server with optional mTLS enforcement.
     pub(crate) async fn start(self) -> Result<(JoinHandle<Result<()>>, SocketAddr)> {
+        // Install the ring crypto provider for rustls. This is needed because both ring and
+        // aws-lc-rs features are enabled (aws-lc-rs via reqwest's rustls feature, ring via
+        // workspace rustls config), and rustls cannot auto-detect which to use.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         // Validate builder input combinations
         if self.ca_cert.is_some() && self.server_cert.is_none() {
             anyhow::bail!("server certificate is required when CA certificate is provided");

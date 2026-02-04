@@ -85,6 +85,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"uv(-.*)? \d+\.\d+\.\d+(-(alpha|beta|rc)\.\d+)?(\+\d+)?( \([^)]*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
+    // Certificate loading debug messages (vary by environment)
+    (
+        r"(?m)^\s*DEBUG Loaded .* certificate\(s\) from SSL_CERT_(FILE|DIR): .*\n",
+        "",
+    ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
