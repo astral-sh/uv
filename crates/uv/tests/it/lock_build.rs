@@ -49,7 +49,7 @@ fn lock_build_dependencies() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -113,7 +113,7 @@ fn lock_build_dependencies() -> Result<()> {
     });
 
     // Re-run with `--locked` to ensure the lock file with build-dependencies is valid.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -169,7 +169,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
     )?;
 
     // First lock to capture build dependencies.
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -234,7 +234,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
 
     // Re-lock (non-locked mode) to trigger a fresh resolution that should
     // use the stored build dependencies as preferences.
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -367,7 +367,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -443,7 +443,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
     });
 
     // Re-run with --locked to verify round-trip.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -498,7 +498,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     )?;
 
     // Initial lock.
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -562,7 +562,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     });
 
     // Re-lock with --upgrade (forces fresh resolution, discarding preferences).
-    uv_snapshot!(context.filters(), context.lock().arg("--upgrade"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--upgrade"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -626,7 +626,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     });
 
     // Verify the lock file is valid.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -680,7 +680,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
     )?;
 
     // Lock with an exclude-newer date.
-    uv_snapshot!(context.filters(), context.lock().arg("--exclude-newer").arg("2024-03-25T00:00:00Z"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--exclude-newer").arg("2024-03-25T00:00:00Z"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -744,7 +744,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
     });
 
     // Verify the lock file is valid.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -805,7 +805,7 @@ fn lock_build_dependencies_extra() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .arg("--preview-features")
-        .arg("extra-build-dependencies"), @"
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -918,7 +918,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1001,7 +1001,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
     });
 
     // Verify the lock file is valid.
-    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
     success: true
     exit_code: 0
     ----- stdout -----

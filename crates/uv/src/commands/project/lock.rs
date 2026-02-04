@@ -1023,18 +1023,20 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(
+            let mut lock = Lock::from_resolution(
                 &resolution,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
             )?
             .with_manifest(manifest)
             .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.into_markers())
-            .with_build_resolutions(
-                build_dispatch.build_resolutions().snapshot(),
-                target.install_path(),
-            )?;
+            .with_required_environments(lock_required_environments.into_markers());
+
+            // Only record build dependencies in the lock file when the preview feature is enabled.
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+                let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                lock = lock.with_build_resolutions(&build_resolutions, target.install_path())?;
+            }
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))

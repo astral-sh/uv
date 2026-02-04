@@ -114,18 +114,27 @@ impl LockedBuildResolutions {
     }
 }
 
+/// Key for build dependency maps: (package name, optional version).
+type BuildDepKey = (PackageName, Option<Version>);
+
+/// Map of build dependency keys to their resolved build dependency (name, version) pairs.
+type BuildPreferencesMap = BTreeMap<BuildDepKey, Vec<(PackageName, Version)>>;
+
+/// Map of build dependency keys to their full resolutions.
+type BuildResolutionsMap = BTreeMap<BuildDepKey, Resolution>;
+
 /// Previously resolved build dependency versions, used as preferences during
 /// subsequent resolutions to prefer the same versions.
 ///
 /// Used during `uv lock` so the resolver prefers previously locked build dep
 /// versions but can deviate if needed (e.g., when constraints change).
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>);
+pub struct BuildPreferences(BuildPreferencesMap);
 
 impl BuildPreferences {
     /// Create build preferences from a map of (package name, optional version) to their
     /// resolved build dependency (name, version) pairs.
-    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>) -> Self {
+    pub fn new(map: BuildPreferencesMap) -> Self {
         Self(map)
     }
 
@@ -154,7 +163,7 @@ impl BuildPreferences {
 /// (including distribution URLs, hashes, etc.) so they can be persisted in the lock file
 /// and reused directly during subsequent builds without re-resolving.
 #[derive(Debug, Default, Clone)]
-pub struct BuildResolutions(Arc<Mutex<BTreeMap<(PackageName, Option<Version>), Resolution>>>);
+pub struct BuildResolutions(Arc<Mutex<BuildResolutionsMap>>);
 
 impl BuildResolutions {
     /// Record a build resolution for the given package name and optional version.
@@ -166,7 +175,7 @@ impl BuildResolutions {
     }
 
     /// Get a snapshot of the current build resolutions.
-    pub fn snapshot(&self) -> BTreeMap<(PackageName, Option<Version>), Resolution> {
+    pub fn snapshot(&self) -> BuildResolutionsMap {
         self.0.lock().unwrap().clone()
     }
 }
