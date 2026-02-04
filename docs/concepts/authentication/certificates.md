@@ -1,8 +1,8 @@
 # TLS certificates
 
-By default, uv uses the rustls TLS backend with platform-verifier, which loads certificates from the
-operating system's certificate store. This provides a balance of security, performance, and
-compatibility with corporate environments that use custom root certificates.
+By default, uv loads certificates from the bundled `webpki-roots` crate. The `webpki-roots` are a
+reliable set of trust roots from Mozilla, and including them in uv improves portability and
+performance (especially on macOS, where reading the system trust store incurs a significant delay).
 
 ## System certificates
 
@@ -13,21 +13,13 @@ command-line flag, or set the `UV_NATIVE_TLS` environment variable to `true`.
 
 ## Custom certificates
 
-To use custom CA certificates, you can set the `SSL_CERT_FILE` environment variable to the path of a
-certificate bundle (PEM format), or set `SSL_CERT_DIR` to a directory containing certificate files
-(`.pem`, `.crt`, or `.cer` extensions).
-
-When using the default TLS backend (rustls), these custom certificates are merged with the
-platform's certificate store loaded via `rustls-platform-verifier`. When using `--native-tls`, the
-custom certificates are used alongside the certificates loaded from the platform's native
-certificate store.
-
-The `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
-The `SSL_CERT_DIR` can contain multiple certificate files, and uv will load all valid certificates
-from the directory.
+If a direct path to the certificate is required (e.g., in CI), set the `SSL_CERT_FILE` environment
+variable to the path of the certificate bundle, to instruct uv to use that file instead of the
+system's trust store.
 
 If client certificate authentication (mTLS) is desired, set the `SSL_CLIENT_CERT` environment
-variable to the path of a PEM formatted file containing the certificate followed by the private key.
+variable to the path of the PEM formatted file containing the certificate followed by the private
+key.
 
 ## Insecure hosts
 

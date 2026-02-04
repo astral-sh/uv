@@ -54,6 +54,8 @@ percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
@@ -65,6 +67,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+webpki-roots = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
