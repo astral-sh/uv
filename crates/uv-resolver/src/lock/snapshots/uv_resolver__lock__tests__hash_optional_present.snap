@@ -102,6 +102,7 @@ Ok(
                 dependencies: [],
                 optional_dependencies: {},
                 dependency_groups: {},
+                build_dependencies: [],
                 metadata: PackageMetadata {
                     requires_dist: {},
                     provides_extra: [],

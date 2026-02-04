@@ -902,7 +902,7 @@ impl Lock {
     /// corresponding packages in the lock file.
     pub fn with_build_resolutions(
         mut self,
-        build_resolutions: BTreeMap<
+        build_resolutions: &BTreeMap<
             (PackageName, Option<Version>),
             uv_distribution_types::Resolution,
         >,
@@ -915,7 +915,7 @@ impl Lock {
             BTreeMap::new();
         let mut build_packages: Vec<Package> = Vec::new();
 
-        for ((parent_name, parent_version), resolution) in &build_resolutions {
+        for ((parent_name, parent_version), resolution) in build_resolutions {
             let mut deps = Vec::new();
             for (resolved_dist, hashes) in resolution.hashes() {
                 let Some(version) = resolved_dist.version() else {
@@ -950,11 +950,11 @@ impl Lock {
         for package in &mut self.packages {
             let key = (package.id.name.clone(), package.id.version.clone());
             if let Some(deps) = build_dep_refs.get(&key) {
-                package.build_dependencies = deps.clone();
+                package.build_dependencies.clone_from(deps);
             } else {
                 let fallback_key = (package.id.name.clone(), None);
                 if let Some(deps) = build_dep_refs.get(&fallback_key) {
-                    package.build_dependencies = deps.clone();
+                    package.build_dependencies.clone_from(deps);
                 }
             }
         }
