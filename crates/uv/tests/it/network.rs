@@ -194,7 +194,7 @@ async fn time_out_response(
 
 /// Returns the server URL and a drop guard that shuts down the server.
 ///
-/// The server runs im a thread with its own tokio runtime, so it
+/// The server runs in a thread with its own tokio runtime, so it
 /// won't be starved by the subprocess blocking the test thread. Dropping the
 /// guard shuts down the runtime and all tasks running in it.
 fn read_timeout_server() -> (String, impl Drop) {
@@ -205,11 +205,11 @@ fn read_timeout_server() -> (String, impl Drop) {
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
-        rt.block_on(async move {
+        runtime.block_on(async move {
             let listener = tokio::net::TcpListener::from_std(listener).unwrap();
             tokio::select! {
                 _ = async {
@@ -996,7 +996,7 @@ async fn proxy_schemeless_url_in_uv_toml() {
 fn connect_timeout_index() {
     let context = TestContext::new("3.12");
 
-    // Create a server that just times out.
+    // Create a server that never responds, causing a timeout for our requests.
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let server = listener.local_addr().unwrap().to_string();
 
@@ -1031,7 +1031,7 @@ fn connect_timeout_index() {
 fn connect_timeout_stream() {
     let context = TestContext::new("3.12");
 
-    // Create a server that just times out.
+    // Create a server that never responds, causing a timeout for our requests.
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let server = listener.local_addr().unwrap().to_string();
 
