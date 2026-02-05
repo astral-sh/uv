@@ -82,7 +82,7 @@ This release also includes the stabilization of preview features. Python upgrade
 
   `uv format` now uses [Ruff 0.15.0](https://github.com/astral-sh/ruff/releases/tag/0.15.0), which uses the [2026 style guide](https://astral.sh/blog/ruff-v0.15.0#the-ruff-2026-style-guide). See the blog post for details.
 
-  The formatting of code is likely to change. You can opt out of this behavior by requesting an older Ruff version, e.g., `uv format --version 0.14.10`.
+  The formatting of code is likely to change. You can opt out of this behavior by requesting an older Ruff version, e.g., `uv format --version 0.14.14`.
 
 - **Update uv crate test features to use `test-` as a prefix** ([#17860](https://github.com/astral-sh/uv/pull/17860))
 
