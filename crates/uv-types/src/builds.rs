@@ -1,10 +1,13 @@
+use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, NoSources};
+use uv_distribution_types::Resolution;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
@@ -80,5 +83,90 @@ impl<T> BuildArena<T> {
     /// Remove a build entry from the arena.
     pub fn remove(&self, key: &BuildKey) -> Option<T> {
         self.0.remove(key).map(|entry| entry.1)
+    }
+}
+
+/// Previously resolved build dependencies from the lock file, stored as complete
+/// [`Resolution`] objects that can be used directly without re-resolving.
+///
+/// Used during `uv sync` to skip the resolver entirely for build dependencies.
+#[derive(Debug, Default, Clone)]
+pub struct LockedBuildResolutions(BTreeMap<(PackageName, Option<Version>), Resolution>);
+
+impl LockedBuildResolutions {
+    /// Create locked build resolutions from a map of (package name, optional version)
+    /// to their pre-built resolutions.
+    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Resolution>) -> Self {
+        Self(map)
+    }
+
+    /// Get the pre-built resolution for a given package name and version.
+    ///
+    /// First tries an exact (name, version) match, then falls back to a (name, None) match.
+    pub fn get(&self, package: &PackageName, version: Option<&Version>) -> Option<&Resolution> {
+        if let Some(version) = version {
+            self.0
+                .get(&(package.clone(), Some(version.clone())))
+                .or_else(|| self.0.get(&(package.clone(), None)))
+        } else {
+            self.0.get(&(package.clone(), None))
+        }
+    }
+}
+
+/// Previously resolved build dependency versions, used as preferences during
+/// subsequent resolutions to prefer the same versions.
+///
+/// Used during `uv lock` so the resolver prefers previously locked build dep
+/// versions but can deviate if needed (e.g., when constraints change).
+#[derive(Debug, Default, Clone)]
+pub struct BuildPreferences(BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>);
+
+impl BuildPreferences {
+    /// Create build preferences from a map of (package name, optional version) to their
+    /// resolved build dependency (name, version) pairs.
+    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>) -> Self {
+        Self(map)
+    }
+
+    /// Get the build dependency preferences for a given package name and version.
+    ///
+    /// First tries an exact (name, version) match, then falls back to a (name, None) match.
+    pub fn get(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<&Vec<(PackageName, Version)>> {
+        if let Some(version) = version {
+            self.0
+                .get(&(package.clone(), Some(version.clone())))
+                .or_else(|| self.0.get(&(package.clone(), None)))
+        } else {
+            self.0.get(&(package.clone(), None))
+        }
+    }
+}
+
+/// A collection of build dependency resolutions, keyed by (package name, optional version).
+///
+/// During the resolution process, when source distributions need to be built,
+/// their build dependencies are resolved. This type captures those full resolutions
+/// (including distribution URLs, hashes, etc.) so they can be persisted in the lock file
+/// and reused directly during subsequent builds without re-resolving.
+#[derive(Debug, Default, Clone)]
+pub struct BuildResolutions(Arc<Mutex<BTreeMap<(PackageName, Option<Version>), Resolution>>>);
+
+impl BuildResolutions {
+    /// Record a build resolution for the given package name and optional version.
+    pub fn insert(&self, package: PackageName, version: Option<Version>, resolution: Resolution) {
+        self.0
+            .lock()
+            .unwrap()
+            .insert((package, version), resolution);
+    }
+
+    /// Get a snapshot of the current build resolutions.
+    pub fn snapshot(&self) -> BTreeMap<(PackageName, Option<Version>), Resolution> {
+        self.0.lock().unwrap().clone()
     }
 }

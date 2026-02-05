@@ -9,9 +9,9 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
-    PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
-    TreeDisplay, VERSION, cyclonedx_json,
+    BuildDependency, Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap,
+    PylockToml, PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest,
+    SatisfiesResult, TreeDisplay, VERSION, cyclonedx_json,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};

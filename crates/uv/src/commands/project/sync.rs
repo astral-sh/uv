@@ -32,7 +32,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -834,6 +834,32 @@ pub(crate) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
+    // Extract locked build resolutions from the lock file so that source
+    // distribution builds use the exact same build deps (with full distribution
+    // info) that were resolved during `uv lock`, skipping re-resolution entirely.
+    let locked_build_resolutions = {
+        let mut map = std::collections::BTreeMap::new();
+        for package in target.lock().packages() {
+            if package.build_dependencies().is_empty() {
+                continue;
+            }
+            if let Some(resolution) = target.lock().build_resolution(
+                package.name(),
+                package.version(),
+                target.install_path(),
+                &tags,
+                build_options,
+                venv.interpreter().markers(),
+            )? {
+                map.insert(
+                    (package.name().clone(), package.version().cloned()),
+                    resolution,
+                );
+            }
+        }
+        LockedBuildResolutions::new(map)
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -859,7 +885,8 @@ pub(crate) async fn do_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_locked_build_resolutions(locked_build_resolutions);
 
     // Run a malware check against OSV before installing.
     if malware_settings.enabled {
