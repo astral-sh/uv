@@ -1,5 +1,89 @@
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter, Write};
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
+
+#[derive(
+    Default,
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+#[repr(transparent)]
+pub struct CPythonAbiVariants(u8);
+
+bitflags::bitflags! {
+    impl CPythonAbiVariants: u8 {
+        /// A freethreading build of CPython without GIL, Python 3.13+.
+        const Freethreading = 1 << 0;
+        /// Historical, not needed on CPython 3.3+.
+        const WideUnicode = 1 << 1;
+        /// A debug build of CPython.
+        const Debug = 1 << 2;
+        /// Historical, not needed on CPython 3.4+, but only removed with CPython 3.8+.
+        ///
+        /// <https://github.com/python/cpython/issues/80888#issuecomment-1093821707>
+        const Pymalloc = 1 << 3;
+    }
+}
+
+impl Deref for CPythonAbiVariants {
+    type Target = u8;
+
+    fn deref(&self) -> &u8 {
+        &self.0
+    }
+}
+
+impl DerefMut for CPythonAbiVariants {
+    fn deref_mut(&mut self) -> &mut u8 {
+        &mut self.0
+    }
+}
+
+impl Display for CPythonAbiVariants {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        // Preserve the known order of flags, as observed from CPython itself.
+        // TODO(konsti): Is there a canonical source for that?
+        if self.contains(Self::Freethreading) {
+            // https://peps.python.org/pep-0703/#build-configuration-changes
+            // Python 3.13+ only, but it makes more sense to just rely on the sysconfig var.
+            f.write_char('t')?;
+        }
+        if self.contains(Self::Debug) {
+            f.write_char('d')?;
+        }
+        if self.contains(Self::Pymalloc) {
+            // Not used anymore, now always implied
+            f.write_char('m')?;
+        }
+        if self.contains(Self::WideUnicode) {
+            // Not used anymore, now always implied
+            f.write_char('u')?;
+        }
+        Ok(())
+    }
+}
+
+impl CPythonAbiVariants {
+    pub fn from_char(suffix: char) -> Option<Self> {
+        match suffix {
+            't' => Some(Self::Freethreading),
+            'u' => Some(Self::WideUnicode),
+            'd' => Some(Self::Debug),
+            'm' => Some(Self::Pymalloc),
+            _ => None,
+        }
+    }
+}
 
 /// A tag to represent the ABI compatibility of a Python distribution.
 ///
@@ -26,8 +110,8 @@ pub enum AbiTag {
     Abi3,
     /// Ex) `cp39m`, `cp310t`
     CPython {
-        gil_disabled: bool,
         python_version: (u8, u8),
+        variant: CPythonAbiVariants,
     },
     /// Ex) `pypy39_pp73`
     PyPy {
@@ -50,11 +134,20 @@ impl AbiTag {
             Self::None => None,
             Self::Abi3 => None,
             Self::CPython {
-                gil_disabled,
+                variant,
                 python_version,
             } => {
+                // We only need to handle freethreading here:
+                // * Debug is ABI compatible (https://github.com/python/cpython/issues/80646)
+                // * Wide unicode is always on in supported versions
+                // * pymalloc is always on in supported versions
+
                 // https://peps.python.org/pep-0703/#build-configuration-changes
-                let prefix = if gil_disabled { "free-threaded " } else { "" };
+                let prefix = if variant.contains(CPythonAbiVariants::Freethreading) {
+                    "free-threaded "
+                } else {
+                    ""
+                };
                 Some(format!(
                     "{}CPython {}.{}",
                     prefix, python_version.0, python_version.1
@@ -86,18 +179,10 @@ impl std::fmt::Display for AbiTag {
             Self::None => write!(f, "none"),
             Self::Abi3 => write!(f, "abi3"),
             Self::CPython {
-                gil_disabled,
+                variant,
                 python_version: (major, minor),
             } => {
-                if *minor <= 7 {
-                    write!(f, "cp{major}{minor}m")
-                } else if *gil_disabled {
-                    // https://peps.python.org/pep-0703/#build-configuration-changes
-                    // Python 3.13+ only, but it makes more sense to just rely on the sysconfig var.
-                    write!(f, "cp{major}{minor}t")
-                } else {
-                    write!(f, "cp{major}{minor}")
-                }
+                write!(f, "cp{major}{minor}{variant}")
             }
             Self::PyPy {
                 python_version: Some((py_major, py_minor)),
@@ -208,12 +293,28 @@ impl FromStr for AbiTag {
             // Ex) `cp39m`, `cp310t`
             let version_end = cp.find(|c: char| !c.is_ascii_digit()).unwrap_or(cp.len());
             let version_str = &cp[..version_end];
-            let abi_suffixes = &cp[version_end..];
             let (major, minor) = parse_python_version(version_str, "CPython", s)?;
-            // TODO(konsti): Handle all ABI tags
-            let gil_disabled = abi_suffixes.contains('t');
+            let abi_suffixes = &cp[version_end..];
+            let mut variant = CPythonAbiVariants::default();
+            for suffix_char in abi_suffixes.chars() {
+                let Some(suffix) = CPythonAbiVariants::from_char(suffix_char) else {
+                    return Err(ParseAbiTagError::UnknownAbiTagSuffix {
+                        suffix: suffix_char,
+                        tag: s.to_string(),
+                    });
+                };
+
+                if variant.contains(suffix) {
+                    return Err(ParseAbiTagError::DuplicateAbiTagSuffix {
+                        suffix: suffix_char,
+                        tag: s.to_string(),
+                    });
+                }
+
+                variant.insert(suffix);
+            }
             Ok(Self::CPython {
-                gil_disabled,
+                variant,
                 python_version: (major, minor),
             })
         } else if let Some(rest) = s.strip_prefix("pypy") {
@@ -338,11 +439,17 @@ pub enum ParseAbiTagError {
         implementation: &'static str,
         tag: String,
     },
+    #[error("Unknown CPython ABI tag suffix letter `{suffix}` for ABI tag: {tag}")]
+    UnknownAbiTagSuffix { suffix: char, tag: String },
+    #[error("Duplicate CPython ABI tag suffix letter `{suffix}` for ABI tag: {tag}")]
+    DuplicateAbiTagSuffix { suffix: char, tag: String },
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use insta::assert_snapshot;
 
     use crate::abi_tag::{AbiTag, ParseAbiTagError};
 
@@ -360,27 +467,15 @@ mod tests {
 
     #[test]
     fn cpython_abi() {
-        let tag = AbiTag::CPython {
-            gil_disabled: false,
-            python_version: (3, 9),
-        };
-        assert_eq!(AbiTag::from_str("cp39"), Ok(tag));
+        let tag = AbiTag::from_str("cp39").unwrap();
         assert_eq!(tag.to_string(), "cp39");
         assert_eq!(tag.pretty(), Some("CPython 3.9".to_string()));
 
-        let tag = AbiTag::CPython {
-            gil_disabled: false,
-            python_version: (3, 7),
-        };
-        assert_eq!(AbiTag::from_str("cp37m"), Ok(tag));
+        let tag = AbiTag::from_str("cp37m").unwrap();
         assert_eq!(tag.to_string(), "cp37m");
         assert_eq!(tag.pretty(), Some("CPython 3.7".to_string()));
 
-        let tag = AbiTag::CPython {
-            gil_disabled: true,
-            python_version: (3, 13),
-        };
-        assert_eq!(AbiTag::from_str("cp313t"), Ok(tag));
+        let tag = AbiTag::from_str("cp313t").unwrap();
         assert_eq!(tag.to_string(), "cp313t");
         assert_eq!(tag.pretty(), Some("free-threaded CPython 3.13".to_string()));
 
@@ -391,6 +486,15 @@ mod tests {
                 tag: "cpXY".to_string()
             })
         );
+    }
+
+    #[test]
+    fn cpython_abi_invalid() {
+        let err = AbiTag::from_str("cp39y").unwrap_err();
+        assert_snapshot!(err, @"Unknown CPython ABI tag suffix letter `y` for ABI tag: cp39y");
+
+        let err = AbiTag::from_str("cp39dd").unwrap_err();
+        assert_snapshot!(err, @"Duplicate CPython ABI tag suffix letter `d` for ABI tag: cp39dd");
     }
 
     #[test]

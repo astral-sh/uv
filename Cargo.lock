@@ -6670,6 +6670,7 @@ dependencies = [
 name = "uv-platform-tags"
 version = "0.0.19"
 dependencies = [
+ "bitflags 2.10.0",
  "insta",
  "memchr",
  "rkyv",

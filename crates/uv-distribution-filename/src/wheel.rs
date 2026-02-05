@@ -474,9 +474,16 @@ mod tests {
     /// Don't drop the freethreading tag when there is a debug tag.
     #[test]
     fn freethreading_debug() {
+        let filename = "correctionlib-2.8.0-cp314-cp314t-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
+        let filename = "correctionlib-2.8.0-cp314-cp314d-macosx_26_0_arm64.whl";
+        let parsed = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(filename, parsed.to_string());
+
         let filename = "correctionlib-2.8.0-cp314-cp314td-macosx_26_0_arm64.whl";
         let parsed = WheelFilename::from_str(filename).unwrap();
-        // TODO(konsti): We should preserve the debug tag too, but that requires cache changes.
-        insta::assert_snapshot!(parsed.to_string(), @"correctionlib-2.8.0-cp314-cp314t-macosx_26_0_arm64.whl");
+        assert_eq!(filename, parsed.to_string());
     }
 }
