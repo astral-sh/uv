@@ -1053,7 +1053,7 @@
     "LinkMode": {
       "oneOf": [
         {
-          "description": "Clone (i.e., copy-on-write or reflink) packages from the wheel into the `site-packages` directory.",
+          "description": "Clone (i.e., copy-on-write) packages from the wheel into the `site-packages` directory.",
           "type": "string",
           "const": "clone"
         },

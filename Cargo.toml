@@ -77,7 +77,7 @@ uv-warnings = { version = "0.0.19", path = "crates/uv-warnings" }
 uv-windows = { version = "0.0.19", path = "crates/uv-windows" }
 uv-workspace = { version = "0.0.19", path = "crates/uv-workspace" }
 
-ambient-id = { version = "0.0.8", default-features = false, features = ["astral-reqwest-middleware"] }
+ambient-id = { version = "0.0.10", default-features = false, features = ["reqwest-middleware"] }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
@@ -86,7 +86,7 @@ astral-tokio-tar = { version = "0.5.6" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
-async_http_range_reader = { version = "0.9.1", package = "astral_async_http_range_reader" }
+async_http_range_reader = { version = "0.10.0", package = "astral_async_http_range_reader" }
 async_zip = { version = "0.0.17", package = "astral_async_zip", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
 axoupdater = { version = "0.9.0", default-features = false }
 backon = { version = "1.3.0" }
@@ -153,14 +153,16 @@ ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
-reqsign = { version = "0.18.1", features = ["aws", "google", "default-context"], default-features = false }
-reqwest = { version = "0.12.22", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
-reqwest-middleware = { version = "0.4.2", package = "astral-reqwest-middleware", features = ["multipart"] }
-reqwest-retry = { version = "0.8.0", package = "astral-reqwest-retry" }
+reqsign = { version = "0.19.0", features = ["aws", "google", "default-context"], default-features = false }
+reqwest = { version = "0.13.1", default-features = false, features = ["json", "gzip", "deflate", "zstd", "stream", "system-proxy", "rustls" ,"native-tls", "socks", "multipart", "http2", "blocking", "query", "form"] }
+reqwest-middleware = { version = "0.5.0", package = "astral-reqwest-middleware", features = ["multipart", "query"] }
+reqwest-retry = { version = "0.9.0", package = "astral-reqwest-retry" }
 rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
+rustls = { version = "0.23.36", default-features = false, features = ["std", "ring"] }
+rustls-pemfile = { version = "2.2.0" }
 rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
 schemars = { version = "1.0.0", features = ["url2"] }
@@ -198,6 +200,7 @@ url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.16.0" }
 version-ranges = { version = "0.1.3", package = "astral-version-ranges" }
 walkdir = { version = "2.5.0" }
+webpki-roots = { version = "1.0.0" }
 which = { version = "8.0.0", features = ["regex"] }
 windows = { version = "0.61.0", features = ["std", "Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Environment", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_JobObjects", "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 windows-registry = { version = "0.5.0" }
@@ -220,7 +223,6 @@ ignore = { version = "0.4.23" }
 insta = { version = "1.40.0", features = ["json", "filters", "redactions"] }
 predicates = { version = "3.1.2" }
 rcgen = { version = "0.14.5", features = ["crypto", "pem", "ring"], default-features = false }
-rustls = { version = "0.23.29", default-features = false }
 similar = { version = "2.6.0" }
 temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }
@@ -339,3 +341,13 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+# Temporary: use git dependencies for reqwest middleware until PRs are merged
+# See: https://github.com/astral-sh/reqwest-middleware/pull/11
+# See: https://github.com/astral-sh/async_http_range_reader/pull/3
+# See: https://github.com/astral-sh/ambient-id/pull/21
+[patch.crates-io]
+astral-reqwest-middleware = { git = "https://github.com/salmonsd/reqwest-middleware", branch = "update-reqwest-tls" }
+astral-reqwest-retry = { git = "https://github.com/salmonsd/reqwest-middleware", branch = "update-reqwest-tls" }
+astral_async_http_range_reader = { git = "https://github.com/salmonsd/async_http_range_reader", branch = "update-reqwest-tls" }
+ambient-id = { git = "https://github.com/salmonsd/ambient-id", branch = "update-reqwest-tls" }

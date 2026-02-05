@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use rustls::AlertDescription;
+use tokio::task::JoinHandle;
 use url::Url;
 
 use uv_cache::Cache;
@@ -14,6 +15,63 @@ use crate::http_util::{
     generate_self_signed_certs, generate_self_signed_certs_with_ca,
     start_https_mtls_user_agent_server, start_https_user_agent_server, test_cert_dir,
 };
+
+/// Assert that the response is a connection error due to TLS issues.
+fn assert_client_connection_error(res: Result<reqwest::Response, reqwest_middleware::Error>) {
+    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
+        panic!("expected middleware error");
+    };
+    let reqwest_error = middleware_error
+        .chain()
+        .find_map(|err| {
+            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
+                if let reqwest_middleware::Error::Reqwest(inner) = err {
+                    inner
+                } else {
+                    panic!("expected reqwest error")
+                }
+            })
+        })
+        .expect("expected reqwest error");
+    assert!(reqwest_error.is_connect());
+}
+
+/// Assert that the server received an `UnknownCA` TLS alert (client rejected server's cert).
+async fn assert_server_unknown_ca_error(server_task: JoinHandle<Result<()>>) {
+    let server_res = server_task.await.expect("server task panicked");
+    let is_expected_err = if let Err(anyhow_err) = server_res
+        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
+        && let Some(wrapped_err) = io_err.get_ref()
+        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
+        && matches!(
+            tls_err,
+            rustls::Error::AlertReceived(AlertDescription::UnknownCA)
+        ) {
+        true
+    } else {
+        false
+    };
+    assert!(is_expected_err, "expected UnknownCA TLS alert from server");
+}
+
+/// Assert that the server received no client certificates (for mTLS failures).
+async fn assert_server_no_cert_error(server_task: JoinHandle<Result<()>>) {
+    let server_res = server_task.await.expect("server task panicked");
+    let is_expected_err = if let Err(anyhow_err) = server_res
+        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
+        && let Some(wrapped_err) = io_err.get_ref()
+        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
+        && matches!(tls_err, rustls::Error::NoCertificatesPresented)
+    {
+        true
+    } else {
+        false
+    };
+    assert!(
+        is_expected_err,
+        "expected NoCertificatesPresented error from server"
+    );
+}
 
 // SAFETY: This test is meant to run with single thread configuration
 #[tokio::test]
@@ -97,39 +155,9 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
     }
 
-    // Validate the client error
-    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
-        panic!("expected middleware error");
-    };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
-
-    // Validate the server error
-    let server_res = server_task.await?;
-    let expected_err = if let Err(anyhow_err) = server_res
-        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
-        && let Some(wrapped_err) = io_err.get_ref()
-        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
-        && matches!(
-            tls_err,
-            rustls::Error::AlertReceived(AlertDescription::UnknownCA)
-        ) {
-        true
-    } else {
-        false
-    };
-    assert!(expected_err);
+    // Validate the errors
+    assert_client_connection_error(res);
+    assert_server_unknown_ca_error(server_task).await;
 
     // ** Set SSL_CERT_FILE to our public certificate
     // ** Then verify our request successfully establishes a connection
@@ -207,39 +235,9 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_DIR);
     }
 
-    // Validate the client error
-    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
-        panic!("expected middleware error");
-    };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
-
-    // Validate the server error
-    let server_res = server_task.await?;
-    let expected_err = if let Err(anyhow_err) = server_res
-        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
-        && let Some(wrapped_err) = io_err.get_ref()
-        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
-        && matches!(
-            tls_err,
-            rustls::Error::AlertReceived(AlertDescription::UnknownCA)
-        ) {
-        true
-    } else {
-        false
-    };
-    assert!(expected_err);
+    // Validate the errors
+    assert_client_connection_error(res);
+    assert_server_unknown_ca_error(server_task).await;
 
     // *** mTLS Tests
 
@@ -296,38 +294,203 @@ async fn ssl_env_vars() -> Result<()> {
         std::env::remove_var(EnvVars::SSL_CERT_FILE);
     }
 
-    // Validate the client error
-    let Some(reqwest_middleware::Error::Middleware(middleware_error)) = res.err() else {
-        panic!("expected middleware error");
-    };
-    let reqwest_error = middleware_error
-        .chain()
-        .find_map(|err| {
-            err.downcast_ref::<reqwest_middleware::Error>().map(|err| {
-                if let reqwest_middleware::Error::Reqwest(inner) = err {
-                    inner
-                } else {
-                    panic!("expected reqwest error")
-                }
-            })
-        })
-        .expect("expected reqwest error");
-    assert!(reqwest_error.is_connect());
-
-    // Validate the server error
-    let server_res = server_task.await?;
-    let expected_err = if let Err(anyhow_err) = server_res
-        && let Some(io_err) = anyhow_err.downcast_ref::<std::io::Error>()
-        && let Some(wrapped_err) = io_err.get_ref()
-        && let Some(tls_err) = wrapped_err.downcast_ref::<rustls::Error>()
-        && matches!(tls_err, rustls::Error::NoCertificatesPresented)
-    {
-        true
-    } else {
-        false
-    };
-    assert!(expected_err);
+    // Validate the errors
+    assert_client_connection_error(res);
+    assert_server_no_cert_error(server_task).await;
 
     // Fin.
+    Ok(())
+}
+
+/// Test that the default rustls backend uses webpki-roots (bundled Mozilla CA certs).
+///
+/// This test demonstrates that:
+/// 1. Public HTTPS servers work (their CAs are in webpki-roots)
+/// 2. Self-signed certs are NOT trusted by default (not in webpki-roots)
+///
+/// This proves we're using webpki-roots (bundled certs) rather than:
+/// - platform-verifier (which would use OS cert store)
+/// - accepting all certificates
+// SAFETY: This test manipulates environment variables
+#[tokio::test]
+#[allow(unsafe_code)]
+async fn webpki_roots_default_backend() -> Result<()> {
+    // Install the ring crypto provider for rustls
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // Ensure no custom cert environment variables are set
+    unsafe {
+        std::env::remove_var(EnvVars::UV_NATIVE_TLS);
+        std::env::remove_var(EnvVars::SSL_CERT_FILE);
+        std::env::remove_var(EnvVars::SSL_CERT_DIR);
+    }
+
+    // PART 1: Public HTTPS should work (CA is in webpki-roots)
+    {
+        let cache = Cache::temp()?.init().await?;
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+
+        let url = DisplaySafeUrl::from_str("https://pypi.org/simple/")?;
+        let res = client
+            .cached_client()
+            .uncached()
+            .for_host(&url)
+            .get(Url::from(url))
+            .send()
+            .await;
+
+        assert!(
+            res.is_ok(),
+            "Public HTTPS should work with webpki-roots: {res:?}"
+        );
+        let response = res.unwrap();
+        assert!(response.status().is_success() || response.status().is_redirection());
+    }
+
+    // PART 2: Self-signed cert should NOT be trusted (not in webpki-roots)
+    // This proves we're not using platform-verifier or accepting all certs
+    {
+        let standalone_cert = generate_self_signed_certs()?;
+        let (server_task, addr) = start_https_user_agent_server(&standalone_cert).await?;
+        let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
+
+        let cache = Cache::temp()?.init().await?;
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default().retries(0), cache).build();
+
+        let res = client
+            .cached_client()
+            .uncached()
+            .for_host(&url)
+            .get(Url::from(url))
+            .send()
+            .await;
+
+        // Connection should fail because self-signed cert is not in webpki-roots
+        assert!(
+            res.is_err(),
+            "Self-signed cert should NOT be trusted by default (not in webpki-roots)"
+        );
+
+        // Verify it's a certificate validation error
+        let err = res.unwrap_err();
+        let err_string = format!("{err:?}");
+        assert!(
+            err_string.contains("certificate")
+                || err_string.contains("Certificate")
+                || err_string.contains("UnknownCA")
+                || err_string.contains("Connect"),
+            "Expected certificate validation error, got: {err_string}"
+        );
+
+        // Clean up server
+        let _ = server_task.await;
+    }
+
+    Ok(())
+}
+
+/// Test that the native-tls backend works with `SSL_CERT_FILE`.
+///
+/// This test only runs on Linux where native-tls (OpenSSL) properly honors
+/// `SSL_CERT_FILE`. On macOS, Security.framework doesn't support custom CA
+/// certificates via environment variables.
+///
+/// Note: mTLS with `SSL_CLIENT_CERT` is not tested for native-tls because
+/// the test certs use EC keys (P-256), which have limited support across platforms.
+// SAFETY: This test is meant to run with single thread configuration
+#[cfg(target_os = "linux")]
+#[tokio::test]
+#[allow(unsafe_code)]
+async fn native_tls_ssl_env_vars() -> Result<()> {
+    // Install the ring crypto provider for rustls (needed by the test server)
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // Ensure our environment is clean
+    unsafe {
+        std::env::remove_var(EnvVars::UV_NATIVE_TLS);
+        std::env::remove_var(EnvVars::SSL_CERT_FILE);
+        std::env::remove_var(EnvVars::SSL_CERT_DIR);
+        std::env::remove_var(EnvVars::SSL_CLIENT_CERT);
+    }
+
+    // Create temporary cert dirs
+    let cert_dir = test_cert_dir();
+    fs_err::create_dir_all(&cert_dir).expect("Failed to create test cert bucket");
+    let cert_dir =
+        tempfile::TempDir::new_in(cert_dir).expect("Failed to create test cert directory");
+
+    // Generate self-signed standalone cert
+    let standalone_server_cert = generate_self_signed_certs()?;
+    let standalone_public_pem_path = cert_dir.path().join("standalone_public.pem");
+
+    // Persist the cert
+    fs_err::write(
+        standalone_public_pem_path.as_path(),
+        standalone_server_cert.public.pem(),
+    )?;
+
+    unsafe {
+        std::env::set_var(
+            EnvVars::SSL_CERT_FILE,
+            standalone_public_pem_path.as_os_str(),
+        );
+    }
+
+    let (server_task, addr) = start_https_user_agent_server(&standalone_server_cert).await?;
+    let url = DisplaySafeUrl::from_str(&format!("https://{addr}"))?;
+    let cache = Cache::temp()?.init().await?;
+    // Use native_tls(true) to enable the native-tls backend, disable retries
+    let client = RegistryClientBuilder::new(
+        BaseClientBuilder::default().native_tls(true).retries(0),
+        cache,
+    )
+    .build();
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await;
+    let server_result = server_task.await?;
+
+    assert!(
+        res.is_ok(),
+        "native-tls SSL_CERT_FILE test failed: {res:?}\nServer result: {server_result:?}"
+    );
+
+    unsafe {
+        std::env::remove_var(EnvVars::SSL_CERT_FILE);
+    }
+
+    Ok(())
+}
+
+/// Test that native-tls can connect to public HTTPS servers using system certificates.
+#[tokio::test]
+async fn native_tls_public_https() -> Result<()> {
+    // Create a client with native-tls backend (uses system cert store)
+    let cache = Cache::temp()?.init().await?;
+    let client =
+        RegistryClientBuilder::new(BaseClientBuilder::default().native_tls(true), cache).build();
+
+    // Connect to PyPI - this should work because native-tls uses system certs
+    let url = DisplaySafeUrl::from_str("https://pypi.org/simple/")?;
+    let res = client
+        .cached_client()
+        .uncached()
+        .for_host(&url)
+        .get(Url::from(url))
+        .send()
+        .await;
+
+    assert!(
+        res.is_ok(),
+        "Failed to connect to PyPI with native-tls: {res:?}"
+    );
+    let response = res.unwrap();
+    assert!(response.status().is_success() || response.status().is_redirection());
+
     Ok(())
 }

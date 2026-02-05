@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime};
 use std::{env, io, iter};
 
 use anyhow::anyhow;
+use fs_err as fs;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
     header::{
@@ -16,13 +17,16 @@ use http::{
     },
 };
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart};
+use reqwest::{
+    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
+};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
     default_on_request_success,
 };
+use rustls::RootCertStore;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::ParseError;
@@ -43,7 +47,7 @@ use uv_warnings::warn_user_once;
 
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
-use crate::tls::read_identity;
+use crate::tls::read_identity_native_tls;
 use crate::{Connectivity, WrappedReqwestError};
 
 pub const DEFAULT_RETRIES: u32 = 3;
@@ -73,7 +77,6 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     native_tls: bool,
-    built_in_root_certs: bool,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -143,7 +146,6 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             native_tls: false,
-            built_in_root_certs: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -224,12 +226,6 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
-        self
-    }
-
-    #[must_use]
-    pub fn built_in_root_certs(mut self, built_in_root_certs: bool) -> Self {
-        self.built_in_root_certs = built_in_root_certs;
         self
     }
 
@@ -423,6 +419,368 @@ impl<'a> BaseClientBuilder<'a> {
         }
     }
 
+    /// Load PEM certificates from a byte slice and add them to the root store.
+    /// Returns the number of certificates successfully added.
+    fn load_pem_certs_to_store(cert_data: &[u8], root_store: &mut RootCertStore) -> usize {
+        let mut reader = std::io::BufReader::new(cert_data);
+        let certs: Vec<_> = rustls_pemfile::certs(&mut reader)
+            .filter_map(Result::ok)
+            .collect();
+        let count = certs.len();
+        for cert in certs {
+            // Ignore errors for individual certs - some might be invalid
+            let _ = root_store.add(cert);
+        }
+        count
+    }
+
+    /// Load CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables
+    /// into a rustls `RootCertStore`.
+    /// Load certificates from the `SSL_CERT_FILE` environment variable into the root store.
+    fn load_certs_from_ssl_cert_file(root_store: &mut RootCertStore) {
+        let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) else {
+            return;
+        };
+
+        let cert_path = Path::new(&cert_file);
+        if !cert_path.exists() {
+            warn_user_once!(
+                "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                cert_path.simplified_display().cyan()
+            );
+            return;
+        }
+
+        let cert_data = match fs::read(cert_path) {
+            Ok(data) => data,
+            Err(err) => {
+                warn_user_once!(
+                    "Failed to read `SSL_CERT_FILE` ({}): {err}",
+                    cert_path.simplified_display().cyan()
+                );
+                return;
+            }
+        };
+
+        let count = Self::load_pem_certs_to_store(&cert_data, root_store);
+        if count > 0 {
+            debug!(
+                "Loaded {} certificate(s) from SSL_CERT_FILE: {}",
+                count, cert_file
+            );
+        } else {
+            warn_user_once!(
+                "Failed to parse any certificates from `SSL_CERT_FILE` ({})",
+                cert_path.simplified_display().cyan()
+            );
+        }
+    }
+
+    /// Load certificates from the `SSL_CERT_DIR` environment variable into the root store.
+    fn load_certs_from_ssl_cert_dir(root_store: &mut RootCertStore) {
+        let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) else {
+            return;
+        };
+
+        if cert_dirs.is_empty() {
+            return;
+        }
+
+        let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
+        let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
+
+        if existing.is_empty() {
+            let end_note = if missing.len() == 1 {
+                "The directory does not exist."
+            } else {
+                "The entries do not exist."
+            };
+            warn_user_once!(
+                "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
+                missing
+                    .iter()
+                    .map(Simplified::simplified_display)
+                    .join(", ")
+                    .cyan()
+            );
+            return;
+        }
+
+        if !missing.is_empty() {
+            let end_note = if missing.len() == 1 {
+                "The following directory does not exist:"
+            } else {
+                "The following entries do not exist:"
+            };
+            warn_user_once!(
+                "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
+                missing
+                    .iter()
+                    .map(Simplified::simplified_display)
+                    .join(", ")
+                    .cyan()
+            );
+        }
+
+        for dir in existing {
+            let Ok(entries) = fs::read_dir(dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(ext) = path.extension() else {
+                    continue;
+                };
+                if !matches!(ext.to_str(), Some("crt" | "pem" | "cer")) {
+                    continue;
+                }
+                let Ok(cert_data) = fs::read(&path) else {
+                    continue;
+                };
+                let count = Self::load_pem_certs_to_store(&cert_data, root_store);
+                if count > 0 {
+                    debug!(
+                        "Loaded {} certificate(s) from SSL_CERT_DIR: {}",
+                        count,
+                        path.simplified_display()
+                    );
+                }
+            }
+        }
+    }
+
+    /// Load certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
+    fn load_certs_from_env_to_store(root_store: &mut RootCertStore) {
+        Self::load_certs_from_ssl_cert_file(root_store);
+        Self::load_certs_from_ssl_cert_dir(root_store);
+    }
+
+    /// Build a rustls `ClientConfig` using webpki-roots as the trust anchors,
+    /// plus any additional certificates from `SSL_CERT_FILE`/`SSL_CERT_DIR`.
+    /// Optionally configures mTLS if `SSL_CLIENT_CERT` is set.
+    fn build_rustls_config() -> rustls::ClientConfig {
+        // Install the ring crypto provider. This is needed because both ring and aws-lc-rs
+        // features are enabled (aws-lc-rs via reqwest's rustls feature, ring via workspace
+        // rustls config), and rustls cannot auto-detect which to use.
+        // Using `let _ =` to ignore the result since this may be called multiple times.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
+        // Start with webpki-roots (Mozilla's root certificates)
+        let mut root_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        };
+
+        // Add any custom certificates from environment variables
+        Self::load_certs_from_env_to_store(&mut root_store);
+
+        // Configure mTLS if SSL_CLIENT_CERT is set
+        if let Some(client_auth) = Self::load_client_auth_from_env() {
+            let builder =
+                rustls::ClientConfig::builder().with_root_certificates(root_store.clone());
+            match builder.with_client_auth_cert(client_auth.certs, client_auth.key) {
+                Ok(config) => config,
+                Err(err) => {
+                    warn_user_once!("Failed to configure mTLS client certificate: {err}");
+                    // Fall back to no client auth, but preserve the custom root certificates
+                    rustls::ClientConfig::builder()
+                        .with_root_certificates(root_store)
+                        .with_no_client_auth()
+                }
+            }
+        } else {
+            rustls::ClientConfig::builder()
+                .with_root_certificates(root_store)
+                .with_no_client_auth()
+        }
+    }
+
+    /// Load client certificate and key from `SSL_CLIENT_CERT` environment variable.
+    fn load_client_auth_from_env() -> Option<ClientAuthConfig> {
+        let ssl_client_cert = env::var_os(EnvVars::SSL_CLIENT_CERT)?;
+        let cert_path = Path::new(&ssl_client_cert);
+
+        let cert_data = match fs::read(cert_path) {
+            Ok(data) => data,
+            Err(err) => {
+                warn_user_once!(
+                    "Failed to read `SSL_CLIENT_CERT` ({}): {err}",
+                    cert_path.simplified_display().cyan()
+                );
+                return None;
+            }
+        };
+
+        // Parse certificates from PEM
+        let mut reader = std::io::BufReader::new(cert_data.as_slice());
+        let certs: Vec<_> = rustls_pemfile::certs(&mut reader)
+            .filter_map(Result::ok)
+            .collect();
+
+        if certs.is_empty() {
+            warn_user_once!(
+                "No certificates found in `SSL_CLIENT_CERT` ({})",
+                cert_path.simplified_display().cyan()
+            );
+            return None;
+        }
+
+        // Parse private key from PEM (re-read since the reader was consumed)
+        let mut reader = std::io::BufReader::new(cert_data.as_slice());
+        let key = rustls_pemfile::private_key(&mut reader)
+            .ok()
+            .flatten()
+            .or_else(|| {
+                warn_user_once!(
+                    "No private key found in `SSL_CLIENT_CERT` ({})",
+                    cert_path.simplified_display().cyan()
+                );
+                None
+            })?;
+
+        debug!(
+            "Loaded client certificate ({} cert(s)) from SSL_CLIENT_CERT: {}",
+            certs.len(),
+            cert_path.simplified_display()
+        );
+
+        Some(ClientAuthConfig { certs, key })
+    }
+
+    /// Try to load certificates from PEM data as reqwest Certificate objects.
+    fn try_load_reqwest_certs(cert_data: &[u8]) -> Vec<Certificate> {
+        // Try to parse as a bundle first, then as a single cert
+        Certificate::from_pem_bundle(cert_data)
+            .or_else(|_| Certificate::from_pem(cert_data).map(|cert| vec![cert]))
+            .unwrap_or_default()
+    }
+
+    /// Load CA certificates from `SSL_CERT_FILE` as reqwest Certificate objects.
+    fn load_certs_from_ssl_cert_file_as_reqwest() -> Vec<Certificate> {
+        let Ok(cert_file) = env::var(EnvVars::SSL_CERT_FILE) else {
+            return Vec::new();
+        };
+
+        let cert_path = Path::new(&cert_file);
+        if !cert_path.exists() {
+            warn_user_once!(
+                "Ignoring invalid `SSL_CERT_FILE`. File does not exist: {}.",
+                cert_path.simplified_display().cyan()
+            );
+            return Vec::new();
+        }
+
+        let cert_data = match fs::read(cert_path) {
+            Ok(data) => data,
+            Err(err) => {
+                warn_user_once!(
+                    "Failed to read `SSL_CERT_FILE` ({}): {err}",
+                    cert_path.simplified_display().cyan()
+                );
+                return Vec::new();
+            }
+        };
+
+        let loaded = Self::try_load_reqwest_certs(&cert_data);
+        if loaded.is_empty() {
+            warn_user_once!(
+                "Failed to parse any certificates from `SSL_CERT_FILE` ({})",
+                cert_path.simplified_display().cyan()
+            );
+        } else {
+            debug!(
+                "Loaded {} certificate(s) from SSL_CERT_FILE: {}",
+                loaded.len(),
+                cert_file
+            );
+        }
+        loaded
+    }
+
+    /// Load CA certificates from `SSL_CERT_DIR` as reqwest Certificate objects.
+    fn load_certs_from_ssl_cert_dir_as_reqwest() -> Vec<Certificate> {
+        let Ok(cert_dirs) = env::var(EnvVars::SSL_CERT_DIR) else {
+            return Vec::new();
+        };
+
+        if cert_dirs.is_empty() {
+            return Vec::new();
+        }
+
+        let mut certs = Vec::new();
+        let paths: Vec<_> = env::split_paths(&cert_dirs).collect();
+        let (existing, missing): (Vec<_>, Vec<_>) = paths.iter().partition(|p| p.exists());
+
+        if existing.is_empty() {
+            let end_note = if missing.len() == 1 {
+                "The directory does not exist."
+            } else {
+                "The entries do not exist."
+            };
+            warn_user_once!(
+                "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
+                missing
+                    .iter()
+                    .map(Simplified::simplified_display)
+                    .join(", ")
+                    .cyan()
+            );
+            return Vec::new();
+        }
+
+        if !missing.is_empty() {
+            let end_note = if missing.len() == 1 {
+                "The following directory does not exist:"
+            } else {
+                "The following entries do not exist:"
+            };
+            warn_user_once!(
+                "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
+                missing
+                    .iter()
+                    .map(Simplified::simplified_display)
+                    .join(", ")
+                    .cyan()
+            );
+        }
+
+        for dir in existing {
+            let Ok(entries) = fs::read_dir(dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(ext) = path.extension() else {
+                    continue;
+                };
+                if !matches!(ext.to_str(), Some("crt" | "pem" | "cer")) {
+                    continue;
+                }
+                let Ok(cert_data) = fs::read(&path) else {
+                    continue;
+                };
+                let loaded = Self::try_load_reqwest_certs(&cert_data);
+                if !loaded.is_empty() {
+                    debug!(
+                        "Loaded {} certificate(s) from SSL_CERT_DIR: {}",
+                        loaded.len(),
+                        path.simplified_display()
+                    );
+                    certs.extend(loaded);
+                }
+            }
+        }
+
+        certs
+    }
+
+    /// Load CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables
+    /// as reqwest Certificate objects (for use with native-tls backend).
+    fn load_certs_from_env_as_reqwest() -> Vec<Certificate> {
+        let mut certs = Self::load_certs_from_ssl_cert_file_as_reqwest();
+        certs.extend(Self::load_certs_from_ssl_cert_dir_as_reqwest());
+        certs
+    }
+
     fn create_secure_and_insecure_clients(&self, timeout: Duration) -> (Client, Client) {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
@@ -433,92 +791,10 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        // Checks for the presence of `SSL_CERT_FILE`.
-        // Certificate loading support is delegated to `rustls-native-certs`.
-        // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
-        let ssl_cert_file_exists = env::var_os(EnvVars::SSL_CERT_FILE).is_some_and(|path| {
-            let path = Path::new(&path);
-            match path.metadata() {
-                Ok(metadata) if metadata.is_file() => true,
-                Ok(_) => {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. Path is not a file: {}.",
-                        path.simplified_display().cyan()
-                    );
-                    false
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. Path does not exist: {}.",
-                        path.simplified_display().cyan()
-                    );
-                    false
-                }
-                Err(err) => {
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_FILE`. Path is not accessible: {} ({err}).",
-                        path.simplified_display().cyan()
-                    );
-                    false
-                }
-            }
-        });
-
-        // Checks for the presence of `SSL_CERT_DIR`.
-        // Certificate loading support is delegated to `rustls-native-certs`.
-        // See https://github.com/rustls/rustls-native-certs/blob/813790a297ad4399efe70a8e5264ca1b420acbec/src/lib.rs#L118-L125
-        let ssl_cert_dir_exists = env::var_os(EnvVars::SSL_CERT_DIR)
-            .filter(|v| !v.is_empty())
-            .is_some_and(|dirs| {
-                // Parse `SSL_CERT_DIR`, with support for multiple entries using
-                // a platform-specific delimiter (`:` on Unix, `;` on Windows)
-                let (existing, missing): (Vec<_>, Vec<_>) =
-                    env::split_paths(&dirs).partition(|p| p.exists());
-
-                if existing.is_empty() {
-                    let end_note = if missing.len() == 1 {
-                        "The directory does not exist."
-                    } else {
-                        "The entries do not exist."
-                    };
-                    warn_user_once!(
-                        "Ignoring invalid `SSL_CERT_DIR`. {end_note}: {}.",
-                        missing
-                            .iter()
-                            .map(Simplified::simplified_display)
-                            .join(", ")
-                            .cyan()
-                    );
-                    return false;
-                }
-
-                // Warn on any missing entries
-                if !missing.is_empty() {
-                    let end_note = if missing.len() == 1 {
-                        "The following directory does not exist:"
-                    } else {
-                        "The following entries do not exist:"
-                    };
-                    warn_user_once!(
-                        "Invalid entries in `SSL_CERT_DIR`. {end_note}: {}.",
-                        missing
-                            .iter()
-                            .map(Simplified::simplified_display)
-                            .join(", ")
-                            .cyan()
-                    );
-                }
-
-                // Proceed while ignoring missing entries
-                true
-            });
-
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
             &user_agent_string,
             timeout,
-            ssl_cert_file_exists,
-            ssl_cert_dir_exists,
             Security::Secure,
             self.redirect_policy,
         );
@@ -527,8 +803,6 @@ impl<'a> BaseClientBuilder<'a> {
         let raw_dangerous_client = self.create_client(
             &user_agent_string,
             timeout,
-            ssl_cert_file_exists,
-            ssl_cert_dir_exists,
             Security::Insecure,
             self.redirect_policy,
         );
@@ -540,8 +814,6 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         user_agent: &str,
         timeout: Duration,
-        ssl_cert_file_exists: bool,
-        ssl_cert_dir_exists: bool,
         security: Security,
         redirect_policy: RedirectPolicy,
     ) -> Client {
@@ -551,7 +823,6 @@ impl<'a> BaseClientBuilder<'a> {
             .user_agent(user_agent)
             .pool_max_idle_per_host(20)
             .read_timeout(timeout)
-            .tls_built_in_root_certs(self.built_in_root_certs)
             .redirect(redirect_policy.reqwest_policy());
 
         // If necessary, accept invalid certificates.
@@ -560,23 +831,36 @@ impl<'a> BaseClientBuilder<'a> {
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
 
-        let client_builder = if self.native_tls || ssl_cert_file_exists || ssl_cert_dir_exists {
-            client_builder.tls_built_in_native_certs(true)
-        } else {
-            client_builder.tls_built_in_webpki_certs(true)
-        };
-
-        // Configure mTLS.
-        let client_builder = if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
-            match read_identity(&ssl_client_cert) {
-                Ok(identity) => client_builder.identity(identity),
-                Err(err) => {
-                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
-                    client_builder
+        // Choose TLS backend:
+        // - Use native-tls when explicitly requested via --native-tls flag (uses system certs)
+        // - Otherwise use rustls with webpki-roots (bundled Mozilla root certificates)
+        //   plus any custom certs from SSL_CERT_FILE/SSL_CERT_DIR and mTLS from SSL_CLIENT_CERT
+        let client_builder = if self.native_tls {
+            // For native-tls, load custom certs and merge with system certs
+            let custom_certs = Self::load_certs_from_env_as_reqwest();
+            let builder = client_builder.tls_backend_native();
+            let builder = if custom_certs.is_empty() {
+                builder
+            } else {
+                builder.tls_certs_merge(custom_certs)
+            };
+            // Configure mTLS for native-tls backend
+            if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
+                match read_identity_native_tls(&ssl_client_cert) {
+                    Ok(identity) => builder.identity(identity),
+                    Err(err) => {
+                        warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                        builder
+                    }
                 }
+            } else {
+                builder
             }
         } else {
-            client_builder
+            // Build a custom rustls config with webpki-roots + custom certs + mTLS
+            // Note: mTLS is configured within build_rustls_config() for rustls backend
+            let tls_config = Self::build_rustls_config();
+            client_builder.tls_backend_preconfigured(tls_config)
         };
 
         // apply proxies
@@ -717,6 +1001,12 @@ pub struct BaseClient {
     retries: u32,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
+}
+
+/// Client certificate and key for mTLS authentication.
+struct ClientAuthConfig {
+    certs: Vec<rustls::pki_types::CertificateDer<'static>>,
+    key: rustls::pki_types::PrivateKeyDer<'static>,
 }
 
 #[derive(Debug, Clone, Copy)]
