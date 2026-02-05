@@ -95,6 +95,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --show-sdk-path) echo "$SDKROOT"; exit 0 ;;
         --show-sdk-version) echo "14.0"; exit 0 ;;
+        *) echo "fake xcrun: unsupported argument: $1" >&2; exit 1 ;;
     esac
     shift
 done
@@ -104,7 +105,7 @@ chmod +x "$WORK_DIR/bin/xcrun"
 # Use CARGO_TARGET_*_LINKER and CARGO_TARGET_*_RUSTFLAGS env vars to configure
 # the cross-compilation without patching .cargo/config.toml.
 TARGET_ENV="$(echo "$TARGET" | tr 'a-z-' 'A-Z_')"
-RUSTFLAGS="-C link-arg=-fuse-ld=lld -C link-arg=--target=${TARGET} -C link-arg=-L${LIBS_DIR} -C link-arg=-F${LIBS_DIR} -C link-arg=-lSystem"
+RUSTFLAGS="-C link-arg=-fuse-ld=lld -C link-arg=--target=${TARGET} -C link-arg=-L${LIBS_DIR} -C link-arg=-F${LIBS_DIR}"
 
 echo "==> Building uv for ${TARGET}..."
 env \
@@ -117,7 +118,7 @@ env \
     cargo build --target "$TARGET" -p uv "${EXTRA_CARGO_ARGS[@]+"${EXTRA_CARGO_ARGS[@]}"}"
 
 BINARY="$REPO_DIR/target/$TARGET/$(
-    if printf '%s\n' "${EXTRA_CARGO_ARGS[@]+"${EXTRA_CARGO_ARGS[@]}"}" | grep -q -- '--release'; then
+    if [[ "${EXTRA_CARGO_ARGS[*]+"${EXTRA_CARGO_ARGS[*]}"}" == *--release* ]]; then
         echo release
     else
         echo debug

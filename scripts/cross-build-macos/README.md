@@ -41,8 +41,11 @@ etc. without having a real macOS SDK present.
 These only declare symbol names — they contain no Apple code. The actual implementations are
 resolved at runtime on macOS from the system frameworks.
 
-`libSystem.tbd` is symlinked from Zig's bundled copy at build time (MIT licensed), which covers
-libc, libm, and other `/usr/lib/system/` sub-libraries.
+`libSystem.tbd` is symlinked from Zig's bundled copy at build time, which covers libc, libm, and
+other `/usr/lib/system/` sub-libraries. The file is either [APSL-licensed][apsl] or uncopyrightable
+(it only contains symbol names and metadata).
+
+[apsl]: https://opensource.apple.com/license/apsl/
 
 ### `darwin-headers/sys/syscall.h` — jemalloc build stub
 
