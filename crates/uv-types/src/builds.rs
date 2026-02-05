@@ -136,44 +136,51 @@ type BuildResolutionInfoMap = BTreeMap<(PackageName, Option<Version>), BuildReso
 
 /// Locked build dependency resolutions, indexed by package name and version.
 #[derive(Debug, Default, Clone)]
-pub struct LockedBuildResolutions(BTreeMap<(PackageName, Option<Version>), Resolution>);
+pub struct LockedBuildResolutions(BTreeMap<PackageName, BTreeMap<Option<Version>, Resolution>>);
 
 impl LockedBuildResolutions {
-    /// Create locked build resolutions from a map of (package name, optional version)
-    /// to their pre-built resolutions.
+    /// Create locked build resolutions from a flat map keyed by `(name, optional version)`.
     pub fn new(map: BTreeMap<(PackageName, Option<Version>), Resolution>) -> Self {
-        Self(map)
+        let mut inner: BTreeMap<PackageName, BTreeMap<Option<Version>, Resolution>> =
+            BTreeMap::new();
+        for ((name, version), resolution) in map {
+            inner.entry(name).or_default().insert(version, resolution);
+        }
+        Self(inner)
     }
 
     /// Get the pre-built resolution for a given package name and version.
     ///
     /// First tries an exact (name, version) match, then falls back to a (name, None) match.
     pub fn get(&self, package: &PackageName, version: Option<&Version>) -> Option<&Resolution> {
+        let versions = self.0.get(package)?;
         if let Some(version) = version {
-            self.0
-                .get(&(package.clone(), Some(version.clone())))
-                .or_else(|| self.0.get(&(package.clone(), None)))
+            versions
+                .get(&Some(version.clone()))
+                .or_else(|| versions.get(&None))
         } else {
-            self.0.get(&(package.clone(), None))
+            versions.get(&None)
         }
     }
 }
 
-/// Key for build dependency maps: (package name, optional version).
-type BuildDepKey = (PackageName, Option<Version>);
-
-/// Map of build dependency keys to their resolved build dependency (name, version) pairs.
-type BuildPreferencesMap = BTreeMap<BuildDepKey, Vec<(PackageName, Version)>>;
-
 /// Build dependency version preferences, indexed by package name and version.
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(BuildPreferencesMap);
+pub struct BuildPreferences(
+    BTreeMap<PackageName, BTreeMap<Option<Version>, Vec<(PackageName, Version)>>>,
+);
 
 impl BuildPreferences {
-    /// Create build preferences from a map of (package name, optional version) to their
-    /// resolved build dependency (name, version) pairs.
-    pub fn new(map: BuildPreferencesMap) -> Self {
-        Self(map)
+    /// Create build preferences from a flat map keyed by `(name, optional version)`.
+    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>) -> Self {
+        let mut inner: BTreeMap<
+            PackageName,
+            BTreeMap<Option<Version>, Vec<(PackageName, Version)>>,
+        > = BTreeMap::new();
+        for ((name, version), deps) in map {
+            inner.entry(name).or_default().insert(version, deps);
+        }
+        Self(inner)
     }
 
     /// Get the build dependency preferences for a given package name and version.
@@ -183,14 +190,16 @@ impl BuildPreferences {
         &self,
         package: &PackageName,
         version: Option<&Version>,
-    ) -> Option<&Vec<(PackageName, Version)>> {
+    ) -> Option<&[(PackageName, Version)]> {
+        let versions = self.0.get(package)?;
         if let Some(version) = version {
-            self.0
-                .get(&(package.clone(), Some(version.clone())))
-                .or_else(|| self.0.get(&(package.clone(), None)))
+            versions
+                .get(&Some(version.clone()))
+                .or_else(|| versions.get(&None))
         } else {
-            self.0.get(&(package.clone(), None))
+            versions.get(&None)
         }
+        .map(Vec::as_slice)
     }
 }
 
