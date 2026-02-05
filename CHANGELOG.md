@@ -3,6 +3,29 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.9.30
+
+Released on 2026-02-04.
+
+### Python
+
+- Add CPython 3.14.3 and 3.13.12 ([#17849](https://github.com/astral-sh/uv/pull/17849))
+
+### Enhancements
+
+- Allow comma-separated values for `--extra` option ([#17525](https://github.com/astral-sh/uv/pull/17525))
+- Check all files during a dry-run publish instead of stopping at the first failure ([#17785](https://github.com/astral-sh/uv/pull/17785))
+- Clarify `UV_HTTP_TIMEOUT` error message ([#17493](https://github.com/astral-sh/uv/pull/17493))
+
+### Preview features
+
+- Use relocatable virtual environments by default ([#17770](https://github.com/astral-sh/uv/pull/17770))
+
+### Bug fixes
+
+- Fix deadlock on token refresh in `uv publish` when using pyx ([#17832](https://github.com/astral-sh/uv/pull/17832))
+- Ignore global Python pins when incompatible with project ([#15473](https://github.com/astral-sh/uv/pull/15473))
+
 ## 0.9.29
 
 Released on 2026-02-03.

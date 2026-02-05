@@ -13751,7 +13751,8 @@ fn install_missing_python_with_target() {
     // Create a context with no installed python interpreters.
     let context = TestContext::new_with_versions(&[])
         .with_python_download_cache()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -13763,7 +13764,7 @@ fn install_missing_python_with_target() {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.14.2
+    Using CPython 3.14.[LATEST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]

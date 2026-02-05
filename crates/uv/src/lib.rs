@@ -1247,7 +1247,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.no_project,
                 &cache,
                 printer,
-                args.relocatable,
+                args.relocatable
+                    || (globals
+                        .preview
+                        .is_enabled(PreviewFeature::RelocatableEnvsDefault)
+                        && !args.no_relocatable),
                 globals.preview,
             )
             .await

@@ -12,7 +12,8 @@ fn python_upgrade() {
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions();
 
     // Install an earlier patch version
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.10.17"), @"
@@ -42,8 +43,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.19 in [TIME]
-     + cpython-3.10.19-[PLATFORM] (python3.10)
+    Installed Python 3.10.[LATEST] in [TIME]
+     + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
     ");
 
     // Should be a no-op when already upgraded
@@ -63,8 +64,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.19 in [TIME]
-     ~ cpython-3.10.19-[PLATFORM] (python3.10)
+    Installed Python 3.10.[LATEST] in [TIME]
+     ~ cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
     ");
 
     // Install an earlier pre-release version
@@ -86,8 +87,8 @@ fn python_upgrade() {
 
     ----- stderr -----
     warning: `uv python upgrade` is experimental and may change without warning. Pass `--preview-features python-upgrade` to disable this warning
-    Installed Python 3.14.2 in [TIME]
-     + cpython-3.14.2-[PLATFORM] (python3.14)
+    Installed Python 3.14.[LATEST] in [TIME]
+     + cpython-3.14.[LATEST]-[PLATFORM] (python3.14)
     ");
 }
 
