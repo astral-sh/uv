@@ -725,3 +725,66 @@ fn dry_run_reports_all_errors() {
     "
     );
 }
+
+/// Warn when a wheel has a non-normalized filename (e.g., leading zeros in version).
+#[test]
+fn non_normalized_filename_warning() {
+    let context = TestContext::new("3.12");
+
+    // Create a wheel file with a non-normalized version (leading zero: 1.01.0 -> 1.1.0).
+    let wheel = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
+    wheel.touch().unwrap();
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/")
+        .arg(wheel.path()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to https://test.pypi.org/legacy/
+    warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`). Pass `--preview-features publish-require-normalized` to skip such files.
+    Uploading ok-1.1.0-py3-none-any.whl ([SIZE])
+    error: Failed to publish: `ok-1.01.0-py3-none-any.whl`
+      Caused by: Failed to read metadata
+      Caused by: Failed to read from zip file
+      Caused by: unable to locate the end of central directory record
+    "
+    );
+}
+
+/// With the preview flag, skip wheels with non-normalized filenames.
+#[test]
+fn non_normalized_filename_skip() {
+    let context = TestContext::new("3.12");
+
+    // Create a wheel file with a non-normalized version.
+    let wheel = context.temp_dir.child("ok-1.01.0-py3-none-any.whl");
+    wheel.touch().unwrap();
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("--preview-features")
+        .arg("publish-require-normalized")
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg("https://test.pypi.org/legacy/")
+        .arg(wheel.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to https://test.pypi.org/legacy/
+    warning: `ok-1.01.0-py3-none-any.whl` has a non-normalized filename (expected `ok-1.1.0-py3-none-any.whl`), skipping
+    "
+    );
+}
