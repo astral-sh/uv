@@ -19,6 +19,13 @@ build-dependencies = [
     { name = "wheel", version = "0.43.0" },
 ]
 
+[package.metadata]
+build-requires = [
+    { name = "anyio", marker = "sys_platform == 'linux'" },
+    { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+    { name = "setuptools", specifier = ">=42" },
+]
+
 [[package]]
 name = "project"
 version = "0.1.0"

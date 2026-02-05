@@ -18,6 +18,12 @@ build-dependencies = [
     { name = "wheel", version = "0.43.0" },
 ]
 
+[package.metadata]
+build-requires = [
+    { name = "iniconfig" },
+    { name = "setuptools", specifier = ">=42" },
+]
+
 [[package]]
 name = "iniconfig"
 version = "2.0.0"
