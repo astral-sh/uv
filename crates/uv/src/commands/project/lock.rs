@@ -1420,6 +1420,18 @@ impl ValidatedLock {
                 }
                 Ok(Self::Preferable(lock))
             }
+            SatisfiesResult::MismatchedBuildRequires(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}`"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
             SatisfiesResult::MissingVersion(name) => {
                 debug!("Resolving despite existing lockfile due to missing version: `{name}`");
                 Ok(Self::Preferable(lock))

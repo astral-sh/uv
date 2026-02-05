@@ -107,6 +107,7 @@ Ok(
                     requires_dist: {},
                     provides_extra: [],
                     dependency_groups: {},
+                    build_requires: {},
                 },
             },
         ],

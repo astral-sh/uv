@@ -80,6 +80,9 @@ fn lock_build_dependencies() -> Result<()> {
             { name = "wheel", version = "0.43.0" },
         ]
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -208,6 +211,13 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
+        ]
+
+        [package.metadata]
+        build-requires = [
+            { name = "anyio", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", specifier = ">=42" },
         ]
 
         [[package]]
@@ -379,6 +389,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
             { name = "wheel", version = "0.43.0" },
         ]
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -442,6 +455,9 @@ fn lock_build_dependencies_preference() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
+
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
         name = "project"
@@ -576,6 +592,9 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
             { name = "wheel", version = "0.43.0" },
         ]
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "dep-b"
         source = { directory = "dep-b" }
@@ -583,6 +602,9 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
+
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
         name = "project"
@@ -707,6 +729,9 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
             { name = "wheel", version = "0.43.0" },
         ]
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -770,6 +795,9 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
+
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
         name = "project"
@@ -888,6 +916,9 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
+
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
         name = "project"
@@ -1014,6 +1045,9 @@ fn lock_build_dependencies_extra() -> Result<()> {
             { name = "wheel", version = "0.43.0" },
         ]
 
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
+
         [[package]]
         name = "project"
         version = "0.1.0"
@@ -1131,6 +1165,9 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "setuptools", version = "69.2.0" },
             { name = "wheel", version = "0.43.0" },
         ]
+
+        [package.metadata]
+        build-requires = [{ name = "setuptools", specifier = ">=42" }]
 
         [[package]]
         name = "iniconfig"

@@ -924,6 +924,10 @@ impl Lock {
         // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<(PackageName, Option<Version>), Vec<BuildDependency>> =
             BTreeMap::new();
+        let mut build_requires_map: BTreeMap<
+            (PackageName, Option<Version>),
+            BTreeSet<Requirement>,
+        > = BTreeMap::new();
         let mut new_packages: Vec<Package> = Vec::new();
 
         // First pass: create all new Package entries (without dependencies) and
@@ -972,6 +976,48 @@ impl Lock {
                 ));
             }
             build_dep_refs.insert((parent_name.clone(), parent_version.clone()), deps);
+        }
+
+        // Read build-system.requires from pyproject.toml for source tree packages
+        // to store in metadata for satisfies() checks.
+        for package in &self.packages {
+            let key = (package.id.name.clone(), package.id.version.clone());
+            if !build_dep_refs.contains_key(&key) {
+                let fallback_key = (package.id.name.clone(), None);
+                if !build_dep_refs.contains_key(&fallback_key) {
+                    continue;
+                }
+            }
+
+            if let Some(source_tree) = package.id.source.as_source_tree() {
+                let path = root.join(source_tree).join("pyproject.toml");
+                if let Ok(contents) = std::fs::read_to_string(&path) {
+                    #[derive(serde::Deserialize)]
+                    #[serde(rename_all = "kebab-case")]
+                    struct PyProjectBuildSystem {
+                        build_system: Option<BuildSystemSection>,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct BuildSystemSection {
+                        requires: Vec<uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>>,
+                    }
+
+                    if let Ok(parsed) = toml::from_str::<PyProjectBuildSystem>(&contents) {
+                        if let Some(build_system) = parsed.build_system {
+                            let build_requires: BTreeSet<Requirement> = build_system
+                                .requires
+                                .into_iter()
+                                .map(|req| {
+                                    Requirement::from(req)
+                                        .relative_to(root)
+                                        .map_err(LockErrorKind::RequirementRelativePath)
+                                })
+                                .collect::<Result<_, _>>()?;
+                            build_requires_map.insert(key, build_requires);
+                        }
+                    }
+                }
+            }
         }
 
         // Add new packages to the lock so we can look up PackageIds.
@@ -1040,17 +1086,25 @@ impl Lock {
             }
         }
 
-        // Set build-dependencies references on parent packages.
+        // Set build-dependencies references and build-requires metadata on parent packages.
         for package in &mut self.packages {
             let key = (package.id.name.clone(), package.id.version.clone());
+            let fallback_key = (package.id.name.clone(), None);
+
             if let Some(deps) = build_dep_refs.get(&key) {
                 package.build_dependencies.clone_from(deps);
-            } else {
-                let fallback_key = (package.id.name.clone(), None);
-                if let Some(deps) = build_dep_refs.get(&fallback_key) {
-                    package.build_dependencies.clone_from(deps);
-                }
+            } else if let Some(deps) = build_dep_refs.get(&fallback_key) {
+                package.build_dependencies.clone_from(deps);
             }
+
+            // Store the original build-system.requires in metadata for satisfies() checks.
+            if let Some(build_requires) = build_requires_map
+                .get(&key)
+                .or_else(|| build_requires_map.get(&fallback_key))
+            {
+                package.metadata.build_requires.clone_from(build_requires);
+            }
+
             // Ensure build dependencies are sorted and deduplicated.
             package.build_dependencies.sort();
             package.build_dependencies.dedup();
@@ -1971,6 +2025,73 @@ impl Lock {
         Ok(SatisfiesResult::Satisfied)
     }
 
+    /// Check whether the `build-system.requires` in a pyproject.toml still match what's stored
+    /// in the lock's `[package.metadata]`.
+    fn satisfies_build_requires<'lock>(
+        &self,
+        pyproject_contents: &str,
+        package: &'lock Package,
+        root: &Path,
+    ) -> Result<SatisfiesResult<'lock>, LockError> {
+        /// Minimal struct to extract `build-system.requires` from a pyproject.toml.
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct PyProjectBuildSystem {
+            build_system: Option<BuildSystemSection>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct BuildSystemSection {
+            requires: Vec<uv_pep508::Requirement<uv_pypi_types::VerbatimParsedUrl>>,
+        }
+
+        let parsed: PyProjectBuildSystem = toml::from_str(pyproject_contents).map_err(|err| {
+            LockErrorKind::InvalidPyprojectToml {
+                path: root
+                    .join(
+                        package
+                            .id
+                            .source
+                            .as_source_tree()
+                            .expect("source tree in build requires check"),
+                    )
+                    .join("pyproject.toml"),
+                err,
+            }
+        })?;
+
+        let current_build_requires: BTreeSet<Requirement> = parsed
+            .build_system
+            .map(|bs| {
+                bs.requires
+                    .into_iter()
+                    .map(|req| {
+                        let req = Requirement::from(req);
+                        normalize_requirement(req, root, &self.requires_python)
+                    })
+                    .collect::<Result<BTreeSet<_>, _>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        let stored_build_requires: BTreeSet<Requirement> = package
+            .metadata
+            .build_requires
+            .iter()
+            .cloned()
+            .map(|req| normalize_requirement(req, root, &self.requires_python))
+            .collect::<Result<_, _>>()?;
+
+        if current_build_requires != stored_build_requires {
+            return Ok(SatisfiesResult::MismatchedBuildRequires(
+                &package.id.name,
+                package.id.version.as_ref(),
+            ));
+        }
+
+        Ok(SatisfiesResult::Satisfied)
+    }
+
     /// Check whether the lock matches the project structure, requirements and configuration.
     pub async fn satisfies<Context: BuildContext>(
         &self,
@@ -2491,6 +2612,39 @@ impl Lock {
                 return Ok(SatisfiesResult::MissingVersion(&package.id.name));
             }
 
+            // Validate that the build-system.requires haven't changed for source trees
+            // that have build dependencies stored in the lock.
+            if !package.metadata.build_requires.is_empty() {
+                if let Some(source_tree) = package.id.source.as_source_tree() {
+                    let parent = root.join(source_tree);
+                    let path = parent.join("pyproject.toml");
+                    match fs_err::tokio::read_to_string(&path).await {
+                        Ok(contents) => {
+                            match self.satisfies_build_requires(&contents, package, root) {
+                                Ok(SatisfiesResult::Satisfied) => {}
+                                Ok(result) => return Ok(result),
+                                Err(_) => {
+                                    debug!(
+                                        "Failed to parse `build-system.requires` for `{}`",
+                                        package.id
+                                    );
+                                    // If we can't parse it, treat as stale.
+                                    return Ok(SatisfiesResult::MismatchedBuildRequires(
+                                        &package.id.name,
+                                        package.id.version.as_ref(),
+                                    ));
+                                }
+                            }
+                        }
+                        // If the pyproject.toml doesn't exist, skip the check.
+                        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                        Err(err) => {
+                            return Err(LockErrorKind::UnreadablePyprojectToml { path, err }.into());
+                        }
+                    }
+                }
+            }
+
             // Add any explicit indexes to the list of known locals or remotes. These indexes may
             // not be available as top-level configuration (i.e., if they're defined within a
             // workspace member), but we already validated that the dependencies are up-to-date, so
@@ -2636,6 +2790,9 @@ pub enum SatisfiesResult<'lock> {
         BTreeMap<GroupName, BTreeSet<Requirement>>,
         BTreeMap<GroupName, BTreeSet<Requirement>>,
     ),
+    /// A package in the lockfile contains different `build-system.requires` metadata
+    /// than expected.
+    MismatchedBuildRequires(&'lock PackageName, Option<&'lock Version>),
     /// The lockfile is missing a version.
     MissingVersion(&'lock PackageName),
 }
@@ -2990,6 +3147,7 @@ impl Package {
                 requires_dist,
                 provides_extra,
                 dependency_groups,
+                build_requires: BTreeSet::default(),
             },
         })
     }
@@ -3039,6 +3197,7 @@ impl Package {
                 requires_dist: BTreeSet::default(),
                 provides_extra: Box::default(),
                 dependency_groups: BTreeMap::default(),
+                build_requires: BTreeSet::default(),
             },
         })
     }
@@ -3710,6 +3869,26 @@ impl Package {
                 metadata_table.insert("provides-extras", value(provides_extras));
             }
 
+            if !self.metadata.build_requires.is_empty() {
+                let build_requires = self
+                    .metadata
+                    .build_requires
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let build_requires = match build_requires.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    build_requires => each_element_on_its_line_array(build_requires.iter()),
+                };
+                metadata_table.insert("build-requires", value(build_requires));
+            }
+
             if !metadata_table.is_empty() {
                 table.insert("metadata", Item::Table(metadata_table));
             }
@@ -3923,6 +4102,8 @@ struct PackageMetadata {
     provides_extra: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
+    #[serde(default, rename = "build-requires")]
+    build_requires: BTreeSet<Requirement>,
 }
 
 impl PackageWire {
