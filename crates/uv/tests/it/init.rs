@@ -9,11 +9,11 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::{TestContext, uv_snapshot};
 
 #[test]
 fn init() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo"), @"
     success: true
@@ -66,7 +66,7 @@ fn init() {
 
 #[test]
 fn init_bare() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare"), @"
     success: true
@@ -114,7 +114,7 @@ fn init_bare() {
 /// Run `uv init --app` to create an application project
 #[test]
 fn init_application() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -184,7 +184,7 @@ fn init_application() -> Result<()> {
 /// When `main.py` already exists, we don't create it again
 #[test]
 fn init_application_hello_exists() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -234,7 +234,7 @@ fn init_application_hello_exists() -> Result<()> {
 /// When other Python files already exists, we still create `main.py`
 #[test]
 fn init_application_other_python_exists() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -292,7 +292,7 @@ fn init_application_other_python_exists() -> Result<()> {
 /// Run `uv init --app --package` to create a packaged application project
 #[test]
 fn init_application_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -367,7 +367,7 @@ fn init_application_package() -> Result<()> {
 /// Run `uv init --lib` to create an library project
 #[test]
 fn init_library() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -450,7 +450,7 @@ fn init_library() -> Result<()> {
 /// init lib test once the uv build backend becomes the stable default.
 #[test]
 fn init_package_preview() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -493,7 +493,7 @@ fn init_package_preview() -> Result<()> {
 
 #[test]
 fn init_bare_lib() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare").arg("--lib"), @"
     success: true
@@ -545,7 +545,7 @@ fn init_bare_lib() {
 
 #[test]
 fn init_bare_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare").arg("--package"), @"
     success: true
@@ -597,7 +597,7 @@ fn init_bare_package() {
 
 #[test]
 fn init_bare_opt_in() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // With `--bare`, you can still opt-in to extras
     // TODO(zanieb): Add option for `--readme`
@@ -650,7 +650,7 @@ fn init_bare_opt_in() {
 // General init --script correctness test
 #[test]
 fn init_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -703,7 +703,7 @@ fn init_script() -> Result<()> {
 /// Using `--bare` with `--script` omits the default script content.
 #[test]
 fn init_script_bare() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -739,7 +739,7 @@ fn init_script_bare() -> Result<()> {
 // Ensure python versions passed as arguments are present in file metadata
 #[test]
 fn init_script_python_version() -> Result<()> {
-    let context = TestContext::new("3.11");
+    let context = uv_test::test_context!("3.11");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -783,7 +783,7 @@ fn init_script_python_version() -> Result<()> {
 // Init script should create parent directories if they don't exist
 #[test]
 fn init_script_create_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -827,7 +827,7 @@ fn init_script_create_directory() -> Result<()> {
 // Init script should fail if file is already a PEP 723 script
 #[test]
 fn init_script_file_conflicts() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -881,7 +881,7 @@ fn init_script_file_conflicts() -> Result<()> {
 // Init script should not trash an existing shebang.
 #[test]
 fn init_script_shebang() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script_path = context.temp_dir.child("script.py");
 
@@ -945,8 +945,8 @@ fn init_script_picks_latest_stable_version() -> Result<()> {
     let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
     // If we do not mark these versions as managed, they would have `PythonSource::SearchPath(First)`, which
     // would mean that pre-releases would be preferred without opt-in (see `PythonSource::allows_prereleases`).
-    let context =
-        TestContext::new_with_versions(managed_versions).with_versions_as_managed(managed_versions);
+    let context = uv_test::test_context_with_versions!(managed_versions)
+        .with_versions_as_managed(managed_versions);
 
     let script_path = context.temp_dir.join("main.py");
 
@@ -983,7 +983,7 @@ fn init_script_picks_latest_stable_version() -> Result<()> {
 /// Run `uv init --lib` with an existing py.typed file
 #[test]
 fn init_py_typed_exists() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -1017,7 +1017,7 @@ fn init_py_typed_exists() -> Result<()> {
 /// Using `uv init --lib --no-package` isn't allowed
 #[test]
 fn init_library_no_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -1041,7 +1041,7 @@ fn init_library_no_package() -> Result<()> {
 /// Ensure that `uv init` initializes the cache.
 #[test]
 fn init_cache() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     fs_err::remove_dir_all(&context.cache_dir)?;
 
@@ -1059,7 +1059,7 @@ fn init_cache() -> Result<()> {
 
 #[test]
 fn init_no_readme() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-readme"), @"
     success: true
@@ -1091,7 +1091,7 @@ fn init_no_readme() {
 
 #[test]
 fn init_no_pin_python() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--no-pin-python"), @"
     success: true
@@ -1124,7 +1124,7 @@ fn init_no_pin_python() {
 
 #[test]
 fn init_library_current_dir() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dir = context.temp_dir.join("foo");
     fs_err::create_dir(&dir)?;
@@ -1189,7 +1189,7 @@ fn init_library_current_dir() -> Result<()> {
 
 #[test]
 fn init_application_current_dir() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dir = context.temp_dir.join("foo");
     fs_err::create_dir(&dir)?;
@@ -1253,7 +1253,7 @@ fn init_application_current_dir() -> Result<()> {
 
 #[test]
 fn init_dot_args() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dir = context.temp_dir.join("foo");
     fs_err::create_dir(&dir)?;
@@ -1318,7 +1318,7 @@ fn init_dot_args() -> Result<()> {
 
 #[test]
 fn init_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1504,7 +1504,7 @@ fn init_workspace() -> Result<()> {
 
 #[test]
 fn init_workspace_relative_sub_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1600,7 +1600,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
 
 #[test]
 fn init_workspace_outside() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1697,7 +1697,7 @@ fn init_workspace_outside() -> Result<()> {
 
 #[test]
 fn init_normalized_names() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // `foo-bar` module is normalized to `foo-bar`.
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("foo-bar").arg("--lib"), @"
@@ -1796,7 +1796,7 @@ fn init_normalized_names() -> Result<()> {
 
 #[test]
 fn init_isolated() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1847,7 +1847,7 @@ fn init_isolated() -> Result<()> {
 
 #[test]
 fn init_no_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -1922,7 +1922,7 @@ fn init_no_workspace() -> Result<()> {
 /// Warn if the user provides `--no-workspace` outside of a workspace.
 #[test]
 fn init_no_workspace_warning() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg("--no-workspace").arg("--name").arg("project"), @"
     success: true
@@ -1954,7 +1954,7 @@ fn init_no_workspace_warning() {
 
 #[test]
 fn init_project_inside_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2032,7 +2032,7 @@ fn init_project_inside_project() -> Result<()> {
 /// Run `uv init` from within a workspace with an explicit root.
 #[test]
 fn init_explicit_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2083,7 +2083,7 @@ fn init_explicit_workspace() -> Result<()> {
 /// Run `uv init --virtual` to create a virtual project.
 #[test]
 fn init_virtual_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2154,7 +2154,7 @@ fn init_virtual_project() -> Result<()> {
 /// Run `uv init` from within a virtual workspace.
 #[test]
 fn init_virtual_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2198,7 +2198,7 @@ fn init_virtual_workspace() -> Result<()> {
 /// Run `uv init --virtual` from within a workspace.
 #[test]
 fn init_nested_virtual_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2255,7 +2255,7 @@ fn init_nested_virtual_workspace() -> Result<()> {
 /// Run `uv init` from within a workspace. The path is already included via `members`.
 #[test]
 fn init_matches_members() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2299,7 +2299,7 @@ fn init_matches_members() -> Result<()> {
 /// Run `uv init` from within a workspace. The path is excluded via `exclude`.
 #[test]
 fn init_matches_exclude() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2342,7 +2342,7 @@ fn init_matches_exclude() -> Result<()> {
 /// Run `uv init`, inheriting the `requires-python` from the workspace.
 #[test]
 fn init_requires_python_workspace() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2400,7 +2400,7 @@ fn init_requires_python_workspace() -> Result<()> {
 /// Run `uv init`, inferring the `requires-python` from the `--python` flag.
 #[test]
 fn init_requires_python_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2459,7 +2459,7 @@ fn init_requires_python_version() -> Result<()> {
 /// specifiers verbatim.
 #[test]
 fn init_requires_python_specifiers() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2517,7 +2517,7 @@ fn init_requires_python_specifiers() -> Result<()> {
 /// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
 #[test]
 fn init_requires_python_version_file() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     context.temp_dir.child(".python-version").write_str("3.9")?;
 
@@ -2554,7 +2554,7 @@ fn init_requires_python_version_file() -> Result<()> {
 /// Run `uv init`, inferring the Python version from an existing `.venv`
 #[test]
 fn init_existing_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2603,7 +2603,7 @@ fn init_existing_environment() -> Result<()> {
 /// Run `uv init`, it should ignore the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.9", "3.12"]);
 
     // Create a new virtual environment in the parent directory
     uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @"
@@ -2651,7 +2651,7 @@ fn init_existing_environment_parent() -> Result<()> {
 /// Run `uv init` from within an unmanaged project.
 #[test]
 fn init_unmanaged() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2687,7 +2687,7 @@ fn init_unmanaged() -> Result<()> {
 
 #[test]
 fn init_hidden() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg(".foo"), @"
     success: false
@@ -2701,7 +2701,7 @@ fn init_hidden() {
 
 #[test]
 fn init_non_ascii_directory() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let directory = context.temp_dir.child("püthon");
     directory.create_dir_all()?;
@@ -2724,7 +2724,7 @@ fn init_non_ascii_directory() -> Result<()> {
 /// Run `uv init` with an invalid `pyproject.toml` in a parent directory.
 #[test]
 fn init_failure() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create an empty `pyproject.toml`.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2771,7 +2771,7 @@ fn init_failure() -> Result<()> {
 
 #[test]
 fn init_failure_with_invalid_option_named_backend() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--backend"), @"
     success: false
     exit_code: 2
@@ -2804,7 +2804,7 @@ fn init_failure_with_invalid_option_named_backend() {
 #[test]
 #[cfg(feature = "test-git")]
 fn init_git() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
 
@@ -2844,7 +2844,7 @@ fn init_git() -> Result<()> {
 
 #[test]
 fn init_vcs_none() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
 
@@ -2865,7 +2865,7 @@ fn init_vcs_none() {
 #[test]
 #[cfg(feature = "test-git")]
 fn init_inside_git_repo() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     Command::new("git")
         .arg("init")
@@ -2901,7 +2901,7 @@ fn init_inside_git_repo() {
 
 #[test]
 fn init_git_not_installed() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
 
@@ -2930,7 +2930,7 @@ fn init_git_not_installed() {
 
 #[test]
 fn init_with_author() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a Git repository and set the author.
     Command::new("git")
@@ -3062,7 +3062,7 @@ fn init_with_author() {
 /// Run `uv init --app --package --build-backend flit` to create a packaged application project
 #[test]
 fn init_application_package_flit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3136,7 +3136,7 @@ fn init_application_package_flit() -> Result<()> {
 /// Run `uv init --lib --build-backend flit` to create an library project
 #[test]
 fn init_library_flit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3217,7 +3217,7 @@ fn init_library_flit() -> Result<()> {
 /// Run `uv init --build-backend flit` should be equivalent to `uv init --package --build-backend flit`.
 #[test]
 fn init_backend_implies_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("project").arg("--build-backend").arg("flit"), @"
     success: true
@@ -3256,7 +3256,7 @@ fn init_backend_implies_package() {
 /// Run `uv init --build-backend poetry` to create a project with poetry-core build backend
 #[test]
 fn init_library_poetry() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-04-28T00:00:00Z");
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-04-28T00:00:00Z");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3338,7 +3338,7 @@ fn init_library_poetry() -> Result<()> {
 #[test]
 #[cfg(feature = "test-crates-io")]
 fn init_app_build_backend_maturin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3468,7 +3468,7 @@ fn init_app_build_backend_maturin() -> Result<()> {
 /// Run `uv init --app --package --build-backend scikit` to create a packaged application project
 #[test]
 fn init_app_build_backend_scikit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3593,7 +3593,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
 #[test]
 #[cfg(feature = "test-crates-io")]
 fn init_lib_build_backend_maturin() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3720,7 +3720,7 @@ fn init_lib_build_backend_maturin() -> Result<()> {
 /// Run `uv init --lib --build-backend scikit` to create a packaged application project
 #[test]
 fn init_lib_build_backend_scikit() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3841,7 +3841,7 @@ fn init_lib_build_backend_scikit() -> Result<()> {
 /// Run `uv init --app --package --build-backend hatchling` to create a packaged application project
 #[test]
 fn init_application_package_hatchling() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -3910,7 +3910,7 @@ fn init_application_package_hatchling() -> Result<()> {
 
 #[test]
 fn init_with_description() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.join("foo");
     fs_err::create_dir_all(&child)?;
@@ -3954,7 +3954,7 @@ fn init_with_description() -> Result<()> {
 
 #[test]
 fn init_without_description() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.join("bar");
     fs_err::create_dir_all(&child)?;
@@ -3997,7 +3997,7 @@ fn init_without_description() -> Result<()> {
 /// Run `uv init --python 3.13t` to create a pin to a freethreaded Python.
 #[test]
 fn init_python_variant() {
-    let context = TestContext::new("3.13");
+    let context = uv_test::test_context!("3.13");
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--python").arg("3.13t"), @"
     success: true
     exit_code: 0
@@ -4014,7 +4014,7 @@ fn init_python_variant() {
 /// Check how `uv init` reacts to working and broken git with different `--vcs` options.
 #[test]
 fn git_states() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // First, with working git.
 
@@ -4075,7 +4075,7 @@ fn git_states() {
 /// Using `uv init` with `--project` isn't allowed
 #[test]
 fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -4105,7 +4105,7 @@ fn init_project_flag_is_not_allowed_under_preview() -> Result<()> {
 
 #[test]
 fn init_project_flag_is_ignored_with_explicit_path() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // with explicit path
     uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar").arg("foo"), @"
@@ -4138,7 +4138,7 @@ fn init_project_flag_is_ignored_with_explicit_path() {
 
 #[test]
 fn init_project_flag_is_warned_without_path() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // with explicit path
     uv_snapshot!(context.filters(), context.init().arg("--project").arg("bar"), @"
@@ -4160,7 +4160,7 @@ fn init_project_flag_is_warned_without_path() {
 /// The `--directory` flag is used as the base for path
 #[test]
 fn init_working_directory_change() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let child = context.temp_dir.child("bar");
     child.create_dir_all()?;

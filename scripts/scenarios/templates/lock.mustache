@@ -15,7 +15,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, packse_index_url, uv_snapshot};
+use uv_test::{packse_index_url, uv_snapshot};
 
 {{#scenarios}}
 
@@ -29,7 +29,7 @@ use crate::common::{TestContext, packse_index_url, uv_snapshot};
 /// ```
 #[test]
 fn {{module_name}}() -> Result<()> {
-    let context = TestContext::new("{{environment.python}}");
+    let context = uv_test::test_context!("{{environment.python}}");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();

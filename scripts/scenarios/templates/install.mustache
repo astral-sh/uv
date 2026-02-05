@@ -9,7 +9,7 @@ use std::process::Command;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
+use uv_test::{TestContext, build_vendor_links_url, packse_index_url, uv_snapshot};
 
 /// Create a `pip install` command with options shared across all scenarios.
 fn command(context: &TestContext) -> Command {
@@ -38,7 +38,7 @@ fn command(context: &TestContext) -> Command {
 {{/python_patch}}
 #[test]
 fn {{module_name}}() {
-    let context = TestContext::new("{{environment.python}}");
+    let context = uv_test::test_context!("{{environment.python}}");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();

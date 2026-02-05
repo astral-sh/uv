@@ -8,11 +8,11 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn show_empty() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.pip_show(), @"
     success: false
@@ -28,7 +28,7 @@ fn show_empty() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_requires_multiple() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0")?;
@@ -78,7 +78,7 @@ fn show_requires_multiple() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_python_version_marker() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("click==8.1.7")?;
@@ -128,7 +128,7 @@ fn show_python_version_marker() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_found_single_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -173,7 +173,7 @@ fn show_found_single_package() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_found_multiple_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -230,7 +230,7 @@ fn show_found_multiple_packages() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_found_one_out_of_three() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -283,7 +283,7 @@ fn show_found_one_out_of_three() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_found_one_out_of_two_quiet() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -331,7 +331,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_empty_quiet() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -378,7 +378,7 @@ fn show_empty_quiet() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_editable() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     context
@@ -415,7 +415,7 @@ fn show_editable() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_required_by_multiple() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! {r"
@@ -471,7 +471,7 @@ fn show_required_by_multiple() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_files() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context
         .pip_install()
@@ -538,7 +538,7 @@ fn show_files() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_target() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;
@@ -590,7 +590,7 @@ fn show_target() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("MarkupSafe==2.1.3")?;

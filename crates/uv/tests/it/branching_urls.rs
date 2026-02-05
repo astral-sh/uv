@@ -2,7 +2,7 @@ use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, make_project, uv_snapshot};
+use uv_test::{make_project, uv_snapshot};
 
 /// The root package has diverging URLs for disjoint markers:
 /// ```toml
@@ -14,7 +14,7 @@ use crate::common::{TestContext, make_project, uv_snapshot};
 #[test]
 #[cfg(feature = "test-pypi")]
 fn branching_urls_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -48,7 +48,7 @@ fn branching_urls_disjoint() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn branching_urls_overlapping() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -86,7 +86,7 @@ fn branching_urls_overlapping() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn root_package_splits_but_transitive_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -157,7 +157,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn root_package_splits_transitive_too() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -363,7 +363,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn root_package_splits_other_dependencies_too() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -547,7 +547,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn branching_between_registry_and_direct_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -633,7 +633,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 #[test]
 #[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -717,7 +717,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 #[test]
 #[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -747,7 +747,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
 /// Ensure that we don't pre-visit package with URLs.
 #[test]
 fn dont_pre_visit_url_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [

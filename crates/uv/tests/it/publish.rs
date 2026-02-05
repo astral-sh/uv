@@ -1,4 +1,3 @@
-use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr, PathChild};
 use fs_err::OpenOptions;
@@ -9,6 +8,7 @@ use std::env::current_dir;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use uv_static::EnvVars;
+use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -23,7 +23,7 @@ fn dummy_wheel() -> PathBuf {
 
 #[test]
 fn username_password_no_longer_supported() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -48,7 +48,7 @@ fn username_password_no_longer_supported() {
 
 #[test]
 fn invalid_token() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("-u")
@@ -74,7 +74,7 @@ fn invalid_token() {
 /// Emulate a missing `permission` `id-token: write` situation.
 #[test]
 fn mixed_credentials() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--username")
@@ -102,7 +102,7 @@ fn mixed_credentials() {
 /// Emulate a missing `permission` `id-token: write` situation.
 #[test]
 fn missing_trusted_publishing_permission() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
@@ -130,7 +130,7 @@ fn missing_trusted_publishing_permission() {
 /// trusted publishing configuration?
 #[test]
 fn no_credentials() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--publish-url")
@@ -160,7 +160,7 @@ fn no_credentials() {
 /// Hint people that it's not `--skip-existing` but `--check-url`.
 #[test]
 fn skip_existing_redirect() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.publish()
         .arg("--skip-existing")
@@ -178,7 +178,7 @@ fn skip_existing_redirect() {
 
 #[test]
 fn dubious_filenames() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.temp_dir.child("not-a-wheel.whl").touch().unwrap();
     context.temp_dir.child("data.tar.gz").touch().unwrap();
@@ -213,7 +213,7 @@ fn dubious_filenames() {
 /// Check that we (don't) use the keyring and warn for missing keyring behaviors correctly.
 #[test]
 fn check_keyring_behaviours() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
     context
@@ -337,7 +337,7 @@ fn check_keyring_behaviours() {
 
 #[test]
 fn invalid_index() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = indoc! {r#"
         [project]
@@ -407,7 +407,7 @@ fn invalid_index() {
 /// <https://github.com/astral-sh/uv/issues/11836#issuecomment-3022735011>
 #[tokio::test]
 async fn read_index_credential_env_vars_for_check_url() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -510,7 +510,7 @@ async fn read_index_credential_env_vars_for_check_url() {
 /// Native GitLab CI trusted publishing using `PYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_pypi_id_token() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -562,7 +562,7 @@ async fn gitlab_trusted_publishing_pypi_id_token() {
 /// Native GitLab CI trusted publishing using `TESTPYPI_ID_TOKEN`
 #[tokio::test]
 async fn gitlab_trusted_publishing_testpypi_id_token() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let server = MockServer::start().await;
 
@@ -616,7 +616,7 @@ async fn gitlab_trusted_publishing_testpypi_id_token() {
 /// PyPI returns `application/json` errors with a `code` field.
 #[tokio::test]
 async fn upload_error_pypi_json() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
@@ -652,7 +652,7 @@ async fn upload_error_pypi_json() {
 /// pyx returns `application/problem+json` errors with RFC 9457 Problem Details.
 #[tokio::test]
 async fn upload_error_problem_details() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
@@ -689,7 +689,7 @@ async fn upload_error_problem_details() {
 /// stopping at the first failure.
 #[test]
 fn dry_run_reports_all_errors() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create two fake wheel files that will fail metadata reading.
     let wheel_a = context.temp_dir.child("a-1.0.0-py3-none-any.whl");

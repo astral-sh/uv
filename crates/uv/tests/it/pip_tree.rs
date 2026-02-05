@@ -7,11 +7,11 @@ use assert_fs::fixture::PathChild;
 use assert_fs::fixture::PathCreateDir;
 use indoc::indoc;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn no_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.pip_tree(), @"
     success: true
@@ -27,7 +27,7 @@ fn no_package() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn prune_last_in_the_subgroup() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0").unwrap();
@@ -71,7 +71,7 @@ fn prune_last_in_the_subgroup() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn single_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0").unwrap();
@@ -117,7 +117,7 @@ fn single_package() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn nested_dependencies() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -167,7 +167,7 @@ fn nested_dependencies() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn reverse() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -219,7 +219,7 @@ fn reverse() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn invert() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -271,7 +271,7 @@ fn invert() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn depth() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -350,7 +350,7 @@ fn depth() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn prune() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -434,7 +434,7 @@ fn prune() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn removed_dependency() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0").unwrap();
@@ -490,7 +490,7 @@ fn removed_dependency() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn multiple_packages() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -545,7 +545,7 @@ fn multiple_packages() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn cycle() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -613,7 +613,7 @@ fn cycle() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn multiple_packages_shared_descendant() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -667,7 +667,7 @@ fn multiple_packages_shared_descendant() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn no_dedupe_and_invert() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -720,7 +720,7 @@ fn no_dedupe_and_invert() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn no_dedupe() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
@@ -774,7 +774,7 @@ fn no_dedupe() {
 #[test]
 #[cfg(feature = "test-git")]
 fn with_editable() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context
@@ -815,7 +815,7 @@ fn with_editable() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn package_flag() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -883,7 +883,7 @@ fn package_flag() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_version_specifiers_simple() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0").unwrap();
@@ -927,7 +927,7 @@ fn show_version_specifiers_simple() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_version_specifiers_with_invert() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -983,7 +983,7 @@ fn show_version_specifiers_with_invert() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn show_version_specifiers_with_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask").unwrap();
@@ -1031,7 +1031,7 @@ fn show_version_specifiers_with_package() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn print_output_even_with_quite_flag() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==2.31.0").unwrap();
@@ -1071,7 +1071,7 @@ fn print_output_even_with_quite_flag() {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn outdated() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask==2.0.0").unwrap();
@@ -1138,7 +1138,7 @@ fn no_duplicate_dependencies_with_markers() {
         build-backend = "uv_build"
     "#};
 
-    let context = TestContext::new_with_versions(&["3.12", "3.13"]).with_filtered_counts();
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]).with_filtered_counts();
 
     let project = context.temp_dir.child("debug");
 
