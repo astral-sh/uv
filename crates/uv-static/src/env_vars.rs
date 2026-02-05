@@ -652,7 +652,7 @@ impl EnvVars {
     /// Timeout (in seconds) to connect to a server. (default: 10 s)
     ///
     /// If `UV_HTTP_TIMEOUT` is lower than this value, `UV_HTTP_TIMEOUT` will be used instead.
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.10.0")]
     pub const UV_HTTP_CONNECT_TIMEOUT: &'static str = "UV_HTTP_CONNECT_TIMEOUT";
 
     /// The number of retries for HTTP requests. (default: 3)

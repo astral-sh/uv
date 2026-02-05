@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.0
+
+Released on 2026-02-05.
+
+### Enhancements
+
+- Improve ABI tag error message phrasing ([#17878](https://github.com/astral-sh/uv/pull/17878))
+- Introduce a 10s connect timeout ([#17733](https://github.com/astral-sh/uv/pull/17733))
+
+### Bug fixes
+
+- Support all CPython ABI tag suffixes properly  ([#17817](https://github.com/astral-sh/uv/pull/17817))
+- Add support for detecting PowerShell on Linux and macOS ([#17870](https://github.com/astral-sh/uv/pull/17870))
+- Retry timeout errors for streams ([#17875](https://github.com/astral-sh/uv/pull/17875))
+
+### Other changes
+
+- Allow using `pyx.dev` as a target in `uv auth` commands despite `PYX_API_URL` differing ([#17856](https://github.com/astral-sh/uv/pull/17856))
+- Tracking branch for 0.10 ([#17661](https://github.com/astral-sh/uv/pull/17661))
+
 ## 0.9.30
 
 Released on 2026-02-04.
