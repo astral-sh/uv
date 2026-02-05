@@ -6087,6 +6087,7 @@ dependencies = [
  "fs-err",
  "insta",
  "serde",
+ "tracing",
  "url",
  "uv-auth",
  "uv-cache",
