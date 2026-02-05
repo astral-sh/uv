@@ -11356,7 +11356,7 @@ fn add_index_by_name_for_workspace() -> Result<()> {
 }
 
 #[test]
-fn add_index_by_name_from_workspace_root() -> Result<()> {
+fn add_index_by_name_for_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
@@ -11457,7 +11457,7 @@ fn add_index_by_name_from_workspace_root() -> Result<()> {
 }
 
 #[test]
-fn add_index_by_name_member_only_not_accessible() -> Result<()> {
+fn add_index_by_name_no_cross_member_references() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let workspace_toml = context.temp_dir.child("pyproject.toml");
