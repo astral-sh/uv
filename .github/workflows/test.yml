@@ -73,7 +73,7 @@ jobs:
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
-            --features python-patch,native-auth,secret-service \
+            --features test-python-patch,native-auth,secret-service \
             --workspace \
             --profile ci-linux
 
@@ -118,7 +118,7 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features python,python-managed,pypi,git,git-lfs,performance,crates-io,native-auth,apple-native \
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
             --workspace \
             --profile ci-macos
 
@@ -180,7 +180,7 @@ jobs:
           cargo nextest run \
             --cargo-profile fast-build \
             --no-default-features \
-            --features python,pypi,python-managed,native-auth,windows-native \
+            --features test-python,test-pypi,test-python-managed,native-auth,windows-native \
             --workspace \
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3

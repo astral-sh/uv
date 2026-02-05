@@ -25,7 +25,7 @@ fn no_package() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn prune_last_in_the_subgroup() {
     let context = TestContext::new("3.12");
 
@@ -69,7 +69,7 @@ fn prune_last_in_the_subgroup() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn single_package() {
     let context = TestContext::new("3.12");
 
@@ -115,7 +115,7 @@ fn single_package() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn nested_dependencies() {
     let context = TestContext::new("3.12");
 
@@ -165,7 +165,7 @@ fn nested_dependencies() {
 
 /// Identical test as `invert` since `--reverse` is simply an alias for `--invert`.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn reverse() {
     let context = TestContext::new("3.12");
 
@@ -217,7 +217,7 @@ fn reverse() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn invert() {
     let context = TestContext::new("3.12");
 
@@ -269,7 +269,7 @@ fn invert() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn depth() {
     let context = TestContext::new("3.12");
 
@@ -348,7 +348,7 @@ fn depth() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn prune() {
     let context = TestContext::new("3.12");
 
@@ -432,7 +432,7 @@ fn prune() {
 
 /// Ensure `pip tree` behaves correctly after a package has been removed.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn removed_dependency() {
     let context = TestContext::new("3.12");
 
@@ -488,7 +488,7 @@ fn removed_dependency() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn multiple_packages() {
     let context = TestContext::new("3.12");
 
@@ -543,7 +543,7 @@ fn multiple_packages() {
 
 /// Show the installed tree in the presence of a cycle.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn cycle() {
     let context = TestContext::new("3.12");
 
@@ -611,7 +611,7 @@ fn cycle() {
 
 /// Both `pendulum` and `boto3` depend on `python-dateutil`.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn multiple_packages_shared_descendant() {
     let context = TestContext::new("3.12");
 
@@ -665,7 +665,7 @@ fn multiple_packages_shared_descendant() {
 
 /// Test the interaction between `--no-dedupe` and `--invert`.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn no_dedupe_and_invert() {
     let context = TestContext::new("3.12");
 
@@ -718,7 +718,7 @@ fn no_dedupe_and_invert() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn no_dedupe() {
     let context = TestContext::new("3.12");
 
@@ -772,7 +772,7 @@ fn no_dedupe() {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn with_editable() {
     let context = TestContext::new("3.12");
 
@@ -813,7 +813,7 @@ fn with_editable() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn package_flag() {
     let context = TestContext::new("3.12");
 
@@ -881,7 +881,7 @@ fn package_flag() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn show_version_specifiers_simple() {
     let context = TestContext::new("3.12");
 
@@ -925,7 +925,7 @@ fn show_version_specifiers_simple() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn show_version_specifiers_with_invert() {
     let context = TestContext::new("3.12");
 
@@ -981,7 +981,7 @@ fn show_version_specifiers_with_invert() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn show_version_specifiers_with_package() {
     let context = TestContext::new("3.12");
 
@@ -1029,7 +1029,7 @@ fn show_version_specifiers_with_package() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn print_output_even_with_quite_flag() {
     let context = TestContext::new("3.12");
 
@@ -1069,7 +1069,7 @@ fn print_output_even_with_quite_flag() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn outdated() {
     let context = TestContext::new("3.12");
 
@@ -1120,7 +1120,7 @@ fn outdated() {
 /// Test that dependencies with multiple marker-specific requirements
 /// are only displayed once in the tree.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn no_duplicate_dependencies_with_markers() {
     const PY_PROJECT: &str = indoc! {r#"
         [project]

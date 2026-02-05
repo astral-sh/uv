@@ -782,7 +782,7 @@ fn python_pin_with_comments() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_pin_install() {
     let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
 

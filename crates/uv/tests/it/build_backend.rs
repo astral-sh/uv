@@ -24,7 +24,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
@@ -80,7 +80,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
@@ -154,7 +154,7 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../test/packages/built-by-uv");
@@ -212,7 +212,7 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(unix, feature = "git"))]
+#[cfg(all(unix, feature = "test-git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;
@@ -1223,7 +1223,7 @@ fn invalid_pyproject_toml() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[test]
 fn build_with_all_metadata() -> Result<()> {
     let context = TestContext::new("3.12");

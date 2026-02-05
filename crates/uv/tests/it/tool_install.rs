@@ -1,4 +1,4 @@
-#[cfg(any(feature = "git", feature = "git-lfs"))]
+#[cfg(any(feature = "test-git", feature = "test-git-lfs"))]
 use std::collections::BTreeSet;
 use std::process::Command;
 
@@ -1945,7 +1945,7 @@ fn tool_install_unnamed_package() {
 
 /// Test installing a tool with a Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn tool_install_git() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -2040,7 +2040,7 @@ fn tool_install_git() {
 
 /// Test installing a tool with a Git LFS enabled requirement.
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn tool_install_git_lfs() {
     let context = TestContext::new("3.13")
         .with_filtered_exe_suffix()

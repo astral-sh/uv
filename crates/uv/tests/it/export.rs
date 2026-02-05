@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_types)]
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use crate::common::{TestContext, apply_filters, copy_dir_ignore, uv_snapshot};
 use anyhow::{Ok, Result};
@@ -8,10 +8,10 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use std::path::Path;
 use std::process::Stdio;
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
@@ -1241,7 +1241,7 @@ fn virtual_dependency_group() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1277,7 +1277,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
@@ -1306,7 +1306,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 }
 
 /// Don't redact the username `git` in SSH URLs.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4148,7 +4148,7 @@ fn pep_751_project_extra() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn pep_751_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4529,7 +4529,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn pep_751_https_git_credentials() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -5039,7 +5039,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
@@ -5190,7 +5190,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn cyclonedx_export_mixed_source_types() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
