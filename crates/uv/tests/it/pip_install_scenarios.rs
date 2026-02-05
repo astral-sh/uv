@@ -3408,7 +3408,7 @@ fn python_greater_than_current_patch() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-patch-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----

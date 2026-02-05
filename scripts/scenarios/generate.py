@@ -185,7 +185,7 @@ def main(
         resolver_options = scenario["resolver_options"] or {}
         # Avoid writing the empty `required-environments = []`
         resolver_options["has_required_environments"] = bool(
-            resolver_options["required_environments"]
+            resolver_options.get("required_environments", [])
         )
         if resolver_options.get("universal"):
             lock_scenarios.append(scenario)
