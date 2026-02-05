@@ -358,8 +358,12 @@ impl ManagedPythonInstallation {
     }
 
     pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        // Normalize the path to handle Windows path quirks (trailing separators, \\?\ prefix, etc.)
-        let path = dunce::simplified(path.as_ref()).to_path_buf();
+        // Canonicalize the path to resolve symlinks/junctions and handle Windows path quirks
+        // (trailing separators, \\?\ prefix, casing differences, etc.)
+        // Fall back to absolute path if canonicalize fails (e.g., path doesn't exist).
+        let path = dunce::canonicalize(path.as_ref()).unwrap_or_else(|_| {
+            std::path::absolute(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf())
+        });
 
         let key = PythonInstallationKey::from_str(
             path.file_name()
@@ -367,8 +371,6 @@ impl ManagedPythonInstallation {
                 .to_str()
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
-
-        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
         // Try to read the BUILD file if it exists
         let build = match fs::read_to_string(path.join("BUILD")) {
@@ -392,26 +394,15 @@ impl ManagedPythonInstallation {
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
 
-        // Canonicalize both paths to handle Windows path format differences
-        // (e.g., \\?\ prefix, different casing, junction vs actual path)
-        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix()).ok()?;
+        // Try to create an installation from the interpreter's base prefix.
+        // `from_path` canonicalizes the path, resolving symlinks/junctions.
+        let installation = Self::from_path(interpreter.sys_base_prefix()).ok()?;
+
+        // Verify the installation is within the managed root
         let root = dunce::canonicalize(managed_root.root()).ok()?;
+        installation.path.strip_prefix(&root).ok()?;
 
-        // Verify the interpreter's base prefix is within the managed root
-        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
-
-        let first_component = suffix.components().next()?;
-        let name = first_component.as_os_str().to_str()?;
-
-        // With canonicalization above, symlinks/junctions are resolved, so `name` should
-        // be the actual installation directory (e.g., `cpython-3.12.12-windows-x86_64-none`).
-        // Verify it's a valid installation key.
-        PythonInstallationKey::from_str(name).ok()?;
-
-        // Construct the path within the managed root (not the canonicalized path,
-        // which might resolve to a different location if there are symlinks in the root)
-        let path = managed_root.root().join(name);
-        Self::from_path(path).ok()
+        Some(installation)
     }
 
     /// The path to this managed installation's Python executable.
@@ -598,9 +589,6 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// If the environment contains a symlink directory (or junction on Windows),
-    /// update it to the latest patch directory for this minor version.
-    ///
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {

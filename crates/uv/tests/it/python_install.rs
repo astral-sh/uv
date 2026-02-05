@@ -2796,7 +2796,7 @@ fn python_install_emulated_macos() {
     ");
 
     // It should be discoverable with `uv python find`
-    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13").arg("--resolve-links"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2811,7 +2811,7 @@ fn python_install_emulated_macos() {
     exit_code: 0
     ----- stdout -----
     cpython-3.13.11-macos-aarch64-none    <download available>
-    cpython-3.13.11-macos-x86_64-none     managed/cpython-3.13.11-macos-x86_64-none/bin/python3.13
+    cpython-3.13.11-macos-x86_64-none     managed/cpython-3.13-macos-x86_64-none/bin/python3.13
 
     ----- stderr -----
     ");
@@ -2827,7 +2827,7 @@ fn python_install_emulated_macos() {
     ");
 
     // Once we've installed the native version, it should be preferred over x86_64
-    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13").arg("--resolve-links"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
