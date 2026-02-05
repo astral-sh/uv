@@ -1190,3 +1190,192 @@ fn lock_build_dependencies_fork() -> Result<()> {
 
     Ok(())
 }
+
+/// Verify that a package appearing in both the runtime dependency tree and the
+/// build dependency tree is not duplicated, and its existing `dependencies`
+/// from the main resolution are preserved.
+#[test]
+fn lock_build_dependencies_shared_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local dependency with dynamic version that requires `iniconfig`
+    // as a build dependency (via setuptools build-system.requires).
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "iniconfig"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    // The root project depends on both `dep` (which needs iniconfig to build)
+    // and `iniconfig` directly as a runtime dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "iniconfig"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // `iniconfig` should appear exactly once as a [[package]], used by both
+    // the build-dependencies of `dep` and the runtime dependencies of `project`.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock
+        );
+    });
+
+    // Verify the lock file is valid by re-locking with --locked.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Verify sync works (the shared package should be installed once).
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Verify that transitive build dependencies behind platform markers are
+/// correctly excluded at sync time. When `anyio` (linux-only build dep)
+/// is skipped on macOS/Windows, its transitive deps `idna` and `sniffio`
+/// must also be excluded from the build environment.
+#[test]
+fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local dependency with platform-specific build dependencies.
+    // `anyio` is linux-only, `iniconfig` is darwin/windows-only.
+    // `anyio` depends on `idna` and `sniffio`.
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = [
+            "setuptools>=42",
+            "anyio ; sys_platform == 'linux'",
+            "iniconfig ; sys_platform == 'darwin' or sys_platform == 'win32'",
+        ]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // Verify the lock file structure:
+    // - build-dependencies only has direct deps (setuptools, wheel, anyio, iniconfig)
+    // - anyio has dependencies = [idna, sniffio]
+    // - idna and sniffio are NOT in build-dependencies
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock
+        );
+    });
+
+    // Sync and verify the build works. The key assertion is that it succeeds —
+    // on macOS, anyio+idna+sniffio are excluded; on Linux, iniconfig is excluded.
+    // If transitive marker filtering is broken, orphaned packages (idna/sniffio
+    // without anyio) would be in the build env, which while it might not break
+    // the build, would be incorrect.
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
