@@ -1053,7 +1053,7 @@ impl ValidatedLock {
                     printer.stderr(),
                     "Ignoring existing lockfile due to {change}",
                 );
-                return Ok(Self::Unusable(lock));
+                return Ok(Self::Preferable(lock));
             }
         }
 
