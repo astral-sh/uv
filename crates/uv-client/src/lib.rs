@@ -23,5 +23,6 @@ mod linehaul;
 mod middleware;
 mod registry_client;
 mod remote_metadata;
+pub mod resumable_reader;
 mod rkyvutil;
 mod tls;
