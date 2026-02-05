@@ -610,7 +610,7 @@ pub struct VersionArgs {
     #[arg(long)]
     pub no_sync: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Prefer the active virtual environment over the project's virtual environment [env: UV_ACTIVE=]
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
@@ -3641,7 +3641,7 @@ pub struct RunArgs {
     #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
     pub isolated: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Prefer the active virtual environment over the project's virtual environment [env: UV_ACTIVE=]
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
@@ -3907,7 +3907,7 @@ pub struct SyncArgs {
     #[arg(long, overrides_with("inexact"), hide = true)]
     pub exact: bool,
 
-    /// Sync dependencies to the active virtual environment.
+    /// Sync dependencies to the active virtual environment [env: UV_ACTIVE=]
     ///
     /// Instead of creating or updating the virtual environment for the project or script, the
     /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
@@ -4347,7 +4347,7 @@ pub struct AddArgs {
     #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
     pub frozen: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Prefer the active virtual environment over the project's virtual environment [env: UV_ACTIVE=]
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
@@ -4566,7 +4566,7 @@ pub struct RemoveArgs {
     #[arg(long)]
     pub no_sync: bool,
 
-    /// Prefer the active virtual environment over the project's virtual environment.
+    /// Prefer the active virtual environment over the project's virtual environment [env: UV_ACTIVE=]
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.

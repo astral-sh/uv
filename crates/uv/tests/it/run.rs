@@ -4311,6 +4311,64 @@ fn run_active_project_environment() -> Result<()> {
 }
 
 #[test]
+fn run_active_project_environment_env_var() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // `UV_ACTIVE=true` should behave like `--active`.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("--version")
+        .env(EnvVars::UV_ACTIVE, "1")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: foo
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // `--no-active` should override `UV_ACTIVE`.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--no-active")
+        .arg("python").arg("--version")
+        .env(EnvVars::UV_ACTIVE, "1")
+        .env(EnvVars::VIRTUAL_ENV, "bar"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn run_active_script_environment() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_virtualenv_bin()

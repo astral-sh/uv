@@ -392,6 +392,13 @@ impl EnvVars {
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    /// Equivalent to the `--active` command-line argument.
+    ///
+    /// If set, uv will prefer the active virtual environment (via `VIRTUAL_ENV`) over the
+    /// project's virtual environment when they differ.
+    #[attr_added_in("0.9.31")]
+    pub const UV_ACTIVE: &'static str = "UV_ACTIVE";
+
     /// Specifies the directory to place links to installed, managed Python executables.
     #[attr_added_in("0.4.29")]
     pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";
