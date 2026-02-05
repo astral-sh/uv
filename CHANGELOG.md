@@ -5,9 +5,17 @@
 
 ## 0.10.0
 
-Released on 2026-02-05.
+Since we released uv [0.9.0](https://github.com/astral-sh/uv/releases/tag/0.9.0) in October of 2025,
+we've accumulated various changes that improve correctness and user experience, but could break some
+workflows. This release contains those changes; many have been marked as breaking out of an
+abundance of caution. We expect most users to be able to upgrade without making changes.
 
-TODO: Write intro paragraph summarizing the release.
+This release also includes the stabilization of preview features. Python upgrades are now stable,
+including the `uv python upgrade` command, `uv python install --upgrade`, and automatically
+upgrading Python patch versions in virtual environments when a new version is installed. The
+`add-bounds` and `extra-build-dependencies` settings are now stable. Finally, the `uv workspace
+dir` and `uv workspace list` utilities for writing scripts against workspace members are now
+stable.
 
 ### Breaking changes
 
