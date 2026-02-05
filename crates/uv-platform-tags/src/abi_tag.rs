@@ -439,9 +439,9 @@ pub enum ParseAbiTagError {
         implementation: &'static str,
         tag: String,
     },
-    #[error("Unknown suffix `{suffix}` in ABI tag: {tag}")]
+    #[error("Unknown suffix `{suffix}` in CPython ABI tag: {tag}")]
     UnknownAbiTagSuffix { suffix: char, tag: String },
-    #[error("Duplicate suffix `{suffix}` in ABI tag: {tag}")]
+    #[error("Duplicate suffix `{suffix}` in CPython ABI tag: {tag}")]
     DuplicateAbiTagSuffix { suffix: char, tag: String },
 }
 
@@ -491,10 +491,10 @@ mod tests {
     #[test]
     fn cpython_abi_invalid() {
         let err = AbiTag::from_str("cp39y").unwrap_err();
-        assert_snapshot!(err, @"Unknown suffix `y` in ABI tag: cp39y");
+        assert_snapshot!(err, @"Unknown suffix `y` in CPython ABI tag: cp39y");
 
         let err = AbiTag::from_str("cp39dd").unwrap_err();
-        assert_snapshot!(err, @"Duplicate suffix `d` in ABI tag: cp39dd");
+        assert_snapshot!(err, @"Duplicate suffix `d` in CPython ABI tag: cp39dd");
     }
 
     #[test]
