@@ -461,12 +461,6 @@ fn generate_dist_compatibility_hint(wheel_tags: &ExpandedTags, tags: &Tags) -> O
             let wheel_abi = wheel_tags
                 .abi_tags()
                 .map(|tag| match tag {
-                    AbiTag::CPython {
-                        modifier,
-                        python_version: (major, minor),
-                    } => {
-                        format!("the CPython {major}.{minor}{modifier} ABI (`{tag}`)")
-                    }
                     AbiTag::Abi3 => format!("the stable ABI (`{tag}`)"),
                     _ => {
                         if let Some(pretty) = tag.pretty() {

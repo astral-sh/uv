@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 
 use uv_small_str::SmallString;
 
-use crate::abi_tag::CPythonAbiModifiers;
+use crate::abi_tag::CPythonAbiVariants;
 use crate::{AbiTag, Arch, LanguageTag, Os, Platform, PlatformError, PlatformTag};
 
 #[derive(Debug, thiserror::Error)]
@@ -140,24 +140,24 @@ impl Tags {
         gil_disabled: bool,
         is_cross: bool,
     ) -> Result<Self, TagsError> {
-        let mut modifier = CPythonAbiModifiers::default();
+        let mut variant = CPythonAbiVariants::default();
         if gil_disabled {
             if implementation_name != "cpython" {
                 return Err(TagsError::GilIsACPythonProblem(
                     implementation_name.to_string(),
                 ));
             }
-            modifier.insert(CPythonAbiModifiers::Freethreading);
+            variant.insert(CPythonAbiVariants::Freethreading);
         }
         // Sufficiently correct assumption, pre-3.8 Pythons were generally built with pymalloc.
         // https://docs.python.org/dev/whatsnew/3.8.html#build-and-c-api-changes
         // > the m flag for pymalloc became useless (builds with and without pymalloc are ABI
         // > compatible) and so has been removed.
         if python_version <= (3, 7) && implementation_name == "cpython" {
-            modifier.insert(CPythonAbiModifiers::Pymalloc);
+            variant.insert(CPythonAbiVariants::Pymalloc);
         }
 
-        let implementation = Implementation::parse(implementation_name, modifier)?;
+        let implementation = Implementation::parse(implementation_name, variant)?;
 
         // Determine the compatible tags for the current platform.
         let platform_tags = {
@@ -179,11 +179,11 @@ impl Tags {
             ));
         }
         // 2. abi3 and no abi (e.g. executable binary)
-        if let Implementation::CPython { modifier } = implementation {
+        if let Implementation::CPython { variant } = implementation {
             // For some reason 3.2 is the minimum python for the cp abi
             for minor in (2..=python_version.1).rev() {
                 // No abi3 for free-threading python
-                if !modifier.contains(CPythonAbiModifiers::Freethreading) {
+                if !variant.contains(CPythonAbiVariants::Freethreading) {
                     for platform_tag in &platform_tags {
                         tags.push((
                             implementation.language_tag((python_version.0, minor)),
@@ -319,8 +319,8 @@ impl Tags {
         if self.is_freethreaded {
             let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
                 AbiTag::None => true,
-                AbiTag::CPython { modifier, .. } => {
-                    modifier.contains(CPythonAbiModifiers::Freethreading)
+                AbiTag::CPython { variant, .. } => {
+                    variant.contains(CPythonAbiVariants::Freethreading)
                 }
                 _ => false,
             });
@@ -434,7 +434,7 @@ impl std::fmt::Display for Tags {
 
 #[derive(Debug, Clone, Copy)]
 enum Implementation {
-    CPython { modifier: CPythonAbiModifiers },
+    CPython { variant: CPythonAbiVariants },
     PyPy,
     GraalPy,
     Pyston,
@@ -459,8 +459,8 @@ impl Implementation {
     fn abi_tag(self, python_version: (u8, u8), implementation_version: (u8, u8)) -> AbiTag {
         match self {
             // Ex) `cp39`
-            Self::CPython { modifier } => AbiTag::CPython {
-                modifier,
+            Self::CPython { variant } => AbiTag::CPython {
+                variant,
                 python_version,
             },
             // Ex) `pypy39_pp73`
@@ -480,10 +480,10 @@ impl Implementation {
         }
     }
 
-    fn parse(name: &str, modifier: CPythonAbiModifiers) -> Result<Self, TagsError> {
+    fn parse(name: &str, variant: CPythonAbiVariants) -> Result<Self, TagsError> {
         match name {
             // Known and supported implementations.
-            "cpython" => Ok(Self::CPython { modifier }),
+            "cpython" => Ok(Self::CPython { variant }),
             "pypy" => Ok(Self::PyPy),
             "graalpy" => Ok(Self::GraalPy),
             "pyston" => Ok(Self::Pyston),
