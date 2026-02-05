@@ -36,7 +36,9 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, BuildPreferences, EmptyInstalledPackages, HashStrategy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
@@ -744,6 +746,25 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
+    // Extract build dependency preferences from the existing lock file, if available.
+    // These are used as hints so the resolver prefers previously locked versions.
+    let build_preferences = if let Some(ref lock) = existing_lock {
+        let mut prefs = std::collections::BTreeMap::new();
+        for package in lock.packages() {
+            let build_deps = package.build_dependencies();
+            if !build_deps.is_empty() {
+                let deps = build_deps
+                    .iter()
+                    .map(|dep| (dep.name().clone(), dep.version().clone()))
+                    .collect();
+                prefs.insert((package.name().clone(), package.version().cloned()), deps);
+            }
+        }
+        BuildPreferences::new(prefs)
+    } else {
+        BuildPreferences::default()
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -768,7 +789,8 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency,
         preview,
-    );
+    )
+    .with_build_preferences(build_preferences);
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
@@ -969,7 +991,11 @@ async fn do_lock(
                         .cloned()
                         .map(SupportedEnvironments::into_markers)
                         .unwrap_or_default(),
-                );
+                )
+                .with_build_resolutions(
+                    build_dispatch.build_resolutions().snapshot(),
+                    target.install_path(),
+                )?;
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))

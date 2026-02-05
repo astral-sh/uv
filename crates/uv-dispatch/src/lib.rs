@@ -27,16 +27,18 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverEnvironment,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder, Preference,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPreferences, BuildResolutions,
+    BuildStack, EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildResolutions,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -101,6 +103,9 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    build_resolutions: BuildResolutions,
+    locked_build_resolutions: LockedBuildResolutions,
+    build_preferences: BuildPreferences,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -153,6 +158,9 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            build_resolutions: BuildResolutions::default(),
+            locked_build_resolutions: LockedBuildResolutions::default(),
+            build_preferences: BuildPreferences::default(),
         }
     }
 
@@ -169,6 +177,32 @@ impl<'a> BuildDispatch<'a> {
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
         self
+    }
+
+    /// Set the locked build resolutions from a previous lock file.
+    ///
+    /// When set, build dependency resolution is skipped entirely for packages
+    /// that have locked build resolutions, and the pre-built resolution is
+    /// returned directly.
+    #[must_use]
+    pub fn with_locked_build_resolutions(mut self, resolutions: LockedBuildResolutions) -> Self {
+        self.locked_build_resolutions = resolutions;
+        self
+    }
+
+    /// Set the build dependency preferences from a previous lock file.
+    ///
+    /// Used during `uv lock` so the resolver prefers previously locked build dep
+    /// versions but can deviate if needed.
+    #[must_use]
+    pub fn with_build_preferences(mut self, preferences: BuildPreferences) -> Self {
+        self.build_preferences = preferences;
+        self
+    }
+
+    /// Return the collected build resolutions.
+    pub fn build_resolutions(&self) -> &BuildResolutions {
+        &self.build_resolutions
     }
 }
 
@@ -236,17 +270,61 @@ impl BuildContext for BuildDispatch<'_> {
         self.extra_build_variables
     }
 
+    fn record_build_resolution(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+        resolution: &Resolution,
+    ) {
+        self.build_resolutions
+            .insert(package.clone(), version.cloned(), resolution.clone());
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        package_name: Option<&'data PackageName>,
+        package_version: Option<&'data Version>,
         build_stack: &'data BuildStack,
     ) -> Result<Resolution, BuildDispatchError> {
+        // If we have a locked build resolution for this package, return it directly
+        // without running the resolver, matching the behavior of `uv sync` for
+        // regular dependencies.
+        if let Some(name) = package_name {
+            if let Some(resolution) = self.locked_build_resolutions.get(name, package_version) {
+                debug!("Using locked build resolution for `{name}` (skipping resolver)");
+                return Ok(resolution.clone());
+            }
+        }
+
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
+        let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
+        // When the lock file has stored build dependencies for this package, use
+        // them as preferences so the resolver prefers the same versions.
+        let preferences = if let Some(name) = package_name {
+            if let Some(deps) = self.build_preferences.get(name, package_version) {
+                Preferences::from_iter(
+                    deps.iter().map(|(name, version)| {
+                        Preference::from_build(name.clone(), version.clone())
+                    }),
+                    &resolver_env,
+                )
+            } else {
+                Preferences::default()
+            }
+        } else {
+            Preferences::default()
+        };
+
+        let manifest = Manifest::simple(requirements.to_vec())
+            .with_constraints(self.constraints.clone())
+            .with_preferences(preferences);
+
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
+            manifest,
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
@@ -254,7 +332,7 @@ impl BuildContext for BuildDispatch<'_> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverEnvironment::specific(marker_env),
+            resolver_env,
             self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),

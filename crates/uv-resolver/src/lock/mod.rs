@@ -27,7 +27,7 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    IndexUrl, Name, Node, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
@@ -772,6 +772,10 @@ impl Lock {
                     }
                 }
             }
+
+            // Sort build dependencies.
+            package.build_dependencies.sort();
+            package.build_dependencies.dedup();
         }
         packages.sort_by(|dist1, dist2| dist1.id.cmp(&dist2.id));
 
@@ -890,6 +894,130 @@ impl Lock {
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
         self
+    }
+
+    /// Populate build dependencies from captured build resolutions.
+    ///
+    /// Maps the collected build resolutions (keyed by package name) to the
+    /// corresponding packages in the lock file.
+    pub fn with_build_resolutions(
+        mut self,
+        build_resolutions: BTreeMap<
+            (PackageName, Option<Version>),
+            uv_distribution_types::Resolution,
+        >,
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        // Build a map from (name, version) to the build resolution for that package.
+        // For each resolution, convert distributions to Package entries and collect
+        // BuildDependency references.
+        let mut build_dep_refs: BTreeMap<(PackageName, Option<Version>), Vec<BuildDependency>> =
+            BTreeMap::new();
+        let mut build_packages: Vec<Package> = Vec::new();
+
+        for ((parent_name, parent_version), resolution) in &build_resolutions {
+            let mut deps = Vec::new();
+            for (resolved_dist, hashes) in resolution.hashes() {
+                let Some(version) = resolved_dist.version() else {
+                    continue;
+                };
+                deps.push(BuildDependency::new(
+                    resolved_dist.name().clone(),
+                    version.clone(),
+                ));
+
+                // Only add the package if it's not already in the lock.
+                let already_exists = self.packages.iter().any(|p| {
+                    p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
+                });
+                if !already_exists
+                    && !build_packages.iter().any(|p| {
+                        p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
+                    })
+                {
+                    if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) {
+                        build_packages.push(package);
+                    }
+                }
+            }
+            build_dep_refs.insert((parent_name.clone(), parent_version.clone()), deps);
+        }
+
+        // Add build dependency packages to the lock.
+        self.packages.extend(build_packages);
+
+        // Set build-dependencies references on parent packages.
+        for package in &mut self.packages {
+            let key = (package.id.name.clone(), package.id.version.clone());
+            if let Some(deps) = build_dep_refs.get(&key) {
+                package.build_dependencies = deps.clone();
+            } else {
+                let fallback_key = (package.id.name.clone(), None);
+                if let Some(deps) = build_dep_refs.get(&fallback_key) {
+                    package.build_dependencies = deps.clone();
+                }
+            }
+        }
+
+        Ok(self)
+    }
+
+    /// Construct a [`Resolution`] from the build dependencies of the given package.
+    ///
+    /// Looks up each build dependency's full `[[package]]` entry in the lock and
+    /// converts it to a `ResolvedDist` using `Package::to_dist()`. Returns `None`
+    /// if the package has no build dependencies or if any build dependency package
+    /// is missing from the lock.
+    pub fn build_resolution(
+        &self,
+        package_name: &PackageName,
+        package_version: Option<&Version>,
+        workspace_root: &Path,
+        tags: &Tags,
+        build_options: &BuildOptions,
+        markers: &MarkerEnvironment,
+    ) -> Result<Option<uv_distribution_types::Resolution>, LockError> {
+        // Find the parent package in the lock.
+        let parent = self.packages.iter().find(|p| {
+            p.id.name == *package_name
+                && (package_version.is_none() || p.id.version.as_ref() == package_version)
+        });
+        let Some(parent) = parent else {
+            return Ok(None);
+        };
+
+        if parent.build_dependencies.is_empty() {
+            return Ok(None);
+        }
+
+        let mut graph = petgraph::graph::DiGraph::new();
+        let tag_policy = TagPolicy::Required(tags);
+
+        for build_dep in &parent.build_dependencies {
+            // Find the build dep's full package entry in the lock.
+            let dep_package = self.packages.iter().find(|p| {
+                p.id.name == build_dep.name && p.id.version.as_ref() == Some(&build_dep.version)
+            });
+            let Some(dep_package) = dep_package else {
+                // Build dep package not found in lock — can't construct Resolution.
+                return Ok(None);
+            };
+
+            let HashedDist { dist, hashes } =
+                dep_package.to_dist(workspace_root, tag_policy, build_options, markers)?;
+            let version = dep_package.version().cloned();
+            let resolved_dist = ResolvedDist::Installable {
+                dist: std::sync::Arc::new(dist),
+                version,
+            };
+            graph.add_node(Node::Dist {
+                dist: resolved_dist,
+                hashes,
+                install: true,
+            });
+        }
+
+        Ok(Some(uv_distribution_types::Resolution::new(graph)))
     }
 
     /// Record the conflicting groups that were used to generate this lock.
@@ -2597,6 +2725,9 @@ pub struct Package {
     optional_dependencies: BTreeMap<ExtraName, Vec<Dependency>>,
     /// The resolved PEP 735 dependency groups of the package.
     dependency_groups: BTreeMap<GroupName, Vec<Dependency>>,
+    /// The resolved build dependencies of the package (packages needed to build this
+    /// package from a source distribution).
+    build_dependencies: Vec<BuildDependency>,
     /// The exact requirements from the package metadata.
     metadata: PackageMetadata,
 }
@@ -2662,10 +2793,60 @@ impl Package {
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
             dependency_groups: BTreeMap::default(),
+            build_dependencies: vec![],
             metadata: PackageMetadata {
                 requires_dist,
                 provides_extra,
                 dependency_groups,
+            },
+        })
+    }
+
+    /// Create a [`Package`] from a [`ResolvedDist`] and its hashes.
+    ///
+    /// This is used for build dependency packages, which don't carry metadata
+    /// (no transitive dependency tracking needed).
+    pub(crate) fn from_resolved_dist(
+        resolved_dist: &ResolvedDist,
+        hashes: &[HashDigest],
+        root: &Path,
+    ) -> Result<Self, LockError> {
+        let source = Source::from_resolved_dist(resolved_dist, root)?;
+        let version = resolved_dist.version().cloned();
+        let name = resolved_dist.name().clone();
+        let id = PackageId {
+            name,
+            version,
+            source,
+        };
+
+        let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+            return Err(LockErrorKind::InstalledBuildDep.into());
+        };
+
+        // Extract the index URL from the distribution.
+        let index = match dist.as_ref() {
+            Dist::Built(BuiltDist::Registry(dist)) => Some(&dist.best_wheel().index),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => Some(&dist.index),
+            _ => None,
+        };
+
+        let sdist = SourceDist::from_dist(&id, dist, hashes, index)?;
+        let wheels = Wheel::from_dist(dist, hashes, index)?;
+
+        Ok(Self {
+            id,
+            sdist,
+            wheels,
+            fork_markers: vec![],
+            dependencies: vec![],
+            optional_dependencies: BTreeMap::default(),
+            dependency_groups: BTreeMap::default(),
+            build_dependencies: vec![],
+            metadata: PackageMetadata {
+                requires_dist: BTreeSet::default(),
+                provides_extra: Box::default(),
+                dependency_groups: BTreeMap::default(),
             },
         })
     }
@@ -3251,6 +3432,15 @@ impl Package {
             }
         }
 
+        if !self.build_dependencies.is_empty() {
+            let deps = each_element_on_its_line_array(
+                self.build_dependencies
+                    .iter()
+                    .map(|dep| dep.to_toml().into_inline_table()),
+            );
+            table.insert("build-dependencies", value(deps));
+        }
+
         if let Some(ref sdist) = self.sdist {
             table.insert("sdist", value(sdist.to_toml()?));
         }
@@ -3383,6 +3573,11 @@ impl Package {
             Source::Git(_, git) => Some(&git.precise),
             _ => None,
         }
+    }
+
+    /// Returns the resolved build dependencies of the package.
+    pub fn build_dependencies(&self) -> &[BuildDependency] {
+        &self.build_dependencies
     }
 
     /// Return the fork markers for this package, if any.
@@ -3523,6 +3718,8 @@ struct PackageWire {
     optional_dependencies: BTreeMap<ExtraName, Vec<DependencyWire>>,
     #[serde(default, rename = "dev-dependencies", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, Vec<DependencyWire>>,
+    #[serde(default, rename = "build-dependencies")]
+    build_dependencies: Vec<BuildDependencyWire>,
 }
 
 #[derive(Clone, Default, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -3589,6 +3786,11 @@ impl PackageWire {
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
+            build_dependencies: self
+                .build_dependencies
+                .into_iter()
+                .map(BuildDependency::from)
+                .collect(),
         })
     }
 }
@@ -5070,6 +5272,64 @@ impl TryFrom<WheelWire> for Wheel {
     }
 }
 
+/// A resolved build dependency: a package pinned to a specific version, needed
+/// to build a source distribution.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub struct BuildDependency {
+    name: PackageName,
+    version: Version,
+}
+
+impl BuildDependency {
+    /// Create a new build dependency.
+    pub fn new(name: PackageName, version: Version) -> Self {
+        Self { name, version }
+    }
+
+    /// Returns the package name.
+    pub fn name(&self) -> &PackageName {
+        &self.name
+    }
+
+    /// Returns the version.
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    /// Returns the TOML representation of this build dependency.
+    fn to_toml(&self) -> Table {
+        let mut table = Table::new();
+        table.insert("name", value(self.name.to_string()));
+        table.insert("version", value(self.version.to_string()));
+        table
+    }
+}
+
+/// The wire format for a build dependency.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct BuildDependencyWire {
+    name: PackageName,
+    version: Version,
+}
+
+impl From<BuildDependencyWire> for BuildDependency {
+    fn from(wire: BuildDependencyWire) -> Self {
+        Self {
+            name: wire.name,
+            version: wire.version,
+        }
+    }
+}
+
+impl From<&BuildDependency> for BuildDependencyWire {
+    fn from(dep: &BuildDependency) -> Self {
+        Self {
+            name: dep.name.clone(),
+            version: dep.version.clone(),
+        }
+    }
+}
+
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Dependency {
@@ -5914,6 +6174,10 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(Debug, thiserror::Error)]
 enum LockErrorKind {
+    /// An error that occurs when a build dependency is an installed distribution
+    /// rather than an installable one.
+    #[error("Build dependency is an installed distribution, expected an installable one")]
+    InstalledBuildDep,
     /// An error that occurs when multiple packages with the same
     /// ID were found.
     #[error("Found duplicate package `{id}`", id = id.cyan())]

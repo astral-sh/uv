@@ -16,6 +16,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
@@ -111,10 +112,28 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
+    /// Record a build dependency resolution for the given package.
+    ///
+    /// This is called after resolving build dependencies for a source distribution,
+    /// allowing the resolution to be captured and persisted in the lock file.
+    fn record_build_resolution(
+        &self,
+        _package: &PackageName,
+        _version: Option<&Version>,
+        _resolution: &Resolution,
+    ) {
+        // Default: no-op
+    }
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
+    ///
+    /// If `package_name` and `package_version` are provided, the resolver may use previously
+    /// stored build dependency preferences for that package to speed up resolution.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        package_name: Option<&'a PackageName>,
+        package_version: Option<&'a Version>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
 

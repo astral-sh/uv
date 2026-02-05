@@ -120,6 +120,19 @@ impl Preference {
         }))
     }
 
+    /// Create a [`Preference`] from a previously resolved build dependency.
+    pub fn from_build(name: PackageName, version: Version) -> Self {
+        Self {
+            name,
+            version,
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::Any,
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+            source: PreferenceSource::Lock,
+        }
+    }
+
     /// Create a [`Preference`] from an installed distribution.
     pub fn from_installed(dist: &InstalledDist) -> Option<Self> {
         let InstalledDistKind::Registry(dist) = &dist.kind else {
