@@ -7,13 +7,24 @@ use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::RAYON_INITIALIZE;
-use zip::ZipArchive;
+use uv_warnings::warn_user_once;
+use zip::{CompressionMethod, ZipArchive};
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     reader: R,
     target: &Path,
 ) -> Result<(), Error> {
+    /// Returns `true` if the entry uses a well-known compression method.
+    ///
+    /// This currently means just stored (no compression), DEFLATE, or zstd.
+    fn entry_has_well_known_compression(method: &CompressionMethod) -> bool {
+        matches!(
+            method,
+            CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
+        )
+    }
+
     // Unzip in parallel.
     let reader = std::io::BufReader::new(reader);
     let archive = ZipArchive::new(CloneableSeekableReader::new(reader))?;
@@ -26,6 +37,13 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
         .map(|file_number| {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
+
+            if !entry_has_well_known_compression(&file.compression()) {
+                warn_user_once!(
+                    "The '{compression_method:?}' compression method is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
+                    compression_method = file.compression()
+                )
+            }
 
             if let Err(e) = validate_archive_member_name(file.name()) {
                 if !skip_validation {
