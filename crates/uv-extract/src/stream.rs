@@ -95,11 +95,11 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
         // Check for unexpected compression methods.
         // A future version of uv will reject instead of warning about these.
-        if !entry_has_well_known_compression(&zip_entry) {
+        if !entry_has_well_known_compression(zip_entry) {
             warn_user_once!(
                 "The '{compression_method:?}' compression method is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
                 compression_method = zip_entry.compression()
-            )
+            );
         }
 
         // Construct the (expected) path to the file on-disk.

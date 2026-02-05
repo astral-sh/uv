@@ -18,7 +18,7 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
     /// Returns `true` if the entry uses a well-known compression method.
     ///
     /// This currently means just stored (no compression), DEFLATE, or zstd.
-    fn entry_has_well_known_compression(method: &CompressionMethod) -> bool {
+    fn entry_has_well_known_compression(method: CompressionMethod) -> bool {
         matches!(
             method,
             CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
@@ -38,11 +38,11 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
 
-            if !entry_has_well_known_compression(&file.compression()) {
+            if !entry_has_well_known_compression(file.compression()) {
                 warn_user_once!(
                     "The '{compression_method:?}' compression method is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
                     compression_method = file.compression()
-                )
+                );
             }
 
             if let Err(e) = validate_archive_member_name(file.name()) {
