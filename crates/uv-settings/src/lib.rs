@@ -654,15 +654,15 @@ impl EnvironmentOptions {
     pub fn new() -> Result<Self, Error> {
         // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
         // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
-        let http_timeout = parse_integer_environment_variable_allow_seconds_suffix(
+        let http_timeout = parse_seconds_environment_variable(
             EnvVars::UV_HTTP_TIMEOUT,
             Some("value should be an integer number of seconds"),
         )?
-        .or(parse_integer_environment_variable_allow_seconds_suffix(
+        .or(parse_seconds_environment_variable(
             EnvVars::UV_REQUEST_TIMEOUT,
             Some("value should be an integer number of seconds"),
         )?)
-        .or(parse_integer_environment_variable_allow_seconds_suffix(
+        .or(parse_seconds_environment_variable(
             EnvVars::HTTP_TIMEOUT,
             Some("value should be an integer number of seconds"),
         )?)
@@ -701,7 +701,7 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
-            upload_http_timeout: parse_integer_environment_variable_allow_seconds_suffix(
+            upload_http_timeout: parse_seconds_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
                 Some("value should be an integer number of seconds"),
             )?
@@ -807,7 +807,7 @@ where
 ///
 /// This is used for select timeout-related environment variables where the UX can be confusing
 /// because hints often display values like `30s` (seconds).
-fn parse_integer_environment_variable_allow_seconds_suffix<T>(
+fn parse_seconds_environment_variable<T>(
     name: &'static str,
     help: Option<&str>,
 ) -> Result<Option<T>, Error>
@@ -834,7 +834,7 @@ where
         return Ok(None);
     }
 
-    parse_integer_allow_seconds_suffix(&value)
+    parse_integer_seconds(&value)
         .map(Some)
         .map_err(|err| {
             Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
@@ -849,7 +849,8 @@ where
         })
 }
 
-fn parse_integer_allow_seconds_suffix<T>(value: &str) -> Result<T, String>
+/// Parse an integer number of seconds from a string, allowing an optional trailing `s` suffix.
+fn parse_integer_seconds<T>(value: &str) -> Result<T, String>
 where
     T: std::str::FromStr + Copy,
     <T as std::str::FromStr>::Err: std::fmt::Display,
@@ -883,15 +884,12 @@ fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_integer_allow_seconds_suffix;
+    use super::parse_integer_seconds;
 
     #[test]
     fn parses_integer_with_optional_seconds_suffix() {
-        assert_eq!(
-            parse_integer_allow_seconds_suffix::<u64>("30s").unwrap(),
-            30
-        );
-        assert_eq!(parse_integer_allow_seconds_suffix::<u64>("30").unwrap(), 30);
+        assert_eq!(parse_integer_seconds::<u64>("30s").unwrap(), 30);
+        assert_eq!(parse_integer_seconds::<u64>("30").unwrap(), 30);
     }
 }
 
