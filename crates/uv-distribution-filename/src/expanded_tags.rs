@@ -215,7 +215,7 @@ mod tests {
                                 3,
                                 9,
                             ),
-                            modifier: CPythonAbiModifiers(
+                            variant: CPythonAbiVariants(
                                 0,
                             ),
                         },
@@ -256,7 +256,7 @@ mod tests {
                                     3,
                                     12,
                                 ),
-                                modifier: CPythonAbiModifiers(
+                                variant: CPythonAbiVariants(
                                     0,
                                 ),
                             },
@@ -431,7 +431,7 @@ mod tests {
                             3,
                             9,
                         ),
-                        modifier: CPythonAbiModifiers(
+                        variant: CPythonAbiVariants(
                             0,
                         ),
                     },
@@ -440,7 +440,7 @@ mod tests {
                             3,
                             10,
                         ),
-                        modifier: CPythonAbiModifiers(
+                        variant: CPythonAbiVariants(
                             0,
                         ),
                     },

@@ -25,7 +25,7 @@ Ok(
                             3,
                             11,
                         ),
-                        modifier: CPythonAbiModifiers(
+                        variant: CPythonAbiVariants(
                             0,
                         ),
                     },
