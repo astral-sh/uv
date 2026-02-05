@@ -645,9 +645,15 @@ impl EnvVars {
     #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
-    /// Timeout (in seconds) for HTTP requests. (default: 30 s)
+    /// Timeout (in seconds) for HTTP reads. (default: 30 s)
     #[attr_added_in("0.1.7")]
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// Timeout (in seconds) to connect to a server. (default: 10 s)
+    ///
+    /// If `UV_HTTP_TIMEOUT` is lower than this value, `UV_HTTP_TIMEOUT` will be used instead.
+    #[attr_added_in("next release")]
+    pub const UV_HTTP_CONNECT_TIMEOUT: &'static str = "UV_HTTP_CONNECT_TIMEOUT";
 
     /// The number of retries for HTTP requests. (default: 3)
     #[attr_added_in("0.7.21")]
