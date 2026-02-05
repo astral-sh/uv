@@ -41,9 +41,10 @@ use uv_resolver::{
     Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPreferences, BuildResolutionInfo,
-    BuildResolutions, BuildStack, EmptyInstalledPackages, HashStrategy, InFlight,
-    LockedBuildResolutions, ResolvedBuildDep, ResolvedRequirements, SourceTreeEditablePolicy,
+    AnyErrorBuild, BuildArena, BuildContext, BuildDepEdge, BuildDepPackageEntry, BuildIsolation,
+    BuildPreferences, BuildResolutionInfo, BuildResolutions, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight, LockedBuildResolutions, ResolvedBuildDep, ResolvedRequirements,
+    SourceTreeEditablePolicy,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -322,16 +323,6 @@ impl BuildContext for BuildDispatch<'_> {
         self.extra_build_variables
     }
 
-    fn record_build_resolution(
-        &self,
-        _package: &PackageName,
-        _version: Option<&Version>,
-        _resolution: &Resolution,
-    ) {
-        // No-op: build resolutions with markers are captured directly in resolve()
-        // when universal_resolution is enabled.
-    }
-
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -445,11 +436,12 @@ impl BuildContext for BuildDispatch<'_> {
             )
         })?;
 
-        // If doing universal resolution, capture build deps with markers.
+        // If doing universal resolution, capture the build resolution graph
+        // (direct requirements + all packages with their dependency edges).
         if self.universal_resolution {
             if let Some(name) = package_name {
-                let deps = resolver_output
-                    .build_deps_with_markers()
+                let (roots, packages) = resolver_output.build_resolution_graph();
+                let roots = roots
                     .into_iter()
                     .map(|(dist, hashes, marker)| ResolvedBuildDep {
                         dist,
@@ -457,10 +449,25 @@ impl BuildContext for BuildDispatch<'_> {
                         marker,
                     })
                     .collect();
+                let packages = packages
+                    .into_iter()
+                    .map(|(dist, hashes, deps)| BuildDepPackageEntry {
+                        dist,
+                        hashes,
+                        dependencies: deps
+                            .into_iter()
+                            .map(|(name, version, marker)| BuildDepEdge {
+                                name,
+                                version,
+                                marker,
+                            })
+                            .collect(),
+                    })
+                    .collect();
                 self.build_resolutions.insert(
                     name.clone(),
                     package_version.cloned(),
-                    BuildResolutionInfo { deps },
+                    BuildResolutionInfo { roots, packages },
                 );
             }
         }
