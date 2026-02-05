@@ -7565,6 +7565,10 @@ pub struct DisplayTreeArgs {
     /// Show compressed wheel sizes for packages in the tree.
     #[arg(long)]
     pub show_sizes: bool,
+
+    /// Output the dependency tree as JSON.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]
