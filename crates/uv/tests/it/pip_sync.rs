@@ -612,7 +612,7 @@ fn install_url() -> Result<()> {
 
 /// Install a package into a virtual environment from a Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_commit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -643,7 +643,7 @@ fn install_git_commit() -> Result<()> {
 
 /// Install a package into a virtual environment from a Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_tag() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -676,7 +676,7 @@ fn install_git_tag() -> Result<()> {
 
 /// Install two packages from the same Git repository.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_subdirectories() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -912,7 +912,7 @@ fn install_version_then_install_url() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn install_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -1472,7 +1472,7 @@ fn install_url_source_dist_cached() -> Result<()> {
 
 /// Check that we show the right messages on cached, Git source distribution installs.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn install_git_source_dist_cached() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2093,7 +2093,7 @@ fn reinstall_package() -> Result<()> {
 
 /// Verify that we can force reinstall of Git dependencies.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn reinstall_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4005,7 +4005,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
 /// Reject Git dependencies when `--require-hashes` is provided.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn require_hashes_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -6157,7 +6157,7 @@ fn incompatible_platform_direct_url() -> Result<()> {
 }
 
 /// Test that a missing Python version is not installed when not using `--target` or `--prefix`.
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn sync_missing_python_no_target() -> Result<()> {
     // Create a context that only has Python 3.11 available.
@@ -6183,7 +6183,7 @@ fn sync_missing_python_no_target() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 #[test]
 fn sync_with_target_installs_missing_python() -> Result<()> {
     // Create a context that only has Python 3.11 available.

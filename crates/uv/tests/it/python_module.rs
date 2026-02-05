@@ -472,7 +472,7 @@ fn find_uv_bin_error_message() {
     );
 }
 
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn find_uv_bin_py38() {
     let context = TestContext::new("3.8")

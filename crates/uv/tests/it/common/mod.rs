@@ -671,7 +671,7 @@ impl TestContext {
         fs_err::create_dir_all(&bin_dir).expect("Failed to create test bin directory");
 
         // When the `git` feature is disabled, enforce that the test suite does not use `git`
-        if cfg!(not(feature = "git")) {
+        if cfg!(not(feature = "test-git")) {
             Self::disallow_git_cli(&bin_dir).expect("Failed to setup disallowed `git` command");
         }
 

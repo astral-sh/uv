@@ -3,7 +3,7 @@
 //! Generated with `./scripts/sync_scenarios.sh`
 //! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
 //!
-#![cfg(all(feature = "python", feature = "pypi", unix))]
+#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
 use std::process::Command;
 
@@ -3397,7 +3397,7 @@ fn python_greater_than_current_many() {
 ///     └── a-1.0.0
 ///         └── requires python>=3.13.2 (incompatible with environment)
 /// ```
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn python_greater_than_current_patch() {
     let context = TestContext::new("3.13.0");

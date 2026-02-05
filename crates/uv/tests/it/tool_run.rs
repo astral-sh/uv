@@ -933,7 +933,7 @@ fn tool_run_url() {
 
 /// Test running a tool with a Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn tool_run_git() {
     let context = TestContext::new("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
@@ -1025,7 +1025,7 @@ fn tool_run_git() {
 
 /// Test running a tool with a Git LFS enabled requirement.
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn tool_run_git_lfs() {
     let context = TestContext::new("3.13")
         .with_filtered_counts()

@@ -831,7 +831,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn seed() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -855,7 +855,7 @@ fn seed() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn seed_older_python_version() {
     let context = TestContext::new_with_versions(&["3.11"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -964,7 +964,7 @@ fn create_venv_unknown_python_patch() {
     context.venv.assert(predicates::path::missing());
 }
 
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn create_venv_python_patch() {
     let context = TestContext::new_with_versions(&["3.12.9"]);

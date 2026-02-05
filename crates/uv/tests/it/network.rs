@@ -764,7 +764,7 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
 }
 
 /// Test that valid proxy URL in uv.toml routes requests through the proxy.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_valid_url_in_uv_toml() {
     let context = TestContext::new("3.12");
@@ -823,7 +823,7 @@ async fn proxy_valid_url_in_uv_toml() {
 }
 
 /// Test that https-proxy in uv.toml routes HTTPS requests through a CONNECT tunnel proxy.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[test]
 fn proxy_https_proxy_in_uv_toml() {
     let context = TestContext::new("3.12");
@@ -860,7 +860,7 @@ fn proxy_https_proxy_in_uv_toml() {
 }
 
 /// Test that no-proxy in uv.toml bypasses the proxy for specified hosts.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_no_proxy_in_uv_toml() {
     let context = TestContext::new("3.12");
@@ -928,7 +928,7 @@ no-proxy = ["{target_host}"]
 }
 
 /// Test that proxy URLs without a scheme in uv.toml default to http://.
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 #[tokio::test]
 async fn proxy_schemeless_url_in_uv_toml() {
     let context = TestContext::new("3.12");

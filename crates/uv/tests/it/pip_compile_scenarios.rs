@@ -3,7 +3,7 @@
 //! Generated with `./scripts/sync_scenarios.sh`
 //! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
 //!
-#![cfg(all(feature = "python", feature = "pypi", unix))]
+#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
 use std::process::Command;
 
@@ -360,7 +360,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 ///     └── a-1.0.0
 ///         └── requires python>=3.9.4
 /// ```
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_no_patch() -> Result<()> {
     let context = TestContext::new("3.9.20");
@@ -408,7 +408,7 @@ fn python_patch_override_no_patch() -> Result<()> {
 ///     └── a-1.0.0
 ///         └── requires python>=3.9.0
 /// ```
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn python_patch_override_patch_compatible() -> Result<()> {
     let context = TestContext::new("3.9.20");

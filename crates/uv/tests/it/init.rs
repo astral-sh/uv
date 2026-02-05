@@ -939,7 +939,7 @@ fn init_script_shebang() -> Result<()> {
 
 // Make sure that `uv init --script` picks the latest non-pre-release version of Python
 // for the `requires-python` constraint.
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn init_script_picks_latest_stable_version() -> Result<()> {
     let managed_versions = &["3.14.0rc2", "3.13", "3.12"];
@@ -2802,7 +2802,7 @@ fn init_failure_with_invalid_option_named_backend() {
     ");
 }
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn init_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -2863,7 +2863,7 @@ fn init_vcs_none() {
 
 /// Run `uv init` from within a Git repository. Do not try to reinitialize one.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn init_inside_git_repo() {
     let context = TestContext::new("3.12");
 
@@ -3336,7 +3336,7 @@ fn init_library_poetry() -> Result<()> {
 
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
-#[cfg(feature = "crates-io")]
+#[cfg(feature = "test-crates-io")]
 fn init_app_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3591,7 +3591,7 @@ fn init_app_build_backend_scikit() -> Result<()> {
 
 /// Run `uv init --lib --build-backend maturin` to create a packaged application project
 #[test]
-#[cfg(feature = "crates-io")]
+#[cfg(feature = "test-crates-io")]
 fn init_lib_build_backend_maturin() -> Result<()> {
     let context = TestContext::new("3.12");
 

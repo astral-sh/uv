@@ -754,7 +754,7 @@ fn mixed_requires_python() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 fn group_requires_python_useful_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
@@ -899,7 +899,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 /// Ensure that group requires-python solves an actual problem
 #[test]
 #[cfg(not(windows))]
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 fn group_requires_python_useful_non_defaults() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.9"]);
 
@@ -7033,7 +7033,7 @@ fn sync_active_script_environment_json() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_workspace_custom_environment_path() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -8833,7 +8833,7 @@ fn sync_no_sources_missing_member() -> Result<()> {
 
 /// Test `--no-sources-package` with sync to selectively disable sources.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_no_sources_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -9855,7 +9855,7 @@ fn sync_derivation_chain_group() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/9743>
 #[test]
-#[cfg(all(feature = "slow-tests", feature = "git"))]
+#[cfg(all(feature = "test-slow", feature = "test-git"))]
 fn sync_stale_egg_info() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -9961,7 +9961,7 @@ fn sync_stale_egg_info() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_git_repeated_member_static_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -10055,7 +10055,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -10173,7 +10173,7 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/8887>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_git_repeated_member_backwards_path() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -10356,7 +10356,7 @@ fn mismatched_name_cached_wheel() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/9516>
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn sync_git_path_dependency() -> Result<()> {
     let context = TestContext::new("3.13");
 
@@ -14033,7 +14033,7 @@ fn reject_unmatched_runtime() -> Result<()> {
 
 /// Test Git LFS configuration.
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn sync_git_lfs() -> Result<()> {
     let context = TestContext::new("3.13").with_git_lfs_config();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
