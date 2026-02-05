@@ -1157,6 +1157,61 @@ impl Lock {
         Ok(resolutions)
     }
 
+    /// Extract all build dependency `(name, version)` pairs for each package,
+    /// walking the dependency graph from `build-dependencies` through transitive
+    /// `dependencies` edges. Used as resolver preferences during re-lock so that
+    /// transitive build deps keep their previously resolved versions.
+    pub fn build_dep_preferences(
+        &self,
+    ) -> BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>> {
+        // Build a lookup map from (name, version) to package.
+        let package_map: FxHashMap<(&PackageName, Option<&Version>), &Package> = self
+            .packages
+            .iter()
+            .map(|p| ((&p.id.name, p.id.version.as_ref()), p))
+            .collect();
+
+        let mut result = BTreeMap::new();
+
+        for package in &self.packages {
+            if package.build_dependencies.is_empty() {
+                continue;
+            }
+
+            let mut deps = Vec::new();
+            let mut seen: FxHashSet<(&PackageName, &Version)> = FxHashSet::default();
+            let mut queue: VecDeque<(&PackageName, &Version)> = VecDeque::new();
+
+            // Seed with direct build dependencies.
+            for build_dep in &package.build_dependencies {
+                if seen.insert((&build_dep.name, &build_dep.version)) {
+                    queue.push_back((&build_dep.name, &build_dep.version));
+                }
+            }
+
+            // BFS through transitive dependencies.
+            while let Some((dep_name, dep_version)) = queue.pop_front() {
+                deps.push((dep_name.clone(), dep_version.clone()));
+
+                if let Some(dep_package) = package_map.get(&(dep_name, Some(dep_version))) {
+                    for dep in &dep_package.dependencies {
+                        if let Some(transitive_version) = dep.package_id.version.as_ref() {
+                            if seen.insert((&dep.package_id.name, transitive_version)) {
+                                queue.push_back((&dep.package_id.name, transitive_version));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !deps.is_empty() {
+                result.insert((package.id.name.clone(), package.id.version.clone()), deps);
+            }
+        }
+
+        result
+    }
+
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {

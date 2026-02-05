@@ -748,19 +748,10 @@ async fn do_lock(
 
     // Extract build dependency preferences from the existing lock file, if available.
     // These are used as hints so the resolver prefers previously locked versions.
+    // We walk the full dependency graph (direct + transitive) to ensure all build
+    // dep versions are pinned, not just direct requirements.
     let build_preferences = if let Some(ref lock) = existing_lock {
-        let mut prefs = BTreeMap::new();
-        for package in lock.packages() {
-            let build_deps = package.build_dependencies();
-            if !build_deps.is_empty() {
-                let deps = build_deps
-                    .iter()
-                    .map(|dep| (dep.name().clone(), dep.version().clone()))
-                    .collect();
-                prefs.insert((package.name().clone(), package.version().cloned()), deps);
-            }
-        }
-        BuildPreferences::new(prefs)
+        BuildPreferences::new(lock.build_dep_preferences())
     } else {
         BuildPreferences::default()
     };
