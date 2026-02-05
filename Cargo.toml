@@ -77,7 +77,7 @@ uv-warnings = { version = "0.0.19", path = "crates/uv-warnings" }
 uv-windows = { version = "0.0.19", path = "crates/uv-windows" }
 uv-workspace = { version = "0.0.19", path = "crates/uv-workspace" }
 
-ambient-id = { version = "0.0.8", default-features = false, features = ["astral-reqwest-middleware"] }
+ambient-id = { version = "0.0.10", default-features = false, features = ["astral-reqwest-middleware"] }
 anstream = { version = "0.6.15" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
