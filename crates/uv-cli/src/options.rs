@@ -2,6 +2,7 @@ use std::fmt;
 
 use anstream::eprintln;
 
+use tracing::debug;
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{
@@ -219,7 +220,10 @@ pub fn resolve_and_combine_indexes(
     let resolve = |index_arg: IndexArg| -> Index {
         #[allow(clippy::print_stderr, clippy::exit)]
         match index_arg.try_resolve(&filesystem_indexes, strategy) {
-            Ok(index) => index,
+            Ok(index) => {
+                debug!("Resolved index by name: {:?}", index);
+                index
+            }
             Err(error) => {
                 eprintln!("error: {error}");
                 std::process::exit(2);
