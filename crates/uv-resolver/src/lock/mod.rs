@@ -898,71 +898,147 @@ impl Lock {
 
     /// Populate build dependencies from captured build resolutions.
     ///
-    /// Maps the collected build resolutions (keyed by package name) to the
-    /// corresponding packages in the lock file, including markers.
+    /// Only **direct** build requirements are stored in `build-dependencies`,
+    /// consistent with how regular `dependencies` work. The build dep packages
+    /// are added to the lock with their `dependencies` populated so that
+    /// transitive deps can be walked at sync time via BFS.
     pub fn with_build_resolutions(
         mut self,
         build_resolutions: &BTreeMap<(PackageName, Option<Version>), uv_types::BuildResolutionInfo>,
         root: &Path,
     ) -> Result<Self, LockError> {
-        // Build a map from (name, version) to the build resolution for that package.
-        // For each resolution, convert distributions to Package entries and collect
-        // BuildDependency references with markers.
+        // Build a set of existing (name, version) pairs for dedup.
+        let mut existing_packages: FxHashSet<(PackageName, Version)> = self
+            .packages
+            .iter()
+            .filter_map(|p| {
+                p.id.version
+                    .as_ref()
+                    .map(|v| (p.id.name.clone(), v.clone()))
+            })
+            .collect();
+
+        // Track which packages are newly created (need dependency population).
+        let mut newly_created: FxHashSet<(PackageName, Version)> = FxHashSet::default();
+
+        // Collect direct build dep refs per parent, and new packages to add.
         let mut build_dep_refs: BTreeMap<(PackageName, Option<Version>), Vec<BuildDependency>> =
             BTreeMap::new();
-        let mut build_packages: Vec<Package> = Vec::new();
+        let mut new_packages: Vec<Package> = Vec::new();
 
+        // First pass: create all new Package entries (without dependencies) and
+        // collect direct build requirements per parent.
         for ((parent_name, parent_version), info) in build_resolutions {
-            let mut deps = Vec::new();
-            for build_dep in &info.deps {
-                let resolved_dist = &build_dep.dist;
-                let hashes = &build_dep.hashes;
-                let marker = &build_dep.marker;
+            // Create Package entries for any packages not already in the lock.
+            for entry in &info.packages {
+                let resolved_dist = &entry.dist;
+                let hashes = &entry.hashes;
 
                 let Some(version) = resolved_dist.version() else {
                     continue;
                 };
 
-                // Simplify marker against requires-python for consistency with regular deps.
-                // SimplifiedMarkerTree removes redundant python version constraints.
+                let key = (resolved_dist.name().clone(), version.clone());
+                if existing_packages.contains(&key) {
+                    continue;
+                }
+
+                if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root) {
+                    existing_packages.insert(key.clone());
+                    newly_created.insert(key);
+                    new_packages.push(package);
+                }
+            }
+
+            // Collect only the direct build requirements (root edges) as build-dependencies.
+            let mut deps = Vec::new();
+            for root_dep in &info.roots {
+                let resolved_dist = &root_dep.dist;
+                let marker = &root_dep.marker;
+
+                let Some(version) = resolved_dist.version() else {
+                    continue;
+                };
+
                 let simplified = SimplifiedMarkerTree::new(&self.requires_python, *marker);
-                // Only include marker if it's not always true after simplification.
                 let marker_opt = simplified
                     .try_to_string()
                     .map(|_| simplified.as_simplified_marker_tree());
 
-                // Check if the package already exists in the lock or in our collected build packages.
-                let already_exists = self.packages.iter().any(|p| {
-                    p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
-                }) || build_packages.iter().any(|p| {
-                    p.id.name == *resolved_dist.name() && p.id.version.as_ref() == Some(version)
-                });
-
-                if already_exists {
-                    // Package exists, safe to add the dependency reference.
-                    deps.push(BuildDependency::new(
-                        resolved_dist.name().clone(),
-                        version.clone(),
-                        marker_opt,
-                    ));
-                } else if let Ok(package) = Package::from_resolved_dist(resolved_dist, hashes, root)
-                {
-                    // Package was successfully created, add both the package and the dependency.
-                    build_packages.push(package);
-                    deps.push(BuildDependency::new(
-                        resolved_dist.name().clone(),
-                        version.clone(),
-                        marker_opt,
-                    ));
-                }
-                // If the package doesn't exist and can't be created, skip this dependency
-                // to avoid dangling references in the lock file.
+                deps.push(BuildDependency::new(
+                    resolved_dist.name().clone(),
+                    version.clone(),
+                    marker_opt,
+                ));
             }
             build_dep_refs.insert((parent_name.clone(), parent_version.clone()), deps);
         }
 
-        // Add build dependency packages to the lock.
-        self.packages.extend(build_packages);
+        // Add new packages to the lock so we can look up PackageIds.
+        self.packages.extend(new_packages);
+
+        // Build a (name, version) → PackageId map for resolving dependency edges.
+        let package_id_map: FxHashMap<(PackageName, Version), PackageId> = self
+            .packages
+            .iter()
+            .filter_map(|p| {
+                p.id.version
+                    .as_ref()
+                    .map(|v| ((p.id.name.clone(), v.clone()), p.id.clone()))
+            })
+            .collect();
+
+        // Second pass: populate dependencies on newly created packages.
+        // Collect updates keyed by (name, version) to apply afterward.
+        let mut dep_updates: FxHashMap<(PackageName, Version), Vec<Dependency>> =
+            FxHashMap::default();
+
+        for ((_parent_name, _parent_version), info) in build_resolutions {
+            for entry in &info.packages {
+                let resolved_dist = &entry.dist;
+                let Some(version) = resolved_dist.version() else {
+                    continue;
+                };
+
+                let key = (resolved_dist.name().clone(), version.clone());
+
+                // Only populate deps for packages we created (not pre-existing ones
+                // that already have their deps from the main resolution).
+                if !newly_created.contains(&key) || dep_updates.contains_key(&key) {
+                    continue;
+                }
+
+                let mut deps = Vec::new();
+                for dep_edge in &entry.dependencies {
+                    let dep_key = (dep_edge.name.clone(), dep_edge.version.clone());
+                    let Some(dep_id) = package_id_map.get(&dep_key) else {
+                        continue;
+                    };
+                    let simplified =
+                        SimplifiedMarkerTree::new(&self.requires_python, dep_edge.marker);
+                    let complexified = simplified.into_marker(&self.requires_python);
+                    deps.push(Dependency {
+                        package_id: dep_id.clone(),
+                        extra: BTreeSet::default(),
+                        simplified_marker: simplified,
+                        complexified_marker: UniversalMarker::from_combined(complexified),
+                    });
+                }
+                deps.sort();
+                deps.dedup();
+                dep_updates.insert(key, deps);
+            }
+        }
+
+        // Apply dependency updates to packages.
+        for package in &mut self.packages {
+            if let Some(version) = &package.id.version {
+                let key = (package.id.name.clone(), version.clone());
+                if let Some(deps) = dep_updates.remove(&key) {
+                    package.dependencies = deps;
+                }
+            }
+        }
 
         // Set build-dependencies references on parent packages.
         for package in &mut self.packages {
@@ -975,73 +1051,20 @@ impl Lock {
                     package.build_dependencies.clone_from(deps);
                 }
             }
+            // Ensure build dependencies are sorted and deduplicated.
+            package.build_dependencies.sort();
+            package.build_dependencies.dedup();
         }
 
         Ok(self)
     }
 
-    /// Construct a [`Resolution`] from the build dependencies of the given package.
-    ///
-    /// Looks up each build dependency's full `[[package]]` entry in the lock and
-    /// converts it to a `ResolvedDist` using `Package::to_dist()`. Returns `None`
-    /// if the package has no build dependencies or if any build dependency package
-    /// is missing from the lock.
-    pub fn build_resolution(
-        &self,
-        package_name: &PackageName,
-        package_version: Option<&Version>,
-        workspace_root: &Path,
-        tags: &Tags,
-        build_options: &BuildOptions,
-        markers: &MarkerEnvironment,
-    ) -> Result<Option<uv_distribution_types::Resolution>, LockError> {
-        // Find the parent package in the lock.
-        let parent = self.packages.iter().find(|p| {
-            p.id.name == *package_name
-                && (package_version.is_none() || p.id.version.as_ref() == package_version)
-        });
-        let Some(parent) = parent else {
-            return Ok(None);
-        };
-
-        if parent.build_dependencies.is_empty() {
-            return Ok(None);
-        }
-
-        let mut graph = petgraph::graph::DiGraph::new();
-        let tag_policy = TagPolicy::Required(tags);
-
-        for build_dep in &parent.build_dependencies {
-            // Find the build dep's full package entry in the lock.
-            let dep_package = self.packages.iter().find(|p| {
-                p.id.name == build_dep.name && p.id.version.as_ref() == Some(&build_dep.version)
-            });
-            let Some(dep_package) = dep_package else {
-                // Build dep package not found in lock — can't construct Resolution.
-                return Ok(None);
-            };
-
-            let HashedDist { dist, hashes } =
-                dep_package.to_dist(workspace_root, tag_policy, build_options, markers)?;
-            let version = dep_package.version().cloned();
-            let resolved_dist = ResolvedDist::Installable {
-                dist: std::sync::Arc::new(dist),
-                version,
-            };
-            graph.add_node(Node::Dist {
-                dist: resolved_dist,
-                hashes,
-                install: true,
-            });
-        }
-
-        Ok(Some(uv_distribution_types::Resolution::new(graph)))
-    }
-
     /// Construct all build resolutions for packages that have build dependencies.
     ///
-    /// This is more efficient than calling `build_resolution` for each package
-    /// individually, as it builds a package lookup map once and reuses it.
+    /// Walks the dependency graph (BFS) from each package's `build-dependencies`
+    /// through the `dependencies` of each transitive build dep, evaluating markers
+    /// at each edge. This is consistent with how `to_resolution()` handles regular
+    /// dependencies.
     pub fn all_build_resolutions(
         &self,
         workspace_root: &Path,
@@ -1053,11 +1076,11 @@ impl Lock {
         LockError,
     > {
         // Build a lookup map from (name, version) to package for O(1) lookups.
-        let package_map: std::collections::HashMap<(&PackageName, Option<&Version>), &Package> =
-            self.packages
-                .iter()
-                .map(|p| ((&p.id.name, p.id.version.as_ref()), p))
-                .collect();
+        let package_map: FxHashMap<(&PackageName, Option<&Version>), &Package> = self
+            .packages
+            .iter()
+            .map(|p| ((&p.id.name, p.id.version.as_ref()), p))
+            .collect();
 
         let mut resolutions = BTreeMap::new();
         let tag_policy = TagPolicy::Required(tags);
@@ -1068,12 +1091,13 @@ impl Lock {
             }
 
             let mut graph = petgraph::graph::DiGraph::new();
+            let mut seen: FxHashSet<(&PackageName, &Version)> = FxHashSet::default();
+            let mut queue: VecDeque<(&PackageName, &Version)> = VecDeque::new();
             let mut all_deps_found = true;
 
+            // Seed the BFS with direct build dependencies (root edges).
             for build_dep in &package.build_dependencies {
-                // Skip build deps whose markers don't match the current environment.
-                // Complexify the marker (add back requires-python constraints) before evaluation,
-                // since we store simplified markers in the lock file.
+                // Evaluate the build dep's marker against the current environment.
                 if let Some(marker) = build_dep.marker() {
                     let complexified = self.requires_python.complexify_markers(*marker);
                     if !complexified.evaluate(markers, &[]) {
@@ -1081,14 +1105,20 @@ impl Lock {
                     }
                 }
 
-                // Look up the build dep's full package entry using the map.
-                let dep_package = package_map.get(&(&build_dep.name, Some(&build_dep.version)));
+                if seen.insert((&build_dep.name, &build_dep.version)) {
+                    queue.push_back((&build_dep.name, &build_dep.version));
+                }
+            }
+
+            // BFS through the dependency graph.
+            while let Some((dep_name, dep_version)) = queue.pop_front() {
+                let dep_package = package_map.get(&(dep_name, Some(dep_version)));
                 let Some(dep_package) = dep_package else {
-                    // Build dep package not found in lock — skip this package's resolution.
                     all_deps_found = false;
                     break;
                 };
 
+                // Add this package to the resolution graph.
                 let HashedDist { dist, hashes } =
                     dep_package.to_dist(workspace_root, tag_policy, build_options, markers)?;
                 let version = dep_package.version().cloned();
@@ -1101,6 +1131,19 @@ impl Lock {
                     hashes,
                     install: true,
                 });
+
+                // Walk this package's dependencies, evaluating markers.
+                for dep in &dep_package.dependencies {
+                    if !dep.complexified_marker.evaluate_no_extras(markers) {
+                        continue;
+                    }
+                    let Some(transitive_version) = dep.package_id.version.as_ref() else {
+                        continue;
+                    };
+                    if seen.insert((&dep.package_id.name, transitive_version)) {
+                        queue.push_back((&dep.package_id.name, transitive_version));
+                    }
+                }
             }
 
             if all_deps_found {

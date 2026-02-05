@@ -76,8 +76,8 @@ fn lock_build_dependencies() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -204,12 +204,10 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "setuptools", version = "69.2.0" },
-            { name = "idna", version = "3.6" },
-            { name = "wheel", version = "0.43.0" },
-            { name = "sniffio", version = "1.3.1" },
-            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
+            { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -272,6 +270,10 @@ fn lock_build_dependencies_universal() -> Result<()> {
         name = "anyio"
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
@@ -373,8 +375,8 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -437,8 +439,8 @@ fn lock_build_dependencies_preference() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -570,16 +572,16 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         name = "dep-a"
         source = { directory = "dep-a" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
         name = "dep-b"
         source = { directory = "dep-b" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -701,8 +703,8 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -765,8 +767,8 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -883,8 +885,8 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -1008,8 +1010,8 @@ fn lock_build_dependencies_extra() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]
@@ -1126,8 +1128,8 @@ fn lock_build_dependencies_fork() -> Result<()> {
         name = "dep"
         source = { directory = "dep" }
         build-dependencies = [
-            { name = "wheel", version = "0.43.0" },
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[package]]

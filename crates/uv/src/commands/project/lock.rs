@@ -749,7 +749,7 @@ async fn do_lock(
     // Extract build dependency preferences from the existing lock file, if available.
     // These are used as hints so the resolver prefers previously locked versions.
     let build_preferences = if let Some(ref lock) = existing_lock {
-        let mut prefs = std::collections::BTreeMap::new();
+        let mut prefs = BTreeMap::new();
         for package in lock.packages() {
             let build_deps = package.build_dependencies();
             if !build_deps.is_empty() {

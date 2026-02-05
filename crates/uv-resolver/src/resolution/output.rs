@@ -6,6 +6,7 @@ use indexmap::IndexSet;
 use petgraph::{
     Directed, Direction,
     graph::{Graph, NodeIndex},
+    visit::EdgeRef,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
@@ -598,19 +599,42 @@ impl ResolverOutput {
             })
     }
 
-    /// Extract build dependency info with markers for each resolved package.
+    /// Extract the build resolution graph: direct build requirements (root edges)
+    /// and all packages with their direct dependency edges.
     ///
-    /// Returns a list of (dist, hashes, marker) tuples for all resolved packages.
-    /// The marker indicates when each package is needed.
-    pub fn build_deps_with_markers(
+    /// This preserves the dependency graph structure so that transitive build
+    /// dependencies can be walked at sync time with proper marker evaluation,
+    /// consistent with how `to_resolution()` handles regular dependencies.
+    ///
+    /// Returns `(roots, packages)` where:
+    /// - `roots`: direct build requirements as `(dist, hashes, marker)` tuples
+    /// - `packages`: all packages as `(dist, hashes, deps)` tuples, where each
+    ///   dep is `(name, version, marker)`
+    #[expect(clippy::type_complexity)]
+    pub fn build_resolution_graph(
         &self,
-    ) -> Vec<(
-        ResolvedDist,
-        Vec<uv_pypi_types::HashDigest>,
-        uv_pep508::MarkerTree,
-    )> {
-        let mut result = Vec::new();
+    ) -> (
+        Vec<(
+            ResolvedDist,
+            Vec<uv_pypi_types::HashDigest>,
+            uv_pep508::MarkerTree,
+        )>,
+        Vec<(
+            ResolvedDist,
+            Vec<uv_pypi_types::HashDigest>,
+            Vec<(PackageName, Version, uv_pep508::MarkerTree)>,
+        )>,
+    ) {
+        let mut roots = Vec::new();
+        let mut packages = Vec::new();
 
+        // Find the root node.
+        let root_index = self
+            .graph
+            .node_indices()
+            .find(|&idx| matches!(self.graph[idx], ResolutionGraphNode::Root));
+
+        // Collect all base packages with their direct dependency edges.
         for node_index in self.graph.node_indices() {
             let ResolutionGraphNode::Dist(dist) = &self.graph[node_index] else {
                 continue;
@@ -619,27 +643,47 @@ impl ResolverOutput {
                 continue;
             }
 
-            // Find the marker for this package by looking at incoming edges from root
-            // or combining markers from all incoming edges.
-            let mut combined_marker = uv_pep508::MarkerTree::FALSE;
-            for edge in self
-                .graph
-                .edges_directed(node_index, petgraph::Direction::Incoming)
-            {
-                let edge_marker = edge.weight();
-                // Convert UniversalMarker to MarkerTree (pep508 side only)
-                // .or() modifies in-place
-                combined_marker.or(edge_marker.pep508());
+            // Collect this package's outgoing dependency edges.
+            let mut deps = Vec::new();
+            for edge in self.graph.edges(node_index) {
+                let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                if !dep_dist.is_base() {
+                    continue;
+                }
+                deps.push((
+                    dep_dist.name.clone(),
+                    dep_dist.version.clone(),
+                    edge.weight().pep508(),
+                ));
             }
 
-            result.push((
+            packages.push((
                 dist.dist.clone(),
                 dist.hashes.clone().into_iter().collect(),
-                combined_marker,
+                deps,
             ));
         }
 
-        result
+        // Collect root edges (direct build requirements).
+        if let Some(root_idx) = root_index {
+            for edge in self.graph.edges(root_idx) {
+                let ResolutionGraphNode::Dist(dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                if !dist.is_base() {
+                    continue;
+                }
+                roots.push((
+                    dist.dist.clone(),
+                    dist.hashes.clone().into_iter().collect(),
+                    edge.weight().pep508(),
+                ));
+            }
+        }
+
+        (roots, packages)
     }
 
     /// Return the number of distinct packages in the graph.

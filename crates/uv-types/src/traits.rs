@@ -112,19 +112,6 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
-    /// Record a build dependency resolution for the given package.
-    ///
-    /// This is called after resolving build dependencies for a source distribution,
-    /// allowing the resolution to be captured and persisted in the lock file.
-    fn record_build_resolution(
-        &self,
-        _package: &PackageName,
-        _version: Option<&Version>,
-        _resolution: &Resolution,
-    ) {
-        // Default: no-op
-    }
-
     /// Resolve the given requirements into a ready-to-install set of package versions.
     ///
     /// If `package_name` and `package_version` are provided, the resolver may use previously

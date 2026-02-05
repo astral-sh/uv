@@ -88,7 +88,7 @@ impl<T> BuildArena<T> {
     }
 }
 
-/// A resolved build dependency with its marker.
+/// A resolved build dependency with its marker (an edge from the resolution root).
 #[derive(Debug, Clone)]
 pub struct ResolvedBuildDep {
     /// The resolved distribution.
@@ -99,11 +99,36 @@ pub struct ResolvedBuildDep {
     pub marker: MarkerTree,
 }
 
-/// Captured build resolution info with markers for each dependency.
+/// A dependency edge in the build resolution graph.
+#[derive(Debug, Clone)]
+pub struct BuildDepEdge {
+    /// The package name of the dependency.
+    pub name: PackageName,
+    /// The version of the dependency.
+    pub version: Version,
+    /// The marker for when this dependency is needed.
+    pub marker: MarkerTree,
+}
+
+/// A package entry in the build resolution graph, with its direct dependencies.
+#[derive(Debug, Clone)]
+pub struct BuildDepPackageEntry {
+    /// The resolved distribution.
+    pub dist: ResolvedDist,
+    /// The hashes for verification.
+    pub hashes: Vec<HashDigest>,
+    /// This package's direct dependencies with markers.
+    pub dependencies: Vec<BuildDepEdge>,
+}
+
+/// Captured build resolution info as a graph: direct requirements (roots) plus
+/// all packages with their dependency edges.
 #[derive(Debug, Clone, Default)]
 pub struct BuildResolutionInfo {
-    /// The resolved build dependencies with their markers.
-    pub deps: Vec<ResolvedBuildDep>,
+    /// Direct build requirements (edges from the resolution root).
+    pub roots: Vec<ResolvedBuildDep>,
+    /// All packages in the resolution with their direct dependencies.
+    pub packages: Vec<BuildDepPackageEntry>,
 }
 
 /// Map of build dependency keys to their resolution info (with markers).

@@ -388,16 +388,6 @@ impl SourceBuild {
             )
             .await?;
 
-            // Record the build resolution for this package so it can be persisted
-            // in the lock file.
-            if let Some(name) = &package_name {
-                build_context.record_build_resolution(
-                    name,
-                    package_version.as_ref(),
-                    &resolved_requirements,
-                );
-            }
-
             build_context
                 .install(&resolved_requirements, &venv, build_stack)
                 .await
@@ -1098,12 +1088,6 @@ async fn create_pep517_build_environment(
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
             })?;
-
-        // Update the recorded build resolution with the full set of
-        // requirements (including dynamic ones).
-        if let Some(name) = package_name {
-            build_context.record_build_resolution(name, package_version, &resolution);
-        }
 
         build_context
             .install(&resolution, venv, build_stack)
