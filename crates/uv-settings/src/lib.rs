@@ -2,7 +2,7 @@ use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_UPLOAD_TIMEOUT};
+use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_dirs::{system_config_file, user_config_dir};
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
@@ -710,7 +710,7 @@ impl EnvironmentOptions {
             )?
             .map(Duration::from_secs)
             .or(http_read_timeout)
-            .unwrap_or(DEFAULT_UPLOAD_TIMEOUT),
+            .unwrap_or(DEFAULT_READ_TIMEOUT_UPLOAD),
             http_read_timeout: http_read_timeout.unwrap_or(DEFAULT_READ_TIMEOUT),
             http_connect_timeout: parse_integer_environment_variable(
                 EnvVars::UV_HTTP_CONNECT_TIMEOUT,

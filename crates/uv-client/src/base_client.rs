@@ -65,7 +65,7 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 ///
 /// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
 /// timeout on the entire upload.
-pub const DEFAULT_UPLOAD_TIMEOUT: Duration = Duration::from_mins(15);
+pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
