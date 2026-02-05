@@ -1733,14 +1733,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(
-                args.install_dir,
-                args.targets,
-                args.all,
-                printer,
-                globals.preview,
-            )
-            .await
+            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
@@ -1755,6 +1748,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::python_find_script(
                     (&script).into(),
                     args.show_version,
+                    args.resolve_links,
                     // TODO(zsol): is this the right thing to do here?
                     &client_builder.subcommand(vec!["python".to_owned(), "find".to_owned()]),
                     globals.python_preference,
@@ -1770,6 +1764,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     &project_dir,
                     args.request,
                     args.show_version,
+                    args.resolve_links,
                     args.no_project,
                     cli.top_level.no_config,
                     args.system,

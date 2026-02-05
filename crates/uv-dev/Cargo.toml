@@ -26,8 +26,8 @@ uv-installer = { workspace = true }
 uv-macros = { workspace = true }
 uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
-uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-preview = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }

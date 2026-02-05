@@ -12,7 +12,6 @@ use fs_err as fs;
 use itertools::Itertools;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_preview::{Preview, PreviewFeature};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -30,6 +29,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::{self, PythonInstallationKey};
+use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
 use crate::{
     PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
@@ -357,7 +357,9 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
+    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let path = path.as_ref();
+
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
@@ -365,7 +367,8 @@ impl ManagedPythonInstallation {
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
 
-        let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
+        let path = std::path::absolute(path)
+            .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 
         // Try to read the BUILD file if it exists
         let build = match fs::read_to_string(path.join("BUILD")) {
@@ -381,6 +384,34 @@ impl ManagedPythonInstallation {
             sha256: None,
             build,
         })
+    }
+
+    /// Try to create a [`ManagedPythonInstallation`] from an [`Interpreter`].
+    ///
+    /// Returns `None` if the interpreter is not a managed installation.
+    pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
+        let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
+
+        // Canonicalize both paths to handle Windows path format differences
+        // (e.g., \\?\ prefix, different casing, junction vs actual path).
+        // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
+        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
+            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
+        let root = dunce::canonicalize(managed_root.root())
+            .unwrap_or_else(|_| managed_root.root().to_path_buf());
+
+        // Verify the interpreter's base prefix is within the managed root
+        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
+
+        let first_component = suffix.components().next()?;
+        let name = first_component.as_os_str().to_str()?;
+
+        // Verify it's a valid installation key
+        PythonInstallationKey::from_str(name).ok()?;
+
+        // Construct the installation from the path within the managed root
+        let path = managed_root.root().join(name);
+        Self::from_path(path).ok()
     }
 
     /// The path to this managed installation's Python executable.
@@ -560,23 +591,8 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
-            minor_version_link.create_directory()?;
-        }
-        Ok(())
-    }
-
-    /// If the environment contains a symlink directory (or junction on Windows),
-    /// update it to the latest patch directory for this minor version.
-    ///
-    /// Unlike [`ensure_minor_version_link`], will not create a new symlink directory
-    /// if one doesn't already exist,
-    pub fn update_minor_version_link(&self, preview: Preview) -> Result<(), Error> {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
-            if !minor_version_link.exists() {
-                return Ok(());
-            }
+    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self) {
             minor_version_link.create_directory()?;
         }
         Ok(())
@@ -774,11 +790,7 @@ impl PythonMinorVersionLink {
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
     /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
     /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
-    pub fn from_executable(
-        executable: &Path,
-        key: &PythonInstallationKey,
-        preview: Preview,
-    ) -> Option<Self> {
+    fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
         let implementation = key.implementation();
         if !matches!(
             implementation.as_ref(),
@@ -828,24 +840,11 @@ impl PythonMinorVersionLink {
             symlink_executable,
             target_directory,
         };
-        // If preview mode is disabled, still return a `MinorVersionSymlink` for
-        // existing symlinks, allowing continued operations without the `--preview`
-        // flag after initial symlink directory installation.
-        if !preview.is_enabled(PreviewFeature::PythonUpgrade) && !minor_version_link.exists() {
-            return None;
-        }
         Some(minor_version_link)
     }
 
-    pub fn from_installation(
-        installation: &ManagedPythonInstallation,
-        preview: Preview,
-    ) -> Option<Self> {
-        Self::from_executable(
-            installation.executable(false).as_path(),
-            installation.key(),
-            preview,
-        )
+    pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        Self::from_executable(installation.executable(false).as_path(), installation.key())
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {
@@ -877,13 +876,21 @@ impl PythonMinorVersionLink {
         Ok(())
     }
 
+    /// Check if the minor version link exists and points to the expected target directory.
+    ///
+    /// This verifies both that the symlink/junction exists AND that it points to the
+    /// `target_directory` specified in this struct. This is important because the link
+    /// may exist but point to a different installation (e.g., after an upgrade), in which
+    /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
-                .map(|metadata| metadata.file_type().is_symlink())
-                .unwrap_or(false)
+                .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                && self
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
         }
         #[cfg(windows)]
         {
@@ -894,6 +901,25 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
+                && self
+                    .read_target()
+                    .is_some_and(|target| target == self.target_directory)
+        }
+    }
+
+    /// Read the target of the minor version link.
+    ///
+    /// On Unix, this reads the symlink target. On Windows, this reads the junction target
+    /// using the `junction` crate which properly handles the `\??\` prefix that Windows
+    /// uses internally for junction targets.
+    pub fn read_target(&self) -> Option<PathBuf> {
+        #[cfg(unix)]
+        {
+            self.symlink_directory.read_link().ok()
+        }
+        #[cfg(windows)]
+        {
+            junction::get_target(&self.symlink_directory).ok()
         }
     }
 }
