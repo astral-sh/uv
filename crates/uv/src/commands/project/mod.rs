@@ -1454,7 +1454,6 @@ impl ProjectEnvironment {
                         false,
                         false,
                         upgradeable,
-                        preview,
                     )?;
                     return Ok(if replace {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1496,7 +1495,6 @@ impl ProjectEnvironment {
                     false,
                     false,
                     upgradeable,
-                    preview,
                 )?;
 
                 if replace {
@@ -1650,7 +1648,6 @@ impl ScriptEnvironment {
                         false,
                         false,
                         upgradeable,
-                        preview,
                     )?;
                     return Ok(if root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1692,7 +1689,6 @@ impl ScriptEnvironment {
                     false,
                     false,
                     upgradeable,
-                    preview,
                 )?;
 
                 Ok(if replaced {

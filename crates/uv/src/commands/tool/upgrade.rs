@@ -360,7 +360,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone(), preview)?;
+        let environment = installed_tools.create_environment(name, interpreter.clone())?;
 
         let environment = sync_environment(
             environment,

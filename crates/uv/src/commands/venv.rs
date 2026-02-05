@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -190,10 +190,9 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeature::PythonUpgrade)
-        && python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+    let upgradeable = python_request
+        .as_ref()
+        .is_none_or(|request| !request.includes_patch());
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
@@ -205,7 +204,6 @@ pub(crate) async fn venv(
         relocatable,
         seed,
         upgradeable,
-        preview,
     )
     .map_err(VenvError::Creation)?;
 
