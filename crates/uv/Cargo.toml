@@ -131,8 +131,12 @@ assert_fs = { workspace = true }
 backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
+bytes = { workspace = true }
 filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
@@ -143,6 +147,7 @@ sha2 = { workspace = true }
 similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 whoami = { workspace = true }
 wiremock = { workspace = true }
