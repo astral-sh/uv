@@ -11391,30 +11391,18 @@ fn add_index_by_name_member_only_not_accessible() -> Result<()> {
 }
 
 #[tokio::test]
-async fn add_index_by_name_child_shadows_parent() -> Result<()> {
+async fn add_index_by_name_member_shadows_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(503))
-        .mount(&server)
-        .await;
-
-    let filters: Vec<_> = context
-        .filters()
-        .into_iter()
-        .chain([(r"http://127\.0\.0\.1:\d+", "[PARENT_INDEX]")])
-        .collect();
-
     let workspace_toml = context.temp_dir.child("pyproject.toml");
-    workspace_toml.write_str(&formatdoc! {r#"
+    workspace_toml.write_str(indoc! {r#"
         [tool.uv.workspace]
         members = ["child"]
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "{}"
-    "#, server.uri()})?;
+        url = "https://pypi.org/simple"
+    "#})?;
 
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all()?;
@@ -11431,7 +11419,7 @@ async fn add_index_by_name_child_shadows_parent() -> Result<()> {
         url = "https://pypi-proxy.fly.dev/simple"
     "#})?;
 
-    uv_snapshot!(filters, context.add().arg("iniconfig").arg("--index").arg("test-index").current_dir(&child_dir), @r"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index").current_dir(&child_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11443,13 +11431,44 @@ async fn add_index_by_name_child_shadows_parent() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    //let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
-    //insta::with_settings!({
-    //    filters => filters,
-    //}, {
-    //    assert_snapshot!(lock, @r#"
-    //"#);
-    //});
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "child",
+        ]
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "child" }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0", index = "https://pypi-proxy.fly.dev/simple" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+        ]
+        "#);
+    });
 
     Ok(())
 }
