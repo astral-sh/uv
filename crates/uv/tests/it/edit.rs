@@ -688,13 +688,13 @@ fn add_git_lfs() -> Result<()> {
         .child("lfs");
     let ok_checkout_file = git_checkouts
         .child(cache_digest(&repo_url.with_lfs(Some(true))))
-        .child("657500f")
+        .child("0fe88f7")
         .child(".ok");
 
     uv_snapshot!(context.filters(), context.add()
         .arg("--no-cache")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
         .arg("--lfs"), @"
     success: true
     exit_code: 0
@@ -704,7 +704,7 @@ fn add_git_lfs() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -723,7 +723,7 @@ fn add_git_lfs() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo", rev = "657500f0703dc173ac5d68dfa1d7e8c985c84424", lfs = true }
+        test-lfs-repo = { git = "https://github.com/astral-sh/test-lfs-repo", rev = "0fe88f7c2e2883521bf065c108d9ee8eb115674b", lfs = true }
         "#
         );
     });
@@ -751,12 +751,12 @@ fn add_git_lfs() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=657500f0703dc173ac5d68dfa1d7e8c985c84424" }]
+        requires-dist = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b" }]
 
         [[package]]
         name = "test-lfs-repo"
         version = "0.1.0"
-        source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=657500f0703dc173ac5d68dfa1d7e8c985c84424#657500f0703dc173ac5d68dfa1d7e8c985c84424" }
+        source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=0fe88f7c2e2883521bf065c108d9ee8eb115674b#0fe88f7c2e2883521bf065c108d9ee8eb115674b" }
         "#
         );
     });
@@ -765,7 +765,7 @@ fn add_git_lfs() -> Result<()> {
     uv_snapshot!(context.filters(), context.add()
         .arg("--no-cache")
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("4e82e85f6a8b8825d614ea23c550af55b2b7738c")
+        .arg("--rev").arg("07d2c9c75c8defeebb7c5a0c26cca54b777e3bec")
         .arg("--lfs"), @"
     success: true
     exit_code: 0
@@ -776,8 +776,8 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@4e82e85f6a8b8825d614ea23c550af55b2b7738c#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@07d2c9c75c8defeebb7c5a0c26cca54b777e3bec#lfs=true)
     ");
 
     // Test LFS not found scenario resulting in an incomplete fetch cache
@@ -797,7 +797,7 @@ fn add_git_lfs() -> Result<()> {
     uv_snapshot!(filters, context.add()
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
         .arg("--lfs"), @"
     success: false
     exit_code: [ERROR_CODE]
@@ -813,7 +813,7 @@ fn add_git_lfs() -> Result<()> {
     // Test LFS recovery from an incomplete fetch cache
     uv_snapshot!(context.filters(), context.add()
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
         .arg("--lfs"), @"
     success: true
     exit_code: 0
@@ -824,8 +824,8 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@4e82e85f6a8b8825d614ea23c550af55b2b7738c#lfs=true)
-     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     - test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@07d2c9c75c8defeebb7c5a0c26cca54b777e3bec#lfs=true)
+     + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -846,7 +846,7 @@ fn add_git_lfs() -> Result<()> {
     // Test LFS recovery from an incomplete db and non-fresh checkout
     uv_snapshot!(context.filters(), context.add()
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
         .arg("--reinstall")
         .arg("--lfs"), @"
     success: true
@@ -858,7 +858,7 @@ fn add_git_lfs() -> Result<()> {
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@657500f0703dc173ac5d68dfa1d7e8c985c84424#lfs=true)
+     ~ test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@0fe88f7c2e2883521bf065c108d9ee8eb115674b#lfs=true)
     ");
 
     // Verify that we can import the module and access LFS content
@@ -879,7 +879,7 @@ fn add_git_lfs() -> Result<()> {
     // Exercise the sdist cache
     uv_snapshot!(context.filters(), context.add()
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
-        .arg("--rev").arg("657500f0703dc173ac5d68dfa1d7e8c985c84424")
+        .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
         .arg("--lfs"), @"
     success: true
     exit_code: 0
