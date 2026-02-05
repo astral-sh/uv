@@ -84,7 +84,7 @@ This release also includes the stabilization of preview features. Python upgrade
 
   The formatting of code is likely to change. You can opt out of this behavior by requesting an older Ruff version, e.g., `uv format --version 0.14.10`.
 
-- **Update uv crete test features to use `test-` as a prefix** ([#17860](https://github.com/astral-sh/uv/pull/17860))
+- **Update uv crate test features to use `test-` as a prefix** ([#17860](https://github.com/astral-sh/uv/pull/17860))
 
   This change only affects redistributors of uv. The Cargo features used to gate test dependencies, e.g., `pypi`, have been renamed with a `test-` prefix for clarity, e.g., `test-pypi`.
 
