@@ -36,9 +36,9 @@ def main() -> None:
         if not crate_manifest.exists():
             continue
         crate_version = tomllib.loads(crate_manifest.read_text())["package"]["version"]
-        manifest_dependency = parsed_workspace_manifest["workspace"]["dependencies"].get(
-            crate_name
-        )
+        manifest_dependency = parsed_workspace_manifest["workspace"][
+            "dependencies"
+        ].get(crate_name)
         if manifest_dependency is None:
             continue
         manifest_version = manifest_dependency["version"]
