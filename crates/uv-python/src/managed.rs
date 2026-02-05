@@ -358,12 +358,7 @@ impl ManagedPythonInstallation {
     }
 
     pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        // Canonicalize the path to resolve symlinks/junctions and handle Windows path quirks
-        // (trailing separators, \\?\ prefix, casing differences, etc.)
-        // Fall back to absolute path if canonicalize fails (e.g., path doesn't exist).
-        let path = dunce::canonicalize(path.as_ref()).unwrap_or_else(|_| {
-            std::path::absolute(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf())
-        });
+        let path = path.as_ref();
 
         let key = PythonInstallationKey::from_str(
             path.file_name()
@@ -371,6 +366,9 @@ impl ManagedPythonInstallation {
                 .to_str()
                 .ok_or(Error::NameError("not a valid string".to_string()))?,
         )?;
+
+        let path = std::path::absolute(path)
+            .map_err(|err| Error::AbsolutePath(path.to_path_buf(), err))?;
 
         // Try to read the BUILD file if it exists
         let build = match fs::read_to_string(path.join("BUILD")) {
@@ -394,15 +392,26 @@ impl ManagedPythonInstallation {
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         let managed_root = ManagedPythonInstallations::from_settings(None).ok()?;
 
-        // Try to create an installation from the interpreter's base prefix.
-        // `from_path` canonicalizes the path, resolving symlinks/junctions.
-        let installation = Self::from_path(interpreter.sys_base_prefix()).ok()?;
+        // Canonicalize both paths to handle Windows path format differences
+        // (e.g., \\?\ prefix, different casing, junction vs actual path).
+        // Fall back to the original path if canonicalization fails (e.g., target doesn't exist).
+        let sys_base_prefix = dunce::canonicalize(interpreter.sys_base_prefix())
+            .unwrap_or_else(|_| interpreter.sys_base_prefix().to_path_buf());
+        let root = dunce::canonicalize(managed_root.root())
+            .unwrap_or_else(|_| managed_root.root().to_path_buf());
 
-        // Verify the installation is within the managed root
-        let root = dunce::canonicalize(managed_root.root()).ok()?;
-        installation.path.strip_prefix(&root).ok()?;
+        // Verify the interpreter's base prefix is within the managed root
+        let suffix = sys_base_prefix.strip_prefix(&root).ok()?;
 
-        Some(installation)
+        let first_component = suffix.components().next()?;
+        let name = first_component.as_os_str().to_str()?;
+
+        // Verify it's a valid installation key
+        PythonInstallationKey::from_str(name).ok()?;
+
+        // Construct the installation from the path within the managed root
+        let path = managed_root.root().join(name);
+        Self::from_path(path).ok()
     }
 
     /// The path to this managed installation's Python executable.

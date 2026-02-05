@@ -996,6 +996,7 @@ mod tests {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        preview: Preview,
     ) -> Result<PythonInstallation, crate::Error> {
         let client_builder = BaseClientBuilder::default();
         let download_list = ManagedPythonDownloadList::new_only_embedded()?;
@@ -1015,7 +1016,7 @@ mod tests {
                 None,
                 None,
                 None,
-                Preview::default(),
+                preview,
             ))
     }
 
@@ -1030,6 +1031,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                Preview::default(),
             )
         })?;
 
@@ -1063,6 +1065,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                Preview::default(),
             )
         })?;
 
@@ -1099,6 +1102,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    Preview::default(),
                 )
             })?;
         assert!(
@@ -1129,6 +1133,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    Preview::default(),
                 )
             })?;
         assert!(
