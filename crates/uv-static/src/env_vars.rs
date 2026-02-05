@@ -714,6 +714,10 @@ impl EnvVars {
     #[attr_added_in("0.2.33")]
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
 
+    /// Used to detect PowerShell usage (set by PowerShell on all platforms).
+    #[attr_added_in("next version")]
+    pub const PS_MODULE_PATH: &'static str = "PSModulePath";
+
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
     ///
