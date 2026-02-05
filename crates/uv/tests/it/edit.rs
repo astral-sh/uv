@@ -1,11 +1,11 @@
 #![allow(clippy::disallowed_types)]
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 mod conditional_imports {
     pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use conditional_imports::*;
 
 use anyhow::Result;
@@ -17,7 +17,7 @@ use std::path::Path;
 use url::Url;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method, matchers::path};
 
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -144,7 +144,7 @@ fn add_registry() -> Result<()> {
 
 /// Add a Git requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -308,7 +308,7 @@ fn add_git() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. The resolution should
 /// succeed, but the `pyproject.toml` should omit the credentials.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_private_source() -> Result<()> {
     let context = TestContext::new("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -404,7 +404,7 @@ fn add_git_private_source() -> Result<()> {
 /// Add a Git requirement from a private repository, with credentials. Since `--raw-sources` is
 /// specified, the `pyproject.toml` should retain the credentials.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_private_raw() -> Result<()> {
     let context = TestContext::new("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -497,7 +497,7 @@ fn add_git_private_raw() -> Result<()> {
 }
 
 #[tokio::test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Result<()> {
     let context = TestContext::new("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -537,7 +537,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_403_response() -> Resul
 }
 
 #[tokio::test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Result<()> {
     use uv_client::DEFAULT_RETRIES;
 
@@ -580,7 +580,7 @@ async fn add_git_private_rate_limited_by_github_rest_api_429_response() -> Resul
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -635,7 +635,7 @@ fn add_git_error() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_branch() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -664,7 +664,7 @@ fn add_git_branch() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn add_git_lfs() -> Result<()> {
     let context = TestContext::new("3.13").with_git_lfs_config();
 
@@ -895,7 +895,7 @@ fn add_git_lfs() -> Result<()> {
 
 /// Add a Git requirement using the `--raw-sources` API.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_raw() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1045,7 +1045,7 @@ fn add_git_raw() -> Result<()> {
 
 /// Add a Git requirement without the `git+` prefix.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_implicit() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1098,7 +1098,7 @@ fn add_git_implicit() -> Result<()> {
 
 /// `--raw-sources` should be considered conflicting with sources-specific arguments, like `--tag`.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_raw_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1182,7 +1182,7 @@ fn reinstall_local_source_trees() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_editable_error() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1210,7 +1210,7 @@ fn add_editable_error() -> Result<()> {
 
 /// Add an unnamed requirement.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_unnamed() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1798,7 +1798,7 @@ fn add_remove_inline_optional() -> Result<()> {
 
 /// Add and remove a workspace dependency.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_remove_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3109,7 +3109,7 @@ fn add_path_adjacent_directory() -> Result<()> {
 
 /// Update a requirement, modifying the source and extras.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn update() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3580,7 +3580,7 @@ fn add_update_marker() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn update_source_replace_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3675,7 +3675,7 @@ fn update_source_replace_url() -> Result<()> {
 /// If a source defined in `tool.uv.sources` but its name is not normalized, `uv add` should not
 /// add the same source again.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_non_normalized_source() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3732,7 +3732,7 @@ fn add_non_normalized_source() -> Result<()> {
 /// Test updating an existing Git reference with branch/tag/rev options without re- specifying the
 /// URL.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_update_git_reference_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -3804,7 +3804,7 @@ fn add_update_git_reference_project() -> Result<()> {
 /// Test updating an existing Git reference with branch/tag/rev options without re-specifying the
 /// URL in a script.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_update_git_reference_script() -> Result<()> {
     let context = TestContext::new("3.12");
     let script = context.temp_dir.child("script.py");
@@ -3892,7 +3892,7 @@ fn add_update_git_reference_script() -> Result<()> {
 /// If a source defined in `tool.uv.sources` but its name is not normalized, `uv remove` should
 /// remove the source.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn remove_non_normalized_source() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -5514,7 +5514,7 @@ fn add_repeat() -> Result<()> {
 
 /// Add from requirement file.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_requirements_file() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_counts();
 
@@ -8333,7 +8333,7 @@ fn remove_last_dep_script() -> Result<()> {
 
 /// Add a Git requirement to PEP 723 script.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_git_to_script() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -12984,7 +12984,7 @@ fn add_with_build_constraints() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn add_unsupported_git_scheme() {
     let context = TestContext::new("3.12");
 
@@ -14825,7 +14825,7 @@ fn add_no_install_project() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "git-lfs")]
+#[cfg(feature = "test-git-lfs")]
 fn add_git_lfs_error() -> Result<()> {
     let context = TestContext::new("3.13").with_git_lfs_config();
 

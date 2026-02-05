@@ -24,7 +24,7 @@ fn workspaces_dir() -> PathBuf {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -68,7 +68,7 @@ fn test_albatross_in_examples_bird_feeder() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -109,7 +109,7 @@ fn test_albatross_in_examples() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -150,7 +150,7 @@ fn test_albatross_just_project() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -226,7 +226,7 @@ fn test_albatross_project_in_excluded() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -270,7 +270,7 @@ fn test_albatross_root_workspace() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -316,7 +316,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -362,7 +362,7 @@ fn test_albatross_root_workspace_albatross() {
 }
 
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -410,7 +410,7 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -480,7 +480,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 /// Check that `uv run` works from a virtual workspace root, which should sync all packages in the
 /// workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -521,7 +521,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -584,7 +584,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -706,7 +706,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
 /// Check that the resolution is the same no matter where in the workspace we are.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_lock_idempotence_root_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-root-workspace",
@@ -718,7 +718,7 @@ fn workspace_lock_idempotence_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are, and that locking
 /// works even if there is no root project.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-virtual-workspace",
@@ -1314,7 +1314,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies cannot be resolved.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1370,7 +1370,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1438,7 +1438,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 /// Tests error messages when a workspace member's dependencies conflict with
 /// two other member's.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1521,7 +1521,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's optional dependencies.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1591,7 +1591,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's development dependencies.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1662,7 +1662,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 /// Tests error messages when a workspace member's name shadows a dependency of
 /// another member.
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn workspace_member_name_shadows_dependencies() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1792,7 +1792,7 @@ fn test_path_hopping() -> Result<()> {
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1867,7 +1867,7 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 /// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
 /// to a git dependency without a subdirectory and not relative to the checkout directory.
 #[test]
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
     let context = TestContext::new("3.12");
 

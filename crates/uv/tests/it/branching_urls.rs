@@ -12,7 +12,7 @@ use crate::common::{TestContext, make_project, uv_snapshot};
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -46,7 +46,7 @@ fn branching_urls_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_overlapping() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -84,7 +84,7 @@ fn branching_urls_overlapping() -> Result<()> {
 /// a -> b -> b2 -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_but_transitive_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -155,7 +155,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_transitive_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -361,7 +361,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_other_dependencies_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -545,7 +545,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_between_registry_and_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -631,7 +631,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -715,7 +715,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 

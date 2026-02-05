@@ -411,7 +411,7 @@ fn python_list_downloads() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_list_downloads_installed() {
     use assert_cmd::assert::OutputAssertExt;
 

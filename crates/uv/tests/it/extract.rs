@@ -1,4 +1,4 @@
-#![cfg(feature = "r2")]
+#![cfg(feature = "test-r2")]
 
 use backon::{BackoffBuilder, Retryable};
 use futures::TryStreamExt;

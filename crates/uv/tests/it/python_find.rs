@@ -981,7 +981,7 @@ fn python_find_managed() {
 /// used in the test context.
 #[test]
 #[cfg(unix)]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_required_python_major_minor() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
@@ -1248,7 +1248,7 @@ fn python_find_path() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_find_freethreaded_313() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -1288,7 +1288,7 @@ fn python_find_freethreaded_313() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_find_freethreaded_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -1366,7 +1366,7 @@ fn python_find_freethreaded_314() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_version_specifiers() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
@@ -1466,7 +1466,7 @@ fn python_find_prerelease_version_specifiers() {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
+#[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_with_patch_request() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
