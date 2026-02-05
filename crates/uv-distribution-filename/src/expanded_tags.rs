@@ -9,7 +9,7 @@ use uv_platform_tags::{
 };
 
 use crate::splitter::MemchrSplitter;
-use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::wheel_tag::{TagSet, WheelTag, WheelTagLarge, WheelTagSmall};
 
 /// The expanded wheel tags as stored in a `WHEEL` file.
 ///
@@ -122,21 +122,33 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
     {
         Ok(WheelTag::Small { small })
     } else {
+        let python_tags: TagSet<LanguageTag> = MemchrSplitter::split(python_tag, b'.')
+            .map(|part| {
+                LanguageTag::from_str(part)
+                    .map_err(|err| ExpandedTagError::InvalidLanguageTag(tag.to_string(), err))
+            })
+            .collect::<Result<_, _>>()?;
+
+        let abi_tags: TagSet<AbiTag> = MemchrSplitter::split(abi_tag, b'.')
+            .map(|part| {
+                AbiTag::from_str(part)
+                    .map_err(|err| ExpandedTagError::InvalidAbiTag(tag.to_string(), err))
+            })
+            .collect::<Result<_, _>>()?;
+
+        let platform_tags: TagSet<PlatformTag> = MemchrSplitter::split(platform_tag, b'.')
+            .map(|part| {
+                PlatformTag::from_str(part)
+                    .map_err(|err| ExpandedTagError::InvalidPlatformTag(tag.to_string(), err))
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok(WheelTag::Large {
             large: Box::new(WheelTagLarge {
                 build_tag: None,
-                python_tag: MemchrSplitter::split(python_tag, b'.')
-                    .map(LanguageTag::from_str)
-                    .filter_map(Result::ok)
-                    .collect(),
-                abi_tag: MemchrSplitter::split(abi_tag, b'.')
-                    .map(AbiTag::from_str)
-                    .filter_map(Result::ok)
-                    .collect(),
-                platform_tag: MemchrSplitter::split(platform_tag, b'.')
-                    .map(PlatformTag::from_str)
-                    .filter_map(Result::ok)
-                    .collect(),
+                python_tag: python_tags,
+                abi_tag: abi_tags,
+                platform_tag: platform_tags,
                 repr: tag.into(),
             }),
         })
@@ -276,29 +288,31 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_unknown_expanded_tag() {
-        let tags = ExpandedTags::parse(vec!["py3-foo-any"]).unwrap();
+    fn test_parse_invalid_macos_version() {
+        // Invalid macOS versions (like `macosx_110_0_arm64`, a typo for `macosx_11_0_arm64`)
+        // should cause parsing to fail.
+        let err = ExpandedTags::parse(vec!["cp313-cp313-macosx_110_0_arm64"]).unwrap_err();
+        insta::assert_debug_snapshot!(err, @r#"
+        InvalidPlatformTag(
+            "cp313-cp313-macosx_110_0_arm64",
+            InvalidMajorVersion {
+                platform: "macosx",
+                tag: "macosx_110_0_arm64",
+            },
+        )
+        "#);
+    }
 
-        insta::assert_debug_snapshot!(tags, @r#"
-        ExpandedTags(
-            [
-                Large {
-                    large: WheelTagLarge {
-                        build_tag: None,
-                        python_tag: [
-                            Python {
-                                major: 3,
-                                minor: None,
-                            },
-                        ],
-                        abi_tag: [],
-                        platform_tag: [
-                            Any,
-                        ],
-                        repr: "py3-foo-any",
-                    },
-                },
-            ],
+    #[test]
+    fn test_parse_unknown_expanded_tag() {
+        // Unknown tags should cause parsing to fail.
+        let err = ExpandedTags::parse(vec!["py3-foo-any"]).unwrap_err();
+        insta::assert_debug_snapshot!(err, @r#"
+        InvalidAbiTag(
+            "py3-foo-any",
+            UnknownFormat(
+                "foo",
+            ),
         )
         "#);
     }
