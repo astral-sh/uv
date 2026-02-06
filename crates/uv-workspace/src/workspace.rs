@@ -1590,14 +1590,15 @@ async fn find_workspace(
     Ok(None)
 }
 
-/// Check if a directory only contains files that are gitignored.
+/// Check if a directory only contains files that are ignored.
 ///
-/// Returns `true` if walking the directory while respecting `.gitignore` rules yields no files,
-/// indicating that any files present (e.g., `__pycache__`) are all gitignored.
+/// Returns `true` if walking the directory while respecting `.gitignore` and `.ignore` rules
+/// yields no files, indicating that any files present (e.g., `__pycache__`) are all ignored.
 fn has_only_gitignored_files(path: &Path) -> bool {
     let walker = ignore::WalkBuilder::new(path)
         .hidden(false)
         .parents(true)
+        .ignore(true)
         .git_ignore(true)
         .git_global(true)
         .git_exclude(true)
