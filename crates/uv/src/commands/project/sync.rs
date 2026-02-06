@@ -793,9 +793,7 @@ pub(super) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
-    // Extract locked build resolutions from the lock file so that source
-    // distribution builds use the exact same build deps (with full distribution
-    // info) that were resolved during `uv lock`, skipping re-resolution entirely.
+    // Extract locked build resolutions from the lock file for source builds.
     let locked_build_resolutions = {
         let map = target.lock().all_build_resolutions(
             target.install_path(),

@@ -746,15 +746,12 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Extract build dependency preferences from the existing lock file, if available.
-    // These are used as hints so the resolver prefers previously locked versions.
-    // We walk the full dependency graph (direct + transitive) to ensure all build
-    // dep versions are pinned, not just direct requirements.
-    let build_preferences = if let Some(ref lock) = existing_lock {
-        BuildPreferences::new(lock.build_dep_preferences())
-    } else {
-        BuildPreferences::default()
-    };
+    // Extract build dependency preferences from the existing lock file so the
+    // resolver prefers previously locked build dependency versions.
+    let build_preferences = existing_lock
+        .as_ref()
+        .map(|lock| BuildPreferences::new(lock.build_dependency_preferences()))
+        .unwrap_or_default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

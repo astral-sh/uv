@@ -37,9 +37,8 @@ use uv_resolver::{
     Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildDepEdge, BuildDepPackageEntry, BuildIsolation,
-    BuildPreferences, BuildResolutionInfo, BuildResolutions, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight, LockedBuildResolutions, ResolvedBuildDep,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPreferences, BuildResolutions,
+    BuildStack, EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildResolutions,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -320,7 +319,7 @@ impl BuildContext for BuildDispatch<'_> {
             .map(|deps| {
                 Preferences::from_iter(
                     deps.iter().map(|(name, version)| {
-                        Preference::from_build(name.clone(), version.clone())
+                        Preference::from_package_build(name.clone(), version.clone())
                     }),
                     &resolver_env,
                 )
@@ -367,35 +366,9 @@ impl BuildContext for BuildDispatch<'_> {
         // (direct requirements + all packages with their dependency edges).
         if self.universal_resolution {
             if let Some(name) = package_name {
-                let (roots, packages) = resolver_output.build_resolution_graph();
-                let roots = roots
-                    .into_iter()
-                    .map(|(dist, hashes, marker)| ResolvedBuildDep {
-                        dist,
-                        hashes,
-                        marker,
-                    })
-                    .collect();
-                let packages = packages
-                    .into_iter()
-                    .map(|(dist, hashes, deps)| BuildDepPackageEntry {
-                        dist,
-                        hashes,
-                        dependencies: deps
-                            .into_iter()
-                            .map(|(name, version, marker)| BuildDepEdge {
-                                name,
-                                version,
-                                marker,
-                            })
-                            .collect(),
-                    })
-                    .collect();
-                self.build_resolutions.insert(
-                    name.clone(),
-                    package_version.cloned(),
-                    BuildResolutionInfo { roots, packages },
-                );
+                let graph = resolver_output.build_resolution_graph();
+                self.build_resolutions
+                    .insert(name.clone(), package_version.cloned(), graph);
             }
         }
 

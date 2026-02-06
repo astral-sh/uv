@@ -2,14 +2,14 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Lock a project with a dependency that requires building from source
 /// (due to dynamic metadata), and verify that build dependencies are captured
 /// in the lock file.
 #[test]
 fn lock_build_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency that uses setuptools with dynamic version,
     // forcing a build to extract metadata.
@@ -66,7 +66,7 @@ fn lock_build_dependencies() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -132,7 +132,7 @@ fn lock_build_dependencies() -> Result<()> {
 /// by using platform-specific markers on build requirements.
 #[test]
 fn lock_build_dependencies_universal() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with platform-specific build dependencies.
     // With universal resolution, both anyio (linux) and iniconfig (darwin/windows)
@@ -197,7 +197,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -318,7 +318,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
 /// subsequent resolves, producing the same versions.
 #[test]
 fn lock_build_dependencies_preference() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version requiring setuptools.
     let dep_dir = context.temp_dir.child("dep");
@@ -375,7 +375,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         assert_snapshot!(
             lock_initial, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -442,7 +442,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
         assert_snapshot!(
             lock_second, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -498,7 +498,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
 /// and verify each gets its own build-dependencies section.
 #[test]
 fn lock_build_dependencies_multiple_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create first local dependency.
     let dep_a_dir = context.temp_dir.child("dep-a");
@@ -578,7 +578,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -659,7 +659,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
 /// build dependencies from scratch.
 #[test]
 fn lock_build_dependencies_upgrade() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -715,7 +715,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         assert_snapshot!(
             lock_initial, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -782,7 +782,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         assert_snapshot!(
             lock_upgraded, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -847,7 +847,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
 /// Verify that `--exclude-newer` is respected for build dependency resolution.
 #[test]
 fn lock_build_dependencies_exclude_newer() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -903,7 +903,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -969,7 +969,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
 /// resolution and captured in the lock file.
 #[test]
 fn lock_build_dependencies_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -1031,7 +1031,7 @@ fn lock_build_dependencies_extra() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
 
         [options]
@@ -1087,7 +1087,7 @@ fn lock_build_dependencies_extra() -> Result<()> {
 /// due to platform-specific dependencies.
 #[test]
 fn lock_build_dependencies_fork() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version, forcing a build.
     let dep_dir = context.temp_dir.child("dep");
@@ -1147,7 +1147,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 3
+        revision = 4
         requires-python = ">=3.12"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -1233,7 +1233,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
 /// from the main resolution are preserved.
 #[test]
 fn lock_build_dependencies_shared_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version that requires `iniconfig`
     // as a build dependency (via setuptools build-system.requires).
@@ -1329,7 +1329,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
 /// must also be excluded from the build environment.
 #[test]
 fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with platform-specific build dependencies.
     // `anyio` is linux-only, `iniconfig` is darwin/windows-only.
@@ -1409,6 +1409,87 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
+    ");
+
+    Ok(())
+}
+
+/// Verify that build dependencies work for a directory dependency with a dynamic
+/// version when syncing. During `uv lock`, the build resolution is stored with
+/// the resolved version from the lock file. During `uv sync`, directory dists
+/// return a URL (not a version) from `version_or_url()`, so `package_version` is
+/// `None` at build time. The lookup must handle this version-key mismatch.
+#[test]
+fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock
+        );
+    });
+
+    // Sync should succeed and use the locked build resolutions even though
+    // `package_version` is `None` for the directory dep at build time.
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)

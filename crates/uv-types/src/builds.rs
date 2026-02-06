@@ -90,7 +90,7 @@ impl<T> BuildArena<T> {
 
 /// A resolved build dependency with its marker (an edge from the resolution root).
 #[derive(Debug, Clone)]
-pub struct ResolvedBuildDep {
+pub struct ResolvedBuildDependency {
     /// The resolved distribution.
     pub dist: ResolvedDist,
     /// The hashes for verification.
@@ -101,7 +101,7 @@ pub struct ResolvedBuildDep {
 
 /// A dependency edge in the build resolution graph.
 #[derive(Debug, Clone)]
-pub struct BuildDepEdge {
+pub struct BuildDependencyEdge {
     /// The package name of the dependency.
     pub name: PackageName,
     /// The version of the dependency.
@@ -110,102 +110,74 @@ pub struct BuildDepEdge {
     pub marker: MarkerTree,
 }
 
-/// A package entry in the build resolution graph, with its direct dependencies.
+/// A package in the build resolution graph, with its direct dependencies.
 #[derive(Debug, Clone)]
-pub struct BuildDepPackageEntry {
+pub struct BuildDependencyPackage {
     /// The resolved distribution.
     pub dist: ResolvedDist,
     /// The hashes for verification.
     pub hashes: Vec<HashDigest>,
     /// This package's direct dependencies with markers.
-    pub dependencies: Vec<BuildDepEdge>,
+    pub dependencies: Vec<BuildDependencyEdge>,
 }
 
-/// Captured build resolution info as a graph: direct requirements (roots) plus
-/// all packages with their dependency edges.
+/// The build resolution graph for a single package: direct build requirements
+/// (roots) and all packages with their dependency edges.
 #[derive(Debug, Clone, Default)]
-pub struct BuildResolutionInfo {
+pub struct BuildResolutionGraph {
     /// Direct build requirements (edges from the resolution root).
-    pub roots: Vec<ResolvedBuildDep>,
+    pub roots: Vec<ResolvedBuildDependency>,
     /// All packages in the resolution with their direct dependencies.
-    pub packages: Vec<BuildDepPackageEntry>,
+    pub packages: Vec<BuildDependencyPackage>,
 }
 
-/// Map of build dependency keys to their resolution info (with markers).
-type BuildResolutionInfoMap = BTreeMap<(PackageName, Option<Version>), BuildResolutionInfo>;
+/// Map of (package name, optional version) to their build resolution graphs.
+type BuildResolutionGraphMap = BTreeMap<(PackageName, Option<Version>), BuildResolutionGraph>;
 
-/// Locked build dependency resolutions, indexed by package name and version.
+/// Locked build dependency resolutions, indexed by (package name, optional version).
 #[derive(Debug, Default, Clone)]
-pub struct LockedBuildResolutions(BTreeMap<PackageName, BTreeMap<Option<Version>, Resolution>>);
+pub struct LockedBuildResolutions(BTreeMap<(PackageName, Option<Version>), Resolution>);
 
 impl LockedBuildResolutions {
-    /// Create locked build resolutions from a flat map keyed by `(name, optional version)`.
+    /// Create locked build resolutions from a map keyed by `(name, optional version)`.
     pub fn new(map: BTreeMap<(PackageName, Option<Version>), Resolution>) -> Self {
-        let mut inner: BTreeMap<PackageName, BTreeMap<Option<Version>, Resolution>> =
-            BTreeMap::new();
-        for ((name, version), resolution) in map {
-            inner.entry(name).or_default().insert(version, resolution);
-        }
-        Self(inner)
+        Self(map)
     }
 
     /// Get the pre-built resolution for a given package name and version.
-    ///
-    /// First tries an exact (name, version) match, then falls back to a (name, None) match.
     pub fn get(&self, package: &PackageName, version: Option<&Version>) -> Option<&Resolution> {
-        let versions = self.0.get(package)?;
-        if let Some(version) = version {
-            versions
-                .get(&Some(version.clone()))
-                .or_else(|| versions.get(&None))
-        } else {
-            versions.get(&None)
-        }
+        self.0.get(&(package.clone(), version.cloned()))
     }
 }
 
-/// Build dependency version preferences, indexed by package name and version.
+/// A list of `(name, version)` pairs representing preferred build dependency versions.
+type BuildDependencyVersions = Vec<(PackageName, Version)>;
+
+/// Build dependency version preferences, indexed by (package name, optional version).
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(
-    BTreeMap<PackageName, BTreeMap<Option<Version>, Vec<(PackageName, Version)>>>,
-);
+pub struct BuildPreferences(BTreeMap<(PackageName, Option<Version>), BuildDependencyVersions>);
 
 impl BuildPreferences {
-    /// Create build preferences from a flat map keyed by `(name, optional version)`.
-    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>) -> Self {
-        let mut inner: BTreeMap<
-            PackageName,
-            BTreeMap<Option<Version>, Vec<(PackageName, Version)>>,
-        > = BTreeMap::new();
-        for ((name, version), deps) in map {
-            inner.entry(name).or_default().insert(version, deps);
-        }
-        Self(inner)
+    /// Create build preferences from a map keyed by `(name, optional version)`.
+    pub fn new(map: BTreeMap<(PackageName, Option<Version>), BuildDependencyVersions>) -> Self {
+        Self(map)
     }
 
     /// Get the build dependency preferences for a given package name and version.
-    ///
-    /// First tries an exact (name, version) match, then falls back to a (name, None) match.
     pub fn get(
         &self,
         package: &PackageName,
         version: Option<&Version>,
     ) -> Option<&[(PackageName, Version)]> {
-        let versions = self.0.get(package)?;
-        if let Some(version) = version {
-            versions
-                .get(&Some(version.clone()))
-                .or_else(|| versions.get(&None))
-        } else {
-            versions.get(&None)
-        }
-        .map(Vec::as_slice)
+        self.0
+            .get(&(package.clone(), version.cloned()))
+            .map(Vec::as_slice)
     }
 }
 
 /// Captured build dependency resolutions with markers.
 #[derive(Debug, Default, Clone)]
-pub struct BuildResolutions(Arc<Mutex<BuildResolutionInfoMap>>);
+pub struct BuildResolutions(Arc<Mutex<BuildResolutionGraphMap>>);
 
 impl BuildResolutions {
     /// Record a build resolution for the given package name and optional version.
@@ -213,13 +185,13 @@ impl BuildResolutions {
         &self,
         package: PackageName,
         version: Option<Version>,
-        info: BuildResolutionInfo,
+        graph: BuildResolutionGraph,
     ) {
-        self.0.lock().unwrap().insert((package, version), info);
+        self.0.lock().unwrap().insert((package, version), graph);
     }
 
     /// Get a snapshot of the current build resolutions.
-    pub fn snapshot(&self) -> BuildResolutionInfoMap {
+    pub fn snapshot(&self) -> BuildResolutionGraphMap {
         self.0.lock().unwrap().clone()
     }
 }

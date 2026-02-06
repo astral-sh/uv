@@ -120,8 +120,8 @@ impl Preference {
         }))
     }
 
-    /// Create a [`Preference`] from a previously resolved build dependency.
-    pub fn from_build(name: PackageName, version: Version) -> Self {
+    /// Create a [`Preference`] from a previously resolved package build dependency.
+    pub fn from_package_build(name: PackageName, version: Version) -> Self {
         Self {
             name,
             version,

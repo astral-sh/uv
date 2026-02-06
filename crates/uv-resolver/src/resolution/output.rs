@@ -21,6 +21,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_types::{
+    BuildDependencyEdge, BuildDependencyPackage, BuildResolutionGraph, ResolvedBuildDependency,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -604,27 +607,9 @@ impl ResolverOutput {
     ///
     /// This preserves the dependency graph structure so that transitive build
     /// dependencies can be walked at sync time with proper marker evaluation,
-    /// consistent with how `to_resolution()` handles regular dependencies.
-    ///
-    /// Returns `(roots, packages)` where:
-    /// - `roots`: direct build requirements as `(dist, hashes, marker)` tuples
-    /// - `packages`: all packages as `(dist, hashes, deps)` tuples, where each
-    ///   dep is `(name, version, marker)`
-    #[expect(clippy::type_complexity)]
-    pub fn build_resolution_graph(
-        &self,
-    ) -> (
-        Vec<(
-            ResolvedDist,
-            Vec<uv_pypi_types::HashDigest>,
-            uv_pep508::MarkerTree,
-        )>,
-        Vec<(
-            ResolvedDist,
-            Vec<uv_pypi_types::HashDigest>,
-            Vec<(PackageName, Version, uv_pep508::MarkerTree)>,
-        )>,
-    ) {
+    /// consistent with how [`Lock::all_build_resolutions`] handles regular
+    /// dependencies.
+    pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
         let mut roots = Vec::new();
         let mut packages = Vec::new();
 
@@ -644,7 +629,7 @@ impl ResolverOutput {
             }
 
             // Collect this package's outgoing dependency edges.
-            let mut deps = Vec::new();
+            let mut dependencies = Vec::new();
             for edge in self.graph.edges(node_index) {
                 let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {
                     continue;
@@ -652,18 +637,18 @@ impl ResolverOutput {
                 if !dep_dist.is_base() {
                     continue;
                 }
-                deps.push((
-                    dep_dist.name.clone(),
-                    dep_dist.version.clone(),
-                    edge.weight().pep508(),
-                ));
+                dependencies.push(BuildDependencyEdge {
+                    name: dep_dist.name.clone(),
+                    version: dep_dist.version.clone(),
+                    marker: edge.weight().pep508(),
+                });
             }
 
-            packages.push((
-                dist.dist.clone(),
-                dist.hashes.clone().into_iter().collect(),
-                deps,
-            ));
+            packages.push(BuildDependencyPackage {
+                dist: dist.dist.clone(),
+                hashes: dist.hashes.clone().into_iter().collect(),
+                dependencies,
+            });
         }
 
         // Collect root edges (direct build requirements).
@@ -675,15 +660,15 @@ impl ResolverOutput {
                 if !dist.is_base() {
                     continue;
                 }
-                roots.push((
-                    dist.dist.clone(),
-                    dist.hashes.clone().into_iter().collect(),
-                    edge.weight().pep508(),
-                ));
+                roots.push(ResolvedBuildDependency {
+                    dist: dist.dist.clone(),
+                    hashes: dist.hashes.clone().into_iter().collect(),
+                    marker: edge.weight().pep508(),
+                });
             }
         }
 
-        (roots, packages)
+        BuildResolutionGraph { roots, packages }
     }
 
     /// Return the number of distinct packages in the graph.

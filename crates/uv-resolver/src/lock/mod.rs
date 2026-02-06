@@ -75,6 +75,9 @@ pub const VERSION: u32 = 1;
 /// The current revision of the lockfile format.
 const REVISION: u32 = 3;
 
+/// The revision used when `build-dependencies` are included in the lockfile.
+const BUILD_DEPENDENCIES_REVISION: u32 = 4;
+
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
     UniversalMarker::new(pep508, ConflictMarker::TRUE)
@@ -244,6 +247,11 @@ pub(crate) struct HashedDist {
     pub(crate) dist: Dist,
     pub(crate) hashes: HashDigests,
 }
+
+/// Map from (package name, optional version) to a list of transitive build dependency
+/// (name, version) pairs. Used as resolver preferences during re-lock.
+pub(crate) type BuildDependencyPreferences =
+    BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
@@ -904,9 +912,15 @@ impl Lock {
     /// transitive deps can be walked at sync time via BFS.
     pub fn with_build_resolutions(
         mut self,
-        build_resolutions: &BTreeMap<(PackageName, Option<Version>), uv_types::BuildResolutionInfo>,
+        build_resolutions: &BTreeMap<
+            (PackageName, Option<Version>),
+            uv_types::BuildResolutionGraph,
+        >,
         root: &Path,
     ) -> Result<Self, LockError> {
+        // Bump the revision to indicate the lockfile contains build dependencies.
+        self.revision = BUILD_DEPENDENCIES_REVISION;
+
         // Build a set of existing (name, version) pairs for dedup.
         let mut existing_packages: FxHashSet<(PackageName, Version)> = self
             .packages
@@ -991,7 +1005,7 @@ impl Lock {
 
             if let Some(source_tree) = package.id.source.as_source_tree() {
                 let path = root.join(source_tree).join("pyproject.toml");
-                if let Ok(contents) = std::fs::read_to_string(&path) {
+                if let Ok(contents) = fs_err::read_to_string(&path) {
                     #[derive(serde::Deserialize)]
                     #[serde(rename_all = "kebab-case")]
                     struct PyProjectBuildSystem {
@@ -1214,10 +1228,8 @@ impl Lock {
     /// Extract all build dependency `(name, version)` pairs for each package,
     /// walking the dependency graph from `build-dependencies` through transitive
     /// `dependencies` edges. Used as resolver preferences during re-lock so that
-    /// transitive build deps keep their previously resolved versions.
-    pub fn build_dep_preferences(
-        &self,
-    ) -> BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>> {
+    /// transitive build dependencies keep their previously resolved versions.
+    pub fn build_dependency_preferences(&self) -> BuildDependencyPreferences {
         // Build a lookup map from (name, version) to package.
         let package_map: FxHashMap<(&PackageName, Option<&Version>), &Package> = self
             .packages
