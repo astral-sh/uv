@@ -2521,6 +2521,8 @@ async fn run_project(
                 args.diff,
                 args.extra_args,
                 args.version,
+                args.exclude_newer,
+                args.show_version,
                 client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
                 printer,
