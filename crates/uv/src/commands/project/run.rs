@@ -81,6 +81,7 @@ pub(crate) async fn run(
     project_dir: &Path,
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
+    downloaded_script: Option<&tempfile::NamedTempFile>,
     requirements: Vec<RequirementsSource>,
     show_resolution: bool,
     lock_check: LockCheck,
@@ -1284,7 +1285,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     debug!("Running `{command}`");
-    let mut process = command.as_command(interpreter);
+    let mut process = command.as_command(interpreter, downloaded_script);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1437,7 +1438,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(DisplaySafeUrl, tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(DisplaySafeUrl, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1477,7 +1478,11 @@ impl RunCommand {
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
-    fn as_command(&self, interpreter: &Interpreter) -> Command {
+    fn as_command(
+        &self,
+        interpreter: &Interpreter,
+        downloaded_script: Option<&tempfile::NamedTempFile>,
+    ) -> Command {
         match self {
             Self::Python(args) => {
                 let mut process = Command::new(interpreter.sys_executable());
@@ -1507,9 +1512,9 @@ impl RunCommand {
                 process.args(args);
                 process
             }
-            Self::PythonRemote(.., target, args) => {
+            Self::PythonRemote(.., args) => {
                 let mut process = Command::new(interpreter.sys_executable());
-                process.arg(target.path());
+                process.arg(downloaded_script.unwrap().path());
                 process.args(args);
                 process
             }
@@ -1742,9 +1747,8 @@ async fn resolve_gist_url(
 
 impl RunCommand {
     /// Determine the [`RunCommand`] for a given set of arguments.
-    pub(crate) async fn from_args(
+    pub(crate) fn from_args(
         command: &ExternalCommand,
-        client_builder: BaseClientBuilder<'_>,
         module: bool,
         script: bool,
         gui_script: bool,
@@ -1777,8 +1781,7 @@ impl RunCommand {
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
                 let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
-                let file = Self::download_remote_script(&url, &client_builder).await?;
-                return Ok(Self::PythonRemote(url, file, args.to_vec()));
+                return Ok(Self::PythonRemote(url, args.to_vec()));
             }
         }
 

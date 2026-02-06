@@ -187,27 +187,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             ..
         }) = &mut **command
         {
-            let settings = GlobalSettings::resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
-            let client_builder = BaseClientBuilder::new(
-                settings.network_settings.connectivity,
-                settings.network_settings.native_tls,
-                settings.network_settings.allow_insecure_host,
-                settings.preview,
-                settings.network_settings.read_timeout,
-                settings.network_settings.connect_timeout,
-                settings.network_settings.retries,
-            )
-            .http_proxy(settings.network_settings.http_proxy)
-            .https_proxy(settings.network_settings.https_proxy)
-            .no_proxy(settings.network_settings.no_proxy);
-            Some(
-                RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
-                    .await?,
-            )
+            Some(RunCommand::from_args(
+                command,
+                *module,
+                *script,
+                *gui_script,
+            )?)
         } else {
             None
         }
@@ -215,6 +200,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         None
     };
 
+    let mut downloaded_script = None;
+    // If the target is a remote script, download it.
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
         match &**command {
@@ -227,8 +214,29 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => None,
                     Err(err) => return Err(err.into()),
                 },
-                Some(RunCommand::PythonRemote(url, script, _)) => {
-                    match Pep723Metadata::read(&script).await {
+                Some(RunCommand::PythonRemote(url, _)) => {
+                    let settings = GlobalSettings::resolve(
+                        &cli.top_level.global_args,
+                        filesystem.as_ref(),
+                        &environment,
+                    );
+                    let client_builder = BaseClientBuilder::new(
+                        settings.network_settings.connectivity,
+                        settings.network_settings.native_tls,
+                        settings.network_settings.allow_insecure_host,
+                        settings.preview,
+                        settings.network_settings.read_timeout,
+                        settings.network_settings.connect_timeout,
+                        settings.network_settings.retries,
+                    )
+                    .http_proxy(settings.network_settings.http_proxy)
+                    .https_proxy(settings.network_settings.https_proxy)
+                    .no_proxy(settings.network_settings.no_proxy);
+
+                    downloaded_script =
+                        Some(RunCommand::download_remote_script(url, &client_builder).await?);
+
+                    match Pep723Metadata::read(downloaded_script.as_ref().unwrap()).await {
                         Ok(Some(metadata)) => Some(Pep723Item::Remote(metadata, url.clone())),
                         Ok(None) => None,
                         Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -1271,6 +1279,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 project,
                 &project_dir,
                 run_command,
+                downloaded_script.as_ref(),
                 script,
                 globals,
                 cli.top_level.no_config,
@@ -1937,6 +1946,7 @@ async fn run_project(
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
+    downloaded_script: Option<&tempfile::NamedTempFile>,
     script: Option<Pep723Item>,
     globals: GlobalSettings,
     // TODO(zanieb): Determine a better story for passing `no_config` in here
@@ -2056,6 +2066,7 @@ async fn run_project(
                 project_dir,
                 script,
                 command,
+                downloaded_script,
                 requirements,
                 args.show_resolution || globals.verbose > 0,
                 args.lock_check,
