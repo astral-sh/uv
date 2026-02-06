@@ -351,8 +351,14 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
+            let context = match (explicit_from, with.is_empty()) {
+                (true, true) => "--from",
+                (false, false) => "--with",
+                (true, false) => "--from`/`--with",
+                (false, true) => "tool",
+            };
             let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
+                .context(format!("Failed to resolve `{context}` requirement"));
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
