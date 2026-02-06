@@ -11745,6 +11745,88 @@ fn add_index_by_name_precedence() -> Result<()> {
     Ok(())
 }
 
+/// When a directory exists with the same name as a configured index, warn and use the directory.
+#[test]
+fn add_index_by_name_directory_ambiguity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Create a directory with the same name as the index
+    let proxy_dir = context.temp_dir.child("proxy");
+    proxy_dir.create_dir_all()?;
+
+    // Should warn about ambiguity and use the directory (which will fail since it's empty)
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("proxy"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Relative paths passed to `--index` should be disambiguated from index names (use `./proxy`). In the future, this path will be treated as the index defined by the same name
+    warning: Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./proxy`). Support for ambiguous values will be removed in the future
+    warning: Index directory `file://[TEMP_DIR]/proxy` is empty, skipping
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// With preview enabled, prefer the index name over an ambiguous directory.
+#[test]
+fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Create a directory with the same name as the index
+    let proxy_dir = context.temp_dir.child("proxy");
+    proxy_dir.create_dir_all()?;
+
+    // With preview, should use the named index (not the directory)
+    uv_snapshot!(context.filters(), context.add()
+        .arg("iniconfig")
+        .arg("--index").arg("proxy")
+        .arg("--preview-features").arg("index-assume-name"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Add a PyPI requirement.
 #[test]
 fn add_group_comment() -> Result<()> {
