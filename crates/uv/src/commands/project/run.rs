@@ -28,7 +28,7 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -546,35 +546,18 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         script_interpreter
     } else {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
-        let discovery_dir: Cow<'_, Path> =
-            if preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery) {
-                if let Some(dir) = command.as_ref().and_then(RunCommand::script_dir) {
-                    Cow::Owned(std::path::absolute(dir)?)
-                } else {
-                    Cow::Borrowed(project_dir)
-                }
-            } else {
-                Cow::Borrowed(project_dir)
-            };
-
         let project = if let Some(package) = package.as_ref() {
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(
-                    &discovery_dir,
-                    &DiscoveryOptions::default(),
-                    &workspace_cache,
-                )
-                .await?
-                .with_current_project(package.clone())
-                .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                    .await?
+                    .with_current_project(package.clone())
+                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
             match VirtualProject::discover(
-                &discovery_dir,
+                project_dir,
                 &DiscoveryOptions::default(),
                 &workspace_cache,
             )
@@ -1609,7 +1592,7 @@ impl RunCommand {
     }
 
     /// Return the directory containing the script, if any.
-    fn script_dir(&self) -> Option<&Path> {
+    pub(crate) fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
