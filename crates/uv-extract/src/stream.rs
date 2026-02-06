@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
@@ -45,7 +46,11 @@ struct ComputedEntry {
 /// This is useful for unzipping files as they're being downloaded. If the archive
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
 /// threads to work faster in that case.
-pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
+///
+/// `source_hint` is used for warning messages, to identify the source of the ZIP archive
+/// beneath the reader. It might be a URL, a file path, or something else.
+pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    source_hint: D,
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
@@ -97,7 +102,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         // A future version of uv will reject instead of warning about these.
         if !entry_has_well_known_compression(zip_entry) {
             warn_user_once!(
-                "The '{compression_method:?}' compression method is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
+                "One or more file entries in '{source_hint}' use the '{compression_method:?}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
                 compression_method = zip_entry.compression()
             );
         }
@@ -767,14 +772,15 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
-pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
+pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    hint: D,
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     match ext {
         SourceDistExtension::Zip => {
-            unzip(reader, target).await?;
+            unzip(hint, reader, target).await?;
         }
         SourceDistExtension::Tar => {
             untar(reader, target).await?;

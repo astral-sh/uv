@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-use crate::vendor::{CloneableSeekableReader, HasLength};
+use crate::vendor::CloneableSeekableReader;
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
@@ -11,10 +11,9 @@ use uv_warnings::warn_user_once;
 use zip::{CompressionMethod, ZipArchive};
 
 /// Unzip a `.zip` archive into the target directory.
-pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
-    reader: R,
-    target: &Path,
-) -> Result<(), Error> {
+pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
+    let (reader, filename) = reader.into_parts();
+
     /// Returns `true` if the entry uses a well-known compression method.
     ///
     /// This currently means just stored (no compression), DEFLATE, or zstd.
@@ -40,7 +39,8 @@ pub fn unzip<R: Send + std::io::Read + std::io::Seek + HasLength>(
 
             if !entry_has_well_known_compression(file.compression()) {
                 warn_user_once!(
-                    "The '{compression_method:?}' compression method is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
+                    "One or more file entries in '{filename}' use the '{compression_method:?}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
+                    filename = filename.display(),
                     compression_method = file.compression()
                 );
             }
