@@ -1062,6 +1062,16 @@ impl Workspace {
                                 continue;
                             }
 
+                            // If the directory only contains gitignored files
+                            // (e.g., `__pycache__`), skip it.
+                            if has_only_gitignored_files(&member_root) {
+                                debug!(
+                                    "Ignoring workspace member with only gitignored files: `{}`",
+                                    member_root.simplified_display()
+                                );
+                                continue;
+                            }
+
                             return Err(WorkspaceError::MissingPyprojectTomlMember(
                                 member_root,
                                 member_glob.to_string(),
@@ -1578,6 +1588,38 @@ async fn find_workspace(
     }
 
     Ok(None)
+}
+
+/// Check if a directory only contains files that are ignored.
+///
+/// Returns `true` if walking the directory while respecting `.gitignore` and `.ignore` rules
+/// yields no files, indicating that any files present (e.g., `__pycache__`) are all ignored.
+fn has_only_gitignored_files(path: &Path) -> bool {
+    let walker = ignore::WalkBuilder::new(path)
+        .hidden(false)
+        .parents(true)
+        .ignore(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .build();
+
+    for entry in walker {
+        let Ok(entry) = entry else {
+            // If we can't read an entry, assume non-ignored content exists.
+            return false;
+        };
+
+        // Skip the root directory itself.
+        if entry.path() == path {
+            continue;
+        }
+
+        // A non-ignored entry exists.
+        return false;
+    }
+
+    true
 }
 
 /// Check if we're in the `tool.uv.workspace.excluded` of a workspace.

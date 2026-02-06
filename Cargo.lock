@@ -7222,6 +7222,7 @@ dependencies = [
  "clap",
  "fs-err",
  "glob",
+ "ignore",
  "insta",
  "itertools 0.14.0",
  "owo-colors",
