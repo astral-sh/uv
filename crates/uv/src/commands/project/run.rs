@@ -1776,46 +1776,8 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let mut url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
-
-                let client = client_builder.build();
-                let mut response = client
-                    .for_host(&url)
-                    .get(Url::from(url.clone()))
-                    .send()
-                    .await?;
-
-                // If it's a Gist URL, use the GitHub API to get the raw URL.
-                if response.url().host_str() == Some("gist.github.com") {
-                    url =
-                        resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), &client_builder)
-                            .await?;
-
-                    response = client
-                        .for_host(&url)
-                        .get(Url::from(url.clone()))
-                        .send()
-                        .await?;
-                }
-
-                let file_stem = url
-                    .path_segments()
-                    .and_then(Iterator::last)
-                    .and_then(|segment| segment.strip_suffix(".py"))
-                    .unwrap_or("script");
-                let file = tempfile::Builder::new()
-                    .prefix(file_stem)
-                    .suffix(".py")
-                    .tempfile()?;
-
-                // Stream the response to the file.
-                let mut writer = file.as_file();
-                let mut reader = response.bytes_stream();
-                while let Some(chunk) = reader.next().await {
-                    use std::io::Write;
-                    writer.write_all(&chunk?)?;
-                }
-
+                let url = DisplaySafeUrl::parse(&target.to_string_lossy())?;
+                let file = Self::download_remote_script(&url, &client_builder).await?;
                 return Ok(Self::PythonRemote(url, file, args.to_vec()));
             }
         }
@@ -1860,6 +1822,52 @@ impl RunCommand {
                 args.iter().map(std::clone::Clone::clone).collect(),
             ))
         }
+    }
+
+    pub(crate) async fn download_remote_script(
+        mut url: &DisplaySafeUrl,
+        client_builder: &BaseClientBuilder<'_>,
+    ) -> anyhow::Result<tempfile::NamedTempFile> {
+        let client = client_builder.build();
+        let mut response = client
+            .for_host(url)
+            .get(Url::from(url.clone()))
+            .send()
+            .await?;
+
+        let gist_url;
+        // If it's a Gist URL, use the GitHub API to get the raw URL.
+        if response.url().host_str() == Some("gist.github.com") {
+            gist_url =
+                resolve_gist_url(DisplaySafeUrl::ref_cast(response.url()), client_builder).await?;
+            url = &gist_url;
+
+            response = client
+                .for_host(url)
+                .get(Url::from(url.clone()))
+                .send()
+                .await?;
+        }
+
+        let file_stem = url
+            .path_segments()
+            .and_then(Iterator::last)
+            .and_then(|segment| segment.strip_suffix(".py"))
+            .unwrap_or("script");
+        let file = tempfile::Builder::new()
+            .prefix(file_stem)
+            .suffix(".py")
+            .tempfile()?;
+
+        // Stream the response to the file.
+        let mut writer = file.as_file();
+        let mut reader = response.bytes_stream();
+        while let Some(chunk) = reader.next().await {
+            use std::io::Write;
+            writer.write_all(&chunk?)?;
+        }
+
+        Ok(file)
     }
 }
 
