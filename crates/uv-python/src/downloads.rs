@@ -663,6 +663,25 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
     }
 }
 
+impl From<&ManagedPythonDownload> for PythonDownloadRequest {
+    fn from(download: &ManagedPythonDownload) -> Self {
+        let key = download.key();
+        Self::new(
+            Some(VersionRequest::from(&key.version())),
+            match &key.implementation {
+                LenientImplementationName::Known(implementation) => Some(*implementation),
+                LenientImplementationName::Unknown(name) => unreachable!(
+                    "Managed Python downloads are expected to always have known implementation names, found {name}"
+                ),
+            },
+            Some(ArchRequest::Explicit(*key.arch())),
+            Some(*key.os()),
+            Some(*key.libc()),
+            Some(key.prerelease.is_some()),
+        )
+    }
+}
+
 impl Display for PythonDownloadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut parts = Vec::new();

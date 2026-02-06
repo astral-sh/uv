@@ -591,6 +591,14 @@ impl TestContext {
         self
     }
 
+    #[must_use]
+    pub fn with_manual_python_downloads(mut self) -> Self {
+        self.extra_env
+            .push((EnvVars::UV_PYTHON_DOWNLOADS.into(), "manual".into()));
+
+        self
+    }
+
     pub fn with_versions_as_managed(mut self, versions: &[&str]) -> Self {
         self.extra_env.push((
             EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED.into(),

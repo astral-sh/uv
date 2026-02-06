@@ -220,9 +220,14 @@ impl PythonInstallation {
             match python_downloads {
                 PythonDownloads::Automatic => {}
                 PythonDownloads::Manual => {
+                    let install_request = PythonDownloadRequest::from(download)
+                        .unset_defaults()
+                        .without_patch()
+                        .simplified_display()
+                        .map(|install| format!(" {install}"))
+                        .unwrap_or_default();
                     return Err(err.with_missing_python_hint(format!(
-                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
-                        request.to_canonical_string(),
+                        "A managed Python download is available{for_request}, but Python downloads are set to 'manual', use `uv python install{install_request}` to install the required version",
                     )));
                 }
                 PythonDownloads::Never => {
