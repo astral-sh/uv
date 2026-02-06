@@ -35,6 +35,7 @@ uv-warnings = { workspace = true }
 clap = { workspace = true, optional = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
+ignore = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }

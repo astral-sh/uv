@@ -852,7 +852,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that workspace discovery errors if a member is missing a `pyproject.toml`.
+/// Ensure that workspace discovery skips an empty directory that matches a member glob.
 #[test]
 fn workspace_empty_member() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -880,6 +880,124 @@ fn workspace_empty_member() -> Result<()> {
 
     // ... and an empty c.
     fs_err::create_dir_all(workspace.join("packages").join("c"))?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery skips directories that only contain gitignored files.
+#[test]
+fn workspace_gitignored_member() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that only contains gitignored files.
+    fs_err::create_dir_all(workspace.join("packages").join("c").join("__pycache__"))?;
+    fs_err::write(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("__pycache__")
+            .join("test.cpython-312.pyc"),
+        "fake",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that workspace discovery still errors for non-empty, non-gitignored directories
+/// missing a `pyproject.toml`.
+#[test]
+fn workspace_nonempty_member_no_pyproject() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that contains non-gitignored files but no `pyproject.toml`.
+    fs_err::create_dir_all(workspace.join("packages").join("c"))?;
+    fs_err::write(
+        workspace.join("packages").join("c").join("README.md"),
+        "# Hello",
+    )?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
     success: false
