@@ -1135,7 +1135,11 @@ impl RegistryClient {
             if let Some(authorization) = req.headers().get("authorization") {
                 headers.append("authorization", authorization.clone());
             }
-
+            // Specify identity encoding to prevent double compression from async_http_range_reader and reqwest
+            headers.insert(
+                reqwest::header::ACCEPT_ENCODING,
+                reqwest::header::HeaderValue::from_static("identity"),
+            );
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response| {
