@@ -2,14 +2,14 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 /// Lock a project with a dependency that requires building from source
 /// (due to dynamic metadata), and verify that build dependencies are captured
 /// in the lock file.
 #[test]
 fn lock_build_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency that uses setuptools with dynamic version,
     // forcing a build to extract metadata.
@@ -132,7 +132,7 @@ fn lock_build_dependencies() -> Result<()> {
 /// by using platform-specific markers on build requirements.
 #[test]
 fn lock_build_dependencies_universal() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with platform-specific build dependencies.
     // With universal resolution, both anyio (linux) and iniconfig (darwin/windows)
@@ -318,7 +318,7 @@ fn lock_build_dependencies_universal() -> Result<()> {
 /// subsequent resolves, producing the same versions.
 #[test]
 fn lock_build_dependencies_preference() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version requiring setuptools.
     let dep_dir = context.temp_dir.child("dep");
@@ -498,7 +498,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
 /// and verify each gets its own build-dependencies section.
 #[test]
 fn lock_build_dependencies_multiple_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create first local dependency.
     let dep_a_dir = context.temp_dir.child("dep-a");
@@ -659,7 +659,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
 /// build dependencies from scratch.
 #[test]
 fn lock_build_dependencies_upgrade() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -847,7 +847,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
 /// Verify that `--exclude-newer` is respected for build dependency resolution.
 #[test]
 fn lock_build_dependencies_exclude_newer() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -969,7 +969,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
 /// resolution and captured in the lock file.
 #[test]
 fn lock_build_dependencies_extra() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let dep_dir = context.temp_dir.child("dep");
     dep_dir.create_dir_all()?;
@@ -1087,7 +1087,7 @@ fn lock_build_dependencies_extra() -> Result<()> {
 /// due to platform-specific dependencies.
 #[test]
 fn lock_build_dependencies_fork() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version, forcing a build.
     let dep_dir = context.temp_dir.child("dep");
@@ -1233,7 +1233,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
 /// from the main resolution are preserved.
 #[test]
 fn lock_build_dependencies_shared_package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with dynamic version that requires `iniconfig`
     // as a build dependency (via setuptools build-system.requires).
@@ -1329,7 +1329,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
 /// must also be excluded from the build environment.
 #[test]
 fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a local dependency with platform-specific build dependencies.
     // `anyio` is linux-only, `iniconfig` is darwin/windows-only.

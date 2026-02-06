@@ -245,6 +245,11 @@ pub(crate) struct HashedDist {
     pub(crate) hashes: HashDigests,
 }
 
+/// Map from (package name, optional version) to a list of transitive build dependency
+/// (name, version) pairs. Used as resolver preferences during re-lock.
+pub(crate) type BuildDepPreferences =
+    BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>;
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
@@ -991,7 +996,7 @@ impl Lock {
 
             if let Some(source_tree) = package.id.source.as_source_tree() {
                 let path = root.join(source_tree).join("pyproject.toml");
-                if let Ok(contents) = std::fs::read_to_string(&path) {
+                if let Ok(contents) = fs_err::read_to_string(&path) {
                     #[derive(serde::Deserialize)]
                     #[serde(rename_all = "kebab-case")]
                     struct PyProjectBuildSystem {
@@ -1215,9 +1220,7 @@ impl Lock {
     /// walking the dependency graph from `build-dependencies` through transitive
     /// `dependencies` edges. Used as resolver preferences during re-lock so that
     /// transitive build deps keep their previously resolved versions.
-    pub fn build_dep_preferences(
-        &self,
-    ) -> BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>> {
+    pub fn build_dep_preferences(&self) -> BuildDepPreferences {
         // Build a lookup map from (name, version) to package.
         let package_map: FxHashMap<(&PackageName, Option<&Version>), &Package> = self
             .packages

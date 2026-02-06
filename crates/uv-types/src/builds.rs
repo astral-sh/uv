@@ -164,19 +164,18 @@ impl LockedBuildResolutions {
     }
 }
 
+/// A list of `(name, version)` pairs representing preferred build dependency versions.
+type BuildDepVersions = Vec<(PackageName, Version)>;
+
 /// Build dependency version preferences, indexed by package name and version.
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(
-    BTreeMap<PackageName, BTreeMap<Option<Version>, Vec<(PackageName, Version)>>>,
-);
+pub struct BuildPreferences(BTreeMap<PackageName, BTreeMap<Option<Version>, BuildDepVersions>>);
 
 impl BuildPreferences {
     /// Create build preferences from a flat map keyed by `(name, optional version)`.
-    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Vec<(PackageName, Version)>>) -> Self {
-        let mut inner: BTreeMap<
-            PackageName,
-            BTreeMap<Option<Version>, Vec<(PackageName, Version)>>,
-        > = BTreeMap::new();
+    pub fn new(map: BTreeMap<(PackageName, Option<Version>), BuildDepVersions>) -> Self {
+        let mut inner: BTreeMap<PackageName, BTreeMap<Option<Version>, BuildDepVersions>> =
+            BTreeMap::new();
         for ((name, version), deps) in map {
             inner.entry(name).or_default().insert(version, deps);
         }
