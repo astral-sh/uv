@@ -33588,3 +33588,37 @@ fn lock_index_by_name() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that explicit indexes passed via CLI produce a warning.
+#[test]
+fn lock_index_by_name_explicit() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [[tool.uv.index]]
+        name = "explicit"
+        explicit = true
+        url = "https://pypi-proxy.fly.dev/simple"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index").arg("explicit"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}

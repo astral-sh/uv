@@ -1937,6 +1937,7 @@ impl AddSettings {
             filesystem.as_ref(),
             package_indexes.clone(),
             preview,
+            true,
         )
         .into_iter()
         .flatten()
