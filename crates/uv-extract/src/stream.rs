@@ -772,15 +772,18 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
+///
+/// `source_hint` is used for warning messages, to identify the source of the archive
+/// beneath the reader. It might be a URL, a file path, or something else.
 pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
-    hint: D,
+    source_hint: D,
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     match ext {
         SourceDistExtension::Zip => {
-            unzip(hint, reader, target).await?;
+            unzip(source_hint, reader, target).await?;
         }
         SourceDistExtension::Tar => {
             untar(reader, target).await?;
