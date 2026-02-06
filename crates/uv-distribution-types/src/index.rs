@@ -478,6 +478,8 @@ pub enum IndexArgStrategy {
     IgnoreDirectory,
 }
 
+/// Error returned when an unresolved index does not map to an index name in the
+/// list provided.
 #[derive(Debug, Error)]
 #[error("Could not find an index named `{0}`")]
 pub struct ResolveIndexArgError(IndexName);
