@@ -12,8 +12,6 @@ use zip::{CompressionMethod, ZipArchive};
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
-    let (reader, filename) = reader.into_parts();
-
     /// Returns `true` if the entry uses a well-known compression method.
     ///
     /// This currently means just stored (no compression), DEFLATE, or zstd.
@@ -23,6 +21,8 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
             CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
         )
     }
+
+    let (reader, filename) = reader.into_parts();
 
     // Unzip in parallel.
     let reader = std::io::BufReader::new(reader);
