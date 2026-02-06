@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -8,6 +9,7 @@ use url::Url;
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
+use uv_warnings::warn_user_once;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -269,13 +271,13 @@ pub enum IndexFormat {
 }
 
 impl Index {
-    /// Initialize an [`Index`] from a pip-style `--index-url`.
-    pub fn from_index_url(url: IndexUrl) -> Self {
+    /// Initialize an [`Index`] from a url
+    pub fn new(url: IndexUrl) -> Self {
         Self {
-            url,
             name: None,
+            url,
             explicit: false,
-            default: true,
+            default: false,
             origin: None,
             format: IndexFormat::Simple,
             publish_url: None,
@@ -283,44 +285,78 @@ impl Index {
             ignore_error_codes: None,
             cache_control: None,
         }
+    }
+
+    /// Initialize an [`Index`] from a pip-style `--index-url`.
+    pub fn from_index_url(url: IndexUrl) -> Self {
+        Self::new(url).with_default()
     }
 
     /// Initialize an [`Index`] from a pip-style `--extra-index-url`.
     pub fn from_extra_index_url(url: IndexUrl) -> Self {
-        Self {
-            url,
-            name: None,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
-        }
+        Self::new(url)
     }
 
     /// Initialize an [`Index`] from a pip-style `--find-links`.
     pub fn from_find_links(url: IndexUrl) -> Self {
-        Self {
-            url,
-            name: None,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Flat,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
+        Self::new(url).with_format(IndexFormat::Flat)
+    }
+
+    /// Try to initialise an index from a name and url CLI argument
+    ///
+    /// Returns `Ok(None)` if `s` didn't appear to match the right format.
+    /// e.g.: `name=https://pypi.org/simple`
+    pub fn try_from_named_cli(s: &str) -> Result<Option<Self>, IndexSourceError> {
+        if let Some((name, url)) = s.split_once('=')
+            && !name.chars().any(|c| c == ':')
+        {
+            let name = IndexName::from_str(name)?;
+            let url = IndexUrl::from_str(url)?;
+            Ok(Some(
+                Self::new(url).with_name(name).with_origin(Origin::Cli),
+            ))
+        } else {
+            Ok(None)
         }
+    }
+
+    /// Parse a default index passed on the command line
+    pub fn from_default_index(s: &str) -> Result<Self, IndexSourceError> {
+        // See if it looks like a source prefixed with a name
+        if let Some(index) = Self::try_from_named_cli(s)? {
+            return Ok(index.with_default());
+        }
+
+        // Otherwise, assume the source is a URL.
+        let url = IndexUrl::from_str(s)?;
+        Ok(Self::new(url).with_origin(Origin::Cli).with_default())
+    }
+
+    /// Set the [`IndexName`] of the index.
+    #[must_use]
+    pub fn with_name(mut self, name: IndexName) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    /// Set the index as a default
+    #[must_use]
+    pub fn with_default(mut self) -> Self {
+        self.default = true;
+        self
     }
 
     /// Set the [`Origin`] of the index.
     #[must_use]
     pub fn with_origin(mut self, origin: Origin) -> Self {
         self.origin = Some(origin);
+        self
+    }
+
+    /// Set the [`IndexFormat`] of the index.
+    #[must_use]
+    pub fn with_format(mut self, format: IndexFormat) -> Self {
+        self.format = format;
         self
     }
 
@@ -423,44 +459,108 @@ impl From<IndexUrl> for Index {
     }
 }
 
-impl FromStr for Index {
-    type Err = IndexSourceError;
+/// A potentially unresolved index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexArg {
+    /// A usable index (with a URL)
+    Resolved(Index),
+    /// An index name which must be looked up
+    Unresolved(IndexName),
+}
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default: false,
-                    origin: None,
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                });
-            }
+/// The resolution strategy to use when an unresolved [`IndexArg`] could refer
+/// to both a directory and a named index.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IndexArgStrategy {
+    /// Pick the directory over the name and warn
+    PreferDirectory,
+    /// Pick the name and ignore the directory with no warning
+    IgnoreDirectory,
+}
+
+/// Error returned when an unresolved index does not map to an index name in the
+/// list provided.
+#[derive(Debug, Error)]
+#[error("Could not find an index named `{0}`")]
+pub struct ResolveIndexArgError(IndexName);
+
+impl IndexArg {
+    /// Parse a non-default index passed on the command line
+    pub fn from_cli(s: &str) -> Result<Self, IndexSourceError> {
+        // See if it looks like a source prefixed with a name
+        if let Some(index) = Index::try_from_named_cli(s)? {
+            return Ok(Self::Resolved(index));
+        }
+
+        // Consider if it could be just a name
+        if let Ok(name) = IndexName::from_str(s) {
+            return Ok(Self::Unresolved(name));
         }
 
         // Otherwise, assume the source is a URL.
         let url = IndexUrl::from_str(s)?;
-        Ok(Self {
-            name: None,
-            url,
-            explicit: false,
-            default: false,
-            origin: None,
-            format: IndexFormat::Simple,
-            publish_url: None,
-            authenticate: AuthPolicy::default(),
-            ignore_error_codes: None,
-            cache_control: None,
-        })
+        Ok(Self::Resolved(Index::new(url).with_origin(Origin::Cli)))
+    }
+
+    /// Converts from [`IndexArg`] to [`Option<Index>`].
+    ///
+    /// Useful when filtering out unresolved indices.
+    pub fn index(self) -> Option<Index> {
+        match self {
+            Self::Resolved(index) => Some(index),
+            Self::Unresolved(_) => None,
+        }
+    }
+
+    /// Attempt to look up the [`IndexArg`] in the passed list of indexes
+    ///
+    /// The origin is inherited from the index
+    pub fn try_resolve<I>(
+        self,
+        indexes: I,
+        strategy: IndexArgStrategy,
+    ) -> Result<Index, ResolveIndexArgError>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Index>,
+    {
+        match self {
+            Self::Resolved(index) => Ok(index),
+            Self::Unresolved(unresolved) => {
+                if let Some(index) = indexes
+                    .into_iter()
+                    .find(|index| index.borrow().name.as_ref() == Some(&unresolved))
+                {
+                    match strategy {
+                        IndexArgStrategy::PreferDirectory => {
+                            // If a directory of the same name exists, treat it as a directory but
+                            // warn the user of the impending changes.
+                            if let Ok(url @ IndexUrl::Path(_)) =
+                                IndexUrl::from_str(unresolved.as_ref())
+                                && let Ok(path) = url.inner().as_path()
+                                && path.is_dir()
+                            {
+                                if cfg!(windows) {
+                                    warn_user_once!(
+                                        "Relative paths passed to `--index` should be disambiguated from index names (use `.\\{unresolved}` or `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
+                                    );
+                                } else {
+                                    warn_user_once!(
+                                        "Relative paths passed to `--index` should be disambiguated from index names (use `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
+                                    );
+                                }
+                                Ok(Index::new(url.clone()).with_origin(Origin::Cli))
+                            } else {
+                                Ok(index.borrow().clone())
+                            }
+                        }
+                        IndexArgStrategy::IgnoreDirectory => Ok(index.borrow().clone()),
+                    }
+                } else {
+                    Err(ResolveIndexArgError(unresolved))
+                }
+            }
+        }
     }
 }
 

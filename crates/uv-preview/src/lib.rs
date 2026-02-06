@@ -37,6 +37,7 @@ pub enum PreviewFeature {
     AdjustUlimit = 1 << 22,
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
+    IndexAssumeName = 1 << 25,
 }
 
 impl PreviewFeature {
@@ -68,6 +69,7 @@ impl PreviewFeature {
             Self::AdjustUlimit => "adjust-ulimit",
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
+            Self::IndexAssumeName => "index-assume-name",
         }
     }
 }
@@ -112,6 +114,7 @@ impl FromStr for PreviewFeature {
             "adjust-ulimit" => Self::AdjustUlimit,
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
+            "index-assume-name" => Self::IndexAssumeName,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -342,6 +345,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::RelocatableEnvsDefault.as_str(),
             "relocatable-envs-default"
+        );
+        assert_eq!(
+            PreviewFeature::IndexAssumeName.as_str(),
+            "index-assume-name"
         );
     }
 }
