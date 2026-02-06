@@ -13,7 +13,7 @@ use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{
     Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
-use uv_warnings::owo_colors::OwoColorize;
+use uv_warnings::{owo_colors::OwoColorize, warn_user_once};
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -195,12 +195,19 @@ pub fn check_conflicts(flag_a: Flag, flag_b: Flag) {
 /// Indexes passed by name are resolved from the filesystem configuration
 /// prioritizing indexes from the workspace member, then the workspace, and then
 /// the configuration.
+///
+/// A warning is emitted for any names which resolve to an explicit index.
+///
+/// If `permit_single_explicit_index` is true, the warning is only emitted when
+/// more than one index is provided (this is intended for the `uv add` path
+/// where a single explicit index can be used to pin a package to a source).
 pub fn resolve_and_combine_indexes(
     default_index: Option<Maybe<Index>>,
     index: Option<Vec<Vec<Maybe<IndexArg>>>>,
     filesystem: Option<&FilesystemOptions>,
     package_indexes: Vec<Index>,
     preview: Preview,
+    permit_single_explicit_index: bool,
 ) -> Option<Vec<Index>> {
     let filesystem_indexes: Vec<Index> = package_indexes
         .into_iter()
@@ -244,7 +251,23 @@ pub fn resolve_and_combine_indexes(
             .collect()
     });
 
-    default_index.combine(index)
+    let combined = default_index.combine(index);
+
+    if let Some(ref indexes) = combined {
+        if !permit_single_explicit_index || indexes.len() > 1 {
+            if let Some(index) = indexes.iter().find(|index| index.explicit) {
+                let name = index
+                    .name
+                    .as_ref()
+                    .map_or_else(|| index.url.to_string(), ToString::to_string);
+                warn_user_once!(
+                    "Explicit index `{name}` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`."
+                );
+            }
+        }
+    }
+
+    combined
 }
 
 impl From<RefreshArgs> for Refresh {
@@ -498,6 +521,7 @@ impl Resolve<IndexArgs> for PipOptions {
                 filesystem,
                 package_indexes,
                 preview,
+                false,
             ),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
@@ -565,6 +589,7 @@ pub fn resolver_options(
             filesystem,
             package_indexes,
             preview,
+            false,
         ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
@@ -678,6 +703,7 @@ pub fn resolver_installer_options(
             filesystem,
             package_indexes,
             preview,
+            false,
         ),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {

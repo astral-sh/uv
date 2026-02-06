@@ -11827,6 +11827,84 @@ fn add_index_by_name_directory_ambiguity_preview() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_index_by_name_explicit_single() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "explicit"
+        explicit = true
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--index").arg("explicit")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn add_index_by_name_explicit_multiple() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "explicit"
+        explicit = true
+        url = "https://pypi-proxy.fly.dev/simple"
+
+        [[tool.uv.index]]
+        name = "implicit"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    // Multiple indexes with at least one explicit should produce a warning
+    uv_snapshot!(context.filters(), context.add()
+        .arg("--index").arg("explicit")
+        .arg("--index").arg("implicit")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Explicit index `explicit` will be ignored. Explicit indexes are only used when specified in `[tool.uv.sources]`.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 /// Add a PyPI requirement.
 #[test]
 fn add_group_comment() -> Result<()> {
