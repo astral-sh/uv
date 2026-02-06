@@ -1,4 +1,3 @@
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -139,24 +138,8 @@ impl<'de> serde::Deserialize<'de> for PreviewFeature {
     where
         D: serde::Deserializer<'de>,
     {
-        struct Visitor;
-
-        impl serde::de::Visitor<'_> for Visitor {
-            type Value = PreviewFeature;
-
-            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
-                f.write_str("a string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                PreviewFeature::from_str(v).map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
+        let s: Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
