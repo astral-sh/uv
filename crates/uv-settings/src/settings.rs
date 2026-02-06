@@ -664,6 +664,7 @@ impl ResolverInstallerSchema {
         })
     }
 
+    /// Return the priority ordered list of indexes
     pub fn indexes(&self) -> impl Iterator<Item = Index> {
         self.index
             .iter()
