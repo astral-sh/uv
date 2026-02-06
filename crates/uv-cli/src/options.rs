@@ -1,6 +1,6 @@
 use std::fmt;
 
-use anstream::eprintln;
+use anstream::{eprint, eprintln};
 
 use tracing::debug;
 use uv_cache::Refresh;
@@ -13,7 +13,10 @@ use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{
     Combine, EnvFlag, FilesystemOptions, PipOptions, ResolverInstallerOptions, ResolverOptions,
 };
-use uv_warnings::{owo_colors::OwoColorize, warn_user_once};
+use uv_warnings::{
+    owo_colors::{AnsiColors, OwoColorize},
+    warn_user_once,
+};
 
 use crate::{
     BuildOptionsArgs, FetchArgs, IndexArgs, InstallerArgs, Maybe, RefreshArgs, ResolverArgs,
@@ -225,14 +228,18 @@ pub fn resolve_and_combine_indexes(
         IndexArgStrategy::PreferDirectory
     };
     let resolve = |index_arg: IndexArg| -> Index {
-        #[allow(clippy::print_stderr, clippy::exit)]
         match index_arg.try_resolve(&filesystem_indexes, strategy) {
             Ok(index) => {
                 debug!("Resolved index by name: {:?}", index);
                 index
             }
             Err(error) => {
-                eprintln!("error: {error}");
+                let mut error_chain = String::new();
+                // Writing to a string can't fail with errors (panics on allocation failure)
+                uv_warnings::write_error_chain(&error, &mut error_chain, "error", AnsiColors::Red)
+                    .unwrap();
+                eprint!("{}", error_chain);
+                #[expect(clippy::exit)]
                 std::process::exit(2);
             }
         }
