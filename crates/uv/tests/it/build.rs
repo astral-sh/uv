@@ -1794,7 +1794,7 @@ fn build_list_files_errors() -> Result<()> {
 
     ----- stderr -----
       × Failed to build `[WORKSPACE]/test/packages/anyio_local`
-      ╰─▶ Can only use `--list` with the uv backend
+      ╰─▶ Can only use `--list` with a compatible uv build backend, but `[WORKSPACE]/test/packages/anyio_local` is not compatible because `build_system.build-backend` is not `uv_build`, but `flit_core.buildapi`
     ");
     Ok(())
 }
