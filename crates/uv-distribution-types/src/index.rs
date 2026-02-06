@@ -10,7 +10,7 @@ use url::Url;
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::exclude_newer::ExcludeNewerOverride;
 use crate::index_name::{IndexName, IndexNameError};
@@ -651,11 +651,11 @@ impl IndexArg {
                                 && path.is_dir()
                             {
                                 if cfg!(windows) {
-                                    warn_user!(
+                                    warn_user_once!(
                                         "Relative paths passed to `--index` should be disambiguated from index names (use `.\\{unresolved}` or `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
                                     );
                                 } else {
-                                    warn_user!(
+                                    warn_user_once!(
                                         "Relative paths passed to `--index` should be disambiguated from index names (use `./{unresolved}`). In the future, this path will be treated as the index defined by the same name"
                                     );
                                 }
