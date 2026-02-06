@@ -36,14 +36,13 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn remove(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
@@ -75,7 +74,7 @@ pub(crate) async fn remove(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation",
             );
         }
-        if frozen {
+        if frozen.is_some() {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -184,7 +183,7 @@ pub(crate) async fn remove(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
@@ -389,7 +388,7 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),
@@ -426,7 +425,7 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {

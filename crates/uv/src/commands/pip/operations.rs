@@ -33,6 +33,7 @@ use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
+use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
@@ -217,7 +218,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 pyproject_path,
                 None,
                 build_dispatch.locations(),
-                build_dispatch.sources(),
+                build_dispatch.sources().clone(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
             )
@@ -385,7 +386,7 @@ pub(crate) enum Modifications {
 
 /// A distribution which was or would be modified
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ChangedDist {
     Local(LocalDist),
     Remote(Arc<Dist>),
@@ -483,7 +484,7 @@ impl Changelog {
     {
         // SAFETY: This is allowed because `LocalDist` implements `Hash` and `Eq` based solely on
         // the inner `kind`, and omits the types that rely on internal mutability.
-        #[allow(clippy::mutable_key_type)]
+        #[expect(clippy::mutable_key_type)]
         let mut uninstalled: HashSet<_> = uninstalled.into_iter().collect();
         let (reinstalled, installed): (HashSet<_>, HashSet<_>) = installed
             .into_iter()
@@ -832,7 +833,7 @@ async fn execute_plan(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -894,19 +895,32 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
     printer: Printer,
 ) -> Result<(), Error> {
+    // Resolve minor-version link directories (e.g., `cpython-3.12` → `cpython-3.12.12`).
+    // On Windows, junction points aren't resolved by the interpreter's `sys.prefix`, so we
+    // use the target directory from the minor-version link to display the actual installation.
+    // This only applies to managed installations, not virtual environments.
+    let root = if env.interpreter().is_virtualenv() {
+        env.root().to_path_buf()
+    } else {
+        ManagedPythonInstallation::try_from_interpreter(env.interpreter())
+            .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
+            .map(|link| link.target_directory)
+            .unwrap_or_else(|| env.root().to_path_buf())
+    };
+
     let message = format!(
         "Using Python {} environment at: {}",
         env.interpreter().python_version(),
-        env.root().user_display()
+        root.user_display()
     );
 
-    let Ok(target) = std::path::absolute(env.root()) else {
+    let Ok(target) = std::path::absolute(&root) else {
         debug!("{}", message);
         return Ok(());
     };
@@ -937,7 +951,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -1010,7 +1024,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -1028,7 +1042,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-#[allow(clippy::result_large_err)]
+#[expect(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

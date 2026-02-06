@@ -14,7 +14,6 @@ use uv_install_wheel::read_record_file;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
-use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
@@ -153,7 +152,7 @@ impl InstalledTools {
     /// included with an error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
@@ -311,7 +310,6 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
-        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -342,7 +340,6 @@ impl InstalledTools {
             false,
             false,
             false,
-            preview,
         )?;
 
         Ok(venv)

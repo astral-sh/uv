@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, Reinstall,
+    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
@@ -15,7 +15,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
-use uv_preview::PreviewFeatures;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -213,6 +213,7 @@ pub struct GlobalOptions {
     #[option(
         default = "false",
         value_type = "bool",
+        uv_toml_only = true,
         example = r#"
             native-tls = true
         "#
@@ -244,6 +245,7 @@ pub struct GlobalOptions {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             cache-dir = "./.uv_cache"
         "#
@@ -266,7 +268,7 @@ pub struct GlobalOptions {
             preview-features = ["python-upgrade"]
         "#
     )]
-    pub preview_features: Option<Vec<PreviewFeatures>>,
+    pub preview_features: Option<Vec<PreviewFeature>>,
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
@@ -321,6 +323,36 @@ pub struct GlobalOptions {
         "#
     )]
     pub concurrent_installs: Option<NonZeroUsize>,
+    /// The URL of the HTTP proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            http-proxy = "http://proxy.example.com"
+        "#
+    )]
+    pub http_proxy: Option<ProxyUrl>,
+    /// The URL of the HTTPS proxy to use.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            https-proxy = "https://proxy.example.com"
+        "#
+    )]
+    pub https_proxy: Option<ProxyUrl>,
+    /// A list of hosts to exclude from proxying.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        uv_toml_only = true,
+        example = r#"
+            no-proxy = ["localhost", "127.0.0.1"]
+        "#
+    )]
+    pub no_proxy: Option<Vec<String>>,
     /// Allow insecure connections to host.
     ///
     /// Expects to receive either a hostname (e.g., `localhost`), a host-port pair (e.g.,
@@ -360,6 +392,7 @@ pub struct InstallerOptions {
     pub no_binary: Option<bool>,
     pub no_binary_package: Option<Vec<PackageName>>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Settings relevant to all resolver operations.
@@ -390,6 +423,7 @@ pub struct ResolverOptions {
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
 }
 
 /// Shared settings, relevant to all operations that must resolve and install dependencies. The
@@ -418,6 +452,7 @@ pub struct ResolverInstallerOptions {
     pub torch_backend: Option<TorchMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub upgrade: Option<Upgrade>,
     pub reinstall: Option<Reinstall>,
     pub no_build: Option<bool>,
@@ -452,6 +487,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -487,6 +523,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             torch_backend,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade: Upgrade::from_args(
                 upgrade,
                 upgrade_package
@@ -898,6 +935,15 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1020,6 +1066,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-install-mirror = "https://github.com/astral-sh/python-build-standalone/releases/download"
         "#
@@ -1036,6 +1083,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             pypy-install-mirror = "https://downloads.python.org/pypy"
         "#
@@ -1046,6 +1094,7 @@ pub struct PythonInstallMirrors {
     #[option(
         default = "None",
         value_type = "str",
+        uv_toml_only = true,
         example = r#"
             python-downloads-json-url = "/etc/uv/python-downloads.json"
         "#
@@ -1786,6 +1835,15 @@ pub struct PipOptions {
         "#
     )]
     pub no_sources: Option<bool>,
+    /// Ignore `tool.uv.sources` for the specified packages.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            no-sources-package = ["ruff"]
+        "#
+    )]
+    pub no_sources_package: Option<Vec<PackageName>>,
     /// Allow package upgrades, ignoring pinned versions in any existing output file.
     #[option(
         default = "false",
@@ -1936,6 +1994,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             torch_backend: value.torch_backend,
         }
     }
@@ -1977,6 +2036,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             no_binary: value.no_binary,
             no_binary_package: value.no_binary_package,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
         }
     }
 }
@@ -2012,6 +2072,7 @@ pub struct ToolOptions {
     pub link_mode: Option<LinkMode>,
     pub compile_bytecode: Option<bool>,
     pub no_sources: Option<bool>,
+    pub no_sources_package: Option<Vec<PackageName>>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
     pub no_binary: Option<bool>,
@@ -2043,6 +2104,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             no_build: value.no_build,
             no_build_package: value.no_build_package,
             no_binary: value.no_binary,
@@ -2076,6 +2138,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             no_sources: value.no_sources,
+            no_sources_package: value.no_sources_package,
             upgrade: None,
             reinstall: None,
             no_build: value.no_build,
@@ -2100,7 +2163,7 @@ pub struct OptionsWire {
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
     preview: Option<bool>,
-    preview_features: Option<Vec<PreviewFeatures>>,
+    preview_features: Option<Vec<PreviewFeature>>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
@@ -2116,6 +2179,9 @@ pub struct OptionsWire {
     find_links: Option<Vec<PipFindLinks>>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
+    http_proxy: Option<ProxyUrl>,
+    https_proxy: Option<ProxyUrl>,
+    no_proxy: Option<Vec<String>>,
     allow_insecure_host: Option<Vec<TrustedHost>>,
     resolution: Option<ResolutionMode>,
     prerelease: Option<PrereleaseMode>,
@@ -2132,6 +2198,7 @@ pub struct OptionsWire {
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     no_sources: Option<bool>,
+    no_sources_package: Option<Vec<PackageName>>,
     upgrade: Option<bool>,
     upgrade_package: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     reinstall: Option<bool>,
@@ -2212,6 +2279,9 @@ impl From<OptionsWire> for Options {
             find_links,
             index_strategy,
             keyring_provider,
+            http_proxy,
+            https_proxy,
+            no_proxy,
             allow_insecure_host,
             resolution,
             prerelease,
@@ -2226,6 +2296,7 @@ impl From<OptionsWire> for Options {
             link_mode,
             compile_bytecode,
             no_sources,
+            no_sources_package,
             upgrade,
             upgrade_package,
             reinstall,
@@ -2275,6 +2346,9 @@ impl From<OptionsWire> for Options {
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
+                http_proxy,
+                https_proxy,
+                no_proxy,
                 // Used twice for backwards compatibility
                 allow_insecure_host: allow_insecure_host.clone(),
             },
@@ -2301,6 +2375,7 @@ impl From<OptionsWire> for Options {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package,
                 upgrade,
                 upgrade_package,
                 reinstall,

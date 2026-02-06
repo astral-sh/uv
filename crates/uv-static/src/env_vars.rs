@@ -268,6 +268,11 @@ impl EnvVars {
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
+    /// Equivalent to the `--no-sources-package` command line argument. If set, uv will
+    /// ignore the `tool.uv.sources` table for the given space-delimited list of packages.
+    #[attr_added_in("0.9.26")]
+    pub const UV_NO_SOURCES_PACKAGE: &'static str = "UV_NO_SOURCES_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     #[attr_added_in("0.4.16")]
@@ -279,7 +284,7 @@ impl EnvVars {
     pub const UV_PUBLISH_TOKEN: &'static str = "UV_PUBLISH_TOKEN";
 
     /// Equivalent to the `--index` command-line argument in `uv publish`. If
-    /// set, uv the index with this name in the configuration for publishing.
+    /// set, uv will use the index with this name in the configuration for publishing.
     #[attr_added_in("0.5.8")]
     pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
 
@@ -563,6 +568,12 @@ impl EnvVars {
     #[attr_added_in("0.9.15")]
     pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
 
+    /// Marker variable to track whether `PYTHONHOME` was set by uv.
+    /// Used by the Windows trampoline to distinguish uv-set values from user-set values.
+    #[attr_hidden]
+    #[attr_added_in("0.9.29")]
+    pub const UV_INTERNAL__PYTHONHOME: &'static str = "UV_INTERNAL__PYTHONHOME";
+
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
     pub const XDG_CONFIG_DIRS: &'static str = "XDG_CONFIG_DIRS";
@@ -634,9 +645,15 @@ impl EnvVars {
     #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
-    /// Timeout (in seconds) for HTTP requests. (default: 30 s)
+    /// Timeout (in seconds) for HTTP reads. (default: 30 s)
     #[attr_added_in("0.1.7")]
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// Timeout (in seconds) to connect to a server. (default: 10 s)
+    ///
+    /// If `UV_HTTP_TIMEOUT` is lower than this value, `UV_HTTP_TIMEOUT` will be used instead.
+    #[attr_added_in("0.10.0")]
+    pub const UV_HTTP_CONNECT_TIMEOUT: &'static str = "UV_HTTP_CONNECT_TIMEOUT";
 
     /// The number of retries for HTTP requests. (default: 3)
     #[attr_added_in("0.7.21")]
@@ -708,6 +725,10 @@ impl EnvVars {
     /// Used to detect Ksh shell usage.
     #[attr_added_in("0.2.33")]
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
+
+    /// Used to detect PowerShell usage (set by PowerShell on all platforms).
+    #[attr_added_in("next version")]
+    pub const PS_MODULE_PATH: &'static str = "PSModulePath";
 
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
@@ -1203,6 +1224,12 @@ impl EnvVars {
     /// `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
     #[attr_added_in("0.8.21")]
     pub const UV_S3_ENDPOINT_URL: &'static str = "UV_S3_ENDPOINT_URL";
+
+    /// The URL to treat as a GCS-compatible storage endpoint. Requests to this endpoint
+    /// will be signed using Google Cloud authentication based on the `GOOGLE_APPLICATION_CREDENTIALS`
+    /// environment variable or Application Default Credentials.
+    #[attr_added_in("0.9.26")]
+    pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
 
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]

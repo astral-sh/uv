@@ -4,15 +4,15 @@ use std::{collections::BTreeMap, num::NonZeroUsize};
 use url::Url;
 
 use uv_configuration::{
-    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, Reinstall, RequiredVersion,
-    TargetTriple, TrustedPublishing, Upgrade,
+    BuildIsolation, ExportFormat, IndexStrategy, KeyringProviderType, NoSources, ProxyUrl,
+    Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
     PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
-use uv_preview::PreviewFeatures;
+use uv_preview::Preview;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -101,7 +101,8 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
-impl_combine_or!(PreviewFeatures);
+impl_combine_or!(Preview);
+impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);
 impl_combine_or!(PythonVersion);
@@ -183,6 +184,16 @@ impl Combine for Option<PackageConfigSettings> {
     }
 }
 
+impl Combine for Option<NoSources> {
+    /// Combine two source strategies by using the `combine` method if they're both `Some`.
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
 impl Combine for Option<Upgrade> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
@@ -230,9 +241,11 @@ impl Combine for ExcludeNewer {
             if self.package.is_empty() {
                 self.package = other.package;
             } else {
-                // Merge package-specific timestamps, with self taking precedence
-                for (pkg, timestamp) in &other.package {
-                    self.package.entry(pkg.clone()).or_insert(timestamp.clone());
+                // Merge package-specific settings, with self taking precedence
+                for (pkg, setting) in &other.package {
+                    self.package
+                        .entry(pkg.clone())
+                        .or_insert_with(|| setting.clone());
                 }
             }
         }

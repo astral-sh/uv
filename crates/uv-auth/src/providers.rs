@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::sync::LazyLock;
 
-use reqsign::aws::DefaultSigner;
+use reqsign::aws::DefaultSigner as AwsDefaultSigner;
+use reqsign::google::DefaultSigner as GcsDefaultSigner;
 use tracing::debug;
 use url::Url;
 
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -69,10 +70,10 @@ impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
     pub(crate) fn is_s3_endpoint(url: &Url, preview: Preview) -> bool {
         if let Some(s3_endpoint_realm) = S3_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
-            if !preview.is_enabled(PreviewFeatures::S3_ENDPOINT) {
+            if !preview.is_enabled(PreviewFeature::S3Endpoint) {
                 warn_user_once!(
                     "The `s3-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-                    PreviewFeatures::S3_ENDPOINT
+                    PreviewFeature::S3Endpoint
                 );
             }
 
@@ -89,7 +90,7 @@ impl S3EndpointProvider {
     ///
     /// This is potentially expensive as it may invoke credential helpers, so the result
     /// should be cached.
-    pub(crate) fn create_signer() -> DefaultSigner {
+    pub(crate) fn create_signer() -> AwsDefaultSigner {
         // TODO(charlie): Can `reqsign` infer the region for us? Profiles, for example,
         // often have a region set already.
         let region = std::env::var(EnvVars::AWS_REGION)
@@ -100,5 +101,45 @@ impl S3EndpointProvider {
                     .unwrap_or_else(|_| Cow::Borrowed("us-east-1"))
             });
         reqsign::aws::default_signer("s3", &region)
+    }
+}
+
+/// The [`Url`] for the GCS endpoint, if set.
+static GCS_ENDPOINT_REALM: LazyLock<Option<Realm>> = LazyLock::new(|| {
+    let gcs_endpoint_url = std::env::var(EnvVars::UV_GCS_ENDPOINT_URL).ok()?;
+    let url = Url::parse(&gcs_endpoint_url).expect("Failed to parse GCS endpoint URL");
+    Some(Realm::from(&url))
+});
+
+/// A provider for authentication credentials for GCS endpoints.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GcsEndpointProvider;
+
+impl GcsEndpointProvider {
+    /// Returns `true` if the URL matches the configured GCS endpoint.
+    pub(crate) fn is_gcs_endpoint(url: &Url, preview: Preview) -> bool {
+        if let Some(gcs_endpoint_realm) = GCS_ENDPOINT_REALM.as_ref().map(RealmRef::from) {
+            if !preview.is_enabled(PreviewFeature::GcsEndpoint) {
+                warn_user_once!(
+                    "The `gcs-endpoint` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                    PreviewFeature::GcsEndpoint
+                );
+            }
+
+            // Treat any URL on the same domain or subdomain as available for GCS signing.
+            let realm = RealmRef::from(url);
+            if realm == gcs_endpoint_realm || realm.is_subdomain_of(gcs_endpoint_realm) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Creates a new GCS signer.
+    ///
+    /// This is potentially expensive as it may invoke credential helpers, so the result
+    /// should be cached.
+    pub(crate) fn create_signer() -> GcsDefaultSigner {
+        reqsign::google::default_signer("storage.googleapis.com")
     }
 }

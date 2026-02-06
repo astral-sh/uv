@@ -90,11 +90,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.client.unmanaged.timeout().as_secs()
+                    self.client.unmanaged.read_timeout().as_secs()
                 ),
             )
         } else {

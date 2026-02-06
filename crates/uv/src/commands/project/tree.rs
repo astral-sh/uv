@@ -29,16 +29,17 @@ use crate::commands::project::{
 use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+use crate::settings::FrozenSource;
 use crate::settings::LockCheck;
 use crate::settings::ResolverSettings;
 
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
     groups: DependencyGroups,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     universal: bool,
     depth: u8,
     prune: Vec<PackageName>,
@@ -82,7 +83,7 @@ pub(crate) async fn tree(
     let groups = groups.with_defaults(default_groups);
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
-    let interpreter = if frozen && universal {
+    let interpreter = if frozen.is_some() && universal {
         None
     } else {
         Some(match target {
@@ -124,8 +125,8 @@ pub(crate) async fn tree(
     };
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, LockTarget::Script(_)) && !target.lock_path().is_file() {

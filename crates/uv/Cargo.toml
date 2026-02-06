@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.9.18"
+version = "0.10.0"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -114,6 +114,7 @@ zip = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
+uv-windows = { workspace = true }
 windows = { workspace = true }
 
 [build-dependencies]
@@ -130,8 +131,12 @@ assert_fs = { workspace = true }
 backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
+bytes = { workspace = true }
 filetime = { workspace = true }
 flate2 = { workspace = true, default-features = false }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
@@ -142,6 +147,7 @@ sha2 = { workspace = true }
 similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
+tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 whoami = { workspace = true }
 wiremock = { workspace = true }
@@ -149,9 +155,10 @@ zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
+uv-unix = { workspace = true }
 
 [features]
-default = ["performance", "uv-distribution/static", "default-tests"]
+default = ["performance", "uv-distribution/static", "test-defaults"]
 native-auth = []
 # Use better memory allocators, etc.
 performance = ["performance-memory-allocator"]
@@ -165,38 +172,38 @@ self-update = ["axoupdater", "uv-cli/self-update"]
 tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
-default-tests = [
-    "crates-io",
-    "git",
-    "git-lfs",
-    "pypi",
-    "r2",
-    "python",
-    "python-managed",
-    "python-eol",
-    "slow-tests",
+test-defaults = [
+    "test-crates-io",
+    "test-git",
+    "test-git-lfs",
+    "test-pypi",
+    "test-r2",
+    "test-python",
+    "test-python-managed",
+    "test-python-eol",
+    "test-slow",
     "test-ecosystem"
 ]
 # Introduces a testing dependency on crates.io.
-crates-io = []
+test-crates-io = []
 # Introduces a testing dependency on Git.
-git = []
+test-git = []
 # Introduces a testing dependency on Git LFS.
-git-lfs = ["git"]
+test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
-pypi = []
+test-pypi = []
 # Introduces a testing dependency on R2.
-r2 = []
+test-r2 = []
 # Introduces a testing dependency on a local Python installation.
-python = []
+test-python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.
-python-patch = []
+test-python-patch = []
 # Introduces a testing dependency on a local Python installation with an EOL version.
-python-eol = []
+test-python-eol = []
 # Introduces a testing dependency on managed Python installations.
-python-managed = []
+test-python-managed = []
 # Include "slow" test cases.
-slow-tests = []
+test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
 # Build uvw binary on Windows

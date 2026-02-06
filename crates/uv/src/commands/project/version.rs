@@ -38,7 +38,7 @@ use crate::commands::project::{
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -53,7 +53,7 @@ pub(crate) fn self_version(
 }
 
 /// Read or update project version (`uv version`)
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
     mut bump: Vec<VersionBumpSpec>,
@@ -64,7 +64,7 @@ pub(crate) async fn project_version(
     explicit_project: bool,
     dry_run: bool,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -93,27 +93,30 @@ pub(crate) async fn project_version(
 
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
-    if frozen && is_read_only {
-        return Box::pin(print_frozen_version(
-            project,
-            &name,
-            project_dir,
-            active,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_downloads,
-            concurrency,
-            no_config,
-            cache,
-            short,
-            output_format,
-            printer,
-            preview,
-        ))
-        .await;
+    if let Some(frozen_source) = frozen {
+        if is_read_only {
+            return Box::pin(print_frozen_version(
+                project,
+                &name,
+                project_dir,
+                frozen_source,
+                active,
+                python,
+                install_mirrors,
+                &settings,
+                client_builder,
+                python_preference,
+                python_downloads,
+                concurrency,
+                no_config,
+                cache,
+                short,
+                output_format,
+                printer,
+                preview,
+            ))
+            .await;
+        }
     }
 
     let mut toml = PyProjectTomlMut::from_toml(
@@ -291,6 +294,11 @@ pub(crate) async fn project_version(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
+                ));
+            }
             return Err(anyhow!(
                 "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));
@@ -421,6 +429,7 @@ async fn print_frozen_version(
     project: VirtualProject,
     name: &PackageName,
     project_dir: &Path,
+    frozen_source: FrozenSource,
     active: Option<bool>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -464,7 +473,7 @@ async fn print_frozen_version(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         project::lock::LockOperation::new(
-            LockMode::Frozen,
+            LockMode::Frozen(frozen_source.into()),
             &settings.resolver,
             &client_builder,
             &state,
@@ -512,12 +521,11 @@ async fn print_frozen_version(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -534,7 +542,7 @@ async fn lock_and_sync(
     preview: Preview,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 

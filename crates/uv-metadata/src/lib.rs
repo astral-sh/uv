@@ -140,7 +140,7 @@ pub fn read_archive_metadata(
 
     let mut file = archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?;
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     let mut buffer = Vec::with_capacity(file.size() as usize);
     file.read_to_end(&mut buffer).map_err(Error::Io)?;
 
@@ -250,7 +250,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
         if is_metadata_entry(&path, filename)? {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
-            reader.read_to_end(&mut contents).await.unwrap();
+            reader.read_to_end(&mut contents).await.map_err(Error::Io)?;
 
             // Validate the CRC of any file we unpack
             // (It would be nice if async_zip made it harder to Not do this...)

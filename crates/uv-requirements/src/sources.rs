@@ -78,6 +78,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
     pub fn from_requirements_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -110,6 +114,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
     pub fn from_constraints_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -142,6 +150,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
     pub fn from_overrides_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -180,7 +192,7 @@ impl RequirementsSource {
     pub fn from_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -230,7 +242,7 @@ impl RequirementsSource {
     pub fn from_with_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -322,7 +334,7 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
-#[allow(clippy::case_sensitive_file_extension_comparisons)]
+#[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uv-build"
-version = "0.9.18"
+version = "0.10.0"
 description = "A Python build backend"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -12,7 +12,9 @@ license = { workspace = true }
 [dependencies]
 uv-build-backend = { workspace = true }
 uv-logging = { workspace = true }
+uv-preview = { workspace = true }
 uv-version = { workspace = true }
+uv-static = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }

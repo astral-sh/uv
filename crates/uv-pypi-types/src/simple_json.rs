@@ -10,13 +10,17 @@ use uv_pep440::{Version, VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::Requirement;
 use uv_small_str::SmallString;
 
-use crate::VerbatimParsedUrl;
 use crate::lenient_requirement::LenientVersionSpecifiers;
+use crate::{ProjectStatus, VerbatimParsedUrl};
 
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     #[serde(deserialize_with = "sorted_simple_json_files")]
     pub files: Vec<PypiFile>,
@@ -81,8 +85,8 @@ impl<'de> Deserialize<'de> for PypiFile {
                 let mut url = None;
                 let mut yanked = None;
 
-                while let Some(key) = access.next_key::<&str>()? {
-                    match key {
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -131,6 +135,9 @@ impl<'de> Deserialize<'de> for PypiFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleDetail {
+    /// PEP 792 project status information.
+    #[serde(default)]
+    pub project_status: ProjectStatus,
     /// The list of [`PyxFile`]s available for download sorted by filename.
     pub files: Vec<PyxFile>,
     /// The core metadata for the project, keyed by version.
@@ -181,8 +188,8 @@ impl<'de> Deserialize<'de> for PyxFile {
                 let mut yanked = None;
                 let mut zstd = None;
 
-                while let Some(key) = access.next_key::<&str>()? {
-                    match key {
+                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
+                    match &*key {
                         "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata" => {
                             if core_metadata.is_none() {
                                 core_metadata = access.next_value()?;
@@ -199,7 +206,7 @@ impl<'de> Deserialize<'de> for PyxFile {
                                         .map(VersionSpecifiers::from)
                                 });
                         }
-                        "size" => size = Some(access.next_value()?),
+                        "size" => size = access.next_value()?,
                         "upload-time" => upload_time = Some(access.next_value()?),
                         "url" => url = Some(access.next_value()?),
                         "yanked" => yanked = Some(access.next_value()?),

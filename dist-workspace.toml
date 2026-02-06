@@ -43,7 +43,7 @@ auto-includes = false
 # Whether dist should create a Github Release or use an existing draft
 create-release = true
 # Which actions to run on pull requests
-pr-run-mode = "plan"
+pr-run-mode = "skip"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Which phase dist should use to create the GitHub release
@@ -57,11 +57,11 @@ github-attestations-filters = ["*.json", "*.sh", "*.ps1", "*.zip", "*.tar.gz"]
 # Whether CI should include auto-generated code to build local artifacts
 build-local-artifacts = false
 # Local artifacts jobs to run in CI
-local-artifacts-jobs = ["./build-binaries", "./build-docker"]
+local-artifacts-jobs = ["./build-release-binaries", "./build-docker"]
 # Publish jobs to run in CI
 publish-jobs = ["./publish-pypi", "./publish-crates"]
 # Post-announce jobs to run in CI
-post-announce-jobs = ["./publish-docs"]
+post-announce-jobs = ["./publish-docs", "./publish-versions"]
 # Custom permissions for GitHub Jobs
 github-custom-job-permissions = { "build-docker" = { packages = "write", contents = "read", id-token = "write", attestations = "write" }, "publish-crates" = { contents = "read" } }
 # Whether to install an updater program
@@ -83,7 +83,7 @@ riscv64gc-unknown-linux-gnu = "2.31"
 "actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
 "actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
 "actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
-"actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
+"actions/attest-build-provenance" = "00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8" # v3.1.0
 
 [dist.binaries]
 "*" = ["uv", "uvx"]

@@ -43,7 +43,7 @@ fn find_uv_bin_venv() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -59,7 +59,7 @@ fn find_uv_bin_venv() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -85,7 +85,7 @@ fn find_uv_bin_target() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--target")
-        .arg("target"), @r"
+        .arg("target"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -103,7 +103,7 @@ fn find_uv_bin_target() {
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(TEST_SCRIPT)
-        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @r"
+        .env(EnvVars::PYTHONPATH, context.temp_dir.child("target").path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -131,7 +131,7 @@ fn find_uv_bin_prefix() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("--prefix")
-        .arg(prefix.path()), @r"
+        .arg(prefix.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -152,7 +152,7 @@ fn find_uv_bin_prefix() {
         .env(
             EnvVars::PYTHONPATH,
             site_packages_path(&context.temp_dir.join("prefix"), "python3.12"),
-        ), @r"
+        ), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -183,7 +183,7 @@ fn find_uv_bin_base_prefix() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python")
         .arg(base_venv.path())
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -197,13 +197,13 @@ fn find_uv_bin_base_prefix() {
     "
     );
 
-    context.venv().assert().success();
+    context.venv().arg("--clear").assert().success();
 
     // Mutate `base_prefix` to simulate lookup in a system Python installation
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
         .arg(format!(r#"import sys, uv; sys.base_prefix = "{}"; print(uv.find_uv_bin())"#, base_venv.path().portable_display()))
-        .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @r"
+        .env(EnvVars::PYTHONPATH, site_packages_path(base_venv.path(), "python3.12")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -242,7 +242,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
         .arg(context.workspace_root.join("test/packages/fake-uv"))
         .arg("python")
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -295,7 +295,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
         .arg("python")
         .arg("-c")
         .arg(TEST_SCRIPT),
-     @r"
+     @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -346,7 +346,7 @@ fn find_uv_bin_user_bin() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -362,7 +362,7 @@ fn find_uv_bin_user_bin() {
     // We should find the binary in the virtual environment first
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -383,7 +383,7 @@ fn find_uv_bin_user_bin() {
     // We should find the binary in the bin now
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -430,7 +430,7 @@ fn find_uv_bin_error_message() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -472,7 +472,7 @@ fn find_uv_bin_error_message() {
     );
 }
 
-#[cfg(feature = "python-eol")]
+#[cfg(feature = "test-python-eol")]
 #[test]
 fn find_uv_bin_py38() {
     let context = TestContext::new("3.8")
@@ -486,7 +486,7 @@ fn find_uv_bin_py38() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -502,7 +502,7 @@ fn find_uv_bin_py38() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -526,7 +526,7 @@ fn find_uv_bin_py39() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -542,7 +542,7 @@ fn find_uv_bin_py39() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -566,7 +566,7 @@ fn find_uv_bin_py310() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -582,7 +582,7 @@ fn find_uv_bin_py310() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -606,7 +606,7 @@ fn find_uv_bin_py311() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -622,7 +622,7 @@ fn find_uv_bin_py311() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -646,7 +646,7 @@ fn find_uv_bin_py312() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -662,7 +662,7 @@ fn find_uv_bin_py312() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -686,7 +686,7 @@ fn find_uv_bin_py313() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -702,7 +702,7 @@ fn find_uv_bin_py313() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -726,7 +726,7 @@ fn find_uv_bin_py314() {
 
     // Install in a virtual environment
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(context.workspace_root.join("test/packages/fake-uv")), @r"
+        .arg(context.workspace_root.join("test/packages/fake-uv")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -742,7 +742,7 @@ fn find_uv_bin_py314() {
     // We should find the binary in the virtual environment
     uv_snapshot!(context.filters(), context.python_command()
         .arg("-c")
-        .arg(TEST_SCRIPT), @r"
+        .arg(TEST_SCRIPT), @"
     success: true
     exit_code: 0
     ----- stdout -----

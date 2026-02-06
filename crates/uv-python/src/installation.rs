@@ -73,19 +73,44 @@ impl PythonInstallation {
         Ok(installation)
     }
 
-    /// Find an installed [`PythonInstallation`] that satisfies a requested version, if the request cannot
-    /// be satisfied, fallback to the best available Python installation.
-    pub fn find_best(
+    /// Find or download a [`PythonInstallation`] that satisfies a requested version, if the request
+    /// cannot be satisfied, fallback to the best available Python installation.
+    pub async fn find_best(
         request: &PythonRequest,
         environments: EnvironmentPreference,
         preference: PythonPreference,
-        download_list: &ManagedPythonDownloadList,
+        python_downloads: PythonDownloads,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
+        reporter: Option<&dyn Reporter>,
+        python_install_mirror: Option<&str>,
+        pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
         preview: Preview,
     ) -> Result<Self, Error> {
-        let installation =
-            find_best_python_installation(request, environments, preference, cache, preview)??;
-        installation.warn_if_outdated_prerelease(request, download_list);
+        let retry_policy = client_builder.retry_policy();
+        let client = client_builder.clone().retries(0).build();
+        let download_list =
+            ManagedPythonDownloadList::new(&client, python_downloads_json_url).await?;
+        let downloads_enabled = preference.allows_managed()
+            && python_downloads.is_automatic()
+            && client_builder.connectivity.is_online();
+        let installation = find_best_python_installation(
+            request,
+            environments,
+            preference,
+            downloads_enabled,
+            &download_list,
+            &client,
+            &retry_policy,
+            cache,
+            reporter,
+            python_install_mirror,
+            pypy_install_mirror,
+            preview,
+        )
+        .await?;
+        installation.warn_if_outdated_prerelease(request, &download_list);
         Ok(installation)
     }
 
@@ -159,7 +184,13 @@ impl PythonInstallation {
             Ok(Err(downloads::Error::NoDownloadFound(_))) => {
                 if downloads_enabled {
                     debug!("No downloads are available for {request}");
-                    return Err(err);
+                    if matches!(request, PythonRequest::Default | PythonRequest::Any) {
+                        return Err(err);
+                    }
+                    return Err(err.with_missing_python_hint(
+                        "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
+                            .to_string(),
+                    ));
                 }
                 None
             }
@@ -229,7 +260,6 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
-            preview,
         )
         .await?;
 
@@ -247,7 +277,6 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
-        preview: Preview,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -290,7 +319,7 @@ impl PythonInstallation {
             .patch()
             .is_some_and(|p| p >= highest_patch)
         {
-            installed.ensure_minor_version_link(preview)?;
+            installed.ensure_minor_version_link()?;
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {
@@ -554,7 +583,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a minor versioned executable.
     pub fn executable_name_minor(&self) -> String {
         format!(
-            "python{maj}.{min}{var}{exe}",
+            "{name}{maj}.{min}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             min = self.minor,
             var = self.variant.executable_suffix(),
@@ -565,7 +595,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for a major versioned executable.
     pub fn executable_name_major(&self) -> String {
         format!(
-            "python{maj}{var}{exe}",
+            "{name}{maj}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             maj = self.major,
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
@@ -575,7 +606,8 @@ impl PythonInstallationKey {
     /// Return a canonical name for an un-versioned executable.
     pub fn executable_name(&self) -> String {
         format!(
-            "python{var}{exe}",
+            "{name}{var}{exe}",
+            name = self.implementation().executable_install_name(),
             var = self.variant.executable_suffix(),
             exe = std::env::consts::EXE_SUFFIX
         )

@@ -17,8 +17,7 @@ use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DevMode, DryRun,
-    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions,
-    SourceStrategy,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, GitLfsSetting, InstallOptions, NoSources,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -30,7 +29,7 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_git::GIT_STORE;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::Preview;
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -57,14 +56,14 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn add(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     no_install_project: bool,
@@ -104,22 +103,6 @@ pub(crate) async fn add(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if bounds.is_some() && !preview.is_enabled(PreviewFeatures::ADD_BOUNDS) {
-        warn_user_once!(
-            "The `bounds` option is in preview and may change in any future release. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::ADD_BOUNDS
-        );
-    }
-
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !settings.resolver.extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -187,7 +170,7 @@ pub(crate) async fn add(
                 "`{lock_check}` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if frozen {
+        if frozen.is_some() {
             warn_user_once!(
                 "`--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -291,7 +274,7 @@ pub(crate) async fn add(
         defaulted_groups =
             groups.with_defaults(default_dependency_groups(project.pyproject_toml())?);
 
-        if frozen || no_sync {
+        if frozen.is_some() || no_sync {
             // Discover the interpreter.
             let interpreter = ProjectInterpreter::discover(
                 project.workspace(),
@@ -396,7 +379,7 @@ pub(crate) async fn add(
             let build_constraints = Constraints::default();
             let build_hasher = HashStrategy::default();
             let hasher = HashStrategy::default();
-            let sources = SourceStrategy::Enabled;
+            let sources = NoSources::None;
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
@@ -442,7 +425,7 @@ pub(crate) async fn add(
                     settings.resolver.extra_build_dependencies.clone(),
                     project.workspace(),
                     &settings.resolver.index_locations,
-                    settings.resolver.sources,
+                    &settings.resolver.sources,
                     client.credentials_cache(),
                 )?
             } else {
@@ -706,7 +689,7 @@ pub(crate) async fn add(
 
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
@@ -730,7 +713,7 @@ pub(crate) async fn add(
                 let _ = snapshot.revert();
             }
 
-            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            #[expect(clippy::exit, clippy::cast_possible_wrap)]
             std::process::exit(if cfg!(windows) {
                 0xC000_013A_u32 as i32
             } else {
@@ -984,7 +967,7 @@ fn edits(
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     mut target: AddTarget,
     toml: &mut PyProjectTomlMut,
@@ -1270,7 +1253,7 @@ fn resolve_requirement(
 
 /// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum PythonTarget {
     Interpreter(Interpreter),
     Environment(PythonEnvironment),
@@ -1288,7 +1271,7 @@ impl PythonTarget {
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script, Box<Interpreter>),
@@ -1352,7 +1335,7 @@ impl AddTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    #[allow(clippy::result_large_err)]
+    #[expect(clippy::result_large_err)]
     fn update(self, content: &str) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script, interpreter) => {
@@ -1389,7 +1372,7 @@ impl AddTarget {
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
     Project(VirtualProject, Option<Vec<u8>>),

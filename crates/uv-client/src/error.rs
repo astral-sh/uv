@@ -1,9 +1,11 @@
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
+use reqwest::Response;
 use serde::Deserialize;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
+use tracing::warn;
 
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
@@ -44,6 +46,46 @@ fn default_problem_type() -> String {
 }
 
 impl ProblemDetails {
+    /// The content type for RFC 9457 Problem Details responses.
+    pub const CONTENT_TYPE: &str = "application/problem+json";
+
+    /// Try to parse a response body as RFC 9457 Problem Details.
+    ///
+    /// Returns `None` if parsing fails. The caller is responsible for checking
+    /// that the content type is `application/problem+json` before calling this.
+    pub fn try_from_response_body(body: &[u8]) -> Option<Self> {
+        match serde_json::from_slice(body) {
+            Ok(details) => Some(details),
+            Err(err) => {
+                warn!("Failed to parse problem details: {err}");
+                None
+            }
+        }
+    }
+
+    /// Try to extract RFC 9457 Problem Details from an HTTP response.
+    ///
+    /// Returns `None` if the content type is not `application/problem+json`
+    /// or if parsing fails. Only consumes the response body if the content
+    /// type matches.
+    pub async fn try_from_response(response: Response) -> Option<Self> {
+        let is_problem = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .is_some_and(|ct| ct == Self::CONTENT_TYPE);
+        if !is_problem {
+            return None;
+        }
+        match response.bytes().await {
+            Ok(bytes) => Self::try_from_response_body(&bytes),
+            Err(err) => {
+                warn!("Failed to read response body for problem details: {err}");
+                None
+            }
+        }
+    }
+
     /// Get a human-readable description of the problem
     pub fn description(&self) -> Option<String> {
         match self {
@@ -141,6 +183,31 @@ impl Error {
     /// Create a new error from a `MessagePack` parsing error.
     pub(crate) fn from_msgpack_err(err: rmp_serde::decode::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadMessagePack { source: err, url }.into()
+    }
+
+    /// Create an [`Error`] from a [`reqwest_middleware::Error`].
+    pub(crate) fn from_reqwest_middleware(
+        url: DisplaySafeUrl,
+        err: reqwest_middleware::Error,
+    ) -> Self {
+        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
+            if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
+                return ErrorKind::Offline(offline_err.url().to_string()).into();
+            }
+            if let Some(reqwest_retry::RetryError::WithRetries { retries, .. }) =
+                underlying.downcast_ref::<reqwest_retry::RetryError>()
+            {
+                let retries = *retries;
+                return Self::new(
+                    ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
+                    retries,
+                );
+            }
+        }
+        Self::from(ErrorKind::WrappedReqwestError(
+            url,
+            WrappedReqwestError::from(err),
+        ))
     }
 
     /// Returns `true` if this error corresponds to an offline error.
@@ -300,13 +367,6 @@ pub enum ErrorKind {
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
-    /// Add the number of failed retries to the error.
-    #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
-    RequestWithRetries {
-        source: Box<ErrorKind>,
-        retries: u32,
-    },
-
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {
         source: serde_json::Error,
@@ -374,29 +434,12 @@ pub enum ErrorKind {
         "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{0}`"
     )]
     Offline(String),
-
-    #[error("Invalid cache control header: `{0}`")]
-    InvalidCacheControl(String),
 }
 
 impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
     pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
-    }
-
-    /// Create an [`ErrorKind`] from a [`reqwest_middleware::Error`].
-    pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
-        err: reqwest_middleware::Error,
-    ) -> Self {
-        if let reqwest_middleware::Error::Middleware(ref underlying) = err {
-            if let Some(err) = underlying.downcast_ref::<OfflineError>() {
-                return Self::Offline(err.url().to_string());
-            }
-        }
-
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(err))
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
@@ -677,6 +720,17 @@ mod tests {
         assert_eq!(
             problem_details.title,
             Some("You do not have enough credit.".to_string())
+        );
+    }
+
+    #[test]
+    fn test_try_from_response_body() {
+        let body = r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#;
+        let problem = ProblemDetails::try_from_response_body(body.as_bytes())
+            .expect("should parse problem details");
+        assert_eq!(
+            problem.description().unwrap(),
+            "Server message: Bad Request, Missing required field `name`"
         );
     }
 }

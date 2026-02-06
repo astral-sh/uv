@@ -1,12 +1,13 @@
+use indexmap::IndexMap;
+use itertools::Itertools;
+use serde::{Deserialize, Deserializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
-
-use itertools::Itertools;
-use serde::{Deserialize, Deserializer};
 use tracing::{debug, trace, warn};
 use version_ranges::Ranges;
 use walkdir::WalkDir;
@@ -18,7 +19,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -123,9 +124,12 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
     where
         D: Deserializer<'de>,
     {
-        let given = String::deserialize(deserializer)?;
+        let given = <Cow<'_, str>>::deserialize(deserializer)?;
         let normalized = PackageName::from_str(&given).map_err(serde::de::Error::custom)?;
-        Ok(Self { given, normalized })
+        Ok(Self {
+            given: given.to_string(),
+            normalized,
+        })
     }
 }
 
@@ -349,13 +353,7 @@ impl PyProjectToml {
         let (license, license_expression, license_files) = self.license_metadata(root)?;
 
         // TODO(konsti): https://peps.python.org/pep-0753/#label-normalization (Draft)
-        let project_urls = self
-            .project
-            .urls
-            .iter()
-            .flatten()
-            .map(|(key, value)| format!("{key}, {value}"))
-            .collect();
+        let project_urls = ProjectUrls::new(self.project.urls.clone().unwrap_or_default());
 
         let extras = self
             .project
@@ -400,11 +398,7 @@ impl PyProjectToml {
             summary,
             description,
             description_content_type,
-            keywords: self
-                .project
-                .keywords
-                .as_ref()
-                .map(|keywords| keywords.join(",")),
+            keywords: self.project.keywords.clone().map(Keywords::new),
             home_page: None,
             download_url: None,
             author,
@@ -434,7 +428,7 @@ impl PyProjectToml {
     }
 
     /// Parse and validate the old (PEP 621) and new (PEP 639) license files.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     fn license_metadata(
         &self,
         root: &Path,
@@ -695,7 +689,7 @@ struct Project {
     /// PyPI shows all URLs with their name. For some known patterns, they add favicons.
     /// main: <https://github.com/pypi/warehouse/blob/main/warehouse/templates/packaging/detail.html>
     /// archived: <https://github.com/pypi/warehouse/blob/e3bd3c3805ff47fff32b67a899c1ce11c16f3c31/warehouse/templates/packaging/detail.html>
-    urls: Option<BTreeMap<String, String>>,
+    urls: Option<IndexMap<String, String>>,
     /// The console entrypoints of the project.
     ///
     /// The key of the table is the name of the entry point and the value is the object reference.
@@ -956,7 +950,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
-        assert_snapshot!(metadata.core_metadata_format(), @r"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: Hello-World
         Version: 0.1.0
@@ -1040,7 +1034,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1073,9 +1067,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -1084,8 +1078,7 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
@@ -1134,7 +1127,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1226,7 +1219,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @r#"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
@@ -1266,9 +1259,9 @@ mod tests {
         # Foo
 
         This is the foo library.
-        "###);
+        "#);
 
-        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @"
         [console_scripts]
         foo = foo.cli:__main__
 
@@ -1277,8 +1270,7 @@ mod tests {
 
         [bar_group]
         foo-bar = foo:bar
-
-        "###);
+        ");
     }
 
     #[test]
@@ -1305,7 +1297,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
+            @r#"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."#
         );
     }
 
@@ -1359,7 +1351,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
+            @r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"#
         );
     }
 
@@ -1372,11 +1364,11 @@ mod tests {
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
 
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.3
         Name: hello-world
         Version: 0.1.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1429,7 +1421,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: `project.description` must be a single line
         ");
@@ -1447,7 +1439,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: When `project.license-files` is defined, `project.license` must be an SPDX expression string
         ");
@@ -1463,12 +1455,12 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap();
-        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        assert_snapshot!(metadata.core_metadata_format(), @"
         Metadata-Version: 2.4
         Name: hello-world
         Version: 0.1.0
         License-Expression: MIT OR Apache-2.0
-        "###);
+        ");
     }
 
     #[test]
@@ -1482,7 +1474,7 @@ mod tests {
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
         // TODO(konsti): We mess up the indentation in the error.
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: `project.license` is not a valid SPDX expression: MIT XOR Apache-2
           Caused by: MIT XOR Apache-2
@@ -1501,7 +1493,7 @@ mod tests {
             .unwrap()
             .to_metadata(Path::new("/do/not/read"))
             .unwrap_err();
-        assert_snapshot!(format_err(err), @r"
+        assert_snapshot!(format_err(err), @"
         Invalid project metadata
           Caused by: Dynamic metadata is not supported
         ");

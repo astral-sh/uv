@@ -11,16 +11,16 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
+use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
-use uv_preview::Preview;
+use uv_platform_tags::Os;
 use uv_pypi_types::Scheme;
-use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
+use uv_python::managed::{
+    ManagedPythonInstallation, PythonMinorVersionLink, create_link_to_executable,
+};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
-use uv_warnings::warn_user_once;
-
-use crate::{Error, Prompt};
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -48,7 +48,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -58,7 +58,6 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: Preview,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -163,13 +162,12 @@ pub(crate) fn create(
                             fs_err::create_dir_all(&location)?;
                         }
                         Some(false) => return err,
-                        // When we don't have a TTY, warn that the behavior will change in the future
+                        // When we don't have a TTY, require `--clear` explicitly.
                         None => {
-                            warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
-                                location.user_display(),
-                                "--clear".green(),
-                            );
+                            return Err(Error::Exists {
+                                name,
+                                path: location.to_path_buf(),
+                            });
                         }
                     }
                 }
@@ -207,12 +205,11 @@ pub(crate) fn create(
     fs_err::write(location.join(".gitignore"), "*")?;
 
     let mut using_minor_version_link = false;
-    let executable_target = if upgradeable && interpreter.is_standalone() {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
-            base_python.as_path(),
-            &interpreter.key(),
-            preview,
-        ) {
+    let executable_target = if upgradeable {
+        if let Some(minor_version_link) =
+            ManagedPythonInstallation::try_from_interpreter(interpreter)
+                .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
+        {
             if !minor_version_link.exists() {
                 base_python.clone()
             } else {
@@ -238,7 +235,7 @@ pub(crate) fn create(
     };
 
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    // In preview mode, for standalone interpreters, this `home` value will include a
+    // For standalone interpreters, this `home` value will include a
     // symlink directory on Unix or junction on Windows to enable transparent Python patch
     // upgrades.
     let python_home = executable_target
@@ -314,6 +311,12 @@ pub(crate) fn create(
                 create_link_to_executable(targetwt.as_path(), &executable_target)
                     .map_err(Error::Python)?;
             }
+        } else if matches!(interpreter.platform().os(), Os::Pyodide { .. }) {
+            // For Pyodide, link only `python.exe`.
+            // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            create_link_to_executable(target.as_path(), &executable_target)
+                .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
@@ -440,6 +443,13 @@ pub(crate) fn create(
 
     // Add all the activate scripts for different shells
     for (name, template) in ACTIVATE_TEMPLATES {
+        // csh has no way to determine its own script location, so a relocatable
+        // activate.csh is not possible. Skip it entirely instead of generating a
+        // non-functional script.
+        if relocatable && *name == "activate.csh" {
+            continue;
+        }
+
         let path_sep = if cfg!(windows) { ";" } else { ":" };
 
         let relative_site_packages = [
@@ -470,9 +480,7 @@ pub(crate) fn create(
                     escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
                 )
             }
-            // Note:
-            // * relocatable activate scripts appear not to be possible in csh.
-            // * `activate.ps1` is already relocatable by default.
+            // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
 

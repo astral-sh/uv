@@ -50,7 +50,23 @@ sudo dnf install gcc
 
 For running tests, we recommend [nextest](https://nexte.st/).
 
-If tests fail due to a mismatch in the JSON Schema, run: `cargo dev generate-json-schema`.
+To run a specific test by name:
+
+```shell
+cargo nextest run -E 'test(test_name)'
+```
+
+To run all tests and accept snapshot changes:
+
+```shell
+cargo insta test --accept --test-runner nextest
+```
+
+To update snapshots for a specific test:
+
+```shell
+cargo insta test --accept --test-runner nextest -- <test_name>
+```
 
 ### Python
 
@@ -100,6 +116,62 @@ You can invoke your development version of uv with `cargo run -- <args>`. For ex
 ```shell
 cargo run -- venv
 cargo run -- pip install requests
+```
+
+## Formatting
+
+```shell
+# Rust
+cargo fmt --all
+
+# Python
+uvx ruff format .
+
+# Markdown, YAML, and other files (requires Node.js)
+npx prettier --write .
+# or in Docker
+docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write .
+```
+
+## Linting
+
+Linting requires [shellcheck](https://github.com/koalaman/shellcheck) and
+[cargo-shear](https://github.com/Boshen/cargo-shear) to be installed separately.
+
+```shell
+# Rust
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+# Python
+uvx ruff check .
+
+# Python type checking
+uvx ty check python/uv
+
+# Shell scripts
+shellcheck <script>
+
+# Spell checking
+uvx typos
+
+# Unused Rust dependencies
+cargo shear
+```
+
+### Compiling for Windows from Unix
+
+To run clippy for a Windows target from Linux or macOS, you can use
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin):
+
+```shell
+# Install cargo-xwin
+cargo install cargo-xwin --locked
+
+# Add the Windows target
+rustup target add x86_64-pc-windows-msvc
+
+# Run clippy for Windows
+cargo xwin clippy --workspace --all-targets --all-features --locked -- -D warnings
 ```
 
 ## Crate structure
@@ -183,40 +255,65 @@ To preview any changes to the documentation locally:
 3. Run the development server with:
 
    ```shell
-   # For contributors.
-   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.public.yml
-
-   # For members of the Astral org, which has access to MkDocs Insiders via sponsorship.
-   uvx --with-requirements docs/requirements-insiders.txt -- mkdocs serve -f mkdocs.insiders.yml
+   uvx --with-requirements docs/requirements.txt -- mkdocs serve -f mkdocs.yml
    ```
 
 The documentation should then be available locally at
 [http://127.0.0.1:8000/uv/](http://127.0.0.1:8000/uv/).
 
-To update the documentation dependencies, edit `docs/requirements.in` and
-`docs/requirements-insiders.in`, then run:
+To update the documentation dependencies, edit `docs/requirements.in`, then run:
 
 ```shell
 uv pip compile docs/requirements.in -o docs/requirements.txt --universal -p 3.12
-uv pip compile docs/requirements-insiders.in -o docs/requirements-insiders.txt --universal -p 3.12
 ```
 
 Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
 Cloudflare Pages.
 
-After making changes to the documentation, format the markdown files with:
+After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
 
-```shell
-npx prettier --write "**/*.md"
-```
+## Development code signing on macOS
 
-Note that the command above requires Node.js and npm to be installed on your system. As an
-alternative, you can run this command using Docker:
+Code signing can only be performed by Astral team members.
 
-```console
-$ docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write "**/*.md"
-```
+Code signing on macOS can improve developer experience when running tests, e.g., when running tests
+that access the macOS keychain, a signed binary can be approved once but an unsigned binary will
+need to be approved on each re-compile.
+
+### Acquiring a development certificate
+
+1. Generate a
+   [request for the certificate](https://developer.apple.com/help/account/certificates/create-a-certificate-signing-request)
+2. Create a certificate in the
+   [Apple Developer portal](https://developer.apple.com/account/resources/certificates/list)
+3. Download and install the certificate to your login keychain
+
+   ```shell
+   security import ~/Downloads/mac_development.cer -k ~/Library/Keychains/login.keychain-db
+   ```
+
+4. Identify your code signing identity
+
+   ```shell
+   security find-identity -v -p codesigning
+   ```
+
+5. If the above fails to find your identity, install the intermediate certificates
+
+   ```shell
+   curl -sLO "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"
+   security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+   rm AppleWWDRCAG3.cer
+   ```
+
+6. Set `UV_TEST_CODESIGN_IDENTITY`
+
+   ```shell
+   export UV_TEST_CODESIGN_IDENTITY="Mac Developer: Your Name (TEAM_ID)"
+   ```
+
+Note `UV_TEST_CODESIGN_IDENTITY` is only supported via `nextest`.
 
 ## Releases
 

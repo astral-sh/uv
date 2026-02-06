@@ -24,12 +24,15 @@ use uv_distribution_types::{
     IndexCapabilities, IndexUrl, Name, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
+use uv_fs::CWD;
 use uv_fs::Simplified;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_preview::Preview;
+use uv_python::PythonVersionFile;
+use uv_python::VersionFileDiscoveryOptions;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
@@ -95,7 +98,7 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
 }
 
 /// Run a command.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
@@ -682,7 +685,7 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
     Python {
         executable: String,
@@ -715,7 +718,6 @@ impl std::fmt::Display for ToolRequirement {
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
-#[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
@@ -741,43 +743,38 @@ async fn get_or_create_environment(
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let reporter = PythonDownloadReporter::single(printer);
 
-    // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
-    // -p/--python flag.
-    let python_request = match request {
-        ToolRequest::Python {
-            request: tool_python_request,
-            ..
-        } => {
-            match python {
-                None => Some(tool_python_request.clone()),
+    // Determine explicit Python version requests
+    let explicit_python_request = python.map(PythonRequest::parse);
+    let tool_python_request = match request {
+        ToolRequest::Python { request, .. } => Some(request.clone()),
+        ToolRequest::Package { .. } => None,
+    };
 
-                // The user is both invoking a python interpreter directly and also supplying the
-                // -p/--python flag. Cases like `uvx -p pypy python` are allowed, for two reasons:
-                // 1) Previously this was the only way to invoke e.g. PyPy via `uvx`, and it's nice
-                // to remain compatible with that. 2) A script might define an alias like `uvx
-                // --python $MY_PYTHON ...`, and it's nice to be able to run the interpreter
-                // directly while sticking to that alias.
-                //
-                // However, we want to error out if we see conflicting or redundant versions like
-                // `uvx -p python38 python39`.
-                //
-                // Note that a command like `uvx default` doesn't bring us here. ToolRequest::parse
-                // returns ToolRequest::Package rather than ToolRequest::Python in that case. See
-                // PythonRequest::try_from_tool_name.
-                Some(python_flag) => {
-                    if tool_python_request != &PythonRequest::Default {
-                        return Err(anyhow::anyhow!(
-                            "Received multiple Python version requests: `{}` and `{}`",
-                            python_flag.to_string().cyan(),
-                            tool_python_request.to_canonical_string().cyan()
-                        )
-                        .into());
-                    }
-                    Some(PythonRequest::parse(python_flag))
-                }
-            }
+    // Resolve Python request with version file lookup when no explicit request
+    let python_request = match (explicit_python_request, tool_python_request) {
+        // e.g., `uvx --python 3.10 python3.12`
+        (Some(explicit), Some(tool_request)) if tool_request != PythonRequest::Default => {
+            // Conflict: both --python flag and versioned tool name
+            return Err(anyhow::anyhow!(
+                "Received multiple Python version requests: `{}` and `{}`",
+                explicit.to_canonical_string().cyan(),
+                tool_request.to_canonical_string().cyan()
+            )
+            .into());
         }
-        ToolRequest::Package { .. } => python.map(PythonRequest::parse),
+        // e.g, `uvx --python 3.10 ...`
+        (Some(explicit), _) => Some(explicit),
+        // e.g., `uvx python` or `uvx <tool>`
+        (None, Some(PythonRequest::Default) | None) => PythonVersionFile::discover(
+            &*CWD,
+            &VersionFileDiscoveryOptions::default()
+                .with_no_config(false)
+                .with_no_local(true),
+        )
+        .await?
+        .and_then(PythonVersionFile::into_version),
+        // e.g., `uvx python3.12`
+        (None, Some(tool_request)) => Some(tool_request),
     };
 
     // Discover an interpreter.
@@ -918,12 +915,17 @@ async fn get_or_create_environment(
     } = &request
     {
         // Build the registry client to fetch the latest version.
-        let client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
-            .index_locations(settings.resolver.index_locations.clone())
-            .index_strategy(settings.resolver.index_strategy)
-            .markers(interpreter.markers())
-            .platform(interpreter.platform())
-            .build();
+        let client = RegistryClientBuilder::new(
+            client_builder
+                .clone()
+                .keyring(settings.resolver.keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(settings.resolver.index_locations.clone())
+        .index_strategy(settings.resolver.index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build();
 
         // Initialize the capabilities.
         let capabilities = IndexCapabilities::default();

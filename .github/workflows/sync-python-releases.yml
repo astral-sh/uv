@@ -17,13 +17,16 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
         with:
           version: "latest"
           enable-cache: true
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: false
       - name: Sync Python Releases
         run: |
           uv run -- fetch-download-metadata.py
@@ -37,14 +40,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: "Update Python version constants"
+        run: uv run scripts/sync-python-version-constants.py
+
       - name: "Create Pull Request"
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
         with:
           commit-message: "Sync latest Python releases"
           add-paths: |
             crates/uv-python/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
             crates/uv-python/src/sysconfig/generated_mappings.rs
+            crates/uv/tests/it/common/mod.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."

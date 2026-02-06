@@ -167,6 +167,7 @@ async fn test_simultaneous_create_set_then_move() {
 }
 
 #[tokio::test]
+#[cfg(not(target_os = "windows"))]
 async fn test_simultaneous_independent_create_set() {
     init_logger();
 

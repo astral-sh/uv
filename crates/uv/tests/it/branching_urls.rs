@@ -1,5 +1,3 @@
-use std::env;
-
 use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;
@@ -14,7 +12,7 @@ use crate::common::{TestContext, make_project, uv_snapshot};
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -27,14 +25,14 @@ fn branching_urls_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -48,7 +46,7 @@ fn branching_urls_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_overlapping() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -61,7 +59,7 @@ fn branching_urls_overlapping() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -86,7 +84,7 @@ fn branching_urls_overlapping() -> Result<()> {
 /// a -> b -> b2 -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_but_transitive_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -129,7 +127,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -157,7 +155,7 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_transitive_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -200,14 +198,14 @@ fn root_package_splits_transitive_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
@@ -363,7 +361,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_other_dependencies_too() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -397,14 +395,14 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     "# };
     make_project(&context.temp_dir.path().join("b2"), "b2", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
@@ -547,7 +545,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_between_registry_and_direct_url() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -559,14 +557,14 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -633,7 +631,7 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -646,14 +644,14 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
@@ -717,7 +715,7 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -730,7 +728,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
     "# };
     make_project(context.temp_dir.path(), "a", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @r"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&context.temp_dir), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -777,14 +775,14 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     " };
     make_project(&context.temp_dir.join("c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&context.temp_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"

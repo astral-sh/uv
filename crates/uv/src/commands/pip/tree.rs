@@ -32,7 +32,7 @@ use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_tree(
     show_version_specifiers: bool,
     depth: u8,

@@ -192,6 +192,7 @@ impl IncompatibleDist {
                     let tag = tags?.abi_tag().as_ref().map(ToString::to_string)?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
                 }
+                IncompatibleWheel::Tag(IncompatibleTag::FreethreadedAbi) => None,
                 IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
                     let tag = requires_python?;
                     Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
@@ -224,6 +225,9 @@ impl Display for IncompatibleDist {
                         f.write_str("no wheels with a matching Python implementation tag")
                     }
                     IncompatibleTag::Abi => f.write_str("no wheels with a matching Python ABI tag"),
+                    IncompatibleTag::FreethreadedAbi => {
+                        f.write_str("no wheels with a free-threading compatible ABI tag")
+                    }
                     IncompatibleTag::AbiPythonVersion => {
                         f.write_str("no wheels with a matching Python version tag")
                     }
@@ -753,7 +757,6 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
-    #[allow(clippy::match_like_matches_macro)]
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {

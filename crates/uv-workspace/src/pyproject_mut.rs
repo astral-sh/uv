@@ -545,17 +545,17 @@ impl PyProjectTomlMut {
 
         // Set the position to the minimum, if it's not already the first element.
         if let Some(min) = existing.iter().filter_map(Table::position).min() {
-            table.set_position(min);
+            table.set_position(Some(min));
 
             // Increment the position of all existing elements.
             for table in existing.iter_mut() {
                 if let Some(position) = table.position() {
-                    table.set_position(position + 1);
+                    table.set_position(Some(position + 1));
                 }
             }
         } else {
             let position = isize::try_from(size).expect("TOML table size fits in `isize`");
-            table.set_position(position);
+            table.set_position(Some(position));
         }
 
         // Push the item to the table.

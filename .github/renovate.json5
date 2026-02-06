@@ -7,7 +7,7 @@
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal"],
+  labels: ["internal", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
@@ -40,6 +40,13 @@
       enabled: false,
     },
     {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
+      enabled: false,
+    },
+    {
       // Create dedicated branches to update references to dependencies in the documentation.
       matchFileNames: ["docs/**/*.md"],
       commitMessageTopic: "documentation references to {{{depName}}}",
@@ -63,6 +70,14 @@
       matchManagers: ["github-actions"],
       matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
+      enabled: false,
+    },
+    {
+      // Exclude test-system.yml from Python version updates, as it intentionally
+      // tests multiple Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-system.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-system.yml",
       enabled: false,
     },
     {
@@ -106,6 +121,11 @@
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["maturin"],
+      commitMessageTopic: "maturin",
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
@@ -117,6 +137,17 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Maturin version used in maturin-action
+    {
+      customType: "regex",
+      managerFilePatterns: [
+        "/.github/workflows/build-release-binaries\\.yml$/",
+      ],
+      matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
     },
     // Minimum supported Rust toolchain version
     {

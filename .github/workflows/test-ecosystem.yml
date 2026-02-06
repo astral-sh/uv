@@ -1,0 +1,65 @@
+on:
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  ecosystem-test:
+    name: "${{ matrix.repo }}"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - repo: "prefecthq/prefect"
+            ref: "7f25bbdf45fc81cca6dc23fb6a7377d436b70c83"
+            commands:
+              - "uv venv"
+              - "uv pip install -e '.[dev]'"
+            python: "3.9"
+          - repo: "pallets/flask"
+            ref: "b78b5a210bde49e7e04b62a2a4f453ca10e0048c"
+            commands:
+              - "uv venv"
+              - "uv pip install -r requirements/dev.txt"
+            python: "3.12"
+          - repo: "pydantic/pydantic-core"
+            ref: "d03bf4a01ca3b378cc8590bd481f307e82115bc6"
+            commands:
+              - "uv sync --group all"
+              - "uv lock --upgrade"
+            python: "3.12"
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Test"
+        run: |
+          echo '${{ toJSON(matrix.commands) }}' | jq -r '.[]' | while read cmd; do
+            echo "+ $cmd" >&2
+            if [[ $cmd == uv* ]]; then
+              ./$cmd
+            else
+              $cmd
+            fi
+          done

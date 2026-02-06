@@ -29,7 +29,7 @@ fn prune_no_op() -> Result<()> {
         .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
         .collect();
 
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -70,7 +70,7 @@ fn prune_stale_directory() -> Result<()> {
         .chain(std::iter::once((r"Removed \d+ files", "Removed [N] files")))
         .collect();
 
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -104,7 +104,7 @@ fn prune_cached_env() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -118,7 +118,7 @@ fn prune_cached_env() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.0.0
-    "###);
+    ");
 
     let filters: Vec<_> = context
         .filters()
@@ -132,7 +132,7 @@ fn prune_cached_env() {
         ])
         .collect();
 
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -164,7 +164,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v5");
+    let wheels = context.cache_dir.child("wheels-v6");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -179,7 +179,7 @@ fn prune_stale_symlink() -> Result<()> {
         ])
         .collect();
 
-    uv_snapshot!(filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -211,7 +211,7 @@ async fn prune_force() -> Result<()> {
         .success();
 
     // When unlocked, `--force` should still take a lock
-    uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @r"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -232,7 +232,7 @@ async fn prune_force() -> Result<()> {
     let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
         .with_exclusive_lock()
         .await;
-    uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @r"
+    uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -265,7 +265,7 @@ fn prune_unzipped() -> Result<()> {
         .collect();
 
     // Install a requirement, to populate the cache.
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -276,9 +276,9 @@ fn prune_unzipped() -> Result<()> {
     Installed 2 packages in [TIME]
      + iniconfig==2.0.0
      + source-distribution==0.0.1
-    "###);
+    ");
 
-    uv_snapshot!(&filters, context.prune().arg("--ci"), @r###"
+    uv_snapshot!(&filters, context.prune().arg("--ci"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -286,7 +286,7 @@ fn prune_unzipped() -> Result<()> {
     ----- stderr -----
     Pruning cache at: [CACHE_DIR]/
     Removed [N] files ([SIZE])
-    "###);
+    ");
 
     context.venv().arg("--clear").assert().success();
 
@@ -295,7 +295,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -305,13 +305,13 @@ fn prune_unzipped() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + source-distribution==0.0.1
-    "###);
+    ");
 
     // But reinstalling the other package should require a download, since we pruned the wheel.
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -361,7 +361,7 @@ fn prune_stale_revision() -> Result<()> {
     uv_snapshot!(&filters, context
         .pip_install()
         .arg(".")
-        .arg("--reinstall"), @r###"
+        .arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -371,12 +371,12 @@ fn prune_stale_revision() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     uv_snapshot!(&filters, context
         .pip_install()
         .arg(".")
-        .arg("--reinstall"), @r###"
+        .arg("--reinstall"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -387,7 +387,7 @@ fn prune_stale_revision() -> Result<()> {
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     let filters: Vec<_> = filters
         .into_iter()
@@ -401,7 +401,7 @@ fn prune_stale_revision() -> Result<()> {
         .collect();
 
     // Pruning should remove the unused revision.
-    uv_snapshot!(&filters, context.prune().arg("--verbose"), @r"
+    uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -419,7 +419,7 @@ fn prune_stale_revision() -> Result<()> {
     // Uninstall and reinstall the package. We should use the cached version.
     uv_snapshot!(&filters, context
         .pip_uninstall()
-        .arg("."), @r###"
+        .arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -427,11 +427,11 @@ fn prune_stale_revision() -> Result<()> {
     ----- stderr -----
     Uninstalled 1 package in [TIME]
      - project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     uv_snapshot!(&filters, context
         .pip_install()
-        .arg("."), @r###"
+        .arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -441,7 +441,7 @@ fn prune_stale_revision() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    ");
 
     Ok(())
 }

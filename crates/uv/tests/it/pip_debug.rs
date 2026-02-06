@@ -4,7 +4,7 @@ use crate::common::{TestContext, uv_snapshot};
 fn debug_warn() {
     let context = TestContext::new("3.12");
 
-    uv_snapshot!(context.pip_debug(), @r"
+    uv_snapshot!(context.pip_debug(), @"
     success: false
     exit_code: 2
     ----- stdout -----

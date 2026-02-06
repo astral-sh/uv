@@ -195,7 +195,11 @@ impl<'a> FlatIndexClient<'a> {
                     .text()
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-                let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(&text, &url)
+                let SimpleDetailHTML {
+                    project_status: _,
+                    base,
+                    files,
+                } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
                 // Convert to a reference-counted string.
@@ -259,7 +263,7 @@ impl<'a> FlatIndexClient<'a> {
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
         // The path context is provided by the caller.
-        #[allow(clippy::disallowed_methods)]
+        #[expect(clippy::disallowed_methods)]
         let entries = std::fs::read_dir(path)?;
 
         let mut dists = Vec::new();

@@ -1,6 +1,6 @@
 [package]
 name = "uv-install-wheel"
-version = "0.0.8"
+version = "0.0.20"
 description = "This is an internal component crate of uv"
 keywords = ["wheel", "python"]
 
@@ -35,6 +35,7 @@ configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
 fs-err = { workspace = true }
+itertools = { workspace = true }
 mailparse = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }

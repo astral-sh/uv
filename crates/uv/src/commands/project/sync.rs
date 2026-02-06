@@ -25,14 +25,14 @@ use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::{InstallationStrategy, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -51,15 +51,15 @@ use crate::commands::project::{
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings, ResolverSettings,
+    FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
+    ResolverSettings,
 };
 
 /// Sync the project environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
@@ -85,11 +85,10 @@ pub(crate) async fn sync(
     preview: Preview,
     output_format: SyncFormat,
 ) -> Result<ExitStatus> {
-    if preview.is_enabled(PreviewFeatures::JSON_OUTPUT) && matches!(output_format, SyncFormat::Json)
-    {
+    if preview.is_enabled(PreviewFeature::JsonOutput) && matches!(output_format, SyncFormat::Json) {
         warn_user!(
             "The `--output-format json` option is experimental and the schema may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::JSON_OUTPUT
+            PreviewFeature::JsonOutput
         );
     }
 
@@ -99,7 +98,7 @@ pub(crate) async fn sync(
         SyncTarget::Script(script)
     } else {
         // Identify the project.
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
@@ -225,7 +224,7 @@ pub(crate) async fn sync(
     if let SyncTarget::Script(script) = &target {
         let lockfile = LockTarget::from(script).lock_path();
         if !lockfile.is_file() {
-            if frozen {
+            if frozen.is_some() {
                 return Err(anyhow::anyhow!(
                     "`uv sync --frozen` requires a script lockfile; run `{}` to lock the script",
                     format!("uv lock --script {}", script.path.user_display()).green(),
@@ -329,8 +328,8 @@ pub(crate) async fn sync(
     let state = UniversalState::default();
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(environment.interpreter(), lock_check)
     } else if dry_run.enabled() {
@@ -463,7 +462,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
@@ -547,7 +546,7 @@ fn identify_installation_target<'a>(
 }
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
     Project(VirtualProject),
@@ -600,7 +599,6 @@ impl Deref for SyncEnvironment {
 }
 
 /// Sync a lockfile with an environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
@@ -641,15 +639,6 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // Lower the extra build dependencies with source resolution.
     let extra_build_requires = match &target {
         InstallTarget::Workspace { workspace, .. }
@@ -660,7 +649,7 @@ pub(super) async fn do_sync(
                 extra_build_dependencies.clone(),
                 workspace,
                 index_locations,
-                sources,
+                &sources,
                 client_builder.credentials_cache(),
             )?
         }
@@ -682,7 +671,7 @@ pub(super) async fn do_sync(
                 extra_build_variables: extra_build_variables.clone(),
                 prerelease: PrereleaseMode::default(),
                 resolution: ResolutionMode::default(),
-                sources,
+                sources: sources.clone(),
                 torch_backend: None,
                 upgrade: Upgrade::default(),
             };
@@ -824,7 +813,7 @@ pub(super) async fn do_sync(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -1388,8 +1377,8 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome)> for LockReport {
                 Outcome::Success(result) => {
                     match result {
                         LockResult::Unchanged(..) => match mode {
-                            // When `--frozen` is used, we don't check the lockfile
-                            LockMode::Frozen => LockAction::Use,
+                            // When `--frozen` is used, we don't check the lockfile.
+                            LockMode::Frozen(_) => LockAction::Use,
                             LockMode::DryRun(_) | LockMode::Locked(_, _) | LockMode::Write(_) => {
                                 LockAction::Check
                             }

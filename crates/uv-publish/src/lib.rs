@@ -39,7 +39,11 @@ use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
 
-use crate::trusted_publishing::{TrustedPublishingError, TrustedPublishingToken};
+use crate::trusted_publishing::pypi::PyPIPublishingService;
+use crate::trusted_publishing::pyx::PyxPublishingService;
+use crate::trusted_publishing::{
+    TrustedPublishingError, TrustedPublishingService, TrustedPublishingToken,
+};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -62,7 +66,7 @@ pub enum PublishError {
         Box<DisplaySafeUrl>,
         #[source] Box<PublishSendError>,
     ),
-    #[error("Unable to publish `{}` to {}", _0.user_display(), _1)]
+    #[error("Validation failed for `{}` on {}", _0.user_display(), _1)]
     Validate(
         PathBuf,
         Box<DisplaySafeUrl>,
@@ -88,6 +92,12 @@ pub enum PublishError {
     MissingHash(Box<DistFilename>),
     #[error(transparent)]
     RetryParsing(#[from] RetryParsingError),
+    #[error("Failed to reserve upload slot for `{}`", _0.user_display())]
+    Reserve(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to upload to S3 for `{}`", _0.user_display())]
+    S3Upload(PathBuf, #[source] Box<PublishSendError>),
+    #[error("Failed to finalize upload for `{}`", _0.user_display())]
+    Finalize(PathBuf, #[source] Box<PublishSendError>),
 }
 
 /// Failure to get the metadata for a specific file.
@@ -116,10 +126,12 @@ pub enum PublishPrepareError {
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
     ReqwestMiddleware(#[source] reqwest_middleware::Error),
-    #[error("Upload failed with status {0}")]
+    #[error("Server returned status code {0}")]
     StatusNoBody(StatusCode, #[source] reqwest::Error),
-    #[error("Upload failed with status code {0}. Server says: {1}")]
+    #[error("Server returned status code {0}. Server says: {1}")]
     Status(StatusCode, String),
+    #[error("Server returned status code {0}. {1}")]
+    StatusProblemDetails(StatusCode, String),
     #[error(
         "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
     )]
@@ -323,7 +335,7 @@ fn group_files(files: Vec<PathBuf>, no_attestations: bool) -> Vec<UploadDistribu
             let Some(dist_filename) = DistFilename::try_from_normalized_filename(&filename) else {
                 debug!("Not a distribution filename: `{filename}`");
                 // I've never seen these in upper case
-                #[allow(clippy::case_sensitive_file_extension_comparisons)]
+                #[expect(clippy::case_sensitive_file_extension_comparisons)]
                 if filename.ends_with(".whl")
                     || filename.ends_with(".zip")
                     // Catch all compressed tar variants, e.g., `.tar.gz`
@@ -395,6 +407,7 @@ pub async fn check_trusted_publishing(
     username: Option<&str>,
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
+    token_store: &PyxTokenStore,
     trusted_publishing: TrustedPublishing,
     registry: &DisplaySafeUrl,
     client: &BaseClient,
@@ -410,10 +423,21 @@ pub async fn check_trusted_publishing(
             }
 
             debug!("Attempting to get a token for trusted publishing");
+
             // Attempt to get a token for trusted publishing.
-            match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                .await
-            {
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+            };
+
+            match token {
                 // Success: we have a token for trusted publishing.
                 Ok(Some(token)) => Ok(TrustedPublishResult::Configured(token)),
                 // Failed to discover an ambient OIDC token.
@@ -441,11 +465,22 @@ pub async fn check_trusted_publishing(
                 return Err(PublishError::MixedCredentials(conflicts.join(" and ")));
             }
 
-            let Some(token) =
-                trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
+            // Attempt to get a token for trusted publishing.
+            let token = if token_store.is_known_url(registry) {
+                debug!("Using trusted publishing flow for pyx");
+                PyxPublishingService::new(registry, client)
+                    .get_token()
                     .await
                     .map_err(Box::new)?
-            else {
+            } else {
+                debug!("Using trusted publishing flow for PyPI");
+                PyPIPublishingService::new(registry, client)
+                    .get_token()
+                    .await
+                    .map_err(Box::new)?
+            };
+
+            let Some(token) = token else {
                 return Err(PublishError::TrustedPublishing(
                     TrustedPublishingError::NoToken.into(),
                 ));
@@ -606,7 +641,9 @@ pub async fn upload(
     }
 }
 
-/// Validate a file against a registry.
+/// Validate a distribution before uploading.
+///
+/// Returns `true` if the file should be uploaded, `false` if it already exists on the server.
 pub async fn validate(
     file: &Path,
     form_metadata: &FormMetadata,
@@ -615,7 +652,7 @@ pub async fn validate(
     store: &PyxTokenStore,
     client: &BaseClient,
     credentials: &Credentials,
-) -> Result<(), PublishError> {
+) -> Result<bool, PublishError> {
     if store.is_known_url(registry) {
         debug!("Performing validation request for {registry}");
 
@@ -625,7 +662,7 @@ pub async fn validate(
             .expect("URL must have path segments")
             .push("validate");
 
-        let request = build_validation_request(
+        let request = build_metadata_request(
             raw_filename,
             &validation_url,
             client,
@@ -641,16 +678,261 @@ pub async fn validate(
             )
         })?;
 
+        let status_code = response.status();
+        debug!("Response code for {validation_url}: {status_code}");
+
+        if status_code.is_success() {
+            #[derive(Deserialize)]
+            struct ValidateResponse {
+                exists: bool,
+            }
+
+            // Check if the file already exists.
+            match response.text().await {
+                Ok(body) => {
+                    trace!("Response content for {validation_url}: {body}");
+                    if let Ok(response) = serde_json::from_str::<ValidateResponse>(&body) {
+                        if response.exists {
+                            debug!("File already uploaded: {raw_filename}");
+                            return Ok(false);
+                        }
+                    }
+                }
+                Err(err) => {
+                    trace!("Failed to read response content for {validation_url}: {err}");
+                }
+            }
+            return Ok(true);
+        }
+
+        // Handle error response.
         handle_response(&validation_url, response)
             .await
             .map_err(|err| {
                 PublishError::Validate(file.to_path_buf(), registry.clone().into(), err.into())
             })?;
+
+        Ok(true)
     } else {
         debug!("Skipping validation request for unsupported publish URL: {registry}");
+        Ok(true)
+    }
+}
+
+/// Upload a file using the two-phase upload protocol for pyx.
+///
+/// This is a more efficient upload method that:
+/// 1. Reserves an upload slot and gets a pre-signed S3 URL.
+/// 2. Uploads the file directly to S3.
+/// 3. Finalizes the upload with the registry.
+///
+/// Returns `true` if the file was newly uploaded and `false` if it already existed.
+pub async fn upload_two_phase(
+    group: &UploadDistribution,
+    form_metadata: &FormMetadata,
+    registry: &DisplaySafeUrl,
+    client: &BaseClient,
+    s3_client: &BaseClient,
+    retry_policy: ExponentialBackoff,
+    credentials: &Credentials,
+    reporter: Arc<impl Reporter>,
+) -> Result<bool, PublishError> {
+    #[derive(Debug, Deserialize)]
+    struct ReserveResponse {
+        upload_url: Option<String>,
+        upload_headers: Option<FxHashMap<String, String>>,
     }
 
-    Ok(())
+    // Step 1: Reserve an upload slot.
+    let mut reserve_url = registry.clone();
+    reserve_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("reserve");
+
+    debug!("Reserving upload slot at {reserve_url}");
+
+    let reserve_request = build_metadata_request(
+        &group.raw_filename,
+        &reserve_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = reserve_request.send().await.map_err(|err| {
+        PublishError::Reserve(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    let status = response.status();
+
+    let reserve_response: ReserveResponse = match status {
+        StatusCode::OK => {
+            debug!("File already uploaded: {}", group.raw_filename);
+            return Ok(false);
+        }
+        StatusCode::CREATED => {
+            let body = response.text().await.map_err(|err| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::StatusNoBody(status, err).into(),
+                )
+            })?;
+            serde_json::from_str(&body).map_err(|_| {
+                PublishError::Reserve(
+                    group.file.clone(),
+                    PublishSendError::Status(status, format!("Invalid JSON response: {body}"))
+                        .into(),
+                )
+            })?
+        }
+        _ => {
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::Reserve(
+                group.file.clone(),
+                PublishSendError::Status(status, body).into(),
+            ));
+        }
+    };
+
+    // Step 2: Upload the file directly to S3 (if needed).
+    // When upload_url is None, the file already exists on S3 with the correct hash.
+    if let Some(upload_url) = reserve_response.upload_url {
+        let s3_url = DisplaySafeUrl::parse(&upload_url).map_err(|_| {
+            PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid S3 URL in reserve response".to_string(),
+                )
+                .into(),
+            )
+        })?;
+
+        debug!("Got pre-signed URL for upload: {s3_url}");
+
+        // Use a custom retry loop since streaming uploads can't be retried by the middleware.
+        let file_size = fs_err::tokio::metadata(&group.file)
+            .await
+            .map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?
+            .len();
+
+        let mut retry_state = RetryState::start(retry_policy, s3_url.clone());
+        loop {
+            let file = File::open(&group.file).await.map_err(|err| {
+                PublishError::PublishPrepare(
+                    group.file.clone(),
+                    Box::new(PublishPrepareError::Io(err)),
+                )
+            })?;
+
+            let idx = reporter.on_upload_start(&group.filename.to_string(), Some(file_size));
+            let reporter_clone = reporter.clone();
+            let reader = ProgressReader::new(file, move |read| {
+                reporter_clone.on_upload_progress(idx, read as u64);
+            });
+            let file_reader = Body::wrap_stream(ReaderStream::new(reader));
+
+            let mut request = s3_client
+                .for_host(&s3_url)
+                .raw_client()
+                .put(Url::from(s3_url.clone()))
+                .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                .header(reqwest::header::CONTENT_LENGTH, file_size);
+
+            // Add any required headers from the reserve response (e.g., x-amz-tagging).
+            if let Some(headers) = &reserve_response.upload_headers {
+                for (key, value) in headers {
+                    request = request.header(key, value);
+                }
+            }
+
+            let result = request.body(file_reader).send().await;
+
+            let response = match result {
+                Ok(response) => {
+                    reporter.on_upload_complete(idx);
+                    response
+                }
+                Err(err) => {
+                    let middleware_retries =
+                        if let Some(RetryError::WithRetries { retries, .. }) =
+                            (&err as &dyn std::error::Error).downcast_ref::<RetryError>()
+                        {
+                            *retries
+                        } else {
+                            0
+                        };
+                    if let Some(backoff) = retry_state.should_retry(&err, middleware_retries) {
+                        retry_state.sleep_backoff(backoff).await;
+                        continue;
+                    }
+                    return Err(PublishError::S3Upload(
+                        group.file.clone(),
+                        PublishSendError::ReqwestMiddleware(err).into(),
+                    ));
+                }
+            };
+
+            if response.status().is_success() {
+                break;
+            }
+
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(PublishError::S3Upload(
+                group.file.clone(),
+                PublishSendError::Status(status, format!("S3 upload failed: {body}")).into(),
+            ));
+        }
+
+        debug!("S3 upload complete for {}", group.raw_filename);
+    } else {
+        debug!(
+            "File already exists on S3, skipping upload: {}",
+            group.raw_filename
+        );
+    }
+
+    // Step 3: Finalize the upload.
+    let mut finalize_url = registry.clone();
+    finalize_url
+        .path_segments_mut()
+        .expect("URL must have path segments")
+        .push("finalize");
+
+    debug!("Finalizing upload at {finalize_url}");
+
+    let finalize_request = build_metadata_request(
+        &group.raw_filename,
+        &finalize_url,
+        client,
+        credentials,
+        form_metadata,
+    );
+
+    let response = finalize_request.send().await.map_err(|err| {
+        PublishError::Finalize(
+            group.file.clone(),
+            PublishSendError::ReqwestMiddleware(err).into(),
+        )
+    })?;
+
+    handle_response(&finalize_url, response)
+        .await
+        .map_err(|err| PublishError::Finalize(group.file.clone(), err.into()))?;
+
+    debug!("Upload finalized for {}", group.raw_filename);
+
+    Ok(true)
 }
 
 /// Check whether we should skip the upload of a file because it already exists on the index.
@@ -934,7 +1216,7 @@ impl FormMetadata {
         add_option("description_content_type", description_content_type);
         add_option("download_url", download_url);
         add_option("home_page", home_page);
-        add_option("keywords", keywords);
+        add_option("keywords", keywords.map(|keywords| keywords.as_metadata()));
         add_option("license", license);
         add_option("license_expression", license_expression);
         add_option("maintainer", maintainer);
@@ -956,7 +1238,7 @@ impl FormMetadata {
         add_vec("license_file", license_files);
         add_vec("obsoletes_dist", obsoletes_dist);
         add_vec("platform", platforms);
-        add_vec("project_urls", project_urls);
+        add_vec("project_urls", project_urls.to_vec_str());
         add_vec("provides_dist", provides_dist);
         add_vec("provides_extra", provides_extra);
         add_vec("requires_dist", requires_dist);
@@ -1067,10 +1349,8 @@ async fn build_upload_request<'a>(
     Ok((request, idx))
 }
 
-/// Build the validation request, to validate the upload without actually uploading the file.
-///
-/// Returns the [`RequestBuilder`].
-fn build_validation_request<'a>(
+/// Build a request with form metadata but without the file content.
+fn build_metadata_request<'a>(
     raw_filename: &str,
     registry: &DisplaySafeUrl,
     client: &'a BaseClient,
@@ -1172,6 +1452,18 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
         ));
     }
 
+    // Try to parse as RFC 9457 Problem Details (e.g., from pyx).
+    if content_type.as_deref() == Some(uv_client::ProblemDetails::CONTENT_TYPE)
+        && let Some(problem) =
+            uv_client::ProblemDetails::try_from_response_body(upload_error.as_bytes())
+        && let Some(description) = problem.description()
+    {
+        return Err(PublishSendError::StatusProblemDetails(
+            status_code,
+            description,
+        ));
+    }
+
     // Raced uploads of the same file are handled by the caller.
     Err(PublishSendError::Status(
         status_code,
@@ -1186,7 +1478,6 @@ mod tests {
 
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
-    use thiserror::__private17::AsDynError;
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
@@ -1257,7 +1548,6 @@ mod tests {
         fn shuffle<T>(vec: &mut [T]) {
             let n: usize = vec.len();
             for i in 0..(n - 1) {
-                #[allow(clippy::cast_possible_truncation)]
                 let j = (fastrand::usize(..)) % (n - i) + i;
                 vec.swap(i, j);
             }
@@ -1555,7 +1845,7 @@ mod tests {
             .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .join("\n");
-        assert_snapshot!(&formatted_metadata, @r"
+        assert_snapshot!(&formatted_metadata, @"
         :action: file_upload
         sha256_digest: 89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
         blake2_256_digest: 40ab79b48c4e289e4990f7e689177adae4096c07a634034eb1d10c0b6700e4d2
@@ -1856,13 +2146,13 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
-            @r"
+            @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
           Caused by: Too many redirects, only 10 redirects are allowed
         "
@@ -1884,15 +2174,84 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(err.as_dyn_error(), &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
         assert_snapshot!(
             &capture,
-            @r"
+            @"
         error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to https://different.auth.tld/final/
           Caused by: Redirected URL is not in the same realm. Redirected to: https://different.auth.tld/final/
+        "
+        );
+    }
+
+    /// PyPI returns `application/json` with a `code` field.
+    #[tokio::test]
+    async fn upload_error_pypi_json() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header("content-type", "application/json")
+                    .set_body_raw(
+                        r#"{"message": "The server could not comply with the request since it is either malformed or otherwise incorrect.\n\n\nError: Use 'source' as Python version for an sdist.\n\n", "code": "400 Error: Use 'source' as Python version for an sdist.", "title": "Bad Request"}"#,
+                        "application/json",
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server says: 400 Error: Use 'source' as Python version for an sdist.
+        "
+        );
+    }
+
+    /// pyx returns `application/problem+json` with RFC 9457 Problem Details.
+    #[tokio::test]
+    async fn upload_error_problem_details() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/final"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .insert_header(
+                        "content-type",
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    )
+                    .set_body_raw(
+                        r#"{"type": "about:blank", "status": 400, "title": "Bad Request", "detail": "Missing required field `name`"}"#,
+                        uv_client::ProblemDetails::CONTENT_TYPE,
+                    ),
+            )
+            .mount(&mock_server)
+            .await;
+
+        let err = mock_server_upload(&mock_server).await.unwrap_err();
+
+        let mut capture = String::new();
+        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+
+        let capture = capture.replace(&mock_server.uri(), "[SERVER]");
+        let capture = anstream::adapter::strip_str(&capture);
+        assert_snapshot!(
+            &capture,
+            @"
+        error: Failed to publish `../../test/links/tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl` to [SERVER]/final
+          Caused by: Server returned status code 400 Bad Request. Server message: Bad Request, Missing required field `name`
         "
         );
     }

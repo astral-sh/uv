@@ -9,9 +9,10 @@ use flate2::write::GzEncoder;
 use fs_err::File;
 use globset::{Glob, GlobSet};
 use std::io;
-use std::io::{BufReader, Cursor};
+use std::io::{BufReader, Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
+use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
@@ -33,8 +34,18 @@ pub fn build_source_dist(
         extension: SourceDistExtension::TarGz,
     };
     let source_dist_path = source_dist_directory.join(filename.to_string());
-    let writer = TarGzWriter::new(&source_dist_path)?;
+
+    if source_dist_path.exists() {
+        fs_err::remove_file(&source_dist_path)?;
+    }
+
+    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    temp_file
+        .persist(&source_dist_path)
+        .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
+
     Ok(filename)
 }
 
@@ -281,22 +292,21 @@ fn write_source_dist(
     Ok(filename)
 }
 
-struct TarGzWriter {
+struct TarGzWriter<W: Write> {
     path: PathBuf,
-    tar: tar::Builder<GzEncoder<File>>,
+    tar: tar::Builder<GzEncoder<W>>,
 }
 
-impl TarGzWriter {
-    fn new(path: impl Into<PathBuf>) -> Result<Self, Error> {
+impl<W: Write> TarGzWriter<W> {
+    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let file = File::create(&path)?;
-        let enc = GzEncoder::new(file, Compression::default());
+        let enc = GzEncoder::new(writer, Compression::default());
         let tar = tar::Builder::new(enc);
-        Ok(Self { path, tar })
+        Self { path, tar }
     }
 }
 
-impl DirectoryWriter for TarGzWriter {
+impl<W: Write> DirectoryWriter for TarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         let mut header = Header::new_gnu();
         // Work around bug in Python's std tar module

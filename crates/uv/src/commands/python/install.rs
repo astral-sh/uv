@@ -5,30 +5,33 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Error, Result};
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use anyhow::{Context, Error, Result};
+use futures::{StreamExt, join};
 use indexmap::IndexSet;
-use itertools::{Either, Itertools};
+use itertools::Itertools;
 use owo_colors::{AnsiColors, OwoColorize};
 use rustc_hash::{FxHashMap, FxHashSet};
-use tracing::{debug, trace};
+use tokio::sync::mpsc;
+use tracing::{debug, trace, warn};
 
+use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
     PythonDownloadRequest,
 };
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
-    create_link_to_executable, python_executable_dir,
+    compare_build_versions, create_link_to_executable, python_executable_dir,
 };
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
-    PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
+    ImplementationName, Interpreter, PythonDownloads, PythonInstallationKey,
+    PythonInstallationMinorVersionKey, PythonRequest, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
@@ -66,12 +69,12 @@ impl<'a> InstallRequest<'a> {
             Ok(download) => download,
             Err(downloads::Error::NoDownloadFound(request))
                 if request.libc().is_some_and(Libc::is_musl)
-                    && request
-                        .arch()
-                        .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
+                    && request.arch().is_some_and(|arch| {
+                        arch.inner() == Arch::from(&uv_platform_tags::Arch::Armv7L)
+                    }) =>
             {
                 return Err(anyhow::anyhow!(
-                    "uv does not yet provide musl Python distributions on aarch64."
+                    "uv does not yet provide musl Python distributions on armv7."
                 ));
             }
             Err(err) => return Err(err.into()),
@@ -174,7 +177,7 @@ pub(crate) enum PythonUpgrade {
 }
 
 /// Download and install Python versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn install(
     project_dir: &Path,
     install_dir: Option<PathBuf>,
@@ -191,6 +194,114 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
+    compile_bytecode: bool,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    preview: Preview,
+    printer: Printer,
+) -> Result<ExitStatus> {
+    let (sender, mut receiver) = mpsc::unbounded_channel();
+    let compiler = async {
+        let mut total_files = 0;
+        let mut total_elapsed = std::time::Duration::default();
+        let mut total_skipped = 0;
+        while let Some(installation) = receiver.recv().await {
+            if let Some((files, elapsed)) =
+                compile_stdlib_bytecode(&installation, concurrency, cache)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "Failed to bytecode-compile Python standard library for: {}",
+                            installation.key()
+                        )
+                    })?
+            {
+                total_files += files;
+                total_elapsed += elapsed;
+            } else {
+                total_skipped += 1;
+            }
+        }
+        Ok::<_, anyhow::Error>((total_files, total_elapsed, total_skipped))
+    };
+
+    let installer = perform_install(
+        project_dir,
+        install_dir,
+        targets,
+        reinstall,
+        upgrade,
+        bin,
+        registry,
+        force,
+        python_install_mirror,
+        pypy_install_mirror,
+        python_downloads_json_url,
+        client_builder,
+        default,
+        python_downloads,
+        no_config,
+        compile_bytecode.then_some(sender),
+        concurrency,
+        preview,
+        printer,
+    );
+
+    let (installer_result, compiler_result) = join!(installer, compiler);
+
+    let (total_files, total_elapsed, total_skipped) = compiler_result?;
+    if total_files > 0 {
+        let s = if total_files == 1 { "" } else { "s" };
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!(
+                "Bytecode compiled {} {}{}",
+                format!("{total_files} file{s}").bold(),
+                format!("in {}", elapsed(total_elapsed)).dimmed(),
+                if total_skipped > 0 {
+                    format!(
+                        " (skipped {total_skipped} incompatible version{})",
+                        if total_skipped == 1 { "" } else { "s" }
+                    )
+                } else {
+                    String::new()
+                }
+                .dimmed()
+            )
+            .dimmed()
+        )?;
+    } else if total_skipped > 0 {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format!("No compatible versions to bytecode compile (skipped {total_skipped})")
+                .dimmed()
+        )?;
+    }
+
+    installer_result
+}
+
+#[expect(clippy::fn_params_excessive_bools)]
+async fn perform_install(
+    project_dir: &Path,
+    install_dir: Option<PathBuf>,
+    targets: Vec<String>,
+    reinstall: bool,
+    upgrade: PythonUpgrade,
+    bin: Option<bool>,
+    registry: Option<bool>,
+    force: bool,
+    python_install_mirror: Option<String>,
+    pypy_install_mirror: Option<String>,
+    python_downloads_json_url: Option<String>,
+    client_builder: BaseClientBuilder<'_>,
+    default: bool,
+    python_downloads: PythonDownloads,
+    no_config: bool,
+    bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
+    concurrency: &Concurrency,
     preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -200,20 +311,11 @@ pub(crate) async fn install(
     // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
     // surprised if `uv python find` returned the "newest" Python version rather than the one I just
     // installed with the `--default` flag.
-    if default && !preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT) {
+    if default && !preview.is_enabled(PreviewFeature::PythonInstallDefault) {
         warn_user!(
             "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeatures::PYTHON_INSTALL_DEFAULT
+            PreviewFeature::PythonInstallDefault
         );
-    }
-
-    if let PythonUpgrade::Enabled(source @ PythonUpgradeSource::Upgrade) = upgrade {
-        if !preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE) {
-            warn_user!(
-                "`{source}` is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-                PreviewFeatures::PYTHON_UPGRADE
-            );
-        }
     }
 
     if default && targets.len() > 1 {
@@ -413,25 +515,58 @@ pub(crate) async fn install(
         (vec![], unsatisfied)
     } else {
         // If we can find one existing installation that matches the request, it is satisfied
-        requests.iter().partition_map(|request| {
-            if let Some(installation) = existing_installations.iter().find(|installation| {
-                if matches!(upgrade, PythonUpgrade::Enabled(_)) {
-                    // If this is an upgrade, the requested version is a minor version but the
-                    // requested download is the highest patch for that minor version. We need to
-                    // install it unless an exact match is found.
-                    request.download.key() == installation.key()
+        let mut satisfied = Vec::new();
+        let mut unsatisfied = Vec::new();
+
+        for request in &requests {
+            if matches!(upgrade, PythonUpgrade::Enabled(_)) {
+                // If this is an upgrade, the requested version is a minor version but the
+                // requested download is the highest patch for that minor version. We need to
+                // install it unless an exact match is found (including build version).
+                if let Some(installation) = existing_installations
+                    .iter()
+                    .find(|inst| request.download.key() == inst.key())
+                {
+                    if matches_build(request.download.build(), installation.build()) {
+                        debug!("Found `{}` for request `{}`", installation.key(), request);
+                        satisfied.push(installation);
+                    } else {
+                        // Key matches but build version differs - track as existing for reinstall
+                        debug!(
+                            "Build version mismatch for `{}`, will upgrade",
+                            installation.key()
+                        );
+                        changelog.existing.insert(installation.key().clone());
+                        unsatisfied.push(Cow::Borrowed(request));
+                    }
                 } else {
-                    request.matches_installation(installation)
+                    debug!("No installation found for request `{}`", request);
+                    unsatisfied.push(Cow::Borrowed(request));
                 }
-            }) {
+            } else if let Some(installation) = existing_installations
+                .iter()
+                .find(|inst| request.matches_installation(inst))
+            {
                 debug!("Found `{}` for request `{}`", installation.key(), request);
-                Either::Left(installation)
+                satisfied.push(installation);
             } else {
                 debug!("No installation found for request `{}`", request);
-                Either::Right(Cow::Borrowed(request))
+                unsatisfied.push(Cow::Borrowed(request));
             }
-        })
+        }
+
+        (satisfied, unsatisfied)
     };
+
+    // For all satisfied installs, bytecode compile them now before any future
+    // early return.
+    if let Some(ref sender) = bytecode_compilation_sender {
+        satisfied
+            .iter()
+            .copied()
+            .cloned()
+            .try_for_each(|installation| sender.send(installation))?;
+    }
 
     // Check if Python downloads are banned
     if matches!(python_downloads, PythonDownloads::Never) && !unsatisfied.is_empty() {
@@ -458,10 +593,9 @@ pub(crate) async fn install(
 
     // Download and unpack the Python versions concurrently
     let reporter = PythonDownloadReporter::new(printer, Some(downloads.len() as u64));
-    let mut tasks = FuturesUnordered::new();
 
-    for download in &downloads {
-        tasks.push(async {
+    let mut tasks = futures::stream::iter(&downloads)
+        .map(async |download| {
             (
                 *download,
                 download
@@ -477,8 +611,8 @@ pub(crate) async fn install(
                     )
                     .await,
             )
-        });
-    }
+        })
+        .buffer_unordered(concurrency.downloads);
 
     let mut errors = vec![];
     let mut downloaded = Vec::with_capacity(downloads.len());
@@ -493,6 +627,9 @@ pub(crate) async fn install(
                 };
 
                 let installation = ManagedPythonInstallation::new(path, download);
+                if let Some(ref sender) = bytecode_compilation_sender {
+                    sender.send(installation.clone())?;
+                }
                 changelog.installed.insert(installation.key().clone());
                 for request in &requests {
                     // Take note of which installations satisfied which requests
@@ -587,16 +724,7 @@ pub(crate) async fn install(
         );
 
     for installation in minor_versions.values() {
-        if matches!(
-            upgrade,
-            PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade)
-        ) {
-            // During an upgrade, update existing symlinks but avoid
-            // creating new ones.
-            installation.update_minor_version_link(preview)?;
-        } else {
-            installation.ensure_minor_version_link(preview)?;
-        }
+        installation.ensure_minor_version_link()?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -830,7 +958,7 @@ pub(crate) async fn install(
 /// Link the binaries of a managed Python installation to the bin directory.
 ///
 /// This function is fallible, but errors are pushed to `errors` instead of being thrown.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 fn create_bin_links(
     installation: &ManagedPythonInstallation,
     bin: &Path,
@@ -849,8 +977,8 @@ fn create_bin_links(
     // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
     // it. In particular, it may be confusing because it does not apply when versions are loaded
     // from a `.python-version` file.
-    let should_create_default_links = default
-        || (is_default_install && preview.is_enabled(PreviewFeatures::PYTHON_INSTALL_DEFAULT));
+    let should_create_default_links =
+        default || (is_default_install && preview.is_enabled(PreviewFeature::PythonInstallDefault));
 
     let targets = if should_create_default_links {
         vec![
@@ -869,7 +997,7 @@ fn create_bin_links(
         }
         let executable = if upgradeable {
             if let Some(minor_version_link) =
-                PythonMinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation)
             {
                 minor_version_link.symlink_executable.clone()
             } else {
@@ -1071,6 +1199,53 @@ fn create_bin_links(
     }
 }
 
+/// Attempt to compile the bytecode for a [`ManagedPythonInstallation`]'s stdlib
+async fn compile_stdlib_bytecode(
+    installation: &ManagedPythonInstallation,
+    concurrency: &Concurrency,
+    cache: &Cache,
+) -> Result<Option<(usize, std::time::Duration)>> {
+    let start = std::time::Instant::now();
+
+    // Explicit matching so this heuristic is updated for future additions
+    match installation.implementation() {
+        ImplementationName::Pyodide => return Ok(None),
+        ImplementationName::GraalPy | ImplementationName::PyPy | ImplementationName::CPython => (),
+    }
+
+    let interpreter = Interpreter::query(installation.executable(false), cache)
+        .context("Couldn't locate the interpreter")?;
+
+    // Ensure the bytecode compilation occurs in the correct place, in case the installed
+    // interpreter reports a weird stdlib path.
+    let interpreter_path = installation.path().canonicalize()?;
+    let stdlib_path = match interpreter.stdlib().canonicalize() {
+        Ok(path) if path.starts_with(&interpreter_path) => path,
+        _ => {
+            warn!(
+                "The stdlib path for {} ({}) is not a subdirectory of its installation path ({}).",
+                installation.key(),
+                interpreter.stdlib().display(),
+                interpreter_path.display()
+            );
+            return Ok(None);
+        }
+    };
+
+    let files = uv_installer::compile_tree(
+        &stdlib_path,
+        &installation.executable(false),
+        concurrency,
+        cache.root(),
+    )
+    .await
+    .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
+    if files == 0 {
+        return Ok(None);
+    }
+    Ok(Some((files, start.elapsed())))
+}
+
 pub(crate) fn format_executables(
     event: &ChangeEvent,
     executables: &FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>>,
@@ -1152,5 +1327,19 @@ fn find_matching_bin_link<'a>(
         installations.find(|installation| installation.executable(false) == target)
     } else {
         unreachable!("Only Unix and Windows are supported")
+    }
+}
+
+/// Check if a download's build version matches an installation's build version.
+///
+/// Returns `true` if the build versions match (no upgrade needed), `false` if an upgrade is needed.
+fn matches_build(download_build: Option<&str>, installation_build: Option<&str>) -> bool {
+    match (download_build, installation_build) {
+        // Both have build, check if they match
+        (Some(d), Some(i)) => compare_build_versions(d, i) == std::cmp::Ordering::Equal,
+        // Legacy installation without BUILD file needs upgrade
+        (Some(_), None) => false,
+        // Download doesn't have build info, assume matches
+        (None, _) => true,
     }
 }

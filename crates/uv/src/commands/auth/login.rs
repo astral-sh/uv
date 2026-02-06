@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use uv_auth::{
     AccessToken, AuthBackend, Credentials, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
-    Service, TextCredentialStore,
+    Service, TextCredentialStore, is_default_pyx_domain,
 };
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_distribution_types::IndexUrl;
@@ -32,7 +32,7 @@ pub(crate) async fn login(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }

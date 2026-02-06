@@ -29,6 +29,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_pypi_types::ProjectStatus;
 use uv_pypi_types::{
     PypiSimpleDetail, PypiSimpleIndex, PyxSimpleDetail, PyxSimpleIndex, ResolutionMetadata,
 };
@@ -182,7 +183,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         let client = builder.build();
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
@@ -195,7 +196,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -212,7 +213,7 @@ impl<'a> RegistryClientBuilder<'a> {
             .indexes(Indexes::from(&self.index_locations))
             .wrap_existing(existing);
 
-        let timeout = client.timeout();
+        let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
 
         // Wrap in the cache middleware.
@@ -225,7 +226,7 @@ impl<'a> RegistryClientBuilder<'a> {
             cache: self.cache,
             connectivity,
             client,
-            timeout,
+            read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         }
@@ -247,8 +248,8 @@ pub struct RegistryClient {
     cache: Cache,
     /// The connectivity mode to use.
     connectivity: Connectivity,
-    /// Configured client timeout, in seconds.
-    timeout: Duration,
+    /// Client HTTP read timeout.
+    read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
     /// The pyx token store to use for persistent credentials.
@@ -287,8 +288,8 @@ impl RegistryClient {
     }
 
     /// Return the timeout this client is configured with, in seconds.
-    pub fn timeout(&self) -> Duration {
-        self.timeout
+    pub fn read_timeout(&self) -> Duration {
+        self.read_timeout
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -643,6 +644,7 @@ impl RegistryClient {
                             data.files,
                             data.core_metadata,
                             package_name,
+                            data.project_status,
                             &url,
                         )
                     }
@@ -658,6 +660,7 @@ impl RegistryClient {
                             data.files,
                             data.core_metadata,
                             package_name,
+                            data.project_status,
                             &url,
                         )
                     }
@@ -670,7 +673,12 @@ impl RegistryClient {
                         let data: PypiSimpleDetail = serde_json::from_slice(bytes.as_ref())
                             .map_err(|err| Error::from_json_err(err, url.clone()))?;
 
-                        SimpleDetailMetadata::from_pypi_files(data.files, package_name, &url)
+                        SimpleDetailMetadata::from_pypi_files(
+                            data.files,
+                            package_name,
+                            data.project_status,
+                            &url,
+                        )
                     }
                     MediaType::PypiV1Html | MediaType::TextHtml => {
                         let text = response
@@ -1230,11 +1238,12 @@ impl RegistryClient {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> std::io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.timeout().as_secs()
+                    self.read_timeout().as_secs()
                 ),
             )
         } else {
@@ -1369,9 +1378,15 @@ impl SimpleIndexMetadata {
     }
 }
 
+/// Detail response for a Python package from a Simple API index.
+///
+/// Abstracts over both HTML and JSON index formats.
 #[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct SimpleDetailMetadata(Vec<SimpleDetailMetadatum>);
+pub struct SimpleDetailMetadata {
+    project_status: ProjectStatus,
+    versions: Vec<SimpleDetailMetadatum>,
+}
 
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
@@ -1383,12 +1398,13 @@ pub struct SimpleDetailMetadatum {
 
 impl SimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &SimpleDetailMetadatum> {
-        self.0.iter()
+        self.versions.iter()
     }
 
     fn from_pypi_files(
         files: Vec<uv_pypi_types::PypiFile>,
         package_name: &PackageName,
+        project_status: ProjectStatus,
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
@@ -1423,8 +1439,8 @@ impl SimpleDetailMetadata {
             }
         }
 
-        Self(
-            version_map
+        Self {
+            versions: version_map
                 .into_iter()
                 .map(|(version, files)| SimpleDetailMetadatum {
                     version,
@@ -1432,13 +1448,15 @@ impl SimpleDetailMetadata {
                     metadata: None,
                 })
                 .collect(),
-        )
+            project_status,
+        }
     }
 
     fn from_pyx_files(
         files: Vec<uv_pypi_types::PyxFile>,
         mut core_metadata: FxHashMap<Version, uv_pypi_types::CoreMetadatum>,
         package_name: &PackageName,
+        project_status: ProjectStatus,
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
@@ -1473,8 +1491,8 @@ impl SimpleDetailMetadata {
             }
         }
 
-        Self(
-            version_map
+        Self {
+            versions: version_map
                 .into_iter()
                 .map(|(version, files)| {
                     let metadata =
@@ -1495,7 +1513,8 @@ impl SimpleDetailMetadata {
                     }
                 })
                 .collect(),
-        )
+            project_status,
+        }
     }
 
     /// Read the [`SimpleDetailMetadata`] from an HTML index.
@@ -1504,10 +1523,19 @@ impl SimpleDetailMetadata {
         package_name: &PackageName,
         url: &DisplaySafeUrl,
     ) -> Result<Self, Error> {
-        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, url)
+        let SimpleDetailHTML {
+            project_status,
+            base,
+            files,
+        } = SimpleDetailHTML::parse(text, url)
             .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-        Ok(Self::from_pypi_files(files, package_name, base.as_url()))
+        Ok(Self::from_pypi_files(
+            files,
+            package_name,
+            project_status,
+            base.as_url(),
+        ))
     }
 }
 
@@ -1516,17 +1544,17 @@ impl IntoIterator for SimpleDetailMetadata {
     type IntoIter = std::vec::IntoIter<SimpleDetailMetadatum>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.versions.into_iter()
     }
 }
 
 impl ArchivedSimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleDetailMetadatum>> {
-        self.0.iter()
+        self.versions.iter()
     }
 
     pub fn datum(&self, i: usize) -> Option<&rkyv::Archived<SimpleDetailMetadatum>> {
-        self.0.get(i)
+        self.versions.get(i)
     }
 }
 
@@ -1831,6 +1859,7 @@ mod tests {
         let simple_metadata = SimpleDetailMetadata::from_pypi_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
+            data.project_status,
             &base,
         );
         let versions: Vec<String> = simple_metadata
@@ -1838,6 +1867,205 @@ mod tests {
             .map(|SimpleDetailMetadatum { version, .. }| version.to_string())
             .collect();
         assert_eq!(versions, ["1.7.8".to_string()]);
+    }
+
+    /// Test for project statuses from PyPI's JSON detail response.
+    #[test]
+    fn project_status_pypi_json() {
+        // Minimized from https://pypi.org/simple/pepy/
+        let json = r#"
+        {
+          "alternate-locations": [],
+          "files": [
+            {
+              "core-metadata": false,
+              "data-dist-info-metadata": false,
+              "filename": "pepy-2.1.1.tar.gz",
+              "hashes": {
+                "sha256": "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829"
+              },
+              "provenance": null,
+              "requires-python": ">=3.7",
+              "size": 15399,
+              "upload-time": "2022-11-14T17:14:53.935145Z",
+              "url": "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+              "yanked": false
+            }
+          ],
+          "meta": {
+            "_last-serial": 15765070,
+            "api-version": "1.4"
+          },
+          "name": "pepy",
+          "project-status": {
+            "status": "archived"
+          },
+          "versions": [
+            "2.1.1"
+          ]
+        }
+        "#;
+
+        let data: PypiSimpleDetail = serde_json::from_str(json).unwrap();
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &PackageName::from_str("pepy").unwrap(),
+            data.project_status,
+            &base,
+        );
+
+        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        SimpleDetailMetadata {
+            project_status: ProjectStatus {
+                status: Archived,
+                reason: None,
+            },
+            versions: [
+                SimpleDetailMetadatum {
+                    version: "2.1.1",
+                    files: VersionFiles {
+                        wheels: [],
+                        source_dists: [
+                            VersionSourceDist {
+                                name: SourceDistFilename {
+                                    name: PackageName(
+                                        "pepy",
+                                    ),
+                                    version: "2.1.1",
+                                    extension: TarGz,
+                                },
+                                file: File {
+                                    dist_info_metadata: false,
+                                    filename: "pepy-2.1.1.tar.gz",
+                                    hashes: HashDigests(
+                                        [
+                                            HashDigest {
+                                                algorithm: Sha256,
+                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            },
+                                        ],
+                                    ),
+                                    requires_python: Some(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: GreaterThanEqual,
+                                                    version: "3.7",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                    size: Some(
+                                        15399,
+                                    ),
+                                    upload_time_utc_ms: Some(
+                                        1668446093935,
+                                    ),
+                                    url: AbsoluteUrl(
+                                        UrlString(
+                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                        ),
+                                    ),
+                                    yanked: Some(
+                                        Bool(
+                                            false,
+                                        ),
+                                    ),
+                                    zstd: None,
+                                },
+                            },
+                        ],
+                    },
+                    metadata: None,
+                },
+            ],
+        }
+        "#);
+    }
+
+    /// Test for project statuses from PyPI's HTML detail response.
+    #[test]
+    fn project_status_pypi_html() {
+        // Minimized from https://pypi.org/simple/pepy/
+        let html = r#"
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta name="pypi:repository-version" content="1.4">
+        <meta name="pypi:project-status" content="archived">    <title>Links for pepy</title>
+          </head>
+          <body>
+            <h1>Links for pepy</h1>
+        <a href="https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz#sha256=cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829" data-requires-python="&gt;=3.7" >pepy-2.1.1.tar.gz</a><br />
+        </body>
+        </html>
+        <!--SERIAL 15765070-->
+        "#;
+
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap();
+        let simple_metadata =
+            SimpleDetailMetadata::from_html(html, &PackageName::from_str("pepy").unwrap(), &base)
+                .unwrap();
+        insta::assert_debug_snapshot!(simple_metadata, @r#"
+        SimpleDetailMetadata {
+            project_status: ProjectStatus {
+                status: Archived,
+                reason: None,
+            },
+            versions: [
+                SimpleDetailMetadatum {
+                    version: "2.1.1",
+                    files: VersionFiles {
+                        wheels: [],
+                        source_dists: [
+                            VersionSourceDist {
+                                name: SourceDistFilename {
+                                    name: PackageName(
+                                        "pepy",
+                                    ),
+                                    version: "2.1.1",
+                                    extension: TarGz,
+                                },
+                                file: File {
+                                    dist_info_metadata: false,
+                                    filename: "pepy-2.1.1.tar.gz",
+                                    hashes: HashDigests(
+                                        [
+                                            HashDigest {
+                                                algorithm: Sha256,
+                                                digest: "cec463c444b71d1664229121897b22df753dc91fabb2113d1c89992638c90829",
+                                            },
+                                        ],
+                                    ),
+                                    requires_python: Some(
+                                        VersionSpecifiers(
+                                            [
+                                                VersionSpecifier {
+                                                    operator: GreaterThanEqual,
+                                                    version: "3.7",
+                                                },
+                                            ],
+                                        ),
+                                    ),
+                                    size: None,
+                                    upload_time_utc_ms: None,
+                                    url: AbsoluteUrl(
+                                        UrlString(
+                                            "https://files.pythonhosted.org/packages/78/7e/123d89ce0e999e957e53f0b985f734565c93b9a698af53586fc2a1be0dbf/pepy-2.1.1.tar.gz",
+                                        ),
+                                    ),
+                                    yanked: None,
+                                    zstd: None,
+                                },
+                            },
+                        ],
+                    },
+                    metadata: None,
+                },
+            ],
+        }
+        "#);
     }
 
     /// Test for AWS Code Artifact registry
@@ -1866,7 +2094,11 @@ mod tests {
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
         let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
-        let SimpleDetailHTML { base, files } = SimpleDetailHTML::parse(text, &base).unwrap();
+        let SimpleDetailHTML {
+            project_status: _,
+            base,
+            files,
+        } = SimpleDetailHTML::parse(text, &base).unwrap();
         let base = SmallString::from(base.as_str());
 
         // Test parsing of the file urls

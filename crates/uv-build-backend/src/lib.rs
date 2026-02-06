@@ -32,6 +32,8 @@ use crate::settings::ModuleName;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("Failed to persist temporary file to {}", _0.user_display())]
+    Persist(PathBuf, #[source] io::Error),
     #[error("Invalid metadata format in: {}", _0.user_display())]
     Toml(PathBuf, #[source] toml::de::Error),
     #[error("Invalid project metadata")]
@@ -63,6 +65,8 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
+    #[error("Failed to write JSON metadata file")]
+    Json(#[source] serde_json::Error),
     #[error("Expected a Python module at: {}", _0.user_display())]
     MissingInitPy(PathBuf),
     #[error("For namespace packages, `__init__.py[i]` is not allowed in parent directory: {}", _0.user_display())]
@@ -449,6 +453,7 @@ mod tests {
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
+    use uv_preview::{Preview, PreviewFeature};
 
     const MOCK_UV_VERSION: &str = "1.0.0+test";
 
@@ -475,11 +480,13 @@ mod tests {
 
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
-    fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
+    fn build(source_root: &Path, dist: &Path, preview: Preview) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
-        let direct_wheel_filename = build_wheel(source_root, dist, None, MOCK_UV_VERSION, false)?;
+        let (_name, direct_wheel_list_files) =
+            list_wheel(source_root, MOCK_UV_VERSION, false, preview)?;
+        let direct_wheel_filename =
+            build_wheel(source_root, dist, None, MOCK_UV_VERSION, false, preview)?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
         let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
@@ -490,7 +497,7 @@ mod tests {
             list_source_dist(source_root, MOCK_UV_VERSION, false)?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false)?;
+        let (_name, wheel_list_files) = list_wheel(source_root, MOCK_UV_VERSION, false, preview)?;
         let source_dist_filename = build_source_dist(source_root, dist, MOCK_UV_VERSION, false)?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
@@ -511,6 +518,7 @@ mod tests {
             None,
             MOCK_UV_VERSION,
             false,
+            preview,
         )?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
@@ -535,7 +543,7 @@ mod tests {
 
     fn build_err(source_root: &Path) -> String {
         let dist = TempDir::new().unwrap();
-        let build_err = build(source_root, dist.path()).unwrap_err();
+        let build_err = build(source_root, dist.path(), Preview::default()).unwrap_err();
         let err_message: String = format_err(&build_err)
             .replace(&source_root.user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -652,7 +660,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
+        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -665,7 +673,7 @@ mod tests {
             @"bb74bff575b135bb39e5c9bce56349441fb0923bb8857e32a5eaf34ec1843967"
         );
         // Check both the files we report and the actual files
-        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"
+        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
@@ -682,7 +690,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         ");
-        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @r"
+        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @"
         built_by_uv-0.1.0/
         built_by_uv-0.1.0/LICENSE-APACHE
         built_by_uv-0.1.0/LICENSE-MIT
@@ -716,9 +724,9 @@ mod tests {
         // Check that the wheel is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
-            @"319afb04e87caf894b1362b508ec745253c6d241423ea59021694d2015e821da"
+            @"dbe56fd8bd52184095b2e0ea3e83c95d1bc8b4aa53cf469cec5af62251b24abb"
         );
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         built_by_uv-0.1.0.data/data/
         built_by_uv-0.1.0.data/data/data.csv
         built_by_uv-0.1.0.data/headers/
@@ -743,7 +751,7 @@ mod tests {
         built_by_uv/arithmetic/pi.txt
         built_by_uv/cli.py
         ");
-        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @r"
+        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @"
         built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
@@ -767,7 +775,7 @@ mod tests {
             .unwrap()
             .read_to_string(&mut record)
             .unwrap();
-        assert_snapshot!(record, @r###"
+        assert_snapshot!(record, @"
         built_by_uv/__init__.py,sha256=AJ7XpTNWxYktP97ydb81UpnNqoebH7K4sHRakAMQKG4,44
         built_by_uv/arithmetic/__init__.py,sha256=x2agwFbJAafc9Z6TdJ0K6b6bLMApQdvRSQjP4iy7IEI,67
         built_by_uv/arithmetic/circle.py,sha256=FYZkv6KwrF9nJcwGOKigjke1dm1Fkie7qW1lWJoh3AE,287
@@ -779,11 +787,11 @@ mod tests {
         built_by_uv-0.1.0.data/headers/built_by_uv.h,sha256=p5-HBunJ1dY-xd4dMn03PnRClmGyRosScIp8rT46kg4,144
         built_by_uv-0.1.0.data/scripts/whoami.sh,sha256=T2cmhuDFuX-dTkiSkuAmNyIzvv8AKopjnuTCcr9o-eE,20
         built_by_uv-0.1.0.data/data/data.csv,sha256=7z7u-wXu7Qr2eBZFVpBILlNUiGSngv_1vYqZHVWOU94,265
-        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=JBpLtoa_WBz5WPGpRsAUTD4Dz6H0KkkdiKWCkfMSS1U,84
         built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
         built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
-        "###);
+        ");
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
@@ -833,6 +841,7 @@ mod tests {
             None,
             "0.5.15",
             false,
+            Preview::default(),
         )
         .unwrap();
         let wheel = output_dir
@@ -847,13 +856,13 @@ mod tests {
             .read_to_string(&mut metadata)
             .unwrap();
 
-        assert_snapshot!(metadata, @r###"
+        assert_snapshot!(metadata, @"
         Metadata-Version: 2.3
         Name: pep-pep639-license
         Version: 1.0.0
         License: Copy carefully.
                  Sincerely, the authors
-        "###);
+        ");
     }
 
     /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
@@ -885,7 +894,13 @@ mod tests {
 
         // Prepare the metadata.
         let metadata_dir = TempDir::new().unwrap();
-        let dist_info_dir = metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap();
+        let dist_info_dir = metadata(
+            src.path(),
+            metadata_dir.path(),
+            "0.5.15",
+            Preview::default(),
+        )
+        .unwrap();
         let metadata_prepared =
             fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
                 .unwrap();
@@ -898,6 +913,7 @@ mod tests {
             Some(&metadata_dir.path().join(&dist_info_dir)),
             "0.5.15",
             false,
+            Preview::default(),
         )
         .unwrap();
         let wheel = output_dir
@@ -914,11 +930,11 @@ mod tests {
 
         assert_eq!(metadata_prepared, metadata_wheel);
 
-        assert_snapshot!(metadata_wheel, @r###"
+        assert_snapshot!(metadata_wheel, @"
         Metadata-Version: 2.3
         Name: two-step-build
         Version: 1.0.0
-        "###);
+        ");
     }
 
     /// Check that non-normalized paths for `module-root` work with the glob inclusions.
@@ -947,9 +963,9 @@ mod tests {
         File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path()).unwrap();
+        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
 
-        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
@@ -957,7 +973,7 @@ mod tests {
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
 
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         two_step_build-1.0.0.dist-info/
         two_step_build-1.0.0.dist-info/METADATA
         two_step_build-1.0.0.dist-info/RECORD
@@ -986,7 +1002,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build2 = build(src.path(), dist.path()).unwrap();
+        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1013,9 +1029,9 @@ mod tests {
         File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path()).unwrap();
+        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
 
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         camelCase/
         camelCase/__init__.py
         camelcase-1.0.0.dist-info/
@@ -1030,13 +1046,184 @@ mod tests {
             pyproject_toml.replace("camelCase", "camel_case"),
         )
         .unwrap();
-        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
             @"Expected a Python module at: [TEMP_PATH]/src/camel_case/__init__.py"
+        );
+    }
+
+    /// Test that no partial files are left in dist directory when build fails.
+    #[test]
+    fn no_partial_files_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Source dist build should fail
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        // Wheel build should fail
+        let wheel_result = build_wheel(
+            src.path(),
+            dist.path(),
+            None,
+            MOCK_UV_VERSION,
+            false,
+            Preview::default(),
+        );
+        assert!(wheel_result.is_err());
+
+        // dist directory should be empty (no partial files)
+        let dist_contents: Vec<_> = fs_err::read_dir(dist.path()).unwrap().collect();
+        assert!(
+            dist_contents.is_empty(),
+            "Expected empty dist directory, but found: {dist_contents:?}"
+        );
+    }
+
+    /// Test that pre-existing files in the dist directory are deleted before build starts.
+    #[test]
+    fn existing_files_deleted_on_build_failure() {
+        let src = TempDir::new().unwrap();
+
+        // Create a minimal pyproject.toml without __init__.py (will fail)
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "failing-build"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory
+        let sdist_path = dist.path().join("failing_build-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("failing_build-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should fail and delete existing files
+        let sdist_result = build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false);
+        assert!(sdist_result.is_err());
+
+        let wheel_result = build_wheel(
+            src.path(),
+            dist.path(),
+            None,
+            MOCK_UV_VERSION,
+            false,
+            Preview::default(),
+        );
+        assert!(wheel_result.is_err());
+
+        // Verify pre-existing files were deleted
+        assert!(
+            !sdist_path.exists(),
+            "Pre-existing sdist should have been deleted"
+        );
+        assert!(
+            !wheel_path.exists(),
+            "Pre-existing wheel should have been deleted"
+        );
+    }
+
+    /// Test that existing files are overwritten on successful build.
+    #[test]
+    fn existing_files_overwritten_on_success() {
+        let src = TempDir::new().unwrap();
+
+        // Create a valid project
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "overwrite-test"
+                version = "1.0.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.15,<0.6.0"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("overwrite_test")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("overwrite_test")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+
+        // Create pre-existing files in dist directory with known content
+        let sdist_path = dist.path().join("overwrite_test-1.0.0.tar.gz");
+        let wheel_path = dist.path().join("overwrite_test-1.0.0-py3-none-any.whl");
+        let old_content = b"old content";
+        fs_err::write(&sdist_path, old_content).unwrap();
+        fs_err::write(&wheel_path, old_content).unwrap();
+
+        // Build should succeed and overwrite existing files
+        build_source_dist(src.path(), dist.path(), MOCK_UV_VERSION, false).unwrap();
+        build_wheel(
+            src.path(),
+            dist.path(),
+            None,
+            MOCK_UV_VERSION,
+            false,
+            Preview::default(),
+        )
+        .unwrap();
+
+        // Verify files were overwritten (content should be different)
+        assert_ne!(
+            &fs_err::read(&sdist_path).unwrap()[..],
+            &old_content[..],
+            "Source dist should have been overwritten"
+        );
+        assert_ne!(
+            &fs_err::read(&wheel_path).unwrap()[..],
+            &old_content[..],
+            "Wheel should have been overwritten"
+        );
+
+        // Verify the new files are valid archives
+        assert!(
+            !sdist_contents(&sdist_path).is_empty(),
+            "sdist should be a valid archive"
+        );
+        assert!(
+            !wheel_contents(&wheel_path).is_empty(),
+            "wheel should be a valid archive"
         );
     }
 
@@ -1059,11 +1246,11 @@ mod tests {
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
         let err_message = format_err(&build_err);
         assert_snapshot!(
             err_message,
-            @r"
+            @"
         Invalid module name: django@home-stubs
           Caused by: Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
         "
@@ -1095,7 +1282,7 @@ mod tests {
         File::create(&regular_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let build_err = build(src.path(), dist.path(), Preview::default()).unwrap_err();
         let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
@@ -1114,8 +1301,8 @@ mod tests {
         )
         .unwrap();
 
-        let build1 = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         stuffed_bird-stubs/
         stuffed_bird-stubs/__init__.pyi
         stuffed_bird_stubs-1.0.0.dist-info/
@@ -1140,7 +1327,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path()).unwrap();
+        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
         assert_eq!(build1.wheel_contents, build2.wheel_contents);
     }
 
@@ -1194,8 +1381,8 @@ mod tests {
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
@@ -1204,7 +1391,7 @@ mod tests {
         simple_namespace_part-1.0.0/src/simple_namespace/part
         simple_namespace_part-1.0.0/src/simple_namespace/part/__init__.py
         ");
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         simple_namespace/
         simple_namespace/part/
         simple_namespace/part/__init__.py
@@ -1231,7 +1418,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path()).unwrap();
+        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1285,8 +1472,8 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        let build1 = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @"
         complex_namespace-1.0.0.dist-info/
         complex_namespace-1.0.0.dist-info/METADATA
         complex_namespace-1.0.0.dist-info/RECORD
@@ -1315,7 +1502,7 @@ mod tests {
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
 
-        let build2 = build(src.path(), dist.path()).unwrap();
+        let build2 = build(src.path(), dist.path(), Preview::default()).unwrap();
         assert_eq!(build1, build2);
     }
 
@@ -1356,8 +1543,8 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         cloud-stubs/
         cloud-stubs/db/
         cloud-stubs/db/schema/
@@ -1453,8 +1640,8 @@ mod tests {
         fs_err::remove_file(bogus_init_py).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
@@ -1467,7 +1654,7 @@ mod tests {
         simple_namespace_part-1.0.0/src/simple_namespace/part_b
         simple_namespace_part-1.0.0/src/simple_namespace/part_b/__init__.py
         ");
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         foo/
         foo/__init__.py
         simple_namespace/
@@ -1567,8 +1754,8 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build.source_dist_contents.join("\n"), @r"
+        let build = build(src.path(), dist.path(), Preview::default()).unwrap();
+        assert_snapshot!(build.source_dist_contents.join("\n"), @"
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
@@ -1579,7 +1766,7 @@ mod tests {
         duplicate-1.0.0/src/foo
         duplicate-1.0.0/src/foo/__init__.py
         ");
-        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
         bar/
         bar/baz/
         bar/baz/__init__.py
@@ -1589,6 +1776,53 @@ mod tests {
         duplicate-1.0.0.dist-info/WHEEL
         foo/
         foo/__init__.py
+        ");
+    }
+
+    /// Check that JSON metadata files are present.
+    #[test]
+    fn metadata_json_preview() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "metadata-json-preview"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6.0"]
+            build-backend = "uv_build"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("metadata_json_preview")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("metadata_json_preview")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build = build(
+            src.path(),
+            dist.path(),
+            Preview::from_iter(&[PreviewFeature::MetadataJson]),
+        )
+        .unwrap();
+
+        assert_snapshot!(build.wheel_contents.join("\n"), @"
+        metadata_json_preview-1.0.0.dist-info/
+        metadata_json_preview-1.0.0.dist-info/METADATA
+        metadata_json_preview-1.0.0.dist-info/METADATA.json
+        metadata_json_preview-1.0.0.dist-info/RECORD
+        metadata_json_preview-1.0.0.dist-info/WHEEL
+        metadata_json_preview-1.0.0.dist-info/WHEEL.json
+        metadata_json_preview/
+        metadata_json_preview/__init__.py
         ");
     }
 }

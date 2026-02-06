@@ -16,7 +16,6 @@ use std::{
 /// A trait to represent some reader which has a total length known in
 /// advance. This is roughly equivalent to the nightly
 /// [`Seek::stream_len`] API.
-#[allow(clippy::len_without_is_empty)]
 pub trait HasLength {
     /// Return the current total length of this stream.
     fn len(&self) -> u64;
@@ -117,7 +116,7 @@ impl<R: HasLength> HasLength for BufReader<R> {
     }
 }
 
-#[allow(clippy::disallowed_types)]
+#[expect(clippy::disallowed_types)]
 impl HasLength for std::fs::File {
     fn len(&self) -> u64 {
         self.metadata().unwrap().len()

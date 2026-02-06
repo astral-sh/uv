@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.8"
+version = "0.0.20"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -26,8 +26,8 @@ uv-installer = { workspace = true }
 uv-macros = { workspace = true }
 uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
-uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-preview = { workspace = true }
 uv-python = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
@@ -46,7 +46,7 @@ owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.1" }
 reqwest = { workspace = true, features = ["stream"] }
-resvg = { version = "0.29.0", optional = true }
+resvg = { version = "0.46.0", optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

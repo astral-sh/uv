@@ -34,7 +34,7 @@ impl Binary {
     pub fn default_version(&self) -> Version {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
-            Self::Ruff => Version::new([0, 12, 5]),
+            Self::Ruff => Version::new([0, 15, 0]),
         }
     }
 
@@ -141,7 +141,7 @@ pub enum Error {
     #[error("Request failed after {retries} {subject}", subject = if *retries > 1 { "retries" } else { "retry" })]
     RetriedError {
         #[source]
-        err: Box<Error>,
+        err: Box<Self>,
         retries: u32,
     },
 }

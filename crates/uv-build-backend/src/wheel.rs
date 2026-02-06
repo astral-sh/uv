@@ -1,12 +1,13 @@
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD as base64};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
-use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use sha2::{Digest, Sha256};
-use std::io::{BufReader, Read, Write};
+use std::fmt::{Display, Formatter};
+use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
+use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -15,6 +16,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+use uv_preview::{Preview, PreviewFeature};
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
@@ -30,6 +32,7 @@ pub fn build_wheel(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
+    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -50,7 +53,13 @@ pub fn build_wheel(
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
-    let wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
+
+    if wheel_path.exists() {
+        fs_err::remove_file(&wheel_path)?;
+    }
+
+    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
         source_tree,
@@ -59,7 +68,12 @@ pub fn build_wheel(
         uv_version,
         wheel_writer,
         show_warnings,
+        preview,
     )?;
+
+    temp_file
+        .persist(&wheel_path)
+        .map_err(|err| Error::Persist(wheel_path.clone(), err.error))?;
 
     Ok(filename)
 }
@@ -69,6 +83,7 @@ pub fn list_wheel(
     source_tree: &Path,
     uv_version: &str,
     show_warnings: bool,
+    preview: Preview,
 ) -> Result<(WheelFilename, FileList), Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -95,6 +110,7 @@ pub fn list_wheel(
         uv_version,
         writer,
         show_warnings,
+        preview,
     )?;
     Ok((filename, files))
 }
@@ -106,6 +122,7 @@ fn write_wheel(
     uv_version: &str,
     mut wheel_writer: impl DirectoryWriter,
     show_warnings: bool,
+    preview: Preview,
 ) -> Result<(), Error> {
     let settings = pyproject_toml
         .settings()
@@ -257,6 +274,7 @@ fn write_wheel(
         filename,
         source_tree,
         uv_version,
+        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -270,6 +288,7 @@ pub fn build_editable(
     metadata_directory: Option<&Path>,
     uv_version: &str,
     show_warnings: bool,
+    preview: Preview,
 ) -> Result<WheelFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -295,7 +314,13 @@ pub fn build_editable(
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
-    let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
+
+    if wheel_path.exists() {
+        fs_err::remove_file(&wheel_path)?;
+    }
+
+    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
     // Check that a module root exists in the directory we're linking from the `.pth` file
@@ -320,8 +345,13 @@ pub fn build_editable(
         &filename,
         source_tree,
         uv_version,
+        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
+
+    temp_file
+        .persist(&wheel_path)
+        .map_err(|err| Error::Persist(wheel_path.clone(), err.error))?;
 
     Ok(filename)
 }
@@ -331,6 +361,7 @@ pub fn metadata(
     source_tree: &Path,
     metadata_directory: &Path,
     uv_version: &str,
+    preview: Preview,
 ) -> Result<String, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     for warning in pyproject_toml.check_build_system(uv_version) {
@@ -359,6 +390,7 @@ pub fn metadata(
         &filename,
         source_tree,
         uv_version,
+        preview,
     )?;
     wheel_writer.close(&dist_info_dir)?;
 
@@ -563,6 +595,7 @@ fn write_dist_info(
     filename: &WheelFilename,
     root: &Path,
     uv_version: &str,
+    preview: Preview,
 ) -> Result<String, Error> {
     let dist_info_dir = format!(
         "{}-{}.dist-info",
@@ -572,9 +605,18 @@ fn write_dist_info(
 
     writer.write_directory(&dist_info_dir)?;
 
-    // Add `WHEEL`.
-    let wheel_info = wheel_info(filename, uv_version);
-    writer.write_bytes(&format!("{dist_info_dir}/WHEEL"), wheel_info.as_bytes())?;
+    // Add `WHEEL` and `WHEEL.json`.
+    let wheel_info = WheelInfo::new(filename, uv_version);
+    writer.write_bytes(
+        &format!("{dist_info_dir}/WHEEL"),
+        wheel_info.to_string().as_bytes(),
+    )?;
+    if preview.is_enabled(PreviewFeature::MetadataJson) {
+        writer.write_bytes(
+            &format!("{dist_info_dir}/WHEEL.json"),
+            &serde_json::to_vec(&wheel_info).map_err(Error::Json)?,
+        )?;
+    }
 
     // Add `entry_points.txt`.
     if let Some(entrypoint) = pyproject_toml.to_entry_points()? {
@@ -584,49 +626,79 @@ fn write_dist_info(
         )?;
     }
 
-    // Add `METADATA`.
-    let metadata = pyproject_toml.to_metadata(root)?.core_metadata_format();
-    writer.write_bytes(&format!("{dist_info_dir}/METADATA"), metadata.as_bytes())?;
+    // Add `METADATA` and `METADATA.json`.
+    let metadata = pyproject_toml.to_metadata(root)?;
+    writer.write_bytes(
+        &format!("{dist_info_dir}/METADATA"),
+        metadata.core_metadata_format().as_bytes(),
+    )?;
+    if preview.is_enabled(PreviewFeature::MetadataJson) {
+        writer.write_bytes(
+            &format!("{dist_info_dir}/METADATA.json"),
+            &serde_json::to_vec(&metadata).map_err(Error::Json)?,
+        )?;
+    }
 
     // `RECORD` is added on closing.
 
     Ok(dist_info_dir)
 }
 
-/// Returns the `WHEEL` file contents.
-fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
-    // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#file-contents
-    let mut wheel_info = vec![
-        ("Wheel-Version", "1.0".to_string()),
-        ("Generator", format!("uv {uv_version}")),
-        ("Root-Is-Purelib", "true".to_string()),
-    ];
-    for python_tag in filename.python_tags() {
-        for abi_tag in filename.abi_tags() {
-            for platform_tag in filename.platform_tags() {
-                wheel_info.push(("Tag", format!("{python_tag}-{abi_tag}-{platform_tag}")));
+/// The contents of the `WHEEL` and `WHEEL.json` files.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct WheelInfo {
+    wheel_version: String,
+    generator: String,
+    root_is_purelib: bool,
+    tags: Vec<String>,
+}
+
+impl WheelInfo {
+    fn new(filename: &WheelFilename, uv_version: &str) -> Self {
+        let mut tags = Vec::new();
+        for python_tag in filename.python_tags() {
+            for abi_tag in filename.abi_tags() {
+                for platform_tag in filename.platform_tags() {
+                    tags.push(format!("{python_tag}-{abi_tag}-{platform_tag}"));
+                }
             }
         }
+        Self {
+            wheel_version: "1.0".to_string(),
+            generator: format!("uv {uv_version}"),
+            root_is_purelib: true,
+            tags,
+        }
     }
-    wheel_info
-        .into_iter()
-        .map(|(key, value)| format!("{key}: {value}"))
-        .join("\n")
+}
+
+impl Display for WheelInfo {
+    /// Returns the `WHEEL` file contents in its key-value format.
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Wheel-Version: {}", self.wheel_version)?;
+        writeln!(f, "Generator: {}", self.generator)?;
+        writeln!(f, "Root-Is-Purelib: {}", self.root_is_purelib)?;
+        for tag in &self.tags {
+            writeln!(f, "Tag: {tag}")?;
+        }
+        Ok(())
+    }
 }
 
 /// Zip archive (wheel) writer.
-struct ZipDirectoryWriter {
-    writer: ZipWriter<File>,
+struct ZipDirectoryWriter<W: Write + Seek> {
+    writer: ZipWriter<W>,
     compression: CompressionMethod,
     /// The entries in the `RECORD` file.
     record: Vec<RecordEntry>,
 }
 
-impl ZipDirectoryWriter {
+impl<W: Write + Seek> ZipDirectoryWriter<W> {
     /// A wheel writer with deflate compression.
-    fn new_wheel(file: File) -> Self {
+    fn new_wheel(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(file),
+            writer: ZipWriter::new(writer),
             compression: CompressionMethod::Deflated,
             record: Vec::new(),
         }
@@ -636,9 +708,9 @@ impl ZipDirectoryWriter {
     ///
     /// Since editables are temporary, we save time be skipping compression and decompression.
     #[expect(dead_code)]
-    fn new_editable(file: File) -> Self {
+    fn new_editable(writer: W) -> Self {
         Self {
-            writer: ZipWriter::new(file),
+            writer: ZipWriter::new(writer),
             compression: CompressionMethod::Stored,
             record: Vec::new(),
         }
@@ -660,7 +732,7 @@ impl ZipDirectoryWriter {
     }
 }
 
-impl DirectoryWriter for ZipDirectoryWriter {
+impl<W: Write + Seek> DirectoryWriter for ZipDirectoryWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
         // Set appropriate permissions for metadata files (644 = rw-r--r--)
@@ -812,12 +884,12 @@ mod test {
             PlatformTag::Any,
         );
 
-        assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"
+        assert_snapshot!(WheelInfo::new(&filename, "1.0.0+test").to_string(), @"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
         Tag: py3-none-any
-    ");
+        ");
     }
 
     #[test]
@@ -830,9 +902,9 @@ mod test {
 
         let mut writer = Vec::new();
         write_record(&mut writer, "built_by_uv-0.1.0", record).unwrap();
-        assert_snapshot!(String::from_utf8(writer).unwrap(), @r"
-            built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
-            built_by_uv-0.1.0/RECORD,,
+        assert_snapshot!(String::from_utf8(writer).unwrap(), @"
+        built_by_uv/__init__.py,sha256=ifhp5To6AGGlLAIz5kQtTXLegKii00BtnqC_05fteGU,37
+        built_by_uv-0.1.0/RECORD,,
         ");
     }
 
@@ -841,7 +913,13 @@ mod test {
     fn test_prepare_metadata() {
         let metadata_dir = TempDir::new().unwrap();
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
-        metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
+        metadata(
+            built_by_uv,
+            metadata_dir.path(),
+            "1.0.0+test",
+            Preview::default(),
+        )
+        .unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
             .sort_by_file_name()
@@ -858,18 +936,18 @@ mod test {
             .filter(|path| !path.is_empty())
             .collect();
         files.sort();
-        assert_snapshot!(files.join("\n"), @r###"
+        assert_snapshot!(files.join("\n"), @"
         built_by_uv-0.1.0.dist-info
         built_by_uv-0.1.0.dist-info/METADATA
         built_by_uv-0.1.0.dist-info/RECORD
         built_by_uv-0.1.0.dist-info/WHEEL
         built_by_uv-0.1.0.dist-info/entry_points.txt
-        "###);
+        ");
 
         let metadata_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/METADATA");
-        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(metadata_file).unwrap(), @"
         Metadata-Version: 2.4
         Name: built-by-uv
         Version: 0.1.0
@@ -884,26 +962,26 @@ mod test {
         # built_by_uv
 
         A package to be built with the uv build backend that uses all features exposed by the build backend.
-        "###);
+        ");
 
         let record_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/RECORD");
-        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @r###"
-        built_by_uv-0.1.0.dist-info/WHEEL,sha256=PaG_oOj9G2zCRqoLK0SjWBVZbGAMtIXDmm-MEGw9Wo0,83
+        assert_snapshot!(fs_err::read_to_string(record_file).unwrap(), @"
+        built_by_uv-0.1.0.dist-info/WHEEL,sha256=JBpLtoa_WBz5WPGpRsAUTD4Dz6H0KkkdiKWCkfMSS1U,84
         built_by_uv-0.1.0.dist-info/entry_points.txt,sha256=-IO6yaq6x6HSl-zWH96rZmgYvfyHlH00L5WQoCpz-YI,50
         built_by_uv-0.1.0.dist-info/METADATA,sha256=m6EkVvKrGmqx43b_VR45LHD37IZxPYC0NI6Qx9_UXLE,474
         built_by_uv-0.1.0.dist-info/RECORD,,
-        "###);
+        ");
 
         let wheel_file = metadata_dir
             .path()
             .join("built_by_uv-0.1.0.dist-info/WHEEL");
-        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @r###"
+        assert_snapshot!(fs_err::read_to_string(wheel_file).unwrap(), @"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
         Tag: py3-none-any
-    "###);
+        ");
     }
 }

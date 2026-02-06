@@ -3,7 +3,7 @@
 //! Generated with `./scripts/sync_scenarios.sh`
 //! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
 //!
-#![cfg(all(feature = "python", feature = "pypi", unix))]
+#![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
 use std::process::Command;
 
@@ -45,7 +45,7 @@ fn requires_exact_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-exact-version-does-not-exist-a==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -81,7 +81,7 @@ fn requires_greater_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-greater-version-does-not-exist-a>1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -118,7 +118,7 @@ fn requires_less_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-less-version-does-not-exist-a<2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -151,7 +151,7 @@ fn requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-does-not-exist-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -188,7 +188,7 @@ fn transitive_requires_package_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-requires-package-does-not-exist-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -275,7 +275,7 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
         .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-a")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-non-contiguous-range-of-compatible-versions-c")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -378,7 +378,7 @@ fn dependency_excludes_range_of_compatible_versions() {
         .arg("dependency-excludes-range-of-compatible-versions-a")
                 .arg("dependency-excludes-range-of-compatible-versions-b<3.0.0,>=2.0.0")
                 .arg("dependency-excludes-range-of-compatible-versions-c")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -451,7 +451,7 @@ fn excluded_only_compatible_version() {
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-compatible-version-a!=2.0.0")
                 .arg("excluded-only-compatible-version-b<3.0.0,>=2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -503,7 +503,7 @@ fn excluded_only_version() {
 
     uv_snapshot!(filters, command(&context)
         .arg("excluded-only-version-a!=1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -566,7 +566,7 @@ fn all_extras_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("all-extras-required-a[all]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -617,7 +617,7 @@ fn extra_does_not_exist_backtrack() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-does-not-exist-backtrack-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -667,7 +667,7 @@ fn extra_incompatible_with_extra_not_requested() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-not-requested-a[extra_c]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -718,7 +718,7 @@ fn extra_incompatible_with_extra() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-extra-a[extra_b,extra_c]")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -766,7 +766,7 @@ fn extra_incompatible_with_root() {
     uv_snapshot!(filters, command(&context)
         .arg("extra-incompatible-with-root-a[extra]")
                 .arg("extra-incompatible-with-root-b==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -810,7 +810,7 @@ fn extra_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("extra-required-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -849,7 +849,7 @@ fn missing_extra() {
 
     uv_snapshot!(filters, command(&context)
         .arg("missing-extra-a[extra]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -900,7 +900,7 @@ fn multiple_extras_required() {
 
     uv_snapshot!(filters, command(&context)
         .arg("multiple-extras-required-a[extra_b,extra_c]")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -945,7 +945,7 @@ fn direct_incompatible_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("direct-incompatible-versions-a==1.0.0")
                 .arg("direct-incompatible-versions-a==2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -985,7 +985,7 @@ fn transitive_incompatible_versions() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-versions-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1029,7 +1029,7 @@ fn transitive_incompatible_with_root_version() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-root-version-a")
                 .arg("transitive-incompatible-with-root-version-b==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1078,7 +1078,7 @@ fn transitive_incompatible_with_transitive() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-incompatible-with-transitive-a")
                 .arg("transitive-incompatible-with-transitive-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1118,7 +1118,7 @@ fn local_greater_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-or-equal-a>=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1156,7 +1156,7 @@ fn local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1193,7 +1193,7 @@ fn local_less_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-or-equal-a<=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1231,7 +1231,7 @@ fn local_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-less-than-a<1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1270,7 +1270,7 @@ fn local_not_latest() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-latest-a>=1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1309,7 +1309,7 @@ fn local_not_used_with_sdist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-not-used-with-sdist-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1349,7 +1349,7 @@ fn local_simple() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-simple-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1400,7 +1400,7 @@ fn local_transitive_backtrack() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-backtrack-a")
                 .arg("local-transitive-backtrack-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1448,7 +1448,7 @@ fn local_transitive_conflicting() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-conflicting-a")
                 .arg("local-transitive-conflicting-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1493,7 +1493,7 @@ fn local_transitive_confounding() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-confounding-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1542,7 +1542,7 @@ fn local_transitive_greater_than_or_equal() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-or-equal-a")
                 .arg("local-transitive-greater-than-or-equal-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1590,7 +1590,7 @@ fn local_transitive_greater_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-greater-than-a")
                 .arg("local-transitive-greater-than-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1636,7 +1636,7 @@ fn local_transitive_less_than_or_equal() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-or-equal-a")
                 .arg("local-transitive-less-than-or-equal-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1684,7 +1684,7 @@ fn local_transitive_less_than() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-less-than-a")
                 .arg("local-transitive-less-than-b==2.0.0+foo")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1730,7 +1730,7 @@ fn local_transitive() {
     uv_snapshot!(filters, command(&context)
         .arg("local-transitive-a")
                 .arg("local-transitive-b==2.0.0+foo")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1772,7 +1772,7 @@ fn local_used_without_sdist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("local-used-without-sdist-a==1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1811,7 +1811,7 @@ fn post_equal_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-equal-available-a==1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1850,7 +1850,7 @@ fn post_equal_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-equal-not-available-a==1.2.3.post0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1887,7 +1887,7 @@ fn post_greater_than_or_equal_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-or-equal-post-a>=1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1925,7 +1925,7 @@ fn post_greater_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-or-equal-a>=1.2.3")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1965,7 +1965,7 @@ fn post_greater_than_post_not_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-post-not-available-a>1.2.3.post2")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2001,7 +2001,7 @@ fn post_greater_than_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-post-a>1.2.3.post0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2039,7 +2039,7 @@ fn post_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2074,7 +2074,7 @@ fn post_less_than_or_equal() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-or-equal-a<=1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2109,7 +2109,7 @@ fn post_less_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-less-than-a<1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2145,7 +2145,7 @@ fn post_local_greater_than_post() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-post-a>1.2.3.post1")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2181,7 +2181,7 @@ fn post_local_greater_than() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-local-greater-than-a>1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2216,7 +2216,7 @@ fn post_simple() {
 
     uv_snapshot!(filters, command(&context)
         .arg("post-simple-a==1.2.3")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2255,7 +2255,7 @@ fn package_multiple_prereleases_kinds() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-kinds-a>=1.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2297,7 +2297,7 @@ fn package_multiple_prereleases_numbers() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-multiple-prereleases-numbers-a>=1.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2337,7 +2337,7 @@ fn package_only_prereleases_boundary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2376,7 +2376,7 @@ fn package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-in-range-a>0.1.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2414,7 +2414,7 @@ fn package_only_prereleases() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-prereleases-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2458,7 +2458,7 @@ fn package_prerelease_specified_mixed_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-mixed-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2503,7 +2503,7 @@ fn package_prerelease_specified_only_final_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-only-final-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2551,7 +2551,7 @@ fn package_prerelease_specified_only_prerelease_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prerelease-specified-only-prerelease-available-a>=0.1.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2595,7 +2595,7 @@ fn package_prereleases_boundary() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("package-prereleases-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2636,7 +2636,7 @@ fn package_prereleases_global_boundary() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("package-prereleases-global-boundary-a<0.2.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2680,7 +2680,7 @@ fn package_prereleases_specifier_boundary() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-prereleases-specifier-boundary-a<0.2.0a2")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2723,7 +2723,7 @@ fn requires_package_only_prereleases_in_range_global_opt_in() {
     uv_snapshot!(filters, command(&context)
         .arg("--prerelease=allow")
         .arg("requires-package-only-prereleases-in-range-global-opt-in-a>0.1.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2764,7 +2764,7 @@ fn requires_package_prerelease_and_final_any() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-prerelease-and-final-any-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2814,7 +2814,7 @@ fn transitive_package_only_prereleases_in_range_opt_in() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-opt-in-a")
                 .arg("transitive-package-only-prereleases-in-range-opt-in-b>0.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2865,7 +2865,7 @@ fn transitive_package_only_prereleases_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-in-range-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2908,7 +2908,7 @@ fn transitive_package_only_prereleases() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-prereleases-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2988,7 +2988,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-holes-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3083,7 +3083,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-many-versions-a")
                 .arg("transitive-prerelease-and-stable-dependency-many-versions-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3144,7 +3144,7 @@ fn transitive_prerelease_and_stable_dependency_opt_in() {
         .arg("transitive-prerelease-and-stable-dependency-opt-in-a")
                 .arg("transitive-prerelease-and-stable-dependency-opt-in-b")
                 .arg("transitive-prerelease-and-stable-dependency-opt-in-c>=0.0.0a1")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3207,7 +3207,7 @@ fn transitive_prerelease_and_stable_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-prerelease-and-stable-dependency-a")
                 .arg("transitive-prerelease-and-stable-dependency-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3256,7 +3256,7 @@ fn python_greater_than_current_backtrack() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-backtrack-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3301,7 +3301,7 @@ fn python_greater_than_current_excluded() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-excluded-a>=2.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3371,7 +3371,7 @@ fn python_greater_than_current_many() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-many-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3397,7 +3397,7 @@ fn python_greater_than_current_many() {
 ///     └── a-1.0.0
 ///         └── requires python>=3.13.2 (incompatible with environment)
 /// ```
-#[cfg(feature = "python-patch")]
+#[cfg(feature = "test-python-patch")]
 #[test]
 fn python_greater_than_current_patch() {
     let context = TestContext::new("3.13.0");
@@ -3445,7 +3445,7 @@ fn python_greater_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3482,7 +3482,7 @@ fn python_less_than_current() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-less-than-current-a==1.0.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3520,7 +3520,7 @@ fn python_version_does_not_exist() {
 
     uv_snapshot!(filters, command(&context)
         .arg("python-version-does-not-exist-a==1.0.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3558,7 +3558,7 @@ fn no_binary() {
         .arg("--no-binary")
         .arg("no-binary-a")
         .arg("no-binary-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3597,7 +3597,7 @@ fn no_build() {
         .arg("--only-binary")
         .arg("no-build-a")
         .arg("no-build-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3635,7 +3635,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3674,7 +3674,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3713,7 +3713,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3753,7 +3753,7 @@ fn no_wheels_no_build() {
         .arg("--only-binary")
         .arg("no-wheels-no-build-a")
         .arg("no-wheels-no-build-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3791,7 +3791,7 @@ fn no_wheels_with_matching_platform() {
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-with-matching-platform-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3826,7 +3826,7 @@ fn no_wheels() {
 
     uv_snapshot!(filters, command(&context)
         .arg("no-wheels-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3863,7 +3863,7 @@ fn only_wheels_no_binary() {
         .arg("--no-binary")
         .arg("only-wheels-no-binary-a")
         .arg("only-wheels-no-binary-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3901,7 +3901,7 @@ fn only_wheels() {
 
     uv_snapshot!(filters, command(&context)
         .arg("only-wheels-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3936,7 +3936,7 @@ fn specific_tag_and_default() {
 
     uv_snapshot!(filters, command(&context)
         .arg("specific-tag-and-default-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3972,7 +3972,7 @@ fn package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-in-range-a>0.1.0")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4012,7 +4012,7 @@ fn package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-only-yanked-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4053,7 +4053,7 @@ fn package_yanked_specified_mixed_available() {
 
     uv_snapshot!(filters, command(&context)
         .arg("package-yanked-specified-mixed-available-a>=0.1.0")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4092,7 +4092,7 @@ fn requires_package_yanked_and_unyanked_any() {
 
     uv_snapshot!(filters, command(&context)
         .arg("requires-package-yanked-and-unyanked-any-a")
-        , @r"
+        , @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4187,7 +4187,7 @@ fn transitive_package_only_yanked_in_range() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-in-range-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4232,7 +4232,7 @@ fn transitive_package_only_yanked() {
 
     uv_snapshot!(filters, command(&context)
         .arg("transitive-package-only-yanked-a")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4352,7 +4352,7 @@ fn transitive_yanked_and_unyanked_dependency() {
     uv_snapshot!(filters, command(&context)
         .arg("transitive-yanked-and-unyanked-dependency-a")
                 .arg("transitive-yanked-and-unyanked-dependency-b")
-        , @r"
+        , @"
     success: false
     exit_code: 1
     ----- stdout -----

@@ -1,6 +1,6 @@
 [package]
 name = "uv-static"
-version = "0.0.8"
+version = "0.0.20"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,3 +17,5 @@ workspace = true
 
 [dependencies]
 uv-macros = { workspace = true }
+
+thiserror = { workspace = true }

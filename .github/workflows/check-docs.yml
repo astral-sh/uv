@@ -1,0 +1,31 @@
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  docs:
+    timeout-minutes: 10
+    name: "mkdocs"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        with:
+          version: "0.9.28"
+
+      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: "Generate reference documentation"
+        run: |
+          cargo dev generate-options-reference
+          cargo dev generate-cli-reference
+          cargo dev generate-env-vars-reference
+
+      - name: "Build docs"
+        run: uvx --with-requirements docs/requirements.txt mkdocs build --strict -f mkdocs.yml

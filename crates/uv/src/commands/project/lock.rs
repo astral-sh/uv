@@ -25,7 +25,7 @@ use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::ExtrasResolver;
@@ -43,17 +43,17 @@ use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, Wor
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    MissingLockfileSource, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
     init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, LockCheckSource, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
     Unchanged(Lock),
@@ -78,11 +78,10 @@ impl LockResult {
 }
 
 /// Resolve the project requirements into a lockfile.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn lock(
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     dry_run: DryRun,
     refresh: Refresh,
     python: Option<String>,
@@ -136,8 +135,8 @@ pub(crate) async fn lock(
 
     // Determine the lock mode.
     let interpreter;
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else {
         interpreter = match target {
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
@@ -261,7 +260,7 @@ pub(super) enum LockMode<'env> {
     /// Error if the lockfile is not up-to-date with the project requirements.
     Locked(&'env Interpreter, LockCheckSource),
     /// Use the existing lockfile without performing a resolution.
-    Frozen,
+    Frozen(MissingLockfileSource),
 }
 
 /// A lock operation.
@@ -330,12 +329,12 @@ impl<'env> LockOperation<'env> {
     /// Perform a [`LockOperation`].
     pub(super) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
         match self.mode {
-            LockMode::Frozen => {
+            LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
                 let existing = target
                     .read()
                     .await?
-                    .ok_or_else(|| ProjectError::MissingLockfile)?;
+                    .ok_or(ProjectError::MissingLockfile(source))?;
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
@@ -354,7 +353,7 @@ impl<'env> LockOperation<'env> {
                 let existing = target
                     .read()
                     .await?
-                    .ok_or_else(|| ProjectError::MissingLockfile)?;
+                    .ok_or(ProjectError::MissingLockfile(lock_source.into()))?;
 
                 // Perform the lock operation, but don't write the lockfile to disk.
                 let result = Box::pin(do_lock(
@@ -473,15 +472,6 @@ async fn do_lock(
         torch_backend: _,
     } = settings;
 
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // Collect the requirements, etc.
     let members = target.members();
     let packages = target.packages();
@@ -498,25 +488,25 @@ async fn do_lock(
     let requirements = target.lower(
         requirements,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let overrides = target.lower(
         overrides,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let constraints = target.lower(
         constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let build_constraints = target.lower(
         build_constraints,
         index_locations,
-        *sources,
+        sources,
         client_builder.credentials_cache(),
     )?;
     let dependency_groups = dependency_groups
@@ -525,7 +515,7 @@ async fn do_lock(
             let requirements = target.lower(
                 group.requirements,
                 index_locations,
-                *sources,
+                sources,
                 client_builder.credentials_cache(),
             )?;
             Ok((name, requirements))
@@ -543,7 +533,7 @@ async fn do_lock(
     }
 
     // Check if any conflicts contain project-level conflicts
-    if !preview.is_enabled(PreviewFeatures::PACKAGE_CONFLICTS)
+    if !preview.is_enabled(PreviewFeature::PackageConflicts)
         && conflicts.iter().any(|set| {
             set.iter()
                 .any(|item| matches!(item.kind(), ConflictKind::Project))
@@ -551,7 +541,7 @@ async fn do_lock(
     {
         warn_user_once!(
             "Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::PACKAGE_CONFLICTS
+            PreviewFeature::PackageConflicts
         );
     }
 
@@ -741,7 +731,7 @@ async fn do_lock(
             extra_build_dependencies.clone(),
             workspace,
             index_locations,
-            *sources,
+            sources,
             client.credentials_cache(),
         )?,
         LockTarget::Script(script) => {
@@ -774,7 +764,7 @@ async fn do_lock(
         build_options,
         &build_hasher,
         exclude_newer.clone(),
-        *sources,
+        sources.clone(),
         workspace_cache.clone(),
         concurrency,
         preview,
@@ -1063,7 +1053,7 @@ impl ValidatedLock {
                     printer.stderr(),
                     "Ignoring existing lockfile due to {change}",
                 );
-                return Ok(Self::Unusable(lock));
+                return Ok(Self::Preferable(lock));
             }
         }
 

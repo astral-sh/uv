@@ -14,25 +14,25 @@ fn workspace_list_simple() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
     foo
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
-    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/foo
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -50,7 +50,7 @@ fn workspace_list_root_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -59,7 +59,7 @@ fn workspace_list_root_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -79,7 +79,7 @@ fn workspace_list_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -88,7 +88,7 @@ fn workspace_list_virtual_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -110,7 +110,7 @@ fn workspace_list_from_member() -> Result<()> {
 
     let member_dir = workspace.join("packages").join("bird-feeder");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&member_dir), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -119,7 +119,7 @@ fn workspace_list_from_member() -> Result<()> {
     seeds
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -151,7 +151,7 @@ fn workspace_list_multiple_members() {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace_root), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -160,11 +160,11 @@ fn workspace_list_multiple_members() {
     pkg-c
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
-    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().arg("--paths").current_dir(&workspace_root), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -173,7 +173,7 @@ fn workspace_list_multiple_members() {
     [TEMP_DIR]/pkg-a/pkg-c
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -187,14 +187,14 @@ fn workspace_list_single_project() {
 
     let project = context.temp_dir.child("my-project");
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
     my-project
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 }
@@ -212,14 +212,14 @@ fn workspace_list_with_excluded() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_list().current_dir(&workspace), @"
     success: true
     exit_code: 0
     ----- stdout -----
     albatross
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+
     "
     );
 
@@ -237,7 +237,6 @@ fn workspace_list_no_project() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `uv workspace list` command is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
     error: No `pyproject.toml` found in current directory or any parent directory
     "
     );

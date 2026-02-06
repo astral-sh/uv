@@ -1,17 +1,17 @@
 #![allow(clippy::disallowed_types)]
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use crate::common::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use crate::common::{TestContext, apply_filters, uv_snapshot};
+use crate::common::{TestContext, apply_filters, copy_dir_ignore, uv_snapshot};
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use std::path::Path;
 use std::process::Stdio;
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
@@ -36,7 +36,7 @@ fn requirements_txt_dependency() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -58,7 +58,7 @@ fn requirements_txt_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -84,7 +84,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-header"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-header"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -104,7 +104,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -130,7 +130,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -187,7 +187,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -217,7 +217,7 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -231,9 +231,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest").arg("--extra").arg("async").arg("--no-extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest").arg("--extra").arg("async").arg("--no-extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -259,9 +259,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -279,9 +279,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-extras"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -311,9 +311,9 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-extras").arg("--no-extra").arg("pytest"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-extras").arg("--no-extra").arg("pytest"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -339,7 +339,7 @@ fn requirements_txt_project_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -378,7 +378,7 @@ fn requirements_txt_prune() -> Result<()> {
             .arg("--no-hashes")
             .arg("--prune")
             .arg("jupyter-core"),
-            @r"
+            @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -430,7 +430,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -456,7 +456,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -486,7 +486,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
     context.lock().assert().success();
 
     // Note that the `python_version > '3.11'` markers disappear due to `requires-python = ">=3.12"`
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -539,7 +539,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -566,14 +566,14 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -731,7 +731,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         }
     );
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -783,7 +783,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -830,7 +830,7 @@ fn requirements_txt_non_root() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--package").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -844,7 +844,7 @@ fn requirements_txt_non_root() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -891,7 +891,7 @@ fn allrequirements_txt_() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -919,7 +919,7 @@ fn allrequirements_txt_() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -969,7 +969,7 @@ fn requirements_txt_frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -978,9 +978,9 @@ fn requirements_txt_frozen() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1007,7 +1007,7 @@ fn requirements_txt_frozen() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    "###);
+    ");
 
     Ok(())
 }
@@ -1035,7 +1035,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.export()
         .arg("--output-file")
-        .arg("requirements/requirements.txt"), @r###"
+        .arg("requirements/requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1057,7 +1057,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
     //
     // Read the file contents.
     let contents = apply_filters(
@@ -1070,7 +1070,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
         .unwrap(),
         context.filters(),
     );
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR] --output-file requirements/requirements.txt
     -e .
@@ -1086,7 +1086,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
-    "###);
+    ");
     Ok(())
 }
 
@@ -1107,7 +1107,7 @@ fn requirements_txt_non_project() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1117,9 +1117,9 @@ fn requirements_txt_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1140,7 +1140,7 @@ fn requirements_txt_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1156,7 +1156,7 @@ fn virtual_empty() -> Result<()> {
         wow = "someconfig"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.export(), @r"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1241,7 +1241,7 @@ fn virtual_dependency_group() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1259,7 +1259,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
     context.lock().assert().success();
 
     // The token should not be included in the export
-    uv_snapshot!(context.filters(), context.export(), @r"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1277,7 +1277,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
@@ -1286,8 +1286,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 
         fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
     }
-    #[cfg(windows)]
-    {
+    if cfg!(windows) {
         use std::process::Command;
 
         // https://superuser.com/a/1489152
@@ -1299,7 +1298,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!("{}:R", whoami::username()))
+            .arg(format!("{}:R", whoami::username()?))
             .assert()
             .success();
     }
@@ -1307,7 +1306,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 }
 
 /// Don't redact the username `git` in SSH URLs.
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -1380,7 +1379,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         ssh_deploy_key.portable_display()
     );
 
-    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::GIT_SSH_COMMAND, git_ssh_command), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1446,7 +1445,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1456,9 +1455,9 @@ fn requirements_txt_non_project_marker() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1479,7 +1478,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1516,7 +1515,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1530,9 +1529,9 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1557,7 +1556,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1693,7 +1692,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         }
     );
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1719,9 +1718,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1747,9 +1746,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async").arg("--prune").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("async").arg("--prune").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1772,9 +1771,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--prune").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--prune").arg("child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1783,7 +1782,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -1830,7 +1829,7 @@ fn requirements_txt_relative_path() -> Result<()> {
     // Pipe the output to requirements.txt.
     let file = std::fs::File::create(project.child("requirements.txt")).unwrap();
 
-    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.export().stdout(Stdio::from(file)).current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1838,14 +1837,14 @@ fn requirements_txt_relative_path() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     // Read the file contents.
     let contents = apply_filters(
         fs_err::read_to_string(project.child("requirements.txt")).unwrap(),
         context.filters(),
     );
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR]
     -e .
@@ -1855,10 +1854,10 @@ fn requirements_txt_relative_path() -> Result<()> {
         --hash=sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3 \
         --hash=sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
         # via dependency
-    "###);
+    ");
 
     // Install the dependencies.
-    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--requirement").arg("requirements.txt").current_dir(&project), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1871,7 +1870,7 @@ fn requirements_txt_relative_path() -> Result<()> {
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
      + iniconfig==2.0.0
      + project==0.1.0 (from file://[TEMP_DIR]/project)
-    "###);
+    ");
 
     Ok(())
 }
@@ -1992,7 +1991,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-hashes"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2008,7 +2007,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2034,7 +2033,7 @@ fn requirements_txt_output_file() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--output-file").arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2056,10 +2055,10 @@ fn requirements_txt_output_file() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let contents = apply_filters(context.read("requirements.txt"), context.filters());
-    insta::assert_snapshot!(contents, @r###"
+    insta::assert_snapshot!(contents, @r"
     # This file was autogenerated by uv via the following command:
     #    uv export --cache-dir [CACHE_DIR] --output-file requirements.txt
     -e .
@@ -2075,7 +2074,7 @@ fn requirements_txt_output_file() -> Result<()> {
         --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
         --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
         # via anyio
-    "###);
+    ");
 
     Ok(())
 }
@@ -2123,7 +2122,7 @@ fn requirements_txt_no_emit() -> Result<()> {
     context.lock().assert().success();
 
     // Exclude `anyio`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-package").arg("anyio"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2147,10 +2146,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude `project`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2177,10 +2176,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude `child`.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-project").arg("--package").arg("child"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2193,10 +2192,10 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2221,7 +2220,7 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     // Remove the member.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2240,7 +2239,7 @@ fn requirements_txt_no_emit() -> Result<()> {
     )?;
 
     // Exclude the workspace.
-    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2261,7 +2260,7 @@ fn requirements_txt_no_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2308,7 +2307,7 @@ fn requirements_txt_only_emit() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-emit-workspace"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-workspace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2320,9 +2319,9 @@ fn requirements_txt_only_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-emit-project"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-project"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2332,9 +2331,9 @@ fn requirements_txt_only_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-emit-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-emit-package").arg("anyio"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2347,7 +2346,7 @@ fn requirements_txt_only_emit() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2394,7 +2393,7 @@ fn requirements_txt_no_editable() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--no-editable"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--no-editable"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2422,7 +2421,7 @@ fn requirements_txt_no_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -2449,7 +2448,7 @@ fn requirements_txt_export_group() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2465,9 +2464,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2479,9 +2478,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2505,9 +2504,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--group").arg("foo").arg("--group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2534,9 +2533,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2563,9 +2562,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2589,9 +2588,9 @@ fn requirements_txt_export_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--all-groups").arg("--no-group").arg("baz"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2599,7 +2598,7 @@ fn requirements_txt_export_group() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     error: Group `baz` is not defined in the project's `dependency-groups` table
-    "###);
+    ");
 
     Ok(())
 }
@@ -2619,7 +2618,7 @@ fn requirements_txt_script() -> Result<()> {
         # ///
     "#})?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2642,20 +2641,20 @@ fn requirements_txt_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     // If the lockfile didn't exist already, it shouldn't be persisted to disk.
     assert!(!context.temp_dir.child("uv.lock").exists());
 
     // Explicitly lock the script.
-    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--script").arg(script.path()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -2748,7 +2747,7 @@ fn requirements_txt_script() -> Result<()> {
     "#})?;
 
     // `uv tree` should update the lockfile.
-    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--script").arg(script.path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2774,7 +2773,7 @@ fn requirements_txt_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("script.py.lock");
 
@@ -2900,7 +2899,7 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2914,9 +2913,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2934,9 +2933,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra2"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2954,9 +2953,9 @@ fn requirements_txt_conflicts() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("extra1").arg("--extra").arg("extra2"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2964,7 +2963,7 @@ fn requirements_txt_conflicts() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: Extras `extra1` and `extra2` are incompatible with the declared conflicts: {`project[extra1]`, `project[extra2]`}
-    "###);
+    ");
 
     Ok(())
 }
@@ -3002,7 +3001,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export(), @r###"
+    uv_snapshot!(context.filters(), context.export(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3023,9 +3022,9 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("cpu"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--extra").arg("cpu"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3049,7 +3048,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4149,6 +4148,7 @@ fn pep_751_project_extra() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-git")]
 fn pep_751_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -4482,7 +4482,7 @@ fn pep_751_infer_output_format() -> Result<()> {
     Resolved 4 packages in [TIME]
     "#);
 
-    uv_snapshot!(context.filters(), context.export().arg("-o").arg("pyproject.toml"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("-o").arg("pyproject.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4516,7 +4516,7 @@ fn pep_751_filename() -> Result<()> {
 
     context.lock().assert().success();
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("test.toml"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("-o").arg("test.toml"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4529,7 +4529,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn pep_751_https_git_credentials() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -4623,7 +4623,7 @@ fn no_editable_env_var() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "1"), @r"
+    uv_snapshot!(context.filters(), context.export().env(EnvVars::UV_NO_EDITABLE, "1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4660,7 +4660,7 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
     )?;
 
     // Using --only-group and --extra together should error.
-    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--extra").arg("test"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--extra").arg("test"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4671,10 +4671,10 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
     Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     // Using --only-group and --all-extras together should also error.
-    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--all-extras"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--only-group").arg("dev").arg("--all-extras"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4685,7 +4685,7 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
     Usage: uv export --cache-dir [CACHE_DIR] --only-group <ONLY_GROUP> --exclude-newer <EXCLUDE_NEWER>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -4720,7 +4720,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("--frozen"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4806,7 +4806,7 @@ fn multiple_packages() -> Result<()> {
     // Export `foo` and `bar`.
     uv_snapshot!(context.filters(), context.export()
         .arg("--package").arg("foo")
-        .arg("--package").arg("bar"), @r###"
+        .arg("--package").arg("bar"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4833,13 +4833,13 @@ fn multiple_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     // Export `foo`, `bar`, and `baz`.
     uv_snapshot!(context.filters(), context.export()
         .arg("--package").arg("foo")
         .arg("--package").arg("bar")
-        .arg("--package").arg("baz"), @r###"
+        .arg("--package").arg("baz"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4871,7 +4871,7 @@ fn multiple_packages() -> Result<()> {
 
     ----- stderr -----
     Resolved 9 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -4918,7 +4918,13 @@ fn cyclonedx_export_basic() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -4994,7 +5000,13 @@ fn cyclonedx_export_direct_url() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5027,7 +5039,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
@@ -5071,7 +5083,13 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5147,7 +5165,13 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "standalone-project-1@1.0.0",
           "name": "standalone-project",
-          "version": "1.0.0"
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [],
@@ -5166,7 +5190,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "test-git")]
 #[test]
 fn cyclonedx_export_mixed_source_types() -> Result<()> {
     let context = TestContext::new("3.12").with_cyclonedx_filters();
@@ -5214,7 +5238,13 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
           "type": "library",
           "bom-ref": "mixed-project-1@0.1.0",
           "name": "mixed-project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5318,7 +5348,13 @@ fn cyclonedx_export_project_extra() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5398,7 +5434,13 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5535,7 +5577,13 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5679,7 +5727,13 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
           "type": "library",
           "bom-ref": "child-1@0.1.0",
           "name": "child",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5780,7 +5834,13 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5850,7 +5910,13 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -5970,7 +6036,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     // Remove the child `pyproject.toml`.
     fs_err::remove_dir_all(child.path())?;
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r###"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -5979,7 +6045,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to parse entry: `child`
       ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen"), @r#"
     success: true
@@ -6002,7 +6068,13 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-5",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6036,7 +6108,13 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -6152,7 +6230,13 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-7",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6205,7 +6289,13 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -6251,6 +6341,105 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
     }
     ----- stderr -----
     Resolved 6 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my-project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "my-project-3",
+          "name": "my-project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "urllib3-2@2.2.0",
+          "name": "urllib3",
+          "version": "2.2.0",
+          "purl": "pkg:pypi/urllib3@2.2.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "my-project-1@0.1.0",
+          "name": "my-project",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "my-project-1@0.1.0",
+          "dependsOn": [
+            "urllib3-2@2.2.0"
+          ]
+        },
+        {
+          "ref": "urllib3-2@2.2.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "my-project-3",
+          "dependsOn": [
+            "my-project-1@0.1.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 
@@ -6340,7 +6529,13 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6479,7 +6674,13 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6576,7 +6777,13 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6696,7 +6903,13 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -6827,7 +7040,13 @@ fn cyclonedx_export_prune() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7006,7 +7225,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7071,7 +7296,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7118,7 +7349,13 @@ fn cyclonedx_export_group() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7216,10 +7453,26 @@ fn cyclonedx_export_non_project() -> Result<()> {
             "name": "uv",
             "version": "[VERSION]"
           }
-        ]
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-1",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
       },
       "components": [],
-      "dependencies": []
+      "dependencies": [
+        {
+          "ref": "uv-workspace-1",
+          "dependsOn": []
+        }
+      ]
     }
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
@@ -7245,7 +7498,18 @@ fn cyclonedx_export_non_project() -> Result<()> {
             "name": "uv",
             "version": "[VERSION]"
           }
-        ]
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-2",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
       },
       "components": [
         {
@@ -7259,6 +7523,10 @@ fn cyclonedx_export_non_project() -> Result<()> {
       "dependencies": [
         {
           "ref": "urllib3-1@2.2.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "uv-workspace-2",
           "dependsOn": []
         }
       ]
@@ -7337,7 +7605,13 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7408,7 +7682,13 @@ fn cyclonedx_export_no_emit() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7525,7 +7805,13 @@ fn cyclonedx_export_relative_path() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7613,7 +7899,13 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7811,7 +8103,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7877,7 +8175,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -7931,7 +8235,13 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8028,7 +8338,13 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
         "component": {
           "type": "library",
           "bom-ref": "project-3",
-          "name": "project"
+          "name": "project",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8048,7 +8364,13 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       ],
       "dependencies": [
@@ -8076,7 +8398,7 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
     "#);
 
     // Should fail when exporting to `requirements.txt` or `pylock.toml`as conflict detection is enabled for these formats
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("requirements-txt").arg("--all-packages"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("requirements-txt").arg("--all-packages"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8087,7 +8409,7 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
     error: Package `child` and package `project` are incompatible with the declared conflicts: {child, project}
     ");
 
-    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--all-packages"), @r"
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("pylock.toml").arg("--all-packages"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8150,7 +8472,13 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
           "type": "library",
           "bom-ref": "project-1@0.1.0",
           "name": "project",
-          "version": "0.1.0"
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:package:is_project_root",
+              "value": "true"
+            }
+          ]
         }
       },
       "components": [
@@ -8320,6 +8648,178 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
     }
     ----- stderr -----
     Resolved 12 packages in [TIME]
+    warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
+    let context = TestContext::new("3.12").with_cyclonedx_filters();
+
+    let workspace = context.temp_dir.child("workspace");
+    copy_dir_ignore(
+        context
+            .workspace_root
+            .join("test/workspaces/albatross-virtual-workspace"),
+        &workspace,
+    )?;
+
+    // Lock from the workspace root
+    context.lock().current_dir(&workspace).assert().success();
+
+    // Export from the virtual workspace root (no [project] section) without --all-packages
+    // This should create a synthetic root in metadata.component
+    uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").current_dir(&workspace), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "bomFormat": "CycloneDX",
+      "specVersion": "1.5",
+      "version": 1,
+      "serialNumber": "[SERIAL_NUMBER]",
+      "metadata": {
+        "timestamp": "[TIMESTAMP]",
+        "tools": [
+          {
+            "vendor": "Astral Software Inc.",
+            "name": "uv",
+            "version": "[VERSION]"
+          }
+        ],
+        "component": {
+          "type": "library",
+          "bom-ref": "uv-workspace-8",
+          "name": "uv-workspace",
+          "properties": [
+            {
+              "name": "uv:package:is_synthetic_root",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "components": [
+        {
+          "type": "library",
+          "bom-ref": "albatross-1@0.1.0",
+          "name": "albatross",
+          "version": "0.1.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/albatross"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "anyio-2@4.3.0",
+          "name": "anyio",
+          "version": "4.3.0",
+          "purl": "pkg:pypi/anyio@4.3.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "bird-feeder-3@1.0.0",
+          "name": "bird-feeder",
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/bird-feeder"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "idna-4@3.6",
+          "name": "idna",
+          "version": "3.6",
+          "purl": "pkg:pypi/idna@3.6"
+        },
+        {
+          "type": "library",
+          "bom-ref": "iniconfig-5@2.0.0",
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "purl": "pkg:pypi/iniconfig@2.0.0"
+        },
+        {
+          "type": "library",
+          "bom-ref": "seeds-6@1.0.0",
+          "name": "seeds",
+          "version": "1.0.0",
+          "properties": [
+            {
+              "name": "uv:workspace:path",
+              "value": "packages/seeds"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "bom-ref": "sniffio-7@1.3.1",
+          "name": "sniffio",
+          "version": "1.3.1",
+          "purl": "pkg:pypi/sniffio@1.3.1"
+        }
+      ],
+      "dependencies": [
+        {
+          "ref": "albatross-1@0.1.0",
+          "dependsOn": [
+            "bird-feeder-3@1.0.0",
+            "iniconfig-5@2.0.0"
+          ]
+        },
+        {
+          "ref": "anyio-2@4.3.0",
+          "dependsOn": [
+            "idna-4@3.6",
+            "sniffio-7@1.3.1"
+          ]
+        },
+        {
+          "ref": "bird-feeder-3@1.0.0",
+          "dependsOn": [
+            "anyio-2@4.3.0",
+            "seeds-6@1.0.0"
+          ]
+        },
+        {
+          "ref": "idna-4@3.6",
+          "dependsOn": []
+        },
+        {
+          "ref": "iniconfig-5@2.0.0",
+          "dependsOn": []
+        },
+        {
+          "ref": "seeds-6@1.0.0",
+          "dependsOn": [
+            "idna-4@3.6"
+          ]
+        },
+        {
+          "ref": "sniffio-7@1.3.1",
+          "dependsOn": []
+        },
+        {
+          "ref": "uv-workspace-8",
+          "dependsOn": [
+            "albatross-1@0.1.0",
+            "bird-feeder-3@1.0.0",
+            "seeds-6@1.0.0"
+          ]
+        }
+      ]
+    }
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 7 packages in [TIME]
     warning: `uv export --format=cyclonedx1.5` is experimental and may change without warning. Pass `--preview-features sbom-export` to disable this warning.
     "#);
 

@@ -11,13 +11,11 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_python::downloads::ManagedPythonDownloadList;
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, PipCompileFormat, Reinstall, SourceStrategy, Upgrade,
+    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -31,7 +29,7 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -51,7 +49,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchMode, TorchSource, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
@@ -62,7 +60,7 @@ use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -113,7 +111,7 @@ pub(crate) async fn pip_compile(
     python_downloads: PythonDownloads,
     universal: bool,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
+    sources: NoSources,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     mut python: Option<String>,
@@ -125,15 +123,6 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -297,15 +286,9 @@ pub(crate) async fn pip_compile(
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let python_preference = python_preference.with_system_flag(system);
-    let client = client_builder.clone().retries(0).build();
-    let download_list = ManagedPythonDownloadList::new(
-        &client,
-        install_mirrors.python_downloads_json_url.as_deref(),
-    )
-    .await?;
+    let reporter = PythonDownloadReporter::single(printer);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        let reporter = PythonDownloadReporter::single(printer);
         PythonInstallation::find_or_download(
             Some(&request),
             environment_preference,
@@ -333,10 +316,16 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
-            &download_list,
+            python_downloads,
+            &client_builder,
             &cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
             preview,
         )
+        .await
     }?
     .into_interpreter();
 
@@ -796,7 +785,6 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the uv command used to generate the output file.
-#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
     include_find_links: bool,
