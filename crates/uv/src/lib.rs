@@ -103,7 +103,18 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     };
 
     // Determine the project directory.
-    let project_dir = if let Some(project) = &cli.top_level.global_args.project {
+    let project_dir = if let Some(run_command) = &run_command
+        && cli
+            .top_level
+            .global_args
+            .preview_features
+            .contains(&PreviewFeature::TargetWorkspaceDiscovery)
+        && let Some(dir) = run_command.script_dir()
+    {
+        // When running a target with the preview flag enabled, discover the workspace starting
+        // from the target's directory rather than the current working directory.
+        Cow::Owned(std::path::absolute(dir)?)
+    } else if let Some(project) = &cli.top_level.global_args.project {
         Cow::Owned(uv_fs::normalize_path_buf(std::path::absolute(project)?))
     } else {
         Cow::Borrowed(&*CWD)
