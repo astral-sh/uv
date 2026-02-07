@@ -17,13 +17,17 @@ workspace = true
 
 [dependencies]
 uv-static = { workspace = true }
+uv-warnings = { workspace = true }
 
+clap = { workspace = true, optional = true }
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }
 fs-err = { workspace = true }
 path-slash = { workspace = true }
 percent-encoding = { workspace = true }
+reflink-copy = { workspace = true }
+rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -31,6 +35,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
 
 [target.'cfg(any(unix, target_os = "wasi", target_os = "redox"))'.dependencies]
 rustix = { workspace = true }
@@ -42,4 +47,5 @@ windows = { workspace = true }
 
 [features]
 default = []
+clap = ["dep:clap"]
 tokio = ["dep:tokio", "fs-err/tokio"]

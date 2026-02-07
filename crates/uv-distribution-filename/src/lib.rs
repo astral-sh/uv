@@ -87,6 +87,19 @@ impl DistFilename {
             Self::WheelFilename(_) => "bdist_wheel",
         }
     }
+
+    /// Check if the compressed tag sets are sorted per PEP 425.
+    ///
+    /// For source distributions, this always returns `true` since they have no tags.
+    /// For wheels, this checks if compressed tag sets (`.`-separated) are sorted.
+    ///
+    /// See: <https://github.com/pypi/warehouse/issues/18129>
+    pub fn has_sorted_tags(&self) -> bool {
+        match self {
+            Self::SourceDistFilename(_) => true,
+            Self::WheelFilename(filename) => filename.has_sorted_tags(),
+        }
+    }
 }
 
 impl Display for DistFilename {

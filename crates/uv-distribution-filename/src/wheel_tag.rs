@@ -69,6 +69,21 @@ impl WheelTag {
             Self::Large { large } => large.build_tag.as_ref(),
         }
     }
+
+    /// Check if the compressed tag sets are sorted per PEP 425.
+    ///
+    /// PEP 425 states that compressed tag sets (`.`-separated) should be sorted.
+    /// For example, `manylinux_2_17_x86_64.manylinux2014_x86_64` is unsorted and
+    /// should be `manylinux2014_x86_64.manylinux_2_17_x86_64`.
+    ///
+    /// See: <https://github.com/pypi/warehouse/issues/18129>
+    pub(crate) fn has_sorted_tags(&self) -> bool {
+        match self {
+            // Single tags are always sorted.
+            Self::Small { .. } => true,
+            Self::Large { large } => large.has_sorted_tags(),
+        }
+    }
 }
 
 impl Display for WheelTag {
@@ -139,6 +154,54 @@ pub(crate) struct WheelTagLarge {
     ///
     /// Preserves any unsupported tags that were filtered out when parsing the wheel filename.
     pub(crate) repr: SmallString,
+}
+
+impl WheelTagLarge {
+    /// Check if the compressed tag sets are sorted per PEP 425.
+    fn has_sorted_tags(&self) -> bool {
+        // The repr format is: [build_tag-]python_tag-abi_tag-platform_tag
+        // where each tag component can be a `.`-separated list of tags.
+        //
+        // We need to check that each `.`-separated list is sorted.
+        let repr: &str = &self.repr;
+
+        // Skip the build tag if present.
+        let tag_part = if self.build_tag.is_some() {
+            // Build tag is the first `-` separated component.
+            repr.split_once('-').map_or(repr, |(_, rest)| rest)
+        } else {
+            repr
+        };
+
+        // Split into python-abi-platform components.
+        let mut parts = tag_part.splitn(3, '-');
+        let python_tags = parts.next();
+        let abi_tags = parts.next();
+        let platform_tags = parts.next();
+
+        // Check each component for sorted order.
+        for tags in [python_tags, abi_tags, platform_tags].into_iter().flatten() {
+            if !is_sorted_tag_set(tags) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+/// Check if a `.`-separated tag set is sorted.
+fn is_sorted_tag_set(tags: &str) -> bool {
+    let mut prev: Option<&str> = None;
+    for tag in tags.split('.') {
+        if let Some(p) = prev {
+            if tag < p {
+                return false;
+            }
+        }
+        prev = Some(tag);
+    }
+    true
 }
 
 impl Display for WheelTagLarge {
