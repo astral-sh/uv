@@ -8883,7 +8883,7 @@ fn sync_no_sources_package() -> Result<()> {
 
 #[test]
 fn sync_python_version() -> Result<()> {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc::indoc! {r#"

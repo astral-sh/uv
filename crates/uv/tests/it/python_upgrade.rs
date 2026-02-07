@@ -4,11 +4,11 @@ use assert_fs::fixture::FileTouch;
 use assert_fs::prelude::PathChild;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn python_upgrade() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -93,7 +93,7 @@ fn python_upgrade() {
 
 #[test]
 fn python_upgrade_without_version() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -162,7 +162,7 @@ fn python_upgrade_without_version() {
 
 #[test]
 fn python_upgrade_transparent_from_venv() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -265,7 +265,7 @@ fn python_upgrade_transparent_from_venv() {
 // upgrading.
 #[test]
 fn python_upgrade_transparent_from_venv_preview() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -329,7 +329,7 @@ fn python_upgrade_transparent_from_venv_preview() {
 
 #[test]
 fn python_upgrade_ignored_with_python_pin() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -395,7 +395,7 @@ fn python_upgrade_ignored_with_python_pin() {
 // prevent transparent upgrades.
 #[test]
 fn python_no_transparent_upgrade_with_venv_patch_specification() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -461,7 +461,7 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
 // virtual environments.
 #[test]
 fn python_transparent_upgrade_venv_venv() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -774,7 +774,7 @@ fn python_upgrade_implementation() {
 
 #[test]
 fn python_upgrade_build_version() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()

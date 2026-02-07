@@ -4,7 +4,6 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use uv_test::TestContext;
 use uv_test::uv_snapshot;
 
 // Print the version
@@ -457,7 +456,7 @@ requires-python = ">=3.12"
 /// Preserve comments immediately preceding the version when bumping
 #[test]
 fn version_bump_preserves_preceding_comments() -> Result<()> {
-    let context: TestContext = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(

@@ -898,7 +898,7 @@ fn workspace_empty_member() -> Result<()> {
 /// Ensure that workspace discovery skips directories that only contain gitignored files.
 #[test]
 fn workspace_gitignored_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -966,7 +966,7 @@ fn workspace_gitignored_member() -> Result<()> {
 /// `.ignore` (not just `.gitignore`).
 #[test]
 fn workspace_ignored_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
@@ -1034,7 +1034,7 @@ fn workspace_ignored_member() -> Result<()> {
 /// missing a `pyproject.toml`.
 #[test]
 fn workspace_nonempty_member_no_pyproject() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Build the main workspace ...
     let workspace = context.temp_dir.child("workspace");
