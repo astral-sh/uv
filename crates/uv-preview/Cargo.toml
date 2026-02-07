@@ -18,11 +18,15 @@ workspace = true
 [dependencies]
 uv-warnings = { workspace = true }
 
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
 enumflags2 = { workspace = true }
 itertools = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+insta = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []

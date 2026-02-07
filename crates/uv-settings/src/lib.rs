@@ -297,6 +297,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_cache,
                 cache_dir,
                 preview,
+                preview_features,
                 python_preference,
                 python_downloads,
                 concurrent_downloads,
@@ -393,6 +394,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if preview.is_some() {
         masked_fields.push("preview");
+    }
+    if preview_features.is_some() {
+        masked_fields.push("preview-features");
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");

@@ -144,11 +144,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             },
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                resolve_preview(args, workspace, environment),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: resolve_preview(args, workspace, environment),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -217,22 +213,34 @@ fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> bool {
-    // CLI takes precedence
-    match flag(args.preview, args.no_preview, "preview") {
-        Some(value) => value,
-        None => {
-            // Check environment variable
-            if environment.preview.value == Some(true) {
-                true
-            } else {
-                // Fall back to workspace config
-                workspace
-                    .and_then(|workspace| workspace.globals.preview)
-                    .unwrap_or(false)
-            }
-        }
+) -> Preview {
+    // Commandline arguments take priority.
+    if let Some(preview) = flag(args.preview, args.no_preview, "preview") {
+        return preview.into();
     }
+
+    // Check environment variable
+    if let Some(true) = environment.preview.value {
+        return Preview::all();
+    }
+
+    // From preview_features
+    if !args.preview_features.is_empty() {
+        return Preview::from_iter(&args.preview_features);
+    }
+
+    // Fall back to workspace config
+    workspace
+        .and_then(|workspace| {
+            workspace.globals.preview.map(Preview::from).or_else(|| {
+                workspace
+                    .globals
+                    .preview_features
+                    .as_ref()
+                    .map(Preview::from_iter)
+            })
+        })
+        .unwrap_or_default()
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
