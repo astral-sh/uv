@@ -499,7 +499,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
         # via
         #   outcome
         #   trio
-    cffi==1.16.0 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
+    cffi==1.16.0 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'ios' and sys_platform != 'linux') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
         --hash=sha256:2c56b361916f390cd758a57f2e16233eb4f64bcbeee88a4881ea90fca14dc6ab \
         --hash=sha256:68678abf380b42ce21a5f2abde8efee05c114c2fdb2e9eef2efdb0257fba1235 \
         --hash=sha256:9f90389693731ff1f659e55c7d1640e2ec43ff725cc61b04b2f9c6d8d017df6a \
@@ -520,7 +520,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
         --hash=sha256:9dcf02e65f2971b80047b377468e72a268e15c0af3cf1238e6ff14f7f91143b8 \
         --hash=sha256:e771c5ce06d1415e356078d3bdd68523f284b4ce5419828922b6871e65eda82b
         # via trio
-    pycparser==2.21 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
+    pycparser==2.21 ; (python_full_version >= '3.12' and implementation_name != 'pypy' and os_name == 'nt' and sys_platform != 'darwin' and sys_platform != 'ios' and sys_platform != 'linux') or (implementation_name != 'pypy' and os_name == 'nt' and sys_platform == 'win32') \
         --hash=sha256:8ee45429555515e1f6b185e78100aea234072576aa43ab53aefcae078162fca9 \
         --hash=sha256:e644fdec12f7872f86c58ff790da456218b10f863970249516d60a5eaca77206
         # via cffi
