@@ -73,7 +73,7 @@ jobs:
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
-            --features test-python-patch,native-auth,secret-service \
+            --features test-defaults,test-python-patch,native-auth,secret-service \
             --workspace \
             --profile ci-linux
 
