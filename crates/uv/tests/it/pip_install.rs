@@ -14052,7 +14052,7 @@ fn record_uses_forward_slashes() -> Result<()> {
 /// Free-threaded Python has a different ABI, so wheels must be built specifically for it.
 #[test]
 fn abi_compatibility_on_freethreaded_python() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
         .with_python_download_cache()

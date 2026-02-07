@@ -6,11 +6,11 @@ use indoc::indoc;
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use uv_test::{TestContext, uv_snapshot, venv_bin_path};
+use uv_test::{uv_snapshot, venv_bin_path};
 
 #[test]
 fn python_find() {
-    let mut context: TestContext =
+    let mut context =
         uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters on the path
@@ -152,7 +152,7 @@ fn python_find() {
 
 #[test]
 fn python_find_pin() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     // Pin to a version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"
@@ -229,7 +229,7 @@ fn python_find_pin() {
 
 #[test]
 fn python_find_pin_arbitrary_name() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     // Try to pin to an arbitrary name
     uv_snapshot!(context.filters(), context.python_pin().arg("foo"), @"
@@ -305,7 +305,7 @@ fn python_find_pin_arbitrary_name() {
 
 #[test]
 fn python_find_project() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.10", "3.11", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml
@@ -590,7 +590,7 @@ fn virtual_dependency_group() {
 
 #[test]
 fn python_find_venv() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         // Enable additional filters for Windows compatibility
         .with_filtered_exe_suffix()
         .with_filtered_python_names()
@@ -776,7 +776,7 @@ fn python_find_venv() {
 #[cfg(unix)]
 #[test]
 fn python_find_unsupported_version() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     // Request a low version
     uv_snapshot!(context.filters(), context.python_find().arg("3.6"), @"
@@ -851,7 +851,7 @@ fn python_find_unsupported_version() {
 
 #[test]
 fn python_find_venv_invalid() {
-    let context: TestContext = uv_test::test_context!("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix();
@@ -904,7 +904,7 @@ fn python_find_venv_invalid() {
 
 #[test]
 fn python_find_managed() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_sources()
         .with_versions_as_managed(&["3.12"]);
 
@@ -928,7 +928,7 @@ fn python_find_managed() {
     error: No interpreter found for Python 3.11 in virtual environments or managed installations
     ");
 
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_sources()
         .with_versions_as_managed(&["3.11"]);
 
@@ -983,7 +983,7 @@ fn python_find_managed() {
 #[cfg(unix)]
 #[cfg(feature = "test-python-managed")]
 fn python_required_python_major_minor() {
-    let context: TestContext = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     // Find the Python 3.11 executable.
     let path = &context.python_versions.first().unwrap().1;
@@ -1163,7 +1163,7 @@ fn python_find_script_no_such_version() {
 
 #[test]
 fn python_find_show_version() {
-    let context: TestContext =
+    let context =
         uv_test::test_context_with_versions!(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters found
@@ -1209,8 +1209,7 @@ fn python_find_show_version() {
 
 #[test]
 fn python_find_path() {
-    let context: TestContext =
-        uv_test::test_context_with_versions!(&[]).with_filtered_not_executable();
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_not_executable();
 
     context.temp_dir.child("foo").create_dir_all().unwrap();
     context.temp_dir.child("bar").touch().unwrap();
@@ -1251,7 +1250,7 @@ fn python_find_path() {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_find_freethreaded_313() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
@@ -1291,7 +1290,7 @@ fn python_find_freethreaded_313() {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_find_freethreaded_314() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
@@ -1369,7 +1368,7 @@ fn python_find_freethreaded_314() {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_version_specifiers() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
@@ -1469,7 +1468,7 @@ fn python_find_prerelease_version_specifiers() {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_with_patch_request() {
-    let context: TestContext = uv_test::test_context_with_versions!(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
