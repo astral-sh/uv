@@ -6682,7 +6682,11 @@ name = "uv-preview"
 version = "0.0.20"
 dependencies = [
  "enumflags2",
+ "insta",
  "itertools 0.14.0",
+ "schemars",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "uv-warnings",
 ]
@@ -7018,6 +7022,7 @@ dependencies = [
  "uv-normalize",
  "uv-options-metadata",
  "uv-pep508",
+ "uv-preview",
  "uv-pypi-types",
  "uv-python",
  "uv-redacted",

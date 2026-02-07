@@ -12,6 +12,7 @@ use uv_distribution_types::{
     PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
+use uv_preview::Preview;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -100,6 +101,7 @@ impl_combine_or!(PipExtraIndex);
 impl_combine_or!(PipFindLinks);
 impl_combine_or!(PipIndex);
 impl_combine_or!(PrereleaseMode);
+impl_combine_or!(Preview);
 impl_combine_or!(ProxyUrl);
 impl_combine_or!(PythonDownloads);
 impl_combine_or!(PythonPreference);

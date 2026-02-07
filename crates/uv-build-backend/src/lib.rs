@@ -1810,7 +1810,7 @@ mod tests {
         let build = build(
             src.path(),
             dist.path(),
-            Preview::new(&[PreviewFeature::MetadataJson]),
+            Preview::from_iter(&[PreviewFeature::MetadataJson]),
         )
         .unwrap();
 
