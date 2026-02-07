@@ -111,6 +111,11 @@ walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
+# Optional dependency so that features can use weak `uv-test?/feature` references
+# that are no-ops during `cargo install` (which strips dev-dependencies).
+# The dev-dependency below activates this for test builds.
+uv-test = { workspace = true, optional = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 arrayvec = { workspace = true }
 self-replace = { workspace = true }
@@ -167,7 +172,7 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 self-update = ["axoupdater", "uv-cli/self-update"]
 
 # Features for development only.
-tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export", "uv-test/tracing-durations-export"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export", "uv-test?/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
 test-defaults = [
@@ -185,7 +190,7 @@ test-defaults = [
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
 # Introduces a testing dependency on Git.
-test-git = ["uv-test/git"]
+test-git = ["uv-test?/git"]
 # Introduces a testing dependency on Git LFS.
 test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
