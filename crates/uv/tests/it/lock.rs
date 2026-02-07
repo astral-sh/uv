@@ -17176,10 +17176,10 @@ fn lock_constrained_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lock with a user-provided constraint on the space of supported environments, using a legacy
-/// virtual workspace root.
+/// Lock with a user-provided constraint on the space of supported environments, using a
+/// non-project workspace root.
 #[test]
-fn lock_constrained_environment_legacy() -> Result<()> {
+fn lock_constrained_environment_non_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -17374,7 +17374,7 @@ fn lock_overlapping_environment() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with forked dev dependencies.
+/// Lock a non-project workspace root with forked dev dependencies.
 #[test]
 fn lock_non_project_fork() -> Result<()> {
     let context = TestContext::new("3.10");
@@ -17570,7 +17570,7 @@ fn lock_non_project_fork() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with a conditional dependency.
+/// Lock a non-project workspace root with a conditional dependency.
 #[test]
 fn lock_non_project_conditional() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -17675,7 +17675,7 @@ fn lock_non_project_conditional() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `dependency-groups`.
+/// Lock a non-project workspace root with `dependency-groups`.
 #[test]
 fn lock_non_project_group() -> Result<()> {
     let context = TestContext::new("3.10");
@@ -17817,7 +17817,7 @@ fn lock_non_project_group() -> Result<()> {
     Ok(())
 }
 
-/// Lock a (legacy) non-project workspace root with `tool.uv.sources`.
+/// Lock a non-project workspace root with `tool.uv.sources`.
 #[test]
 fn lock_non_project_sources() -> Result<()> {
     let context = TestContext::new("3.12");

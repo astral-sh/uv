@@ -4928,7 +4928,7 @@ fn add_lower_bound_local() -> Result<()> {
     Ok(())
 }
 
-/// Add dependencies to a (legacy) non-project workspace root.
+/// Add dependencies to a non-project workspace root.
 #[test]
 fn add_non_project() -> Result<()> {
     let context = TestContext::new("3.12");
