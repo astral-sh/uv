@@ -106,21 +106,21 @@ publish-url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<F
 Then, configure credentials (if not using keyring):
 
 ```console
-$ export UV_PUBLISH_USERNAME=dummy
-$ export UV_PUBLISH_PASSWORD="$AZURE_ARTIFACTS_TOKEN"
+export UV_PUBLISH_USERNAME=dummy
+export UV_PUBLISH_PASSWORD="$AZURE_ARTIFACTS_TOKEN"
 ```
 
 And publish the package:
 
 ```console
-$ uv publish --index private-registry
+uv publish --index private-registry
 ```
 
 To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
 
 ```console
-$ export UV_PUBLISH_URL=https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/
-$ uv publish
+export UV_PUBLISH_URL=https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/
+uv publish
 ```
 
 Note this method is not preferable because uv cannot check if the package is already published
@@ -226,21 +226,21 @@ publish-url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/"
 Then, configure credentials (if not using keyring):
 
 ```console
-$ export UV_PUBLISH_USERNAME=oauth2accesstoken
-$ export UV_PUBLISH_PASSWORD="$ARTIFACT_REGISTRY_TOKEN"
+export UV_PUBLISH_USERNAME=oauth2accesstoken
+export UV_PUBLISH_PASSWORD="$ARTIFACT_REGISTRY_TOKEN"
 ```
 
 And publish the package:
 
 ```console
-$ uv publish --index private-registry
+uv publish --index private-registry
 ```
 
 To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
 
 ```console
-$ export UV_PUBLISH_URL=https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/
-$ uv publish
+export UV_PUBLISH_URL=https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>/
+uv publish
 ```
 
 Note this method is not preferable because uv cannot check if the package is already published
@@ -269,28 +269,34 @@ url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/
 Credentials can be provided via "Basic" HTTP authentication scheme. Include access token in the
 password field of the URL. Username must be `aws`, otherwise authentication will fail.
 
-Generate a token with `awscli`:
+Set the required environment variables:
 
 ```bash
-export AWS_CODEARTIFACT_TOKEN="$(
-    aws codeartifact get-authorization-token \
-    --domain <DOMAIN> \
-    --domain-owner <ACCOUNT_ID> \
-    --query authorizationToken \
-    --output text
-)"
+export AWS_REGION=<REGION>
+export AWS_ACCOUNT_ID=<ACCOUNT_ID>
+export AWS_ARTIFACT_DOMAIN=<AWS_ARTIFACT_DOMAIN>
+export AWS_ARTIFACT_REPOSITORY=<AWS_ARTIFACT_REPOSITORY>
 ```
 
-!!! note
+Generate a token with
+[`awscli`](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html):
 
-    You might need to pass extra parameters to properly generate the token (like `--region`), this
-    is a basic example.
+```bash
+export AWS_CODEARTIFACT_TOKEN=" $ (
+    aws codeartifact get-authorization-token \
+    --domain  $ AWS_ARTIFACT_DOMAIN \
+    --domain-owner  $ AWS_ACCOUNT_ID \
+    --query authorizationToken \
+    --output text \
+    --region  $ AWS_REGION
+)"
+```
 
 Then set credentials for the index with:
 
 ```bash
 export UV_INDEX_PRIVATE_REGISTRY_USERNAME=aws
-export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
+export UV_INDEX_URL="https://aws:$AWS_CODEARTIFACT_TOKEN@$AWS_ARTIFACT_DOMAIN-$AWS_ACCOUNT_ID.d.codeartifact.$AWS_REGION.amazonaws.com/pypi/$AWS_ARTIFACT_REPOSITORY/simple/"
 ```
 
 !!! note
@@ -348,21 +354,21 @@ publish-url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.c
 Then, configure credentials (if not using keyring):
 
 ```console
-$ export UV_PUBLISH_USERNAME=aws
-$ export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
+export UV_PUBLISH_USERNAME=aws
+export UV_PUBLISH_PASSWORD="$AWS_CODEARTIFACT_TOKEN"
 ```
 
 And publish the package:
 
 ```console
-$ uv publish --index private-registry
+uv publish --index private-registry
 ```
 
 To use `uv publish` without adding the `publish-url` to the project, you can set `UV_PUBLISH_URL`:
 
 ```console
-$ export UV_PUBLISH_URL=https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/
-$ uv publish
+export UV_PUBLISH_URL=https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/
+uv publish
 ```
 
 Note this method is not preferable because uv cannot check if the package is already published
@@ -384,15 +390,15 @@ url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>/simple"
 ### Authenticate with username and password
 
 ```console
-$ export UV_INDEX_PRIVATE_REGISTRY_USERNAME="<username>"
-$ export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="<password>"
+export UV_INDEX_PRIVATE_REGISTRY_USERNAME="<username>"
+export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="<password>"
 ```
 
 ### Authenticate with JWT token
 
 ```console
-$ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=""
-$ export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$JFROG_JWT_TOKEN"
+export UV_INDEX_PRIVATE_REGISTRY_USERNAME=""
+export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$JFROG_JWT_TOKEN"
 ```
 
 !!! note
@@ -419,15 +425,15 @@ publish-url = "https://<organization>.jfrog.io/artifactory/api/pypi/<repository>
 To authenticate, pass your token as the password and set the username to an empty string:
 
 ```console
-$ uv publish --index <index_name> -u "" -p "$JFROG_TOKEN"
+uv publish --index <index_name> -u "" -p "$JFROG_TOKEN"
 ```
 
 Alternatively, you can set environment variables:
 
 ```console
-$ export UV_PUBLISH_USERNAME=""
-$ export UV_PUBLISH_PASSWORD="$JFROG_TOKEN"
-$ uv publish --index private-registry
+export UV_PUBLISH_USERNAME=""
+export UV_PUBLISH_PASSWORD="$JFROG_TOKEN"
+uv publish --index private-registry
 ```
 
 !!! note
