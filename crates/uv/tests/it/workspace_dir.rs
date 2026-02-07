@@ -2,12 +2,12 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::PathChild;
 
-use crate::common::{TestContext, copy_dir_ignore, uv_snapshot};
+use uv_test::{copy_dir_ignore, uv_snapshot};
 
 /// Test basic output for a simple workspace with one member.
 #[test]
 fn workspace_dir_simple() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Initialize a workspace with one member
     context.init().arg("foo").assert().success();
@@ -29,7 +29,7 @@ fn workspace_dir_simple() {
 /// Workspace dir output when run with `--package`.
 #[test]
 fn workspace_dir_specific_package() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     context.init().arg("foo").assert().success();
     context.init().arg("foo/bar").assert().success();
     let workspace = context.temp_dir.child("foo");
@@ -62,7 +62,7 @@ fn workspace_dir_specific_package() {
 /// Test output when run from a workspace member directory.
 #[test]
 fn workspace_metadata_from_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
     let workspace = context.temp_dir.child("workspace");
 
     let albatross_workspace = context
@@ -90,7 +90,7 @@ fn workspace_metadata_from_member() -> Result<()> {
 /// Test workspace dir error output for a non-existent package.
 #[test]
 fn workspace_dir_package_doesnt_exist() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Initialize a workspace with one member
     context.init().arg("foo").assert().success();
@@ -111,7 +111,7 @@ fn workspace_dir_package_doesnt_exist() {
 /// Test workspace dir error output when not in a project.
 #[test]
 fn workspace_metadata_no_project() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.workspace_dir(), @r"
     success: false

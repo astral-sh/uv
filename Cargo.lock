@@ -5628,7 +5628,6 @@ dependencies = [
  "astral-version-ranges",
  "axoupdater",
  "backon",
- "base64 0.22.1",
  "byteorder",
  "bytes",
  "clap",
@@ -5646,7 +5645,6 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "ignore",
  "indexmap",
  "indicatif",
  "indoc",
@@ -5666,7 +5664,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "similar",
  "tar",
  "tempfile",
  "textwrap",
@@ -5724,6 +5721,7 @@ dependencies = [
  "uv-settings",
  "uv-shell",
  "uv-static",
+ "uv-test",
  "uv-tool",
  "uv-torch",
  "uv-trampoline-builder",
@@ -7072,6 +7070,36 @@ version = "0.0.20"
 dependencies = [
  "thiserror 2.0.18",
  "uv-macros",
+]
+
+[[package]]
+name = "uv-test"
+version = "0.0.20"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "assert_fs",
+ "base64 0.22.1",
+ "fs-err",
+ "futures",
+ "ignore",
+ "indoc",
+ "insta",
+ "itertools 0.14.0",
+ "predicates",
+ "regex",
+ "reqwest",
+ "similar",
+ "tempfile",
+ "tokio",
+ "uv-cache",
+ "uv-client",
+ "uv-configuration",
+ "uv-fs",
+ "uv-preview",
+ "uv-python",
+ "uv-static",
+ "uv-version",
 ]
 
 [[package]]

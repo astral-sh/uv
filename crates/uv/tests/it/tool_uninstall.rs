@@ -3,11 +3,11 @@ use assert_fs::fixture::PathChild;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_uninstall() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -68,7 +68,7 @@ fn tool_uninstall() {
 
 #[test]
 fn tool_uninstall_multiple_names() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -115,7 +115,7 @@ fn tool_uninstall_multiple_names() {
 
 #[test]
 fn tool_uninstall_not_installed() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -133,7 +133,7 @@ fn tool_uninstall_not_installed() {
 
 #[test]
 fn tool_uninstall_missing_receipt() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
@@ -162,7 +162,7 @@ fn tool_uninstall_missing_receipt() {
 
 #[test]
 fn tool_uninstall_all_missing_receipt() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 

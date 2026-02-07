@@ -5,11 +5,11 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn nested_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -50,7 +50,7 @@ fn nested_dependencies() -> Result<()> {
 
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -117,7 +117,7 @@ fn nested_platform_dependencies() -> Result<()> {
 
 #[test]
 fn invert() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -179,7 +179,7 @@ fn invert() -> Result<()> {
 
 #[test]
 fn frozen() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -241,7 +241,7 @@ fn frozen() -> Result<()> {
 
 #[test]
 fn outdated() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -273,7 +273,7 @@ fn outdated() -> Result<()> {
 
 #[test]
 fn platform_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -353,7 +353,7 @@ fn platform_dependencies() -> Result<()> {
 
 #[test]
 fn platform_dependencies_inverted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -398,7 +398,7 @@ fn platform_dependencies_inverted() -> Result<()> {
 
 #[test]
 fn repeated_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -444,7 +444,7 @@ fn repeated_dependencies() -> Result<()> {
 /// URLs.
 #[test]
 fn repeated_version() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let v1 = context.temp_dir.child("v1");
     fs_err::create_dir_all(&v1)?;
@@ -516,7 +516,7 @@ fn repeated_version() -> Result<()> {
 
 #[test]
 fn dev_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -570,7 +570,7 @@ fn dev_dependencies() -> Result<()> {
 
 #[test]
 fn dev_dependencies_inverted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -627,7 +627,7 @@ fn dev_dependencies_inverted() -> Result<()> {
 
 #[test]
 fn optional_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -677,7 +677,7 @@ fn optional_dependencies() -> Result<()> {
 
 #[test]
 fn optional_dependencies_inverted() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -735,7 +735,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 
 #[test]
 fn package() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -810,7 +810,7 @@ fn package() -> Result<()> {
 
 #[test]
 fn group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -920,7 +920,7 @@ fn group() -> Result<()> {
 
 #[test]
 fn cycle() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1006,7 +1006,7 @@ fn cycle() -> Result<()> {
 
 #[test]
 fn workspace_dev() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1085,7 +1085,7 @@ fn workspace_dev() -> Result<()> {
 
 #[test]
 fn non_project() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1121,7 +1121,7 @@ fn non_project() -> Result<()> {
 
 #[test]
 fn non_project_member() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1195,7 +1195,7 @@ fn non_project_member() -> Result<()> {
 
 #[test]
 fn script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -1594,7 +1594,7 @@ fn script() -> Result<()> {
 
 #[test]
 fn only_group() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1676,7 +1676,7 @@ fn only_group() -> Result<()> {
 
 #[test]
 fn show_sizes() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -1706,7 +1706,7 @@ fn show_sizes() -> Result<()> {
 
 #[test]
 fn workspace_circular_dependencies() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create workspace root
     let pyproject_toml = context.temp_dir.child("pyproject.toml");

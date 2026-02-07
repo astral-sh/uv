@@ -15,7 +15,7 @@ use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use crate::common::{
+use uv_test::{
     TestContext, build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions,
     uv_snapshot,
 };
@@ -55,7 +55,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
 {{/python_patch}}
 #[test]
 fn {{module_name}}() -> Result<()> {
-    let context = TestContext::new("{{environment.python}}");
+    let context = uv_test::test_context!("{{environment.python}}");
     let python_versions = &[{{#environment.additional_python}}"{{.}}", {{/environment.additional_python}}];
 
     // In addition to the standard filters, swap out package names for shorter messages
