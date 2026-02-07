@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 
 use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
@@ -98,6 +98,89 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             Self::Workspace { .. } => None,
             Self::NonProjectWorkspace { .. } => None,
             Self::Script { .. } => None,
+        }
+    }
+
+    fn available_extras(&self) -> Vec<ExtraName> {
+        match self {
+            Self::Project {
+                workspace, name, ..
+            } => workspace
+                .packages()
+                .get(name)
+                .and_then(|member| member.pyproject_toml().project.as_ref())
+                .and_then(|project| project.optional_dependencies.as_ref())
+                .map(|extras| extras.keys().cloned().collect())
+                .unwrap_or_default(),
+            Self::Projects {
+                workspace, names, ..
+            } => {
+                let mut all_extras = std::collections::BTreeSet::new();
+                for name in *names {
+                    if let Some(member) = workspace.packages().get(name) {
+                        if let Some(project) = member.pyproject_toml().project.as_ref() {
+                            if let Some(extras) = project.optional_dependencies.as_ref() {
+                                all_extras.extend(extras.keys().cloned());
+                            }
+                        }
+                    }
+                }
+                all_extras.into_iter().collect()
+            }
+            Self::Workspace { workspace, .. } | Self::NonProjectWorkspace { workspace, .. } => {
+                let mut all_extras = std::collections::BTreeSet::new();
+                for member in workspace.packages().values() {
+                    if let Some(project) = member.pyproject_toml().project.as_ref() {
+                        if let Some(extras) = project.optional_dependencies.as_ref() {
+                            all_extras.extend(extras.keys().cloned());
+                        }
+                    }
+                }
+                all_extras.into_iter().collect()
+            }
+            Self::Script { .. } => vec![],
+        }
+    }
+
+    fn available_dependency_groups(&self) -> Vec<GroupName> {
+        match self {
+            Self::Project {
+                workspace, name, ..
+            } => workspace
+                .packages()
+                .get(name)
+                .map(|member| {
+                    member
+                        .pyproject_toml()
+                        .dependency_groups
+                        .as_ref()
+                        .map(|groups| groups.keys().cloned().collect())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default(),
+            Self::Projects {
+                workspace, names, ..
+            } => {
+                let mut all_groups = std::collections::BTreeSet::new();
+                for name in *names {
+                    if let Some(member) = workspace.packages().get(name) {
+                        if let Some(groups) = member.pyproject_toml().dependency_groups.as_ref() {
+                            all_groups.extend(groups.keys().cloned());
+                        }
+                    }
+                }
+                all_groups.into_iter().collect()
+            }
+            Self::Workspace { workspace, .. } | Self::NonProjectWorkspace { workspace, .. } => {
+                let mut all_groups = std::collections::BTreeSet::new();
+                for member in workspace.packages().values() {
+                    if let Some(groups) = member.pyproject_toml().dependency_groups.as_ref() {
+                        all_groups.extend(groups.keys().cloned());
+                    }
+                }
+                all_groups.into_iter().collect()
+            }
+            Self::Script { .. } => vec![],
         }
     }
 }

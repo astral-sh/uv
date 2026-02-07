@@ -6,7 +6,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    CanonicalMarkerListPair, ContainerOperator, ExtraOperator, MarkerEnvironment, MarkerExpression,
+    MarkerOperator, MarkerTree,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
@@ -698,6 +701,45 @@ impl<'a> ParsedRawExtra<'a> {
             Self::Extra { package, .. } => package,
             Self::Group { package, .. } => package,
         }
+    }
+}
+
+pub(crate) fn encoded_extra_to_pep751(
+    name: &ExtraName,
+    operator: &ExtraOperator,
+    root_name: Option<&PackageName>,
+) -> Option<MarkerExpression> {
+    let parsed = ParsedRawExtra::parse(name).ok()?;
+
+    let container_op = match operator {
+        ExtraOperator::Equal => ContainerOperator::In,
+        ExtraOperator::NotEqual => ContainerOperator::NotIn,
+    };
+
+    match parsed {
+        ParsedRawExtra::Extra { package, extra } => {
+            if root_name.is_some_and(|root| root.as_ref() == package) {
+                let extra = ExtraName::from_str(extra).ok()?;
+                Some(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::Extras(extra),
+                    operator: container_op,
+                })
+            } else {
+                None
+            }
+        }
+        ParsedRawExtra::Group { package, group } => {
+            if root_name.is_some_and(|root| root.as_ref() == package) {
+                let group = GroupName::from_str(group).ok()?;
+                Some(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::DependencyGroup(group),
+                    operator: container_op,
+                })
+            } else {
+                None
+            }
+        }
+        ParsedRawExtra::Project { .. } => None,
     }
 }
 

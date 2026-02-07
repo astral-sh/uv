@@ -3431,7 +3431,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r#"
+        .arg("2022-04-04T26:00:00+00"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3440,7 +3440,7 @@ fn compile_exclude_newer() -> Result<()> {
     error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
@@ -16536,6 +16536,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     [[packages]]
     name = "iniconfig"
     version = "2.0.0"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
 
@@ -16585,6 +16586,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     [[packages]]
     name = "source-distribution"
     version = "0.0.3"
+    requires-python = ">=3.10"
     sdist = { url = "https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz", upload-time = 2024-11-03T02:35:36Z, size = 2166, hashes = { sha256 = "be5895c175dbca2d91709a6ab7d5f28e1794272db551ae9a5faf3ae2ed74c3d8" } }
 
     ----- stderr -----
@@ -16669,6 +16671,7 @@ fn pep_751_compile_directory() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
 
@@ -16679,12 +16682,14 @@ fn pep_751_compile_directory() -> Result<()> {
     [[packages]]
     name = "idna"
     version = "3.6"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -16795,12 +16800,14 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     [[packages]]
     name = "idna"
     version = "3.6"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -16859,12 +16866,14 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     [[packages]]
     name = "idna"
     version = "3.6"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -17078,18 +17087,21 @@ fn pep_751_compile_preferences() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.0.0"
+    requires-python = ">=3.6.2"
     sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
 
     [[packages]]
     name = "idna"
     version = "3.0"
+    requires-python = ">=3.4"
     sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", upload-time = 2021-01-01T05:58:25Z, size = 180786, hashes = { sha256 = "c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", upload-time = 2021-01-01T05:58:22Z, size = 58618, hashes = { sha256 = "320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -17119,18 +17131,21 @@ fn pep_751_compile_preferences() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.0.0"
+    requires-python = ">=3.6.2"
     sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
 
     [[packages]]
     name = "idna"
     version = "3.0"
+    requires-python = ">=3.4"
     sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", upload-time = 2021-01-01T05:58:25Z, size = 180786, hashes = { sha256 = "c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", upload-time = 2021-01-01T05:58:22Z, size = 58618, hashes = { sha256 = "320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -17159,18 +17174,21 @@ fn pep_751_compile_preferences() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "3.0.0"
+    requires-python = ">=3.6.2"
     sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
 
     [[packages]]
     name = "idna"
     version = "3.6"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -17198,18 +17216,21 @@ fn pep_751_compile_preferences() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
 
     [[packages]]
     name = "idna"
     version = "3.6"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 
@@ -17246,6 +17267,7 @@ fn pep_751_compile_warn() -> Result<()> {
     [[packages]]
     name = "iniconfig"
     version = "2.0.0"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
 
@@ -17284,6 +17306,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     [[packages]]
     name = "black"
     version = "24.3.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
@@ -17293,30 +17316,35 @@ fn pep_751_compile_non_universal() -> Result<()> {
     [[packages]]
     name = "click"
     version = "8.1.7"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", upload-time = 2023-08-17T17:29:11Z, size = 336121, hashes = { sha256 = "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", upload-time = 2023-08-17T17:29:10Z, size = 97941, hashes = { sha256 = "ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28" } }]
 
     [[packages]]
     name = "mypy-extensions"
     version = "1.0.0"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", upload-time = 2023-02-04T12:11:27Z, size = 4433, hashes = { sha256 = "75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", upload-time = 2023-02-04T12:11:25Z, size = 4695, hashes = { sha256 = "4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d" } }]
 
     [[packages]]
     name = "packaging"
     version = "24.0"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", upload-time = 2024-03-10T09:39:28Z, size = 147882, hashes = { sha256 = "eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", upload-time = 2024-03-10T09:39:25Z, size = 53488, hashes = { sha256 = "2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5" } }]
 
     [[packages]]
     name = "pathspec"
     version = "0.12.1"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", upload-time = 2023-12-10T22:30:45Z, size = 51043, hashes = { sha256 = "a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", upload-time = 2023-12-10T22:30:43Z, size = 31191, hashes = { sha256 = "a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08" } }]
 
     [[packages]]
     name = "platformdirs"
     version = "4.2.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", upload-time = 2024-01-31T01:00:36Z, size = 20055, hashes = { sha256 = "ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", upload-time = 2024-01-31T01:00:34Z, size = 17717, hashes = { sha256 = "0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068" } }]
 
@@ -17344,6 +17372,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     [[packages]]
     name = "black"
     version = "24.3.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
     wheels = [
         { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
@@ -17353,6 +17382,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     [[packages]]
     name = "click"
     version = "8.1.7"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", upload-time = 2023-08-17T17:29:11Z, size = 336121, hashes = { sha256 = "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", upload-time = 2023-08-17T17:29:10Z, size = 97941, hashes = { sha256 = "ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28" } }]
 
@@ -17360,30 +17390,35 @@ fn pep_751_compile_non_universal() -> Result<()> {
     name = "colorama"
     version = "0.4.6"
     marker = "sys_platform == 'win32'"
+    requires-python = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, !=3.6.*"
     sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", upload-time = 2022-10-25T02:36:22Z, size = 27697, hashes = { sha256 = "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", upload-time = 2022-10-25T02:36:20Z, size = 25335, hashes = { sha256 = "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6" } }]
 
     [[packages]]
     name = "mypy-extensions"
     version = "1.0.0"
+    requires-python = ">=3.5"
     sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", upload-time = 2023-02-04T12:11:27Z, size = 4433, hashes = { sha256 = "75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", upload-time = 2023-02-04T12:11:25Z, size = 4695, hashes = { sha256 = "4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d" } }]
 
     [[packages]]
     name = "packaging"
     version = "24.0"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", upload-time = 2024-03-10T09:39:28Z, size = 147882, hashes = { sha256 = "eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", upload-time = 2024-03-10T09:39:25Z, size = 53488, hashes = { sha256 = "2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5" } }]
 
     [[packages]]
     name = "pathspec"
     version = "0.12.1"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", upload-time = 2023-12-10T22:30:45Z, size = 51043, hashes = { sha256 = "a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", upload-time = 2023-12-10T22:30:43Z, size = 31191, hashes = { sha256 = "a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08" } }]
 
     [[packages]]
     name = "platformdirs"
     version = "4.2.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", upload-time = 2024-01-31T01:00:36Z, size = 20055, hashes = { sha256 = "ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", upload-time = 2024-01-31T01:00:34Z, size = 17717, hashes = { sha256 = "0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068" } }]
 
@@ -17423,6 +17458,7 @@ fn pep_751_compile_only_binary() -> Result<()> {
     [[packages]]
     name = "iniconfig"
     version = "2.0.0"
+    requires-python = ">=3.7"
     wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
 
     ----- stderr -----
@@ -17461,6 +17497,7 @@ fn pep_751_compile_no_binary() -> Result<()> {
     [[packages]]
     name = "iniconfig"
     version = "2.0.0"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
 
     ----- stderr -----
@@ -17497,12 +17534,14 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     [[packages]]
     name = "anyio"
     version = "4.3.0"
+    requires-python = ">=3.8"
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
 
     [[packages]]
     name = "sniffio"
     version = "1.3.1"
+    requires-python = ">=3.7"
     sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
     wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
 

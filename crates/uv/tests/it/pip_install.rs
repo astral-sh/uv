@@ -2272,7 +2272,8 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
         .pip_install()
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage")
         .env(EnvVars::UV_GITHUB_FAST_PATH_URL, server.uri())
-        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true"), @"
+        .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
+        .env_remove(EnvVars::UV_HTTP_RETRIES), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11262,9 +11263,10 @@ fn pep_751_install_registry_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "
     );
 
@@ -11277,7 +11279,7 @@ fn pep_751_install_registry_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "
     );
 
@@ -11315,8 +11317,9 @@ fn pep_751_install_registry_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.3
     "
     );
@@ -11330,7 +11333,7 @@ fn pep_751_install_registry_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "
     );
 
@@ -11374,8 +11377,18 @@ fn pep_751_install_directory() -> Result<()> {
 
         [tool.uv.sources]
         foo = { path = "foo" }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     context
         .export()
@@ -11393,11 +11406,12 @@ fn pep_751_install_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
      + foo==1.0.0 (from file://[TEMP_DIR]/foo)
      + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "
     );
@@ -11411,7 +11425,7 @@ fn pep_751_install_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 4 packages in [TIME]
+    Audited 5 packages in [TIME]
     "
     );
 
@@ -11450,8 +11464,9 @@ fn pep_751_install_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
     "
     );
@@ -11465,7 +11480,7 @@ fn pep_751_install_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "
     );
 
@@ -11503,10 +11518,11 @@ fn pep_751_install_url_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
      + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "
     );
@@ -11520,7 +11536,7 @@ fn pep_751_install_url_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Audited 4 packages in [TIME]
     "
     );
 
@@ -11558,10 +11574,11 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
      + idna==3.6
+     + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
     "
     );
@@ -11575,7 +11592,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 3 packages in [TIME]
+    Audited 4 packages in [TIME]
     "
     );
 
@@ -11631,6 +11648,11 @@ fn pep_751_install_path_wheel() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         archive = { path = "iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }
+
+        [[packages]]
+        name = "project"
+        dependencies = [{ name = "iniconfig", version = "2.0.0" }]
+        directory = { path = ".", editable = false }
         "#
         );
     });
@@ -11644,8 +11666,10 @@ fn pep_751_install_path_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Installed 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
      + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "
     );
 
@@ -11658,7 +11682,7 @@ fn pep_751_install_path_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "
     );
 
@@ -11706,9 +11730,10 @@ fn pep_751_install_path_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz)
+     + project==0.1.0 (from file://[TEMP_DIR]/)
     "
     );
 
@@ -11721,7 +11746,7 @@ fn pep_751_install_path_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Audited 2 packages in [TIME]
     "
     );
 
