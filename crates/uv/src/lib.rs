@@ -102,6 +102,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Load environment variables not handled by Clap
     let environment = EnvironmentOptions::new()?;
 
+    let config_file_arg = cli.top_level.config_file.clone();
+
     // The `--isolated` argument is deprecated on preview APIs, and warns on non-preview APIs.
     let deprecated_isolated = if cli.top_level.global_args.isolated {
         match &*cli.command {
@@ -413,6 +415,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         globals.color,
         environment.log_context.unwrap_or_default(),
     )?;
+
+    if let Some(config_file) = config_file_arg.as_ref() {
+        tracing::debug!(
+            "Using explicit configuration file at `{}`; ignoring discovered configuration files.",
+            config_file.display()
+        );
+    }
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if globals.quiet == 1 {
