@@ -253,6 +253,9 @@ pub(crate) enum ProjectError {
     #[error("Project virtual environment directory `{0}` cannot be used because {1}")]
     InvalidProjectEnvironmentDir(PathBuf, String),
 
+    #[error("{0}. When using `--active`, uv does not attempt to recreate the environment.")]
+    ActiveEnvironmentIncompatible(EnvironmentIncompatibilityError),
+
     #[error("Failed to parse `uv.lock`")]
     UvLockParse(#[source] toml::de::Error),
 
@@ -757,6 +760,9 @@ impl ScriptInterpreter {
                         );
                         return Ok(Self::Environment(venv));
                     }
+                    Err(err) if active == Some(true) => {
+                        return Err(ProjectError::ActiveEnvironmentIncompatible(err));
+                    }
                     Err(err) => {
                         debug!("{err}");
                     }
@@ -997,6 +1003,9 @@ impl ProjectInterpreter {
                             root.user_display().cyan(),
                         );
                         return Ok(Self::Environment(venv));
+                    }
+                    Err(err) if active == Some(true) => {
+                        return Err(ProjectError::ActiveEnvironmentIncompatible(err));
                     }
                     Err(err) => {
                         debug!("{err}");
