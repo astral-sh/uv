@@ -2301,6 +2301,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 .bucket(CacheBucket::SourceDistributions),
         )
         .map_err(Error::CacheWrite)?;
+
+        let url = DisplaySafeUrl::from_url(response.url().clone());
+
         let reader = response
             .bytes_stream()
             .map_err(std::io::Error::other)
@@ -2316,7 +2319,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+        uv_extract::stream::archive(url, &mut hasher, ext, temp_dir.path())
             .await
             .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
@@ -2385,7 +2388,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+        uv_extract::stream::archive(path.display(), &mut hasher, ext, &temp_dir.path())
             .await
             .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 

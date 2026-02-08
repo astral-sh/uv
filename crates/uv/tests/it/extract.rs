@@ -23,7 +23,7 @@ async fn unzip(url: &str) -> anyhow::Result<(), uv_extract::Error> {
         .into_async_read();
 
     let target = tempfile::TempDir::new().map_err(uv_extract::Error::Io)?;
-    uv_extract::stream::unzip(reader.compat(), target.path()).await
+    uv_extract::stream::unzip(url, reader.compat(), target.path()).await
 }
 
 #[tokio::test]

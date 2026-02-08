@@ -339,9 +339,14 @@ async fn download_and_unpack(
 
     let id = reporter.on_download_start(binary.name(), version, size);
     let mut progress_reader = ProgressReader::new(reader, id, reporter);
-    stream::archive(&mut progress_reader, format.into(), temp_dir.path())
-        .await
-        .map_err(|e| Error::Extract { source: e })?;
+    stream::archive(
+        DisplaySafeUrl::from_url(download_url.clone()),
+        &mut progress_reader,
+        format.into(),
+        temp_dir.path(),
+    )
+    .await
+    .map_err(|e| Error::Extract { source: e })?;
     reporter.on_download_complete(id);
 
     // Find the binary in the extracted files
