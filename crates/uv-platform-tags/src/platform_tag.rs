@@ -605,12 +605,21 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 })?;
 
-            let major = rest[..first_underscore].parse().map_err(|_| {
+            let major: u16 = rest[..first_underscore].parse().map_err(|_| {
                 ParsePlatformTagError::InvalidMajorVersion {
                     platform: "macosx",
                     tag: s.to_string(),
                 }
             })?;
+
+            // Reject unreasonably large macOS versions (e.g., `macosx_110_0_arm64` is likely
+            // a typo for `macosx_11_0_arm64`).
+            if major >= 100 {
+                return Err(ParsePlatformTagError::InvalidMajorVersion {
+                    platform: "macosx",
+                    tag: s.to_string(),
+                });
+            }
 
             let minor = rest[first_underscore + 1..second_underscore]
                 .parse()
@@ -1080,6 +1089,15 @@ mod tests {
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "macosx",
                 tag: "macosx_11_0_invalid".to_string()
+            })
+        );
+
+        // Unreasonably large macOS versions (likely typos) should be rejected.
+        assert_eq!(
+            PlatformTag::from_str("macosx_110_0_arm64"),
+            Err(ParsePlatformTagError::InvalidMajorVersion {
+                platform: "macosx",
+                tag: "macosx_110_0_arm64".to_string()
             })
         );
     }
