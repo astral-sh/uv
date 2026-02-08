@@ -388,6 +388,7 @@ impl From<IndexArgs> for PipOptions {
             extra_index_url,
             no_index,
             find_links,
+            find_links_strategy,
         } = args;
 
         Self {
@@ -415,6 +416,7 @@ impl From<IndexArgs> for PipOptions {
                     .filter_map(Maybe::into_option)
                     .collect()
             }),
+            find_links_strategy,
             ..Self::default()
         }
     }
@@ -487,6 +489,7 @@ pub fn resolver_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
+        find_links_strategy: index_args.find_links_strategy,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
@@ -603,6 +606,7 @@ pub fn resolver_installer_options(
                 .filter_map(Maybe::into_option)
                 .collect()
         }),
+        find_links_strategy: index_args.find_links_strategy,
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
