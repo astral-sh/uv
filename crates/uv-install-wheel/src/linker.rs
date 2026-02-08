@@ -264,7 +264,11 @@ pub enum LinkMode {
 
 impl Default for LinkMode {
     fn default() -> Self {
-        if cfg!(any(target_os = "macos", target_os = "ios")) {
+        if cfg!(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "linux"
+        )) {
             Self::Clone
         } else {
             Self::Hardlink
@@ -323,6 +327,15 @@ fn clone_wheel_files(
             filename,
         );
         clone_recursive(site_packages.as_ref(), wheel, locks, &entry, &mut attempt)?;
+
+        // If reflink is not supported, fall back to hardlinking the entire wheel.
+        // `hardlink_wheel_files` handles all edge cases (RECORD files, fallback to
+        // copy, etc.) and will overwrite any files already created above.
+        if attempt == Attempt::UseCopyFallback {
+            debug!("Reflink not supported; falling back to hardlink");
+            return hardlink_wheel_files(site_packages, wheel, locks, filename);
+        }
+
         count += 1;
     }
 
@@ -400,6 +413,11 @@ fn clone_recursive(
         fs::create_dir_all(&to)?;
         for entry in fs::read_dir(from)? {
             clone_recursive(site_packages, wheel, locks, &entry?, attempt)?;
+            // If reflink failed, stop immediately so the caller can fall back to
+            // hardlinking without copying any more files.
+            if *attempt == Attempt::UseCopyFallback {
+                return Ok(());
+            }
         }
         return Ok(());
     }
@@ -422,23 +440,16 @@ fn clone_recursive(
                             fs::rename(&tempfile, to)?;
                         } else {
                             debug!(
-                                "Failed to clone `{}` to temporary location `{}`, attempting to copy files as a fallback",
+                                "Failed to clone `{}` to temporary location `{}`",
                                 from.display(),
                                 tempfile.display(),
                             );
                             *attempt = Attempt::UseCopyFallback;
-                            synchronized_copy(&from, &to, locks)?;
                         }
                     }
                 } else {
-                    debug!(
-                        "Failed to clone `{}` to `{}`, attempting to copy files as a fallback",
-                        from.display(),
-                        to.display()
-                    );
-                    // Fallback to copying
+                    debug!("Failed to clone `{}` to `{}`", from.display(), to.display());
                     *attempt = Attempt::UseCopyFallback;
-                    clone_recursive(site_packages, wheel, locks, entry, attempt)?;
                 }
             }
         }
