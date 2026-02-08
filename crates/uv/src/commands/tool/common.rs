@@ -244,7 +244,13 @@ pub(crate) fn finalize_tool_install(
                 continue;
             }
 
-            // For the root package, this is a fatal error
+            // For the root package, this is only acceptable if `--with-executables-from` was used
+            // and we've already installed at least one executable from those packages.
+            if !installed_entrypoints.is_empty() {
+                continue;
+            }
+
+            // Otherwise, this is a fatal error.
             writeln!(
                 printer.stdout(),
                 "No executables are provided by package `{}`; removing tool",
