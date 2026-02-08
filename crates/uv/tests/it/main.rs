@@ -48,6 +48,9 @@ mod init;
 mod lock;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod lock_build;
+
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod lock_conflict;
 
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
