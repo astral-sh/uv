@@ -20,7 +20,7 @@ use uv_resolver::{
     PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject::{ExtraBuildDependencies, ToolUvSources};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{FilesystemOptions, Options, PipOptions};
@@ -300,6 +300,26 @@ impl Combine for ExtraBuildVariables {
 }
 
 impl Combine for Option<ExtraBuildVariables> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+impl Combine for ToolUvSources {
+    fn combine(self, other: Self) -> Self {
+        // Merge sources from other into self, with self taking precedence
+        let mut combined = self.into_inner();
+        for (package, sources) in other.into_inner() {
+            combined.entry(package).or_insert(sources);
+        }
+        combined.into_iter().collect()
+    }
+}
+
+impl Combine for Option<ToolUvSources> {
     fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Some(a), Some(b)) => Some(a.combine(b)),
