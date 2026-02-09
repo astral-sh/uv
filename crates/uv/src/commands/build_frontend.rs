@@ -720,7 +720,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(path.display(), reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -830,7 +830,8 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(source.path().display(), reader, ext, temp_dir.path())
+                .await?;
 
             // If the source distribution has a version in its filename, check the version.
             let version = source
