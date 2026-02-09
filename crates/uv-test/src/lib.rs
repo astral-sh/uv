@@ -604,6 +604,21 @@ impl TestContext {
         self
     }
 
+    /// Add a filter for URLs from GitHub's release-assets CDN.
+    /// These URLs are non-deterministic and occur in logs when downloading distributions
+    /// from GitHub releases.
+    #[must_use]
+    pub fn with_filtered_github_release_asset_urls(mut self) -> Self {
+        // These look like 'https://release-assets.githubusercontent.com/github-production-release-asset/...',
+        // where ... is anything except whitespace or a quote.
+        let pattern = r#"https://release-assets\.githubusercontent\.com/[^\s\"']+"#;
+        self.filters.push((
+            pattern.to_string(),
+            "[GITHUB_RELEASE_ASSET_URL]".to_string(),
+        ));
+        self
+    }
+
     /// Use a shared global cache for Python downloads.
     #[must_use]
     pub fn with_python_download_cache(mut self) -> Self {
