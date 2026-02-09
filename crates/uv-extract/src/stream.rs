@@ -1,17 +1,14 @@
-use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
-use async_zip::{Compression, ZipEntry};
 use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
-use uv_warnings::warn_user_once;
 
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
 
@@ -46,24 +43,10 @@ struct ComputedEntry {
 /// This is useful for unzipping files as they're being downloaded. If the archive
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
 /// threads to work faster in that case.
-///
-/// `source_hint` is used for warning messages, to identify the source of the ZIP archive
-/// beneath the reader. It might be a URL, a file path, or something else.
-pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
-    source_hint: D,
+pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    /// Returns `true` if the entry uses a well-known compression method.
-    ///
-    /// This currently means just stored (no compression), DEFLATE, or zstd.
-    fn entry_has_well_known_compression(entry: &ZipEntry) -> bool {
-        matches!(
-            entry.compression(),
-            Compression::Stored | Compression::Deflate | Compression::Zstd
-        )
-    }
-
     /// Ensure the file path is safe to use as a [`Path`].
     ///
     /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
@@ -96,19 +79,8 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
-        let zip_entry = entry.reader().entry();
-
-        // Check for unexpected compression methods.
-        // A future version of uv will reject instead of warning about these.
-        if !entry_has_well_known_compression(zip_entry) {
-            warn_user_once!(
-                "One or more file entries in '{source_hint}' use the '{compression_method:?}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
-                compression_method = zip_entry.compression()
-            );
-        }
-
         // Construct the (expected) path to the file on-disk.
-        let path = match zip_entry.filename().as_str() {
+        let path = match entry.reader().entry().filename().as_str() {
             Ok(path) => path,
             Err(ZipError::StringNotUtf8) => return Err(Error::LocalHeaderNotUtf8 { offset }),
             Err(err) => return Err(err.into()),
@@ -135,14 +107,14 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             continue;
         };
 
-        let file_offset = zip_entry.file_offset();
-        let expected_compressed_size = zip_entry.compressed_size();
-        let expected_uncompressed_size = zip_entry.uncompressed_size();
-        let expected_data_descriptor = zip_entry.data_descriptor();
+        let file_offset = entry.reader().entry().file_offset();
+        let expected_compressed_size = entry.reader().entry().compressed_size();
+        let expected_uncompressed_size = entry.reader().entry().uncompressed_size();
+        let expected_data_descriptor = entry.reader().entry().data_descriptor();
 
         // Either create the directory or write the file to disk.
         let path = target.join(&relpath);
-        let is_dir = zip_entry.dir()?;
+        let is_dir = entry.reader().entry().dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
                 fs_err::tokio::create_dir_all(path)
@@ -151,23 +123,23 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             }
 
             // If this is a directory, we expect the CRC32 to be 0.
-            if zip_entry.crc32() != 0 {
+            if entry.reader().entry().crc32() != 0 {
                 if !skip_validation {
                     return Err(Error::BadCrc32 {
                         path: relpath.clone(),
                         computed: 0,
-                        expected: zip_entry.crc32(),
+                        expected: entry.reader().entry().crc32(),
                     });
                 }
             }
 
             // If this is a directory, we expect the uncompressed size to be 0.
-            if zip_entry.uncompressed_size() != 0 {
+            if entry.reader().entry().uncompressed_size() != 0 {
                 if !skip_validation {
                     return Err(Error::BadUncompressedSize {
                         path: relpath.clone(),
                         computed: 0,
-                        expected: zip_entry.uncompressed_size(),
+                        expected: entry.reader().entry().uncompressed_size(),
                     });
                 }
             }
@@ -192,7 +164,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             {
                 Ok(file) => {
                     // Write the file to disk.
-                    let size = zip_entry.uncompressed_size();
+                    let size = entry.reader().entry().uncompressed_size();
                     let mut writer = if let Ok(size) = usize::try_from(size) {
                         tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
                     } else {
@@ -772,18 +744,14 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
-///
-/// `source_hint` is used for warning messages, to identify the source of the archive
-/// beneath the reader. It might be a URL, a file path, or something else.
-pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
-    source_hint: D,
+pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
     match ext {
         SourceDistExtension::Zip => {
-            unzip(source_hint, reader, target).await?;
+            unzip(reader, target).await?;
         }
         SourceDistExtension::Tar => {
             untar(reader, target).await?;

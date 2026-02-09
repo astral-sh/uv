@@ -16,7 +16,7 @@ use std::{
 /// A trait to represent some reader which has a total length known in
 /// advance. This is roughly equivalent to the nightly
 /// [`Seek::stream_len`] API.
-pub(crate) trait HasLength {
+pub trait HasLength {
     /// Return the current total length of this stream.
     fn len(&self) -> u64;
 }
