@@ -6106,6 +6106,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
+ "uv-redacted",
  "uv-static",
 ]
 
@@ -6390,7 +6391,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
- "url",
  "uv-auth",
  "uv-cache-key",
  "uv-fs",

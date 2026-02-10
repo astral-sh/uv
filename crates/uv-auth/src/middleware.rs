@@ -365,7 +365,9 @@ impl Middleware for AuthMiddleware {
 
             // Check the cache for a URL match first. This can save us from
             // making a failing request
-            let credentials = self.cache().get_url(request.url(), &Username::none());
+            let credentials = self
+                .cache()
+                .get_url(DisplaySafeUrl::ref_cast(request.url()), &Username::none());
             if let Some(credentials) = credentials.as_ref() {
                 request = credentials.authenticate(request).await;
 
@@ -613,10 +615,10 @@ impl AuthMiddleware {
                 .await;
         }
 
-        let credentials = if let Some(credentials) = self
-            .cache()
-            .get_url(request.url(), credentials.as_username().as_ref())
-        {
+        let credentials = if let Some(credentials) = self.cache().get_url(
+            DisplaySafeUrl::ref_cast(request.url()),
+            credentials.as_username().as_ref(),
+        ) {
             request = credentials.authenticate(request).await;
             // Do not insert already-cached credentials
             None
@@ -1052,7 +1054,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
@@ -1106,7 +1108,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let cache = CredentialsCache::new();
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1502,7 +1504,7 @@ mod tests {
         // Seed _just_ the username. We should pull the username from the cache if not present on the
         // URL.
         cache.insert(
-            &base_url,
+            DisplaySafeUrl::ref_cast(&base_url),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username.to_string()),
                 None,
@@ -1554,14 +1556,14 @@ mod tests {
         let cache = CredentialsCache::new();
         // Seed the cache with our credentials
         cache.insert(
-            &base_url_1,
+            DisplaySafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            &base_url_2,
+            DisplaySafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
@@ -1749,14 +1751,14 @@ mod tests {
 
         // Seed the cache with our credentials
         cache.insert(
-            &base_url_1,
+            DisplaySafeUrl::ref_cast(&base_url_1),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             ))),
         );
         cache.insert(
-            &base_url_2,
+            DisplaySafeUrl::ref_cast(&base_url_2),
             Arc::new(Authentication::from(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),

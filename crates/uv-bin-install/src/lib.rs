@@ -108,7 +108,7 @@ impl From<ArchiveFormat> for SourceDistExtension {
 pub enum Error {
     #[error("Failed to download from: {url}")]
     Download {
-        url: Url,
+        url: DisplaySafeUrl,
         #[source]
         source: reqwest_middleware::Error,
     },
@@ -191,7 +191,8 @@ pub async fn bin_install(
         ArchiveFormat::TarGz
     };
 
-    let download_url = binary.download_url(version, &platform_name, format)?;
+    let download_url =
+        DisplaySafeUrl::from_url(binary.download_url(version, &platform_name, format)?);
 
     let cache_dir = cache_entry.dir();
     fs_err::tokio::create_dir_all(&cache_dir).await?;
@@ -238,7 +239,7 @@ async fn download_and_unpack_with_retry(
     reporter: &dyn Reporter,
     platform_name: &str,
     format: ArchiveFormat,
-    download_url: &Url,
+    download_url: &DisplaySafeUrl,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
     let mut retry_state = RetryState::start(*retry_policy, download_url.clone());
@@ -288,15 +289,15 @@ async fn download_and_unpack(
     reporter: &dyn Reporter,
     platform_name: &str,
     format: ArchiveFormat,
-    download_url: &Url,
+    download_url: &DisplaySafeUrl,
     cache_entry: &CacheEntry,
 ) -> Result<PathBuf, Error> {
     // Create a temporary directory for extraction
     let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::Binaries))?;
 
     let response = client
-        .for_host(&DisplaySafeUrl::from_url(download_url.clone()))
-        .get(download_url.clone())
+        .for_host(download_url)
+        .get(Url::from(download_url.clone()))
         .send()
         .await
         .map_err(|err| Error::Download {
