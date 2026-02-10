@@ -17831,14 +17831,14 @@ fn omit_python_patch_universal() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn credentials_from_subdirectory() -> Result<()> {
+#[tokio::test]
+async fn credentials_from_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create a local dependency in a subdirectory.
     let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -17849,14 +17849,15 @@ fn credentials_from_subdirectory() -> Result<()> {
         build-backend = "hatchling.build"
 
         [tool.uv.sources]
-        iniconfig = { index = "internal" }
+        iniconfig = {{ index = "internal" }}
 
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple/"
+        url = "{}/basic-auth/simple/"
         explicit = true
         "#,
-    )?;
+        proxy.uri(),
+    })?;
     context
         .temp_dir
         .child("foo")

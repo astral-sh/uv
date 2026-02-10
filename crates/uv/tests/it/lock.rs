@@ -9435,9 +9435,10 @@ fn lock_peer_member() -> Result<()> {
 }
 
 /// Lock a workspace in which a member defines an explicit index that requires authentication.
-#[test]
-fn lock_index_workspace_member() -> Result<()> {
+#[tokio::test]
+async fn lock_index_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9460,7 +9461,7 @@ fn lock_index_workspace_member() -> Result<()> {
     fs_err::create_dir_all(&child)?;
 
     let pyproject_toml = child.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "child"
@@ -9470,17 +9471,18 @@ fn lock_index_workspace_member() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         explicit = true
 
         [tool.uv.sources]
-        iniconfig = { index = "my-index" }
+        iniconfig = {{ index = "my-index" }}
 
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Locking without the necessary credentials should fail.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -9534,15 +9536,15 @@ fn lock_index_workspace_member() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "http://[LOCALHOST]/basic-auth/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -9752,8 +9754,8 @@ fn lock_dev_transitive() -> Result<()> {
 }
 
 /// Avoid persisting registry credentials in `uv.lock`.
-#[test]
-fn lock_redact_https() -> Result<()> {
+#[tokio::test]
+async fn lock_redact_http() -> Result<()> {
     // This test in particular seems to prompt a link mode warning
     // that occurs when hardlinking fails. In particular, in this test,
     // uv tries to hardlink between `/tmp` and `~/.local`, which on my
@@ -9766,6 +9768,7 @@ fn lock_redact_https() -> Result<()> {
     // We should probably add a way to configure the `--no-cache` temporary
     // directory location during testing.
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -9778,7 +9781,7 @@ fn lock_redact_https() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9816,10 +9819,10 @@ fn lock_redact_https() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -9837,15 +9840,15 @@ fn lock_redact_https() -> Result<()> {
 
     // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
     // when installing `iniconfig`, rather than when building `foo`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg(proxy.url("/basic-auth/simple")).arg("--no-install-project"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
@@ -9857,13 +9860,13 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9895,13 +9898,13 @@ fn lock_redact_https() -> Result<()> {
 
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
-      ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ├─▶ Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      ╰─▶ HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
     ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9914,7 +9917,7 @@ fn lock_redact_https() -> Result<()> {
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -9923,9 +9926,10 @@ fn lock_redact_https() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv]
-        index-url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        index-url = "{proxy_auth_uri}/basic-auth/simple"
         "#,
-    )?;
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
     // Installing from the lockfile should succeed when credentials are included via
     // `pyproject.toml`.
@@ -10276,12 +10280,13 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lock_redact_index_sources() -> Result<()> {
+#[tokio::test]
+async fn lock_redact_index_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10291,12 +10296,13 @@ fn lock_redact_index_sources() -> Result<()> {
 
         [[tool.uv.index]]
         name = "private"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
 
         [tool.uv.sources]
-        iniconfig = { index = "private" }
+        iniconfig = {{ index = "private" }}
         "#,
-    )?;
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
     uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
@@ -10330,15 +10336,15 @@ fn lock_redact_index_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "https://pypi-proxy.fly.dev/basic-auth/simple" }]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2", index = "http://[LOCALHOST]/basic-auth/simple" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -10369,12 +10375,13 @@ fn lock_redact_index_sources() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lock_redact_url_sources() -> Result<()> {
+#[tokio::test]
+async fn lock_redact_url_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(r#"
+    pyproject_toml.write_str(&format!(r#"
         [project]
         name = "foo"
         version = "0.1.0"
@@ -10382,8 +10389,8 @@ fn lock_redact_url_sources() -> Result<()> {
         dependencies = ["iniconfig>=2"]
 
         [tool.uv.sources]
-        iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-        "#)?;
+        iniconfig = {{ url = "{proxy_auth_uri}/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }}
+        "#, proxy_auth_uri = proxy.authenticated_uri("public", "heron")))?;
 
     uv_snapshot!(&context.filters(), context.lock(), @"
     success: true
@@ -10418,14 +10425,14 @@ fn lock_redact_url_sources() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "iniconfig", url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
+        requires-dist = [{ name = "iniconfig", url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
+        source = { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
         wheels = [
-            { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
+            { url = "http://public:heron@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
         ]
         "#
         );
@@ -10450,19 +10457,20 @@ fn lock_redact_url_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://public:****@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+     + iniconfig==2.0.0 (from http://public:****@[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
     ");
 
     Ok(())
 }
 
 /// Pass credentials for a named index via environment variables.
-#[test]
-fn lock_env_credentials() -> Result<()> {
+#[tokio::test]
+async fn lock_env_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10472,10 +10480,11 @@ fn lock_env_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "internal-proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Without credentials, the resolution should fail.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -10487,7 +10496,7 @@ fn lock_env_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // Provide credentials via environment variables.
@@ -10531,10 +10540,10 @@ fn lock_env_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -10546,12 +10555,13 @@ fn lock_env_credentials() -> Result<()> {
 /// Test solving for packages that are pinned to separate indexes in the same realm.
 /// This requires the credentials to be cached at the URL-level instead of the realm-level, or
 /// credentials for one index will be used for both indexes and the request will fail.
-#[test]
-fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
+#[tokio::test]
+async fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10560,18 +10570,19 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "internal-proxy-heron" }
-        anyio = { index = "internal-proxy-eagle" }
+        iniconfig = {{ index = "internal-proxy-heron" }}
+        anyio = {{ index = "internal-proxy-eagle" }}
 
         [[tool.uv.index]]
         name = "internal-proxy-heron"
-        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple"
+        url = "{proxy_uri}/basic-auth-heron/simple"
 
         [[tool.uv.index]]
         name = "internal-proxy-eagle"
-        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple"
+        url = "{proxy_uri}/basic-auth-eagle/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
@@ -10592,12 +10603,13 @@ fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
 
 // Same as [`lock_multiple_indexes_same_realm_different_credentials`], but with trailing slashes
 // on the index URL
-#[test]
-fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
+#[tokio::test]
+async fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10606,18 +10618,19 @@ fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Re
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "internal-proxy-heron" }
-        anyio = { index = "internal-proxy-eagle" }
+        iniconfig = {{ index = "internal-proxy-heron" }}
+        anyio = {{ index = "internal-proxy-eagle" }}
 
         [[tool.uv.index]]
         name = "internal-proxy-heron"
-        url = "https://pypi-proxy.fly.dev/basic-auth-heron/simple/"
+        url = "{proxy_uri}/basic-auth-heron/simple/"
 
         [[tool.uv.index]]
         name = "internal-proxy-eagle"
-        url = "https://pypi-proxy.fly.dev/basic-auth-eagle/simple/"
+        url = "{proxy_uri}/basic-auth-eagle/simple/"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()
@@ -10637,12 +10650,13 @@ fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Re
 }
 
 /// Resolve against an index that uses relative links.
-#[test]
-fn lock_relative_index() -> Result<()> {
+#[tokio::test]
+async fn lock_relative_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -10651,9 +10665,10 @@ fn lock_relative_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv]
-        index-url = "https://pypi-proxy.fly.dev/relative/simple"
+        index-url = "{proxy_uri}/relative/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
@@ -10692,10 +10707,10 @@ fn lock_relative_index() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/relative/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/relative/simple" }
+        sdist = { url = "http://[LOCALHOST]/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -14419,9 +14434,10 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
 }
 
 /// Change indexes between locking operations.
-#[test]
-fn lock_change_index() -> Result<()> {
+#[tokio::test]
+async fn lock_change_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -14434,7 +14450,7 @@ fn lock_change_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14460,10 +14476,10 @@ fn lock_change_index() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -18953,12 +18969,13 @@ fn lock_unnamed_explicit_index() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lock_named_index() -> Result<()> {
+#[tokio::test]
+async fn lock_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -18973,13 +18990,14 @@ fn lock_named_index() -> Result<()> {
 
         [[tool.uv.index]]
         name = "heron"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [[tool.uv.index]]
         name = "test"
         url = "https://test.pypi.org/simple"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: true
@@ -19018,7 +19036,7 @@ fn lock_named_index() -> Result<()> {
         [[package]]
         name = "typing-extensions"
         version = "4.10.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
@@ -21992,8 +22010,8 @@ fn lock_change_requires_python() -> Result<()> {
 }
 
 /// Retrieve credentials for a named index from the keyring.
-#[test]
-fn lock_keyring_credentials() -> Result<()> {
+#[tokio::test]
+async fn lock_keyring_credentials() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
@@ -22010,9 +22028,10 @@ fn lock_keyring_credentials() -> Result<()> {
         .success();
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22025,23 +22044,24 @@ fn lock_keyring_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials via the keyring
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -22074,10 +22094,10 @@ fn lock_keyring_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -22087,9 +22107,10 @@ fn lock_keyring_credentials() -> Result<()> {
 }
 
 /// Get credentials from the keyring with `explicit = true` and `authenticate = always`
-#[test]
-fn lock_keyring_explicit_always() -> Result<()> {
+#[tokio::test]
+async fn lock_keyring_explicit_always() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     keyring_context
@@ -22114,7 +22135,7 @@ fn lock_keyring_explicit_always() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22126,44 +22147,45 @@ fn lock_keyring_explicit_always() -> Result<()> {
         keyring-provider = "subprocess"
 
         [tool.uv.sources]
-        iniconfig = {index = "proxy"}
+        iniconfig = {{index = "proxy"}}
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "always"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // First, try some invalid credentials — we should not fall back to the default index
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "frog"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "frog"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // With valid credentials, we should succeed
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -22172,9 +22194,10 @@ fn lock_keyring_explicit_always() -> Result<()> {
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always`
-#[test]
-fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
+#[tokio::test]
+async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     keyring_context
@@ -22201,7 +22224,7 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22214,22 +22237,23 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         authenticate = "always"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for pypi-proxy.fly.dev
+    Keyring request for http://[LOCALHOST]/basic-auth/simple
+    Keyring request for [LOCALHOST]
     Resolved 2 packages in [TIME]
     ");
 
@@ -22262,10 +22286,10 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
         "#
         );
@@ -22276,8 +22300,8 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always` — but the keyring version installed does not support `--mode creds`
-#[test]
-fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
+#[tokio::test]
+async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
@@ -22294,9 +22318,10 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
         .success();
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "foo"
@@ -22309,14 +22334,15 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
         authenticate = "always"
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock()
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 2
@@ -22324,8 +22350,8 @@ fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()>
 
     ----- stderr -----
     warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` or provide a username
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
-      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/iniconfig/
     ");
 
     Ok(())
@@ -31445,12 +31471,14 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
 
 /// Add a package with an `--index` URL with no trailing slash while an index with the same URL
 /// exists with a trailing slash in the `pyproject.toml`.
-#[test]
-fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -31459,10 +31487,12 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
-    "#})?;
+        url = "{proxy_uri}/simple/"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    let no_trailing_slash_url = "https://pypi-proxy.fly.dev/simple";
+    let no_trailing_slash_url = &proxy.url("/simple");
 
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(no_trailing_slash_url), @"
     success: true
@@ -31495,7 +31525,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "http://[LOCALHOST]/simple"
         "#
         );
     });
@@ -31517,7 +31547,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         dependencies = [
             { name = "idna" },
             { name = "sniffio" },
@@ -31530,7 +31560,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
@@ -31550,7 +31580,7 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = { registry = "http://[LOCALHOST]/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
@@ -31574,12 +31604,13 @@ fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()>
 
 /// Run `uv lock --locked` with a lockfile with trailing slashes on the index URL but a
 /// `pyproject.toml` without a trailing slash on the index URL.
-#[test]
-fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31589,15 +31620,16 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31608,46 +31640,46 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple/" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple/" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -31665,12 +31697,13 @@ fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
 
 /// Run `uv lock --locked` with `pyproject.toml` with trailing slashes on the index URL but a
 /// lockfile without trailing slashes on the index URL.
-#[test]
-fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31680,15 +31713,16 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
+        url = "{proxy_uri}/simple/"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31699,46 +31733,46 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
+        source = {{ registry = "{proxy_uri}/simple" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -31756,12 +31790,13 @@ fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
 
 /// Run `uv lock --locked` with a lockfile and `pyproject.toml` with trailing slashes on the index
 /// URL.
-#[test]
-fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
+#[tokio::test]
+async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -31771,15 +31806,16 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
 
         [[tool.uv.index]]
         name = "pypi-proxy"
-        url = "https://pypi-proxy.fly.dev/simple/"
+        url = "{proxy_uri}/simple/"
 
         [tool.uv.sources]
-        anyio = { index = "pypi-proxy" }
+        anyio = {{ index = "pypi-proxy" }}
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     let lock = context.temp_dir.child("uv.lock");
-    lock.write_str(r#"
+    lock.write_str(&format!(r#"
         version = 1
         revision = 2
         requires-python = ">=3.12"
@@ -31790,46 +31826,46 @@ fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> 
         [[package]]
         name = "anyio"
         version = "4.3.0"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            {{ name = "idna" }},
+            {{ name = "sniffio" }},
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = {{ url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            {{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" }},
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+            {{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" }},
         ]
 
         [[package]]
         name = "project"
         version = "0.1.0"
-        source = { virtual = "." }
+        source = {{ virtual = "." }}
         dependencies = [
-            { name = "anyio" },
+            {{ name = "anyio" }},
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", index = "https://pypi-proxy.fly.dev/simple/" }]
+        requires-dist = [{{ name = "anyio", index = "{proxy_uri}/simple/" }}]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
-        source = { registry = "https://pypi-proxy.fly.dev/simple/" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        source = {{ registry = "{proxy_uri}/simple/" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }}
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+            {{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" }},
         ]
-        "#
-    )?;
+        "#, proxy_uri = proxy.uri()
+    ))?;
 
     // Run `uv lock --locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
@@ -32281,16 +32317,17 @@ fn lock_exclude_newer_package() -> Result<()> {
 
 /// Test that lockfile validation includes explicit indexes from path dependencies.
 /// <https://github.com/astral-sh/uv/issues/11419>
-#[test]
-fn lock_path_dependency_explicit_index() -> Result<()> {
+#[tokio::test]
+async fn lock_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with explicit index
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32299,14 +32336,15 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32357,16 +32395,17 @@ fn lock_path_dependency_explicit_index() -> Result<()> {
 
 /// Test that lockfile validation includes explicit indexes from path dependencies
 /// defined in a non-root workspace member.
-#[test]
-fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
+#[tokio::test]
+async fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with explicit index
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32375,14 +32414,15 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a
     let member = context.temp_dir.child("member");
@@ -32455,16 +32495,17 @@ fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
 
 /// Test that lockfile validation works correctly when path dependency has
 /// both explicit and non-explicit indexes.
-#[test]
-fn lock_path_dependency_mixed_indexes() -> Result<()> {
+#[tokio::test]
+async fn lock_path_dependency_mixed_indexes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the path dependency with both explicit and non-explicit indexes.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32473,19 +32514,20 @@ fn lock_path_dependency_mixed_indexes() -> Result<()> {
         dependencies = ["iniconfig", "anyio"]
 
         [tool.uv.sources]
-        iniconfig = { index = "explicit-index" }
-        anyio = { index = "non-explicit-index" }
+        iniconfig = {{ index = "explicit-index" }}
+        anyio = {{ index = "non-explicit-index" }}
 
         [[tool.uv.index]]
         name = "non-explicit-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
 
         [[tool.uv.index]]
         name = "explicit-index"
         url = "https://pypi.org/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create a project that depends on pkg_a.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32596,16 +32638,17 @@ fn lock_path_dependency_no_index() -> Result<()> {
 }
 
 /// Test that a nested path dependency with an explicit index validates correctly.
-#[test]
-fn lock_nested_path_dependency_explicit_index() -> Result<()> {
+#[tokio::test]
+async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create the inner dependency with explicit index.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32614,14 +32657,15 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "inner-index" }
+        iniconfig = {{ index = "inner-index" }}
 
         [[tool.uv.index]]
         name = "inner-index"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create intermediate dependency that depends on pkg_a.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -32689,16 +32733,17 @@ fn lock_nested_path_dependency_explicit_index() -> Result<()> {
 }
 
 /// Test that validating circular path dependency indexes doesn't cause an infinite loop.
-#[test]
-fn lock_circular_path_dependency_explicit_index() -> Result<()> {
+#[tokio::test]
+async fn lock_circular_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create pkg_a (with explicit index) that depends on pkg_b.
     let pkg_a = context.temp_dir.child("pkg_a");
     fs_err::create_dir_all(&pkg_a)?;
 
     let pyproject_toml = pkg_a.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "pkg-a"
@@ -32707,15 +32752,16 @@ fn lock_circular_path_dependency_explicit_index() -> Result<()> {
         dependencies = ["pkg-b", "iniconfig"]
 
         [tool.uv.sources]
-        pkg-b = { path = "../pkg_b/" }
-        iniconfig = { index = "index-a" }
+        pkg-b = {{ path = "../pkg_b/" }}
+        iniconfig = {{ index = "index-a" }}
 
         [[tool.uv.index]]
         name = "index-a"
-        url = "https://pypi-proxy.fly.dev/simple"
+        url = "{proxy_uri}/simple"
         explicit = true
         "#,
-    )?;
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Create pkg_b that depends on pkg_a. This is a circular dependency.
     let pkg_b = context.temp_dir.child("pkg_b");
@@ -33324,12 +33370,13 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
 /// it's defined in a dependency group or the top-level `project.dependencies` field.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16843>
-#[test]
-fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
+#[tokio::test]
+async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&format!(
         r#"
         [project]
         name = "project"
@@ -33340,7 +33387,7 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
         dev = ["iniconfig"]
 
         [tool.uv.sources]
-        iniconfig = { index = "second" }
+        iniconfig = {{ index = "second" }}
 
         [[tool.uv.index]]
         name = "first"
@@ -33349,10 +33396,11 @@ fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() ->
 
         [[tool.uv.index]]
         name = "second"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
         default = true
         "#,
-    )?;
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
     success: false
