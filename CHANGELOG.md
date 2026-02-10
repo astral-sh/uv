@@ -2,6 +2,19 @@
 
 <!-- prettier-ignore-start -->
 
+
+## 0.10.2
+
+Released on 2026-02-10.
+
+### Enhancements
+
+- Deprecate unexpected ZIP compression methods ([#17946](https://github.com/astral-sh/uv/pull/17946))
+
+### Bug fixes
+
+- Fix `cargo-install` failing due to missing `uv-test` dependency ([#17954](https://github.com/astral-sh/uv/pull/17954))
+
 ## 0.10.1
 
 Released on 2026-02-10.
