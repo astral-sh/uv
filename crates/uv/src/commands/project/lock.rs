@@ -208,6 +208,23 @@ pub(crate) async fn lock(
     .await
     {
         Ok(lock) => {
+            // Warn the user that the lockfile was not updated (only on success).
+            if let Some(frozen_source) = frozen {
+                match frozen_source {
+                    FrozenSource::Cli => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead."
+                        );
+                    }
+                    FrozenSource::Env | FrozenSource::Configuration => {
+                        warn_user!(
+                            "The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because {} was provided; use `--no-frozen` or `--check` instead.",
+                            MissingLockfileSource::from(frozen_source)
+                        );
+                    }
+                }
+            }
+
             if dry_run.enabled() {
                 // In `--dry-run` mode, show all changes.
                 if let LockResult::Changed(previous, lock) = &lock {
@@ -335,6 +352,7 @@ impl<'env> LockOperation<'env> {
                     .read()
                     .await?
                     .ok_or(ProjectError::MissingLockfile(source))?;
+
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
