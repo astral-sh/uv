@@ -34,8 +34,8 @@ mlflow.pyfunc.log_model(
 )
 ```
 
-MLflow runs `uv export --frozen --no-dev --no-hashes` to generate a pinned `requirements.txt` that
-exactly matches your lock file.
+MLflow runs `uv export --frozen --no-dev --no-hashes --no-header --no-emit-project` to generate a
+pinned `requirements.txt` that exactly matches your lock file.
 
 ## Reproducibility artifacts
 
@@ -50,8 +50,19 @@ These artifacts enable anyone to recreate your exact environment using `uv sync 
 
 ## Configuring dependency groups
 
-MLflow supports uv's dependency groups and extras. You can control which groups are included when
-logging models via environment variables:
+MLflow supports uv's dependency groups and extras. You can pass them directly as parameters to
+`log_model` or `save_model`:
+
+```python
+mlflow.pyfunc.log_model(
+    artifact_path="model",
+    python_model=my_model,
+    uv_groups=["serving"],          # maps to uv's --group flag
+    uv_extras=["cuda", "optimization"],  # maps to uv's --extra flag
+)
+```
+
+Alternatively, you can set them via environment variables:
 
 ```bash
 # Include specific dependency groups
@@ -64,18 +75,18 @@ export MLFLOW_UV_ONLY_GROUPS="ml"
 export MLFLOW_UV_EXTRAS="cuda,optimization"
 ```
 
-These map directly to uv's `--group`, `--only-group`, and `--extra` flags.
+These map directly to uv's `--group`, `--only-group`, and `--extra` flags. Parameters passed to
+`log_model`/`save_model` take precedence over environment variables.
 
 ## Environment restoration
 
-When loading a logged model, MLflow can restore the environment using uv for faster installation:
+When loading a logged model, MLflow automatically detects the uv lock file artifact and restores
+the environment using `uv sync --frozen --no-dev`. This happens transparently when you call
+`mlflow.pyfunc.load_model()` -- no manual intervention is needed.
 
-```bash
-# Restore environment from logged artifacts
-uv sync --frozen
-```
+If uv is not available at load time, MLflow falls back to `pip install -r requirements.txt`.
 
-This is significantly faster than `pip install -r requirements.txt` because uv:
+Using uv for restoration is significantly faster than pip because uv:
 
 - Uses parallel downloads
 - Leverages its global cache
@@ -115,13 +126,14 @@ The `--frozen` flag ensures CI uses exactly the same dependencies as your local 
 
 ## Monorepo support
 
-For monorepos where `uv.lock` is not in the current working directory, use the `uv_lock` parameter:
+For monorepos where `uv.lock` is not in the current working directory, use the `uv_project_path`
+parameter to point to the directory containing your `uv.lock` and `pyproject.toml`:
 
 ```python
 mlflow.pyfunc.log_model(
     artifact_path="model",
     python_model=my_model,
-    uv_lock="../uv.lock",  # Path to lock file
+    uv_project_path="../my-subproject",  # Directory containing uv.lock + pyproject.toml
 )
 ```
 
@@ -199,7 +211,7 @@ to confirm it's a uv project.
 Run `uv lock` to update your lock file, then verify with:
 
 ```bash
-uv export --frozen --no-dev --no-hashes
+uv export --frozen --no-dev --no-hashes --no-header --no-emit-project
 ```
 
 This shows exactly what MLflow will capture.
