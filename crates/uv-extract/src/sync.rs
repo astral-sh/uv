@@ -2,26 +2,16 @@ use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
 use crate::vendor::CloneableSeekableReader;
-use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;
 use uv_configuration::RAYON_INITIALIZE;
 use uv_warnings::warn_user_once;
-use zip::{CompressionMethod, ZipArchive};
+use zip::ZipArchive;
 
 /// Unzip a `.zip` archive into the target directory.
 pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
-    /// Returns `true` if the entry uses a well-known compression method.
-    ///
-    /// This currently means just stored (no compression), DEFLATE, or zstd.
-    fn entry_has_well_known_compression(method: CompressionMethod) -> bool {
-        matches!(
-            method,
-            CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
-        )
-    }
-
     let (reader, filename) = reader.into_parts();
 
     // Unzip in parallel.
@@ -37,11 +27,14 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
             let mut archive = archive.clone();
             let mut file = archive.by_index(file_number)?;
 
-            if !entry_has_well_known_compression(file.compression()) {
+            let compression = CompressionMethod::from(file.compression());
+            if !compression.is_well_known() {
                 warn_user_once!(
-                    "One or more file entries in '{filename}' use the '{compression_method:?}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
+                    "One or more file entries in '{filename}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
                     filename = filename.display(),
-                    compression_method = file.compression()
+                    stored = CompressionMethod::Stored,
+                    deflate = CompressionMethod::Deflated,
+                    zstd = CompressionMethod::Zstd,
                 );
             }
 

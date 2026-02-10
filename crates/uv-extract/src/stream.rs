@@ -4,7 +4,6 @@ use std::pin::Pin;
 
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
-use async_zip::{Compression, ZipEntry};
 use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
@@ -13,7 +12,7 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
-use crate::{Error, insecure_no_validate, validate_archive_member_name};
+use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
@@ -54,16 +53,6 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<(), Error> {
-    /// Returns `true` if the entry uses a well-known compression method.
-    ///
-    /// This currently means just stored (no compression), DEFLATE, or zstd.
-    fn entry_has_well_known_compression(entry: &ZipEntry) -> bool {
-        matches!(
-            entry.compression(),
-            Compression::Stored | Compression::Deflate | Compression::Zstd
-        )
-    }
-
     /// Ensure the file path is safe to use as a [`Path`].
     ///
     /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
@@ -100,10 +89,13 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
         // Check for unexpected compression methods.
         // A future version of uv will reject instead of warning about these.
-        if !entry_has_well_known_compression(zip_entry) {
+        let compression = CompressionMethod::from(zip_entry.compression());
+        if !compression.is_well_known() {
             warn_user_once!(
-                "One or more file entries in '{source_hint}' use the '{compression_method:?}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method.",
-                compression_method = zip_entry.compression()
+                "One or more file entries in '{source_hint}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+                stored = CompressionMethod::Stored,
+                deflate = CompressionMethod::Deflated,
+                zstd = CompressionMethod::Zstd,
             );
         }
 

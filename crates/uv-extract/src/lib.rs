@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{fmt::Display, sync::LazyLock};
 
 pub use error::Error;
 use regex::Regex;
@@ -13,6 +13,67 @@ mod vendor;
 
 static CONTROL_CHARACTERS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\p{C}").unwrap());
 static REPLACEMENT_CHARACTER: &str = "\u{FFFD}";
+
+/// Compression methods that we consider supported.
+///
+/// Our underlying ZIP dependencies may support more.
+pub(crate) enum CompressionMethod {
+    Stored,
+    Deflated,
+    Zstd,
+    // NOTE: This will become `Unsupported(...)` in the future.
+    Deprecated(&'static str),
+}
+
+impl CompressionMethod {
+    /// Returns `true` if this is a well-known compression method that we
+    /// expect other ZIP implementations to support.
+    pub(crate) fn is_well_known(&self) -> bool {
+        matches!(
+            self,
+            CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
+        )
+    }
+}
+
+impl Display for CompressionMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompressionMethod::Stored => write!(f, "stored"),
+            CompressionMethod::Deflated => write!(f, "DEFLATE"),
+            CompressionMethod::Zstd => write!(f, "zstd"),
+            CompressionMethod::Deprecated(name) => write!(f, "{name}"),
+        }
+    }
+}
+
+impl From<async_zip::Compression> for CompressionMethod {
+    fn from(value: async_zip::Compression) -> Self {
+        match value {
+            async_zip::Compression::Stored => CompressionMethod::Stored,
+            async_zip::Compression::Deflate => CompressionMethod::Deflated,
+            async_zip::Compression::Zstd => CompressionMethod::Zstd,
+            async_zip::Compression::Bz => CompressionMethod::Deprecated("bzip2"),
+            async_zip::Compression::Lzma => CompressionMethod::Deprecated("lzma"),
+            async_zip::Compression::Xz => CompressionMethod::Deprecated("xz"),
+            _ => CompressionMethod::Deprecated("unknown"),
+        }
+    }
+}
+
+impl From<zip::CompressionMethod> for CompressionMethod {
+    fn from(value: zip::CompressionMethod) -> Self {
+        match value {
+            zip::CompressionMethod::Stored => CompressionMethod::Stored,
+            zip::CompressionMethod::Deflated => CompressionMethod::Deflated,
+            zip::CompressionMethod::Zstd => CompressionMethod::Zstd,
+            zip::CompressionMethod::Bzip2 => CompressionMethod::Deprecated("bzip2"),
+            zip::CompressionMethod::Lzma => CompressionMethod::Deprecated("lzma"),
+            zip::CompressionMethod::Xz => CompressionMethod::Deprecated("xz"),
+            _ => CompressionMethod::Deprecated("unknown"),
+        }
+    }
+}
 
 /// Validate that a given filename (e.g. reported by a ZIP archive's
 /// local file entries or central directory entries) is "safe" to use.
