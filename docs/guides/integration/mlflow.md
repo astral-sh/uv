@@ -80,8 +80,8 @@ These map directly to uv's `--group`, `--only-group`, and `--extra` flags. Param
 
 ## Environment restoration
 
-When loading a logged model, MLflow automatically detects the uv lock file artifact and restores
-the environment using `uv sync --frozen --no-dev`. This happens transparently when you call
+When loading a logged model, MLflow automatically detects the uv lock file artifact and restores the
+environment using `uv sync --frozen --no-dev`. This happens transparently when you call
 `mlflow.pyfunc.load_model()` -- no manual intervention is needed.
 
 If uv is not available at load time, MLflow falls back to `pip install -r requirements.txt`.
