@@ -14138,7 +14138,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
 #[test]
 fn warn_on_bz2_wheel() {
-    let context = uv_test::test_context!("3.14").with_filtered_github_release_asset_urls();
+    let context = uv_test::test_context!("3.14");
 
     uv_snapshot!(
         context.filters(),
@@ -14151,7 +14151,7 @@ fn warn_on_bz2_wheel() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: One or more file entries in '[GITHUB_RELEASE_ASSET_URL]' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
+    warning: One or more file entries in 'https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + futzed-bz2==0.1.0 (from https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl)
@@ -14161,7 +14161,7 @@ fn warn_on_bz2_wheel() {
 
 #[test]
 fn warn_on_lzma_wheel() {
-    let context = uv_test::test_context!("3.14").with_filtered_github_release_asset_urls();
+    let context = uv_test::test_context!("3.14");
 
     uv_snapshot!(
         context.filters(),
