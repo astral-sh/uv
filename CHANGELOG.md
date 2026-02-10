@@ -2,6 +2,19 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.10.1
+
+Released on 2026-02-10.
+
+### Enhancements
+
+- Don't panic on metadata read errors ([#17904](https://github.com/astral-sh/uv/pull/17904))
+- Skip empty workspace members instead of failing ([#17901](https://github.com/astral-sh/uv/pull/17901))
+- Don't fail creating a read-only `sdist-vX/.git` if it already exists ([#17825](https://github.com/astral-sh/uv/pull/17825))
+
+### Documentation
+
+- Suggest `uv python update-shell` over `uv tool update-shell` in Python docs ([#17941](https://github.com/astral-sh/uv/pull/17941))
 
 ## 0.10.0
 
