@@ -56,6 +56,7 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
+uv-test = { workspace = true, optional = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
 uv-trampoline-builder = { workspace = true }
@@ -185,7 +186,7 @@ test-defaults = [
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
 # Introduces a testing dependency on Git.
-test-git = ["uv-test/git"]
+test-git = ["uv-test?/git"]
 # Introduces a testing dependency on Git LFS.
 test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
@@ -206,6 +207,16 @@ test-slow = []
 test-ecosystem = []
 # Build uvw binary on Windows
 windows-gui-bin = []
+
+[package.metadata.cargo-shear]
+# The uv crate has uv-test as dev-dependency. We want that by default,
+# uv runs tests with `uv-test/git`, so it's a default feature in uv. The
+# problem is that uv-test is only a dev dependency, which gets stripped by
+# `cargo install`, and `cargo install` fails with a missing crate error.
+# As workaround, we make `uv-test` a regular optional dependency. It's never
+# used as a regular dependency, but it allows using `uv-test?/git` as default
+# feature.
+ignored = ["uv-test"]
 
 [package.metadata.dist]
 dist = true
