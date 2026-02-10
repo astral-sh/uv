@@ -29,20 +29,17 @@ impl CompressionMethod {
     /// Returns `true` if this is a well-known compression method that we
     /// expect other ZIP implementations to support.
     pub(crate) fn is_well_known(&self) -> bool {
-        matches!(
-            self,
-            CompressionMethod::Stored | CompressionMethod::Deflated | CompressionMethod::Zstd
-        )
+        matches!(self, Self::Stored | Self::Deflated | Self::Zstd)
     }
 }
 
 impl Display for CompressionMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompressionMethod::Stored => write!(f, "stored"),
-            CompressionMethod::Deflated => write!(f, "DEFLATE"),
-            CompressionMethod::Zstd => write!(f, "zstd"),
-            CompressionMethod::Deprecated(name) => write!(f, "{name}"),
+            Self::Stored => write!(f, "stored"),
+            Self::Deflated => write!(f, "DEFLATE"),
+            Self::Zstd => write!(f, "zstd"),
+            Self::Deprecated(name) => write!(f, "{name}"),
         }
     }
 }
@@ -50,13 +47,13 @@ impl Display for CompressionMethod {
 impl From<async_zip::Compression> for CompressionMethod {
     fn from(value: async_zip::Compression) -> Self {
         match value {
-            async_zip::Compression::Stored => CompressionMethod::Stored,
-            async_zip::Compression::Deflate => CompressionMethod::Deflated,
-            async_zip::Compression::Zstd => CompressionMethod::Zstd,
-            async_zip::Compression::Bz => CompressionMethod::Deprecated("bzip2"),
-            async_zip::Compression::Lzma => CompressionMethod::Deprecated("lzma"),
-            async_zip::Compression::Xz => CompressionMethod::Deprecated("xz"),
-            _ => CompressionMethod::Deprecated("unknown"),
+            async_zip::Compression::Stored => Self::Stored,
+            async_zip::Compression::Deflate => Self::Deflated,
+            async_zip::Compression::Zstd => Self::Zstd,
+            async_zip::Compression::Bz => Self::Deprecated("bzip2"),
+            async_zip::Compression::Lzma => Self::Deprecated("lzma"),
+            async_zip::Compression::Xz => Self::Deprecated("xz"),
+            _ => Self::Deprecated("unknown"),
         }
     }
 }
@@ -64,13 +61,13 @@ impl From<async_zip::Compression> for CompressionMethod {
 impl From<zip::CompressionMethod> for CompressionMethod {
     fn from(value: zip::CompressionMethod) -> Self {
         match value {
-            zip::CompressionMethod::Stored => CompressionMethod::Stored,
-            zip::CompressionMethod::Deflated => CompressionMethod::Deflated,
-            zip::CompressionMethod::Zstd => CompressionMethod::Zstd,
-            zip::CompressionMethod::Bzip2 => CompressionMethod::Deprecated("bzip2"),
-            zip::CompressionMethod::Lzma => CompressionMethod::Deprecated("lzma"),
-            zip::CompressionMethod::Xz => CompressionMethod::Deprecated("xz"),
-            _ => CompressionMethod::Deprecated("unknown"),
+            zip::CompressionMethod::Stored => Self::Stored,
+            zip::CompressionMethod::Deflated => Self::Deflated,
+            zip::CompressionMethod::Zstd => Self::Zstd,
+            zip::CompressionMethod::Bzip2 => Self::Deprecated("bzip2"),
+            zip::CompressionMethod::Lzma => Self::Deprecated("lzma"),
+            zip::CompressionMethod::Xz => Self::Deprecated("xz"),
+            _ => Self::Deprecated("unknown"),
         }
     }
 }
