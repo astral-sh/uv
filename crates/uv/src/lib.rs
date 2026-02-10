@@ -179,35 +179,39 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Parse the external command, if necessary.
     let run_command = if let Commands::Project(command) = &mut *cli.command {
-        if let ProjectCommand::Run(uv_cli::RunArgs {
-            command: Some(command),
-            module,
-            script,
-            gui_script,
-            ..
-        }) = &mut **command
-        {
-            let settings = GlobalSettings::resolve(
-                &cli.top_level.global_args,
-                filesystem.as_ref(),
-                &environment,
-            );
-            let client_builder = BaseClientBuilder::new(
-                settings.network_settings.connectivity,
-                settings.network_settings.native_tls,
-                settings.network_settings.allow_insecure_host,
-                settings.preview,
-                settings.network_settings.read_timeout,
-                settings.network_settings.connect_timeout,
-                settings.network_settings.retries,
-            )
-            .http_proxy(settings.network_settings.http_proxy)
-            .https_proxy(settings.network_settings.https_proxy)
-            .no_proxy(settings.network_settings.no_proxy);
-            Some(
-                RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
-                    .await?,
-            )
+        if let ProjectCommand::Run(run_args) = &mut **command {
+            if let uv_cli::RunArgs {
+                command: Some(command),
+                module,
+                script,
+                gui_script,
+                ..
+            } = run_args.as_mut()
+            {
+                let settings = GlobalSettings::resolve(
+                    &cli.top_level.global_args,
+                    filesystem.as_ref(),
+                    &environment,
+                );
+                let client_builder = BaseClientBuilder::new(
+                    settings.network_settings.connectivity,
+                    settings.network_settings.native_tls,
+                    settings.network_settings.allow_insecure_host,
+                    settings.preview,
+                    settings.network_settings.read_timeout,
+                    settings.network_settings.connect_timeout,
+                    settings.network_settings.retries,
+                )
+                .http_proxy(settings.network_settings.http_proxy)
+                .https_proxy(settings.network_settings.https_proxy)
+                .no_proxy(settings.network_settings.no_proxy);
+                Some(
+                    RunCommand::from_args(command, client_builder, *module, *script, *gui_script)
+                        .await?,
+                )
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -218,7 +222,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // If the target is a PEP 723 script, parse it.
     let script = if let Commands::Project(command) = &*cli.command {
         match &**command {
-            ProjectCommand::Run(uv_cli::RunArgs { .. }) => match run_command.as_ref() {
+            ProjectCommand::Run(_) => match run_command.as_ref() {
                 Some(
                     RunCommand::PythonScript(script, _) | RunCommand::PythonGuiScript(script, _),
                 ) => match Pep723Script::read(&script).await {
@@ -1448,6 +1452,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                args.sandbox,
             ))
             .await
         }
@@ -2013,7 +2018,7 @@ async fn run_project(
         }
         ProjectCommand::Run(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::RunSettings::resolve(args, filesystem, environment);
+            let args = settings::RunSettings::resolve(*args, filesystem, environment);
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2077,6 +2082,7 @@ async fn run_project(
                 args.env_file,
                 globals.preview,
                 args.max_recursion_depth,
+                args.sandbox,
             ))
             .await
         }

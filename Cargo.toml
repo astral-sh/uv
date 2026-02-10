@@ -60,6 +60,7 @@ uv-redacted = { version = "0.0.20", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.20", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.20", path = "crates/uv-requirements-txt" }
 uv-resolver = { version = "0.0.20", path = "crates/uv-resolver" }
+uv-sandbox = { version = "0.0.20", path = "crates/uv-sandbox" }
 uv-scripts = { version = "0.0.20", path = "crates/uv-scripts" }
 uv-settings = { version = "0.0.20", path = "crates/uv-settings" }
 uv-shell = { version = "0.0.20", path = "crates/uv-shell" }
@@ -138,7 +139,7 @@ md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
-nix = { version = "0.30.0", features = ["resource", "signal"] }
+nix = { version = "0.30.0", features = ["fs", "mount", "process", "resource", "sched", "signal", "user"] }
 open = { version = "5.3.2" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }

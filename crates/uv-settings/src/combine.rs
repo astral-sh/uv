@@ -23,6 +23,8 @@ use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
+use uv_sandbox::SandboxOptions;
+
 use crate::{FilesystemOptions, Options, PipOptions};
 
 pub trait Combine {
@@ -113,6 +115,50 @@ impl_combine_or!(TargetTriple);
 impl_combine_or!(TorchMode);
 impl_combine_or!(TrustedPublishing);
 impl_combine_or!(Url);
+impl Combine for Option<SandboxOptions> {
+    /// Combine two sandbox options, preferring `self` for each field.
+    ///
+    /// Allow-lists use override semantics (`self` wins), matching other uv settings.
+    /// Deny-lists use **union** semantics: entries from both sources are merged so that
+    /// protective deny rules from project config are never silently dropped when the
+    /// CLI specifies additional denials. This is important because deny rules are
+    /// security boundaries — a project that denies access to `known-secrets` should
+    /// not lose that protection because a user added `--deny-read ./untrusted`.
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(SandboxOptions {
+                // Allow-lists: CLI overrides project config (standard uv behavior).
+                allow_read: a.allow_read.or(b.allow_read),
+                allow_write: a.allow_write.or(b.allow_write),
+                allow_execute: a.allow_execute.or(b.allow_execute),
+                allow_net: a.allow_net.or(b.allow_net),
+                allow_env: a.allow_env.or(b.allow_env),
+                // Deny-lists: union both sources so protective rules are preserved.
+                deny_read: combine_deny(a.deny_read, b.deny_read),
+                deny_write: combine_deny(a.deny_write, b.deny_write),
+                deny_execute: combine_deny(a.deny_execute, b.deny_execute),
+                deny_net: combine_deny(a.deny_net, b.deny_net),
+                deny_env: combine_deny(a.deny_env, b.deny_env),
+                required: a.required.or(b.required),
+            }),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
+/// Merge two optional deny-lists by concatenating their entries.
+///
+/// If both are `Some`, the entries are combined (deduplication happens later
+/// during resolution). If only one is `Some`, it is returned as-is.
+fn combine_deny<T>(a: Option<Vec<T>>, b: Option<Vec<T>>) -> Option<Vec<T>> {
+    match (a, b) {
+        (Some(mut a_vec), Some(b_vec)) => {
+            a_vec.extend(b_vec);
+            Some(a_vec)
+        }
+        (a, b) => a.or(b),
+    }
+}
 impl_combine_or!(bool);
 
 impl<T> Combine for Option<Vec<T>> {

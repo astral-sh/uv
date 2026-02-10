@@ -1046,7 +1046,7 @@ pub enum ProjectCommand {
         after_help = "Use `uv help run` for more details.",
         after_long_help = ""
     )]
-    Run(RunArgs),
+    Run(Box<RunArgs>),
     /// Create a new project.
     ///
     /// Follows the `pyproject.toml` specification.
@@ -3780,6 +3780,94 @@ pub struct RunArgs {
     /// `--python-platform` option is intended for advanced use cases.
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
+
+    /// Filesystem paths the sandboxed process can read.
+    ///
+    /// Use `@` prefix for presets (e.g., `@project`, `@python`, `@system`).
+    /// Separate multiple entries with commas.
+    ///
+    /// Requires the `sandbox` preview feature.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_read: Option<Vec<String>>,
+
+    /// Filesystem paths to deny reading, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_read: Option<Vec<String>>,
+
+    /// Filesystem paths the sandboxed process can write.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_write: Option<Vec<String>>,
+
+    /// Filesystem paths to deny writing, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_write: Option<Vec<String>>,
+
+    /// Filesystem paths the sandboxed process can execute.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_execute: Option<Vec<String>>,
+
+    /// Filesystem paths to deny executing, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_execute: Option<Vec<String>>,
+
+    /// Allow network access. Pass without a value to allow all, or `false` to deny all.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = "Sandbox options", hide = true)]
+    pub allow_net: Option<String>,
+
+    /// Network hosts to deny access to.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_net: Option<Vec<String>>,
+
+    /// Environment variables visible to the sandboxed process.
+    ///
+    /// Pass `true` to allow all, `false` to deny all, or a comma-separated list.
+    /// Use `@` prefix for presets (e.g., `@standard`).
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = "Sandbox options", hide = true)]
+    pub allow_env: Option<String>,
+
+    /// Environment variables to hide from the sandboxed process.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_env: Option<Vec<String>>,
 }
 
 #[derive(Args)]
@@ -5402,6 +5490,94 @@ pub struct ToolRunArgs {
     /// This option is in preview and may change in any future release.
     #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
     pub torch_backend: Option<TorchMode>,
+
+    /// Filesystem paths the sandboxed process can read.
+    ///
+    /// Use `@` prefix for presets (e.g., `@python`, `@system`).
+    /// Separate multiple entries with commas.
+    ///
+    /// Requires the `sandbox` preview feature.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_read: Option<Vec<String>>,
+
+    /// Filesystem paths to deny reading, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_read: Option<Vec<String>>,
+
+    /// Filesystem paths the sandboxed process can write.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_write: Option<Vec<String>>,
+
+    /// Filesystem paths to deny writing, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_write: Option<Vec<String>>,
+
+    /// Filesystem paths the sandboxed process can execute.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub allow_execute: Option<Vec<String>>,
+
+    /// Filesystem paths to deny executing, even within allowed paths.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_execute: Option<Vec<String>>,
+
+    /// Allow network access. Pass without a value to allow all, or `false` to deny all.
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = "Sandbox options", hide = true)]
+    pub allow_net: Option<String>,
+
+    /// Network hosts to deny access to.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_net: Option<Vec<String>>,
+
+    /// Environment variables visible to the sandboxed process.
+    ///
+    /// Pass `true` to allow all, `false` to deny all, or a comma-separated list.
+    /// Use `@` prefix for presets (e.g., `@standard`).
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", help_heading = "Sandbox options", hide = true)]
+    pub allow_env: Option<String>,
+
+    /// Environment variables to hide from the sandboxed process.
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help_heading = "Sandbox options",
+        hide = true
+    )]
+    pub deny_env: Option<Vec<String>>,
 
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,

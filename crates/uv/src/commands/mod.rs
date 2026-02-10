@@ -306,3 +306,42 @@ pub(crate) enum ScriptPath {
     /// The Python file does not include a PEP 723 script tag.
     Path(PathBuf),
 }
+
+/// Build the effective environment for sandbox env filtering.
+///
+/// A `tokio::process::Command` doesn't expose its accumulated env vars directly,
+/// so we reconstruct the effective env by starting from the parent process's
+/// environment and applying the overrides that the `Command` has accumulated.
+/// This handles `env_remove` calls (which appear as `None` values in `get_envs`)
+/// and explicit `env` overrides.
+///
+/// Non-UTF-8 keys or values are logged as warnings and excluded from the result.
+/// This is a security-relevant decision: if a deny-listed env var has a non-UTF-8
+/// name, it would bypass filtering. Logging ensures visibility.
+#[cfg(target_family = "unix")]
+pub(crate) fn build_effective_env(process: &tokio::process::Command) -> Vec<(String, String)> {
+    let std_cmd = process.as_std();
+    let mut env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+
+    for (key, value) in std_cmd.get_envs() {
+        let Some(key_str) = key.to_str() else {
+            tracing::warn!("Sandbox: skipping env var with non-UTF-8 key: {:?}", key);
+            continue;
+        };
+        match value {
+            None => {
+                // `None` means the var was removed via `env_remove`.
+                env_map.remove(key_str);
+            }
+            Some(val) => {
+                if let Some(val_str) = val.to_str() {
+                    env_map.insert(key_str.to_string(), val_str.to_string());
+                } else {
+                    tracing::warn!("Sandbox: skipping env var `{key_str}` with non-UTF-8 value");
+                }
+            }
+        }
+    }
+
+    env_map.into_iter().collect()
+}

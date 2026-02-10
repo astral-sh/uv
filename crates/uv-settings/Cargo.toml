@@ -32,6 +32,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars", "clap"] }
 uv-redacted = { workspace = true }
 uv-resolver = { workspace = true, features = ["schemars", "clap"] }
+uv-sandbox = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
 uv-torch = { workspace = true, features = ["schemars", "clap"] }
 uv-warnings = { workspace = true }

@@ -125,6 +125,7 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: Preview,
+    sandbox: Option<uv_sandbox::SandboxOptions>,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -415,6 +416,32 @@ pub(crate) async fn run(
     .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
+    // Apply sandboxing if configured + preview feature enabled.
+    #[cfg(target_family = "unix")]
+    if let Some(sandbox_options) =
+        sandbox.filter(|_| preview.is_enabled(uv_preview::PreviewFeature::Sandbox))
+    {
+        let sandbox_spec =
+            build_tool_sandbox_spec(&sandbox_options, &environment, &cache, &process)
+                .context("Failed to resolve sandbox configuration")?;
+
+        uv_sandbox::apply_sandbox(process.as_std_mut(), &sandbox_spec)
+            .context("Failed to configure sandbox")?;
+    }
+
+    // On non-Unix platforms, warn or error if sandbox was requested.
+    #[cfg(not(target_family = "unix"))]
+    if let Some(sandbox_options) =
+        sandbox.filter(|_| preview.is_enabled(uv_preview::PreviewFeature::Sandbox))
+    {
+        if sandbox_options.required.unwrap_or(false) {
+            anyhow::bail!(
+                "Sandboxing is not supported on this platform and `sandbox.required = true` is set"
+            );
+        }
+        warn_user!("Sandboxing is not supported on this platform; running without sandbox");
+    }
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     let space = if args.is_empty() { "" } else { " " };
@@ -443,6 +470,62 @@ pub(crate) async fn run(
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     run_to_completion(handle).await
+}
+
+/// Build a [`uv_sandbox::SandboxSpec`] from resolved [`SandboxOptions`] for tool runs.
+///
+/// Unlike `uv run`, tool runs don't have a project root — the "project" context is
+/// the tool's cached environment. The `process` argument is used to snapshot the
+/// effective environment for env filtering.
+#[cfg(target_family = "unix")]
+fn build_tool_sandbox_spec(
+    options: &uv_sandbox::SandboxOptions,
+    environment: &PythonEnvironment,
+    cache: &Cache,
+    process: &tokio::process::Command,
+) -> anyhow::Result<uv_sandbox::SandboxSpec> {
+    use uv_sandbox::{PresetContext, resolve_sandbox_spec};
+
+    let interpreter = environment.interpreter();
+
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/"));
+
+    // For tool runs, the "project root" is the current working directory, since
+    // there is no pyproject.toml. This means @project preset paths are relative
+    // to the user's cwd.
+    let project_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+
+    let context = PresetContext {
+        project_root,
+        python: interpreter.sys_executable().to_path_buf(),
+        python_prefix: interpreter.sys_base_prefix().to_path_buf(),
+        stdlib: interpreter.stdlib().to_path_buf(),
+        virtualenv: interpreter.sys_prefix().to_path_buf(),
+        home,
+        cache_dir: cache.root().to_path_buf(),
+    };
+
+    let mut spec = resolve_sandbox_spec(options, &context)?;
+
+    // The current working directory must be readable for the child process to
+    // function (e.g., `os.getcwd()` in Python, and the kernel's own path resolution
+    // during exec). For tool runs, @project already points to CWD, but if the user
+    // didn't include @project in allow-read, we still need the CWD to be accessible.
+    if let Ok(cwd) = std::env::current_dir() {
+        if !spec.allow_read.iter().any(|p| cwd.starts_with(p)) {
+            spec.allow_read.push(cwd);
+        }
+    }
+
+    // Re-resolve env vars against the Command's effective environment.
+    if spec.env.is_some() {
+        let effective_env = crate::commands::build_effective_env(process);
+        spec.env = uv_sandbox::resolve_env_with_vars(options, &effective_env);
+    }
+
+    Ok(spec)
 }
 
 /// Return the entry points for the specified package.

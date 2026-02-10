@@ -701,6 +701,15 @@ pub struct ToolUv {
     )]
     pub conflicts: Option<SchemaConflicts>,
 
+    /// Sandbox configuration for `uv run`.
+    ///
+    /// When this section is present and the `sandbox` preview feature is enabled,
+    /// `uv run` will execute the command in a sandboxed environment using OS-level
+    /// isolation (Linux namespaces + seccomp, macOS Seatbelt). All access is denied
+    /// by default; only explicitly allowed operations are permitted.
+    #[option_group]
+    pub sandbox: Option<uv_sandbox::SandboxOptions>,
+
     // Only exists on this type for schema and docs generation, the build backend settings are
     // never merged in a workspace and read separately by the backend code.
     /// Configuration for the uv build backend.

@@ -110,6 +110,9 @@ mod python_upgrade;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod run;
 
+#[cfg(all(feature = "test-python", feature = "test-pypi"))]
+mod run_sandbox;
+
 #[cfg(feature = "self-update")]
 mod self_update;
 

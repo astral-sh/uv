@@ -29,6 +29,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
+uv-sandbox = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
@@ -55,4 +56,4 @@ regex = { workspace = true }
 tempfile = { workspace = true }
 
 [features]
-schemars = ["dep:schemars", "uv-pypi-types/schemars", "uv-redacted/schemars"]
+schemars = ["dep:schemars", "uv-pypi-types/schemars", "uv-redacted/schemars", "uv-sandbox/schemars"]

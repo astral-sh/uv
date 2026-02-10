@@ -65,6 +65,15 @@ pub struct Options {
     #[option_group]
     pub pip: Option<PipOptions>,
 
+    /// Sandbox configuration for `uv run`.
+    ///
+    /// When this section is present and the `sandbox` preview feature is enabled,
+    /// `uv run` will execute the command in a sandboxed environment using OS-level
+    /// isolation (Linux namespaces + seccomp, macOS Seatbelt). All access is denied
+    /// by default; only explicitly allowed operations are permitted.
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub sandbox: Option<uv_sandbox::SandboxOptions>,
+
     /// The keys to consider when caching builds for the project.
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
@@ -2215,6 +2224,7 @@ pub struct OptionsWire {
     add_bounds: Option<AddBoundsKind>,
 
     pip: Option<PipOptions>,
+    sandbox: Option<uv_sandbox::SandboxOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
@@ -2295,6 +2305,7 @@ impl From<OptionsWire> for Options {
             no_binary_package,
             torch_backend,
             pip,
+            sandbox,
             cache_keys,
             override_dependencies,
             exclude_dependencies,
@@ -2374,6 +2385,7 @@ impl From<OptionsWire> for Options {
                 torch_backend,
             },
             pip,
+            sandbox,
             cache_keys,
             build_backend,
             override_dependencies,

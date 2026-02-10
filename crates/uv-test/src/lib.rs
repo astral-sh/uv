@@ -130,6 +130,15 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Normalize sandbox denial error messages across platforms.
+    // macOS Seatbelt: [Errno 1] Operation not permitted
+    // Linux namespace: [Errno 2] No such file or directory
+    //                  [Errno 30] Read-only file system
+    //                  [Errno 13] Permission denied
+    (
+        r"\[Errno (1|2|13|30)\] (Operation not permitted|No such file or directory|Read-only file system|Permission denied)",
+        "[Errno [DENY_ERRNO]] [DENY_MSG]",
+    ),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.

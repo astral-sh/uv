@@ -1,0 +1,31 @@
+[package]
+name = "uv-sandbox"
+version = "0.0.20"
+description = "OS-level sandboxing for uv run"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+dunce = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+uv-macros = { workspace = true }
+uv-options-metadata = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+[features]
+schemars = ["dep:schemars"]
+
+[dependencies.schemars]
+workspace = true
+optional = true

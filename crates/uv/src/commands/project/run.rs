@@ -38,7 +38,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::Pep723Item;
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{Combine, PythonInstallMirrors};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -110,6 +110,7 @@ pub(crate) async fn run(
     env_file: EnvFile,
     preview: Preview,
     max_recursion_depth: u32,
+    sandbox_cli: Option<uv_sandbox::SandboxOptions>,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -204,6 +205,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
+
+    // Sandbox configuration from CLI flags, if any.
+    // Will be combined with project config later (CLI wins via `Combine`).
+    let mut sandbox_config: Option<uv_sandbox::SandboxOptions> = sandbox_cli;
 
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
@@ -605,6 +610,15 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 }
             }
         };
+
+        // Extract sandbox configuration from the project, if present.
+        // CLI settings (already in sandbox_config) take precedence via Combine.
+        let project_sandbox = project
+            .as_ref()
+            .and_then(|p| p.pyproject_toml().tool.as_ref())
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sandbox.clone());
+        sandbox_config = sandbox_config.combine(project_sandbox);
 
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
@@ -1329,6 +1343,33 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
+    // Apply sandboxing if configured + preview feature enabled.
+    #[cfg(target_family = "unix")]
+    if let Some(sandbox_options) =
+        sandbox_config.filter(|_| preview.is_enabled(PreviewFeature::Sandbox))
+    {
+        let sandbox_spec =
+            build_sandbox_spec(&sandbox_options, interpreter, project_dir, &cache, &process)
+                .context("Failed to resolve sandbox configuration")?;
+
+        // Apply sandbox restrictions to the process (env filtering + pre_exec hook).
+        uv_sandbox::apply_sandbox(process.as_std_mut(), &sandbox_spec)
+            .context("Failed to configure sandbox")?;
+    }
+
+    // On non-Unix platforms, warn or error if sandbox was requested.
+    #[cfg(not(target_family = "unix"))]
+    if let Some(sandbox_options) =
+        sandbox_config.filter(|_| preview.is_enabled(PreviewFeature::Sandbox))
+    {
+        if sandbox_options.required.unwrap_or(false) {
+            anyhow::bail!(
+                "Sandboxing is not supported on this platform and `sandbox.required = true` is set"
+            );
+        }
+        warn_user!("Sandboxing is not supported on this platform; running without sandbox");
+    }
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
@@ -1337,6 +1378,60 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
+}
+
+/// Build a [`uv_sandbox::SandboxSpec`] from resolved [`SandboxOptions`].
+///
+/// The `process` argument is used to snapshot the environment variables that have
+/// been configured on the [`Command`] so far (e.g., `VIRTUAL_ENV`, `PATH`), so that
+/// env filtering operates on the actual runtime environment rather than the parent's
+/// environment at an earlier point in time.
+#[cfg(target_family = "unix")]
+fn build_sandbox_spec(
+    options: &uv_sandbox::SandboxOptions,
+    interpreter: &Interpreter,
+    project_dir: &Path,
+    cache: &Cache,
+    process: &tokio::process::Command,
+) -> anyhow::Result<uv_sandbox::SandboxSpec> {
+    use uv_sandbox::{PresetContext, resolve_sandbox_spec};
+
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/"));
+
+    let context = PresetContext {
+        project_root: project_dir.to_path_buf(),
+        python: interpreter.sys_executable().to_path_buf(),
+        python_prefix: interpreter.sys_base_prefix().to_path_buf(),
+        stdlib: interpreter.stdlib().to_path_buf(),
+        virtualenv: interpreter.sys_prefix().to_path_buf(),
+        home,
+        cache_dir: cache.root().to_path_buf(),
+    };
+
+    let mut spec = resolve_sandbox_spec(options, &context)?;
+
+    // The current working directory must be readable for the child process to
+    // function (e.g., `os.getcwd()` in Python, and the kernel's path resolution
+    // during exec). When `--project` points to a different directory than CWD,
+    // `@project` does not cover CWD, so add it explicitly if needed.
+    if let Ok(cwd) = std::env::current_dir() {
+        if !spec.allow_read.iter().any(|path| cwd.starts_with(path)) {
+            spec.allow_read.push(cwd);
+        }
+    }
+
+    // Re-resolve environment variables against the Command's actual environment
+    // (which includes vars set after initial resolution, like VIRTUAL_ENV and PATH).
+    // The `Command` accumulates env overrides on top of the parent env, so we
+    // reconstruct the effective env by starting from the parent and applying overrides.
+    if spec.env.is_some() {
+        let effective_env = crate::commands::build_effective_env(process);
+        spec.env = uv_sandbox::resolve_env_with_vars(options, &effective_env);
+    }
+
+    Ok(spec)
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

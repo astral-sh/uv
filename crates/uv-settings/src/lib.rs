@@ -225,6 +225,7 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
         dependency_groups,
         managed,
         package,
+        sandbox: _,
         build_backend,
     } = options;
     // The `uv.toml` format is not allowed to include any of the following, which are
@@ -371,6 +372,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         dependency_groups: _,
         managed: _,
         package: _,
+        sandbox: _,
         build_backend: _,
     } = options;
 

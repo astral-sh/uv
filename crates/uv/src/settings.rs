@@ -555,6 +555,7 @@ pub(crate) struct RunSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) env_file: EnvFile,
     pub(crate) max_recursion_depth: u32,
+    pub(crate) sandbox: Option<uv_sandbox::SandboxOptions>,
 }
 
 impl RunSettings {
@@ -612,6 +613,16 @@ impl RunSettings {
             env_file,
             no_env_file,
             max_recursion_depth,
+            allow_read,
+            deny_read,
+            allow_write,
+            deny_write,
+            allow_execute,
+            deny_execute,
+            allow_net,
+            deny_net,
+            allow_env,
+            deny_env,
         } = args;
 
         let filesystem_install_mirrors = filesystem
@@ -694,8 +705,149 @@ impl RunSettings {
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            sandbox: sandbox_options_from_cli(
+                allow_read,
+                deny_read,
+                allow_write,
+                deny_write,
+                allow_execute,
+                deny_execute,
+                allow_net,
+                deny_net,
+                allow_env,
+                deny_env,
+            ),
         }
     }
+}
+
+/// Convert raw sandbox CLI arguments into [`SandboxOptions`].
+///
+/// Returns `None` if no sandbox CLI flags were provided.
+#[expect(clippy::needless_pass_by_value)]
+fn sandbox_options_from_cli(
+    allow_read: Option<Vec<String>>,
+    deny_read: Option<Vec<String>>,
+    allow_write: Option<Vec<String>>,
+    deny_write: Option<Vec<String>>,
+    allow_execute: Option<Vec<String>>,
+    deny_execute: Option<Vec<String>>,
+    allow_net: Option<String>,
+    deny_net: Option<Vec<String>>,
+    allow_env: Option<String>,
+    deny_env: Option<Vec<String>>,
+) -> Option<uv_sandbox::SandboxOptions> {
+    use uv_sandbox::{AllowEnv, AllowNet, EnvEntry, EnvPreset, FsEntry, FsPreset, SandboxOptions};
+
+    /// Parse a CLI string into an [`FsEntry`]. `@`-prefixed strings are presets.
+    fn parse_fs_entry(s: &str) -> FsEntry {
+        if let Some(name) = s.strip_prefix('@') {
+            let preset = match name {
+                "project" => FsPreset::Project,
+                "python" => FsPreset::Python,
+                "virtualenv" => FsPreset::Virtualenv,
+                "system" => FsPreset::System,
+                "home" => FsPreset::Home,
+                "uv-cache" => FsPreset::UvCache,
+                "tmp" => FsPreset::Tmp,
+                "known-secrets" => FsPreset::KnownSecrets,
+                "shell-configs" => FsPreset::ShellConfigs,
+                "git-hooks" => FsPreset::GitHooks,
+                "ide-configs" => FsPreset::IdeConfigs,
+                _ => {
+                    warn_user_once!("Unknown sandbox preset `@{name}`, treating as literal path");
+                    return FsEntry::Path(s.to_string());
+                }
+            };
+            FsEntry::Preset { preset }
+        } else {
+            FsEntry::Path(s.to_string())
+        }
+    }
+
+    /// Parse a CLI string into an [`EnvEntry`]. `@`-prefixed strings are presets.
+    fn parse_env_entry(s: &str) -> EnvEntry {
+        if let Some(name) = s.strip_prefix('@') {
+            let preset = match name {
+                "standard" => EnvPreset::Standard,
+                "known-secrets" => EnvPreset::KnownSecrets,
+                _ => {
+                    warn_user_once!("Unknown env preset `@{name}`, treating as literal name");
+                    return EnvEntry::Name(s.to_string());
+                }
+            };
+            EnvEntry::Preset { preset }
+        } else {
+            EnvEntry::Name(s.to_string())
+        }
+    }
+
+    fn parse_fs_list(values: &[String]) -> Vec<FsEntry> {
+        values
+            .iter()
+            .flat_map(|s| s.split(','))
+            .map(|s| parse_fs_entry(s.trim()))
+            .collect()
+    }
+
+    fn parse_env_list(values: &[String]) -> Vec<EnvEntry> {
+        values
+            .iter()
+            .flat_map(|s| s.split(','))
+            .map(|s| parse_env_entry(s.trim()))
+            .collect()
+    }
+
+    // Return None if nothing was set.
+    if allow_read.is_none()
+        && deny_read.is_none()
+        && allow_write.is_none()
+        && deny_write.is_none()
+        && allow_execute.is_none()
+        && deny_execute.is_none()
+        && allow_net.is_none()
+        && deny_net.is_none()
+        && allow_env.is_none()
+        && deny_env.is_none()
+    {
+        return None;
+    }
+
+    Some(SandboxOptions {
+        allow_read: allow_read.as_deref().map(parse_fs_list),
+        deny_read: deny_read.as_deref().map(parse_fs_list),
+        allow_write: allow_write.as_deref().map(parse_fs_list),
+        deny_write: deny_write.as_deref().map(parse_fs_list),
+        allow_execute: allow_execute.as_deref().map(parse_fs_list),
+        deny_execute: deny_execute.as_deref().map(parse_fs_list),
+        allow_net: allow_net.map(|s| match s.as_str() {
+            "true" | "" => AllowNet::Bool(true),
+            "false" => AllowNet::Bool(false),
+            _ => {
+                // Treat as a comma-separated host list. This will be rejected
+                // at resolve time with a clear "not yet implemented" error,
+                // rather than silently granting unrestricted network access.
+                AllowNet::Hosts(
+                    s.split(',')
+                        .map(|h| uv_sandbox::NetEntry::Host(h.trim().to_string()))
+                        .collect(),
+                )
+            }
+        }),
+        deny_net: deny_net.map(|v| {
+            v.iter()
+                .flat_map(|s| s.split(','))
+                .map(|s| uv_sandbox::NetEntry::Host(s.trim().to_string()))
+                .collect()
+        }),
+        allow_env: allow_env.map(|s| match s.as_str() {
+            "true" | "" => AllowEnv::Bool(true),
+            "false" => AllowEnv::Bool(false),
+            _ => AllowEnv::List(s.split(',').map(|e| parse_env_entry(e.trim())).collect()),
+        }),
+        deny_env: deny_env.as_deref().map(parse_env_list),
+        required: None,
+    })
 }
 
 /// The resolved settings to use for a `tool run` invocation.
@@ -715,6 +867,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) python: Option<String>,
     pub(crate) python_platform: Option<TargetTriple>,
     pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) sandbox: Option<uv_sandbox::SandboxOptions>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
@@ -750,6 +903,16 @@ impl ToolRunSettings {
             python,
             python_platform,
             torch_backend,
+            allow_read,
+            deny_read,
+            allow_write,
+            deny_write,
+            allow_execute,
+            deny_execute,
+            allow_net,
+            deny_net,
+            allow_env,
+            deny_env,
             generate_shell_completion: _,
         } = args;
 
@@ -844,6 +1007,18 @@ impl ToolRunSettings {
                 .combine(filesystem_install_mirrors),
             env_file,
             no_env_file,
+            sandbox: sandbox_options_from_cli(
+                allow_read,
+                deny_read,
+                allow_write,
+                deny_write,
+                allow_execute,
+                deny_execute,
+                allow_net,
+                deny_net,
+                allow_env,
+                deny_env,
+            ),
         }
     }
 }
