@@ -1405,7 +1405,10 @@ fn build_metadata_request<'a>(
 }
 
 /// Log response information and map response to an error variant if not successful.
-async fn handle_response(registry: &Url, response: Response) -> Result<(), PublishSendError> {
+async fn handle_response(
+    registry: &DisplaySafeUrl,
+    response: Response,
+) -> Result<(), PublishSendError> {
     let status_code = response.status();
     debug!("Response code for {registry}: {status_code}");
     trace!("Response headers for {registry}: {response:?}");
