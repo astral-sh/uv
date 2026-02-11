@@ -1376,9 +1376,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
 
         // Create mock installation directories
-        for dir_name in [
-            format!("cpython-3.10.0-{platform}"),
-        ] {
+        for dir_name in [format!("cpython-3.10.0-{platform}")] {
             fs::create_dir(temp_dir.path().join(dir_name)).unwrap();
         }
 
