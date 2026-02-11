@@ -1376,9 +1376,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
 
         // Create mock installation directories
-        for dir_name in [format!("cpython-3.10.0-{platform}")] {
-            fs::create_dir(temp_dir.path().join(dir_name)).unwrap();
-        }
+        fs::create_dir(temp_dir.path().join(format!("cpython-3.10.0-{platform}"))).unwrap();
 
         temp_env::with_var(
             uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
