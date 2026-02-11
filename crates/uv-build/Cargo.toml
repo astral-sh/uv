@@ -18,6 +18,7 @@ uv-static = { workspace = true }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
