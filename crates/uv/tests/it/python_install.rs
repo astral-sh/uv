@@ -2913,6 +2913,58 @@ fn python_install_emulated_windows_x86_on_x64() {
     ");
 }
 
+// Creating a venv with `--allow-existing` over an existing managed venv should succeed.
+//
+// Regression test for <https://github.com/astral-sh/uv/issues/17963>.
+#[test]
+fn install_managed_venv_allow_existing() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions()
+        .with_managed_python_dirs()
+        .with_python_download_cache()
+        .with_filtered_python_install_bin();
+
+    // Install a managed Python version.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.[LATEST] in [TIME]
+     + cpython-3.13.[LATEST]-[PLATFORM] (python3.13)
+    ");
+
+    // Create a virtual environment using the managed installation.
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
+        .arg(context.venv.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[LATEST]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
+    // Create the venv again with `--allow-existing` — this should not fail.
+    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13")
+        .arg("--allow-existing")
+        .arg(context.venv.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.13.[LATEST]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+}
+
 // A virtual environment should track the latest patch version installed.
 #[test]
 fn install_transparent_patch_upgrade_uv_venv() {
