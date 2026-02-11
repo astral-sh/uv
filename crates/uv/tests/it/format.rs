@@ -492,7 +492,7 @@ fn format_version_option() -> Result<()> {
 
 #[test]
 fn format_version_constraints() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -525,7 +525,7 @@ fn format_version_constraints() -> Result<()> {
 
 #[test]
 fn format_version_latest() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -558,7 +558,7 @@ fn format_version_latest() -> Result<()> {
 
 #[test]
 fn format_exclude_newer() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -592,7 +592,7 @@ fn format_exclude_newer() -> Result<()> {
 
 #[test]
 fn format_no_matching_version() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
