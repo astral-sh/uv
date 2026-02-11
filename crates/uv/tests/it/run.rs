@@ -6220,3 +6220,129 @@ fn run_target_workspace_discovery() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that rebuilding a local wheel file invalidates the cached environment.
+/// Reproduces issue #16617.
+#[test]
+fn run_with_local_wheel_rebuild() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a simple library project
+    let project = context.temp_dir.child("my_lib");
+    project.create_dir_all()?;
+    project.child("pyproject.toml").write_str(indoc! { r#"
+        [project]
+        name = "my-lib"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#
+    })?;
+
+    project.child("src").child("my_lib").create_dir_all()?;
+    project
+        .child("src")
+        .child("my_lib")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def get_message() -> str:
+                return "Hello from version 1"
+            "#
+        })?;
+
+    // Build the wheel
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--python")
+        .arg("3.12")
+        .arg(project.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    Successfully built my_lib/dist/my_lib-0.1.0-py3-none-any.whl
+    "#
+    );
+
+    let wheel_path = project.child("dist").child("my_lib-0.1.0-py3-none-any.whl");
+
+    // Run with the wheel - should see "version 1"
+    let test_script = context.temp_dir.child("test.py");
+    test_script.write_str("from my_lib import get_message; print(get_message())")?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--with")
+        .arg(wheel_path.path())
+        .arg(test_script.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from version 1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + my-lib==0.1.0 (from file://[TEMP_DIR]/my_lib/dist/my_lib-0.1.0-py3-none-any.whl)
+    "#
+    );
+
+    // Modify the library
+    project
+        .child("src")
+        .child("my_lib")
+        .child("__init__.py")
+        .write_str(indoc! { r#"
+            def get_message() -> str:
+                return "Hello from version 2"
+            "#
+        })?;
+
+    // Rebuild the wheel (same filename, same path, different content)
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--wheel")
+        .arg("--python")
+        .arg("3.12")
+        .arg(project.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel...
+    Successfully built my_lib/dist/my_lib-0.1.0-py3-none-any.whl
+    "#
+    );
+
+    // Run again with the rebuilt wheel - should see "version 2" (NOT cached "version 1")
+    // This is the key assertion that verifies the fix
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--isolated")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--with")
+        .arg(wheel_path.path())
+        .arg(test_script.path()), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from version 2
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + my-lib==0.1.0 (from file://[TEMP_DIR]/my_lib/dist/my_lib-0.1.0-py3-none-any.whl)
+    "#
+    );
+
+    Ok(())
+}
