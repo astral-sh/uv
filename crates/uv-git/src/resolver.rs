@@ -173,6 +173,7 @@ impl GitResolver {
             lock_dir.join(cache_digest(&repository_url)),
             LockedFileMode::Exclusive,
             &repository_url,
+            false,
         )
         .await?;
 

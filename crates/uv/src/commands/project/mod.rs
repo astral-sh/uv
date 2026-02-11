@@ -821,6 +821,7 @@ impl ScriptInterpreter {
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&script.path))),
                     LockedFileMode::Exclusive,
                     script.path.simplified_display(),
+                    false,
                 )
                 .await
             }
@@ -829,6 +830,7 @@ impl ScriptInterpreter {
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(url))),
                     LockedFileMode::Exclusive,
                     url.to_string(),
+                    false,
                 )
                 .await
             }
@@ -837,6 +839,7 @@ impl ScriptInterpreter {
                     std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&metadata.raw))),
                     LockedFileMode::Exclusive,
                     "stdin".to_string(),
+                    false,
                 )
                 .await
             }
@@ -1118,6 +1121,7 @@ impl ProjectInterpreter {
             )),
             LockedFileMode::Exclusive,
             workspace.install_path().simplified_display(),
+            false,
         )
         .await
     }

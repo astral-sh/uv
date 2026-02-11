@@ -5947,6 +5947,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-fs",
  "uv-normalize",
+ "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",

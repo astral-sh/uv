@@ -17,8 +17,8 @@ pub(crate) struct CompileArgs {
     cache_args: CacheArgs,
 }
 
-pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init().await?;
+pub(crate) async fn compile(args: CompileArgs, preview: Preview) -> anyhow::Result<()> {
+    let cache = Cache::from_args(args.cache_args, preview)?.init().await?;
 
     let interpreter = if let Some(python) = args.python {
         python

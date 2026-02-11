@@ -177,6 +177,7 @@ pub async fn bin_install(
             .join(version.to_string())
             .join(&platform_name),
         binary.executable(),
+        cache.lock_file_ignore_umask,
     );
 
     // Lock the directory to prevent racing installs

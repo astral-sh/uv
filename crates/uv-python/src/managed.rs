@@ -143,6 +143,7 @@ impl ManagedPythonInstallations {
             self.root.join(".lock"),
             LockedFileMode::Exclusive,
             self.root.user_display(),
+            false,
         )
         .await?)
     }

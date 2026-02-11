@@ -477,7 +477,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     if cache_settings.no_cache {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
-    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    let cache = Cache::from_settings(
+        cache_settings.no_cache,
+        cache_settings.cache_dir,
+        globals.preview,
+    )?;
 
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(

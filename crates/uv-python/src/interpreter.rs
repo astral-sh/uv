@@ -676,6 +676,7 @@ impl Interpreter {
                 target.root().join(".lock"),
                 LockedFileMode::Exclusive,
                 target.root().user_display(),
+                false,
             )
             .await
         } else if let Some(prefix) = self.prefix() {
@@ -684,6 +685,7 @@ impl Interpreter {
                 prefix.root().join(".lock"),
                 LockedFileMode::Exclusive,
                 prefix.root().user_display(),
+                false,
             )
             .await
         } else if self.is_virtualenv() {
@@ -692,6 +694,7 @@ impl Interpreter {
                 self.sys_prefix.join(".lock"),
                 LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
+                false,
             )
             .await
         } else {
@@ -700,6 +703,7 @@ impl Interpreter {
                 env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
                 LockedFileMode::Exclusive,
                 self.sys_prefix.user_display(),
+                false,
             )
             .await
         }

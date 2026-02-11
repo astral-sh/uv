@@ -265,7 +265,10 @@ impl TextCredentialStore {
             fs::create_dir_all(parent)?;
         }
         let lock = path.with_added_extension("lock");
-        Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
+        Ok(
+            LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store", false)
+                .await?,
+        )
     }
 
     /// Read credentials from a file.
