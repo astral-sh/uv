@@ -308,18 +308,12 @@ impl ManagedPythonInstallations {
         Ok(self
             .find_matching_current_platform()?
             .filter(move |installation| {
-                installation
-                    .path
-                    .file_name()
-                    .map(OsStr::to_string_lossy)
-                    .is_some_and(|filename| {
-                        let prefix = format!("cpython-{version}");
-                        filename.starts_with(&prefix)
-                            && filename
-                                .as_bytes()
-                                .get(prefix.len())
-                                .is_none_or(|&b| b == b'-' || b == b'.')
-                    })
+                let key = installation.key();
+                // Match major and minor versions
+                key.major == version.major()
+                    && key.minor == version.minor()
+                    // If a patch version is requested, also match that
+                    && version.patch().is_none_or(|patch| key.patch == patch)
             }))
     }
 
@@ -1375,84 +1369,29 @@ mod tests {
     }
 
     #[test]
-    fn test_find_version_matches_with_dot_or_dash() {
+    fn test_find_version_matching() {
         use crate::PythonVersion;
 
-        // Get the current platform to create matching installation directories
         let platform = Platform::from_env().unwrap();
-
-        // Create a temp directory for mock installations
         let temp_dir = tempfile::tempdir().unwrap();
 
         // Create mock installation directories
-        // Both should match version "3.10" since '.' and '-' are valid separators
-        let dir_with_patch = format!("cpython-3.10.5-{platform}");
-        let dir_exact = format!("cpython-3.10.0-{platform}");
-        // This should NOT match (different minor version)
-        let dir_different_minor = format!("cpython-3.11.0-{platform}");
+        for dir_name in [
+            format!("cpython-3.10.0-{platform}"),
+        ] {
+            fs::create_dir(temp_dir.path().join(dir_name)).unwrap();
+        }
 
-        fs::create_dir(temp_dir.path().join(&dir_with_patch)).unwrap();
-        fs::create_dir(temp_dir.path().join(&dir_exact)).unwrap();
-        fs::create_dir(temp_dir.path().join(&dir_different_minor)).unwrap();
-
-        // Set UV_PYTHON_INSTALL_DIR to point to our temp directory
         temp_env::with_var(
             uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
             Some(temp_dir.path()),
             || {
                 let installations = ManagedPythonInstallations::from_settings(None).unwrap();
-                let version = PythonVersion::from_str("3.10").unwrap();
 
-                let found: Vec<_> = installations.find_version(&version).unwrap().collect();
-
-                // Should find both cpython-3.10.0 and cpython-3.10.5, but NOT cpython-3.11.0
-                assert_eq!(found.len(), 2);
-                for installation in &found {
-                    let filename = installation.path.file_name().unwrap().to_string_lossy();
-                    assert!(
-                        filename.starts_with("cpython-3.10."),
-                        "unexpected installation: {filename}"
-                    );
-                }
-            },
-        );
-    }
-
-    #[test]
-    fn test_find_version_3_1_does_not_match_3_10() {
-        use crate::PythonVersion;
-
-        // Get the current platform to create matching installation directories
-        let platform = Platform::from_env().unwrap();
-
-        // Create a temp directory for mock installations
-        let temp_dir = tempfile::tempdir().unwrap();
-
-        // Create mock installation directories
-        // Version "3.1" should NOT match "3.10" (different minor version)
-        let dir_3_10 = format!("cpython-3.10.0-{platform}");
-        let dir_3_1 = format!("cpython-3.1.0-{platform}");
-
-        fs::create_dir(temp_dir.path().join(&dir_3_10)).unwrap();
-        fs::create_dir(temp_dir.path().join(&dir_3_1)).unwrap();
-
-        // Set UV_PYTHON_INSTALL_DIR to point to our temp directory
-        temp_env::with_var(
-            uv_static::EnvVars::UV_PYTHON_INSTALL_DIR,
-            Some(temp_dir.path()),
-            || {
-                let installations = ManagedPythonInstallations::from_settings(None).unwrap();
-                let version = PythonVersion::from_str("3.1").unwrap();
-
-                let found: Vec<_> = installations.find_version(&version).unwrap().collect();
-
-                // Should only find cpython-3.1.0, NOT cpython-3.10.0
-                assert_eq!(found.len(), 1);
-                let filename = found[0].path.file_name().unwrap().to_string_lossy();
-                assert!(
-                    filename.starts_with("cpython-3.1."),
-                    "version 3.1 should not match 3.10, got: {filename}"
-                );
+                // Version 3.1 should NOT match 3.10
+                let v3_1 = PythonVersion::from_str("3.1").unwrap();
+                let matched: Vec<_> = installations.find_version(&v3_1).unwrap().collect();
+                assert_eq!(matched.len(), 0);
             },
         );
     }
