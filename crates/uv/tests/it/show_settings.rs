@@ -4391,6 +4391,204 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Parsing both `uv.toml` and `pyproject.toml` with invalid options in the ignored file succeeds with a warning.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn resolve_both_with_ignored_invalid_options() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let config = context.temp_dir.child("uv.toml");
+    config.write_str(indoc::indoc! {r"
+        preview = false
+    "})?;
+
+    // Invalid options in `pyproject.toml` will be ignored in favor of `uv.toml`.
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [tool.uv]
+        preview = false
+        preview-features = ["pylock"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("requirements.in"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    PipCompileSettings {
+        format: None,
+        src_file: [
+            "requirements.in",
+        ],
+        constraints: [],
+        overrides: [],
+        excludes: [],
+        build_constraints: [],
+        constraints_from_workspace: [],
+        overrides_from_workspace: [],
+        excludes_from_workspace: [],
+        build_constraints_from_workspace: [],
+        environments: SupportedEnvironments(
+            [],
+        ),
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: PipSettings {
+            index_locations: IndexLocations {
+                indexes: [],
+                flat_index: [],
+                no_index: false,
+            },
+            python: None,
+            install_mirrors: PythonInstallMirrors {
+                python_install_mirror: None,
+                pypy_install_mirror: None,
+                python_downloads_json_url: None,
+            },
+            system: false,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
+            groups: [],
+            break_system_packages: false,
+            target: None,
+            prefix: None,
+            index_strategy: FirstIndex,
+            keyring_provider: Disabled,
+            torch_backend: None,
+            build_isolation: Isolate,
+            extra_build_dependencies: ExtraBuildDependencies(
+                {},
+            ),
+            extra_build_variables: ExtraBuildVariables(
+                {},
+            ),
+            build_options: BuildOptions {
+                no_binary: None,
+                no_build: None,
+            },
+            allow_empty_requirements: false,
+            strict: false,
+            dependency_mode: Transitive,
+            resolution: Highest,
+            prerelease: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            dependency_metadata: DependencyMetadata(
+                {},
+            ),
+            output_file: None,
+            no_strip_extras: false,
+            no_strip_markers: false,
+            no_annotate: false,
+            no_header: false,
+            custom_compile_command: None,
+            generate_hashes: false,
+            config_setting: ConfigSettings(
+                {},
+            ),
+            config_settings_package: PackageConfigSettings(
+                {},
+            ),
+            python_version: None,
+            python_platform: None,
+            universal: false,
+            exclude_newer: ExcludeNewer {
+                global: None,
+                package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+            no_emit_package: [],
+            emit_index_url: false,
+            emit_find_links: false,
+            emit_build_options: false,
+            emit_marker_expression: false,
+            emit_index_annotation: false,
+            annotation_style: Split,
+            link_mode: Clone,
+            compile_bytecode: false,
+            sources: None,
+            hash_checking: Some(
+                Verify,
+            ),
+            upgrade: None,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    warning: Found both a `uv.toml` file and a `[tool.uv]` section in an adjacent `pyproject.toml`. The following fields from `[tool.uv]` will be ignored in favor of the `uv.toml` file:
+    - preview
+    - preview-features
+    "#
+    );
+
+    Ok(())
+}
+
 /// Tests that errors when parsing `conflicts` are reported.
 #[test]
 fn invalid_conflicts() -> anyhow::Result<()> {
@@ -4735,7 +4933,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -4746,7 +4944,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `preview-features`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -8682,6 +8880,590 @@ fn preview_features() {
     ----- stderr -----
     "#
     );
+}
+
+/// Test CLI preview feature flags vs config precedence.
+/// The CLI should always have higher priority.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn preview_features_precedence() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12");
+
+    let cmd = || {
+        let mut cmd = context.version();
+        cmd.arg("--show-settings");
+        add_shared_args(cmd)
+    };
+
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(indoc::indoc! {r#"
+        [project]
+        name = "demo"
+        version = "0.1.0"
+
+        [tool.uv]
+        preview = false
+        preview-features = ["format"]
+    "#})?;
+
+    // Both `uv.tool.preview` and `uv.tool.preview-features` cannot both be specified.
+    uv_snapshot!(context.filters(), cmd(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`. Cannot specify both `preview` and `preview-features`.
+    "
+    );
+
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(
+        r#"
+        [project]
+        name = "demo"
+        version = "0.1.0"
+
+        [tool.uv]
+        preview-features = ["format"]
+    "#,
+    )?;
+
+    // CLI `--preview` takes precedence over config settings.
+    uv_snapshot!(context.filters(), cmd()
+        .arg("--preview")
+        .arg("pylock"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [
+                PythonInstallDefault,
+                PythonUpgrade,
+                JsonOutput,
+                Pylock,
+                AddBounds,
+                PackageConflicts,
+                ExtraBuildDependencies,
+                DetectModuleConflicts,
+                Format,
+                NativeAuth,
+                S3Endpoint,
+                CacheSize,
+                InitProjectFlag,
+                WorkspaceMetadata,
+                WorkspaceDir,
+                WorkspaceList,
+                SbomExport,
+                AuthHelper,
+                DirectPublish,
+                TargetWorkspaceDiscovery,
+                MetadataJson,
+                GcsEndpoint,
+                AdjustUlimit,
+                SpecialCondaEnvNames,
+                RelocatableEnvsDefault,
+            ],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: Some(
+            "pylock",
+        ),
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // CLI `--no-preview` takes precedence over config settings.
+    uv_snapshot!(context.filters(), cmd()
+        .arg("--no-preview")
+        .arg("pylock"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: Some(
+            "pylock",
+        ),
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    // CLI `--preview-features` takes precedence over config settings.
+    uv_snapshot!(context.filters(), cmd()
+        .arg("--preview-features")
+        .arg("pylock"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [
+                Pylock,
+            ],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    let config = context.temp_dir.child("pyproject.toml");
+    config.write_str(
+        r#"
+        [project]
+        name = "demo"
+        version = "0.1.0"
+
+        [tool.uv]
+        preview-features = [
+            "format",
+            "format",
+        ]
+    "#,
+    )?;
+
+    // Duplicate preview features are reduced
+    uv_snapshot!(context.filters(), cmd(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GlobalSettings {
+        required_version: None,
+        quiet: 0,
+        verbose: 0,
+        color: Auto,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            offline: Disabled,
+            native_tls: false,
+            http_proxy: None,
+            https_proxy: None,
+            no_proxy: None,
+            allow_insecure_host: [],
+            read_timeout: [TIME],
+            connect_timeout: [TIME],
+            retries: 3,
+        },
+        concurrency: Concurrency {
+            downloads: 50,
+            builds: 16,
+            installs: 8,
+        },
+        show_settings: true,
+        preview: Preview {
+            flags: [
+                Format,
+            ],
+        },
+        python_preference: Managed,
+        python_downloads: Automatic,
+        no_progress: false,
+        installer_metadata: true,
+    }
+    CacheSettings {
+        no_cache: false,
+        cache_dir: Some(
+            "[CACHE_DIR]/",
+        ),
+    }
+    VersionSettings {
+        value: None,
+        bump: [],
+        short: false,
+        output_format: Text,
+        dry_run: false,
+        lock_check: Disabled,
+        frozen: None,
+        active: None,
+        no_sync: false,
+        package: None,
+        python: None,
+        install_mirrors: PythonInstallMirrors {
+            python_install_mirror: None,
+            pypy_install_mirror: None,
+            python_downloads_json_url: None,
+        },
+        refresh: None(
+            Timestamp(
+                SystemTime {
+                    tv_sec: [TIME],
+                    tv_nsec: [TIME],
+                },
+            ),
+        ),
+        settings: ResolverInstallerSettings {
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                config_settings_package: PackageConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: ExcludeNewer {
+                    global: None,
+                    package: ExcludeNewerPackage(
+                        {},
+                    ),
+                },
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                build_isolation: Isolate,
+                extra_build_dependencies: ExtraBuildDependencies(
+                    {},
+                ),
+                extra_build_variables: ExtraBuildVariables(
+                    {},
+                ),
+                prerelease: IfNecessaryOrExplicit,
+                resolution: Highest,
+                sources: None,
+                torch_backend: None,
+                upgrade: None,
+            },
+            compile_bytecode: false,
+            reinstall: None,
+        },
+    }
+
+    ----- stderr -----
+    "#
+    );
+
+    Ok(())
 }
 
 /// Track the interactions between `upgrade` and `upgrade-package` across the `uv pip` CLI and a

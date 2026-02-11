@@ -12,8 +12,11 @@ use uv_warnings::warn_user;
 pub use crate::combine::*;
 pub use crate::settings::*;
 
+use crate::validation::{Context, ValidationError, Validator};
+
 mod combine;
 mod settings;
+mod validation;
 
 /// The [`Options`] as loaded from a configuration file on disk.
 #[derive(Debug, Clone)]
@@ -47,6 +50,7 @@ impl FilesystemOptions {
         match read_file(&file) {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
+                options.validate(&Context { path: &file })?;
                 validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options)))
             }
@@ -71,6 +75,7 @@ impl FilesystemOptions {
 
         tracing::debug!("Found system configuration in: `{}`", file.display());
         let options = read_file(&file)?;
+        options.validate(&Context { path: &file })?;
         validate_uv_toml(&file, &options)?;
         Ok(Some(Self(options)))
     }
@@ -130,6 +135,7 @@ impl FilesystemOptions {
                 }
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                options.validate(&Context { path: &path })?;
                 validate_uv_toml(&path, &options)?;
                 return Ok(Some(Self(options)));
             }
@@ -162,6 +168,7 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
+                options.validate(&Context { path: &path })?;
                 return Ok(Some(Self(options)));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -177,6 +184,7 @@ impl FilesystemOptions {
         tracing::debug!("Reading user configuration from: `{}`", path.display());
 
         let options = read_file(path)?;
+        options.validate(&Context { path })?;
         validate_uv_toml(path, &options)?;
         Ok(Self(options))
     }
@@ -297,6 +305,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_cache,
                 cache_dir,
                 preview,
+                preview_features,
                 python_preference,
                 python_downloads,
                 concurrent_downloads,
@@ -393,6 +402,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if preview.is_some() {
         masked_fields.push("preview");
+    }
+    if preview_features.is_some() {
+        masked_fields.push("preview-features");
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");
@@ -582,6 +594,9 @@ pub enum Error {
 
     #[error(transparent)]
     InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
+
+    #[error(transparent)]
+    Validation(#[from] ValidationError),
 }
 
 #[derive(Copy, Clone, Debug)]
