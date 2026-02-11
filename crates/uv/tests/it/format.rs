@@ -517,7 +517,7 @@ fn format_version_constraints() -> Result<()> {
 
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
-    ruff 0.8.4
+    ruff 0.15.0
     ");
 
     Ok(())
@@ -550,7 +550,7 @@ fn format_version_latest() -> Result<()> {
 
     ----- stderr -----
     warning: `uv format` is experimental and may change without warning. Pass `--preview-features format` to disable this warning.
-    ruff 0.8.4
+    ruff 0.15.0
     ");
 
     Ok(())
