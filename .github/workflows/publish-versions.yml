@@ -30,7 +30,7 @@ jobs:
         run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
 
       - name: "Update versions"
         env:
