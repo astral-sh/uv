@@ -2277,3 +2277,50 @@ fn workspace_members_with_complex_relative_paths() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that an unmanaged workspace member without a `[project]` section doesn't panic.
+///
+/// Uses `--verbose` to exercise the `debug!` log path, which previously panicked on
+/// `.unwrap()` when the `[project]` section was missing.
+#[test]
+fn workspace_unmanaged_member_no_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [build-system]
+        requires = ["uv_build>=0.9.0,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    fs_err::create_dir_all(workspace.join("src").join("root"))?;
+    fs_err::write(workspace.join("src").join("root").join("__init__.py"), "")?;
+
+    // Create a workspace member with `managed = false` but no `[project]` section.
+    let member = workspace.join("member");
+    fs_err::create_dir_all(&member)?;
+    fs_err::write(
+        member.join("pyproject.toml"),
+        indoc! {"
+            [tool.uv]
+            managed = false
+        "},
+    )?;
+
+    context
+        .lock()
+        .arg("--verbose")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+
+    Ok(())
+}
