@@ -1002,6 +1002,39 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
     }
 }
 
+/// Create or replace a link to a managed Python executable.
+///
+/// If a file already exists at the link path, it will be atomically replaced.
+///
+/// See [`create_link_to_executable`] for a variant that errors if the link already exists.
+pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
+    let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
+    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
+        to: link_parent.to_path_buf(),
+        err,
+    })?;
+
+    if cfg!(unix) {
+        replace_symlink(executable, link).map_err(|err| Error::LinkExecutable {
+            from: executable.to_path_buf(),
+            to: link.to_path_buf(),
+            err,
+        })
+    } else if cfg!(windows) {
+        use uv_trampoline_builder::windows_python_launcher;
+
+        let launcher = windows_python_launcher(executable, false)?;
+
+        uv_fs::write_atomic_sync(link, &*launcher).map_err(|err| Error::LinkExecutable {
+            from: executable.to_path_buf(),
+            to: link.to_path_buf(),
+            err,
+        })
+    } else {
+        unimplemented!("Only Windows and Unix are supported.")
+    }
+}
+
 // TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
 pub fn platform_key_from_env() -> Result<String, Error> {
