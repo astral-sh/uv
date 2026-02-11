@@ -6,9 +6,7 @@ use anyhow::{Context, Result};
 use tokio::process::Command;
 use tracing::debug;
 
-use uv_bin_install::{
-    BinVersion, Binary, bin_install, bin_install_resolved, find_matching_version,
-};
+use uv_bin_install::{BinVersion, Binary, ResolvedVersion, bin_install, find_matching_version};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_preview::{Preview, PreviewFeature};
@@ -79,38 +77,17 @@ pub(crate) async fn format(
         .transpose()?
         .unwrap_or(BinVersion::Default);
 
-    let (ruff_path, resolved_version) = match bin_version {
+    let resolved = match bin_version {
         BinVersion::Default => {
             // Use the default pinned version
-            let version = Binary::Ruff.default_version();
-            let path = bin_install(
-                Binary::Ruff,
-                &version,
-                &client,
-                &retry_policy,
-                &cache,
-                &reporter,
-            )
-            .await
-            .with_context(|| format!("Failed to install ruff {version}"))?;
-            (path, version)
+            ResolvedVersion::from_version(Binary::Ruff, Binary::Ruff.default_version())?
         }
         BinVersion::Pinned(version) => {
             // Use the exact version directly without manifest lookup.
             if exclude_newer.is_some() {
                 debug!("`--exclude-newer` is ignored for pinned version `{version}`");
             }
-            let path = bin_install(
-                Binary::Ruff,
-                &version,
-                &client,
-                &retry_policy,
-                &cache,
-                &reporter,
-            )
-            .await
-            .with_context(|| format!("Failed to install ruff {version}"))?;
-            (path, version)
+            ResolvedVersion::from_version(Binary::Ruff, version)?
         }
         BinVersion::Latest => {
             // Fetch the latest version from the manifest
@@ -119,18 +96,7 @@ pub(crate) async fn format(
                     .await
                     .with_context(|| "Failed to find latest ruff version")?;
             debug!("Resolved `ruff@latest` to `ruff=={}`", resolved.version);
-            let version = resolved.version.clone();
-            let path = bin_install_resolved(
-                Binary::Ruff,
-                &resolved,
-                &client,
-                &retry_policy,
-                &cache,
-                &reporter,
-            )
-            .await
-            .with_context(|| format!("Failed to install ruff {}", resolved.version))?;
-            (path, version)
+            resolved
         }
         BinVersion::Constraint(constraints) => {
             // Find the best version matching the constraints
@@ -147,24 +113,24 @@ pub(crate) async fn format(
                 "Resolved `ruff@{constraints}` to `ruff=={}`",
                 resolved.version
             );
-            let version = resolved.version.clone();
-            let path = bin_install_resolved(
-                Binary::Ruff,
-                &resolved,
-                &client,
-                &retry_policy,
-                &cache,
-                &reporter,
-            )
-            .await
-            .with_context(|| format!("Failed to install ruff {}", resolved.version))?;
-            (path, version)
+            resolved
         }
     };
 
     if show_version {
-        writeln!(printer.stderr(), "ruff {resolved_version}")?;
+        writeln!(printer.stderr(), "ruff {}", resolved.version)?;
     }
+
+    let ruff_path = bin_install(
+        Binary::Ruff,
+        &resolved,
+        &client,
+        &retry_policy,
+        &cache,
+        &reporter,
+    )
+    .await
+    .with_context(|| format!("Failed to install ruff {}", resolved.version))?;
 
     let mut command = Command::new(&ruff_path);
     command.current_dir(target_dir);

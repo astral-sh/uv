@@ -185,6 +185,26 @@ pub struct ResolvedVersion {
     pub archive_format: ArchiveFormat,
 }
 
+impl ResolvedVersion {
+    /// Construct a [`ResolvedVersion`] from a [`Binary`] and a [`Version`] by inferring the
+    /// download URL and archive format from the current platform.
+    pub fn from_version(binary: Binary, version: Version) -> Result<Self, Error> {
+        let platform = Platform::from_env()?;
+        let platform_name = platform.as_cargo_dist_triple();
+        let archive_format = if platform.os.is_windows() {
+            ArchiveFormat::Zip
+        } else {
+            ArchiveFormat::TarGz
+        };
+        let artifact_url = binary.download_url(&version, &platform_name, archive_format)?;
+        Ok(Self {
+            version,
+            artifact_url,
+            archive_format,
+        })
+    }
+}
+
 /// Errors that can occur during binary download and installation.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -235,10 +255,7 @@ pub enum Error {
     },
 
     #[error("Failed to parse version manifest")]
-    ManifestParse {
-        #[source]
-        source: serde_json::Error,
-    },
+    ManifestParse(#[from] serde_json::Error),
 
     #[error("Invalid UTF-8 in version manifest")]
     ManifestUtf8(#[from] std::str::Utf8Error),
@@ -366,6 +383,21 @@ async fn fetch_and_find_matching_version(
             source: reqwest_middleware::Error::Reqwest(err),
         })?;
 
+    // Parse a single JSON line and check if it matches the constraints and platform.
+    let parse_and_check = |line: &[u8]| -> Result<Option<ResolvedVersion>, Error> {
+        let line_str = std::str::from_utf8(line)?;
+        if line_str.trim().is_empty() {
+            return Ok(None);
+        }
+        let version_info: BinVersionInfo = serde_json::from_str(line_str)?;
+        Ok(check_version_match(
+            &version_info,
+            constraints,
+            exclude_newer,
+            platform_name,
+        ))
+    };
+
     // Stream the response line by line
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
@@ -380,41 +412,18 @@ async fn fetch_and_find_matching_version(
         // Process complete lines
         while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
             let line = &buffer[..newline_pos];
-
-            // Skip empty lines
-            if line.is_empty() {
-                buffer.drain(..=newline_pos);
-                continue;
-            }
-
-            // Parse the JSON line
-            let line_str = std::str::from_utf8(line)?;
-            let version_info: BinVersionInfo =
-                serde_json::from_str(line_str).map_err(|source| Error::ManifestParse { source })?;
-
+            let result = parse_and_check(line)?;
             buffer.drain(..=newline_pos);
 
-            if let Some(resolved) =
-                check_version_match(&version_info, constraints, exclude_newer, platform_name)
-            {
+            if let Some(resolved) = result {
                 return Ok(resolved);
             }
         }
     }
 
     // Process any remaining data in buffer (in case there's no trailing newline)
-    if !buffer.is_empty() {
-        let line_str = std::str::from_utf8(&buffer)?;
-        if !line_str.trim().is_empty() {
-            let version_info: BinVersionInfo =
-                serde_json::from_str(line_str).map_err(|source| Error::ManifestParse { source })?;
-
-            if let Some(resolved) =
-                check_version_match(&version_info, constraints, exclude_newer, platform_name)
-            {
-                return Ok(resolved);
-            }
-        }
+    if let Some(resolved) = parse_and_check(&buffer)? {
+        return Ok(resolved);
     }
 
     // No matching version found
@@ -433,8 +442,8 @@ async fn fetch_and_find_matching_version(
 
 /// Check if a version matches the constraints and find the artifact for the platform.
 ///
-/// Returns `Ok(Some(resolved))` if the version matches and an artifact is found,
-/// `Ok(None)` if the version doesn't match or no artifact is available for the platform.
+/// Returns `Some(resolved)` if the version matches and an artifact is found,
+/// `None` if the version doesn't match or no artifact is available for the platform.
 fn check_version_match(
     version_info: &BinVersionInfo,
     constraints: Option<&uv_pep440::VersionSpecifiers>,
@@ -455,14 +464,8 @@ fn check_version_match(
         return None;
     }
 
-    find_artifact_for_platform(version_info, platform_name)
-}
-
-/// Find an artifact for the given platform from the version info.
-fn find_artifact_for_platform(
-    version_info: &BinVersionInfo,
-    platform_name: &str,
-) -> Option<ResolvedVersion> {
+    // Find an artifact matching the platform, trusting whichever archive format the
+    // manifest reports.
     for artifact in &version_info.artifacts {
         if artifact.platform != platform_name {
             continue;
@@ -488,8 +491,8 @@ fn find_artifact_for_platform(
     None
 }
 
-/// Install the given binary using the artifact URL from a resolved version.
-pub async fn bin_install_resolved(
+/// Install the given binary from a [`ResolvedVersion`].
+pub async fn bin_install(
     binary: Binary,
     resolved: &ResolvedVersion,
     client: &BaseClient,
@@ -514,41 +517,6 @@ pub async fn bin_install_resolved(
     .await
 }
 
-/// Install the given binary by constructing the download URL.
-pub async fn bin_install(
-    binary: Binary,
-    version: &Version,
-    client: &BaseClient,
-    retry_policy: &ExponentialBackoff,
-    cache: &Cache,
-    reporter: &dyn Reporter,
-) -> Result<PathBuf, Error> {
-    let platform = Platform::from_env()?;
-    let platform_name = platform.as_cargo_dist_triple();
-
-    let format = if platform.os.is_windows() {
-        ArchiveFormat::Zip
-    } else {
-        ArchiveFormat::TarGz
-    };
-
-    let download_url =
-        DisplaySafeUrl::from_url(binary.download_url(version, &platform_name, format)?);
-
-    bin_install_from_url(
-        binary,
-        version,
-        &download_url,
-        format,
-        &platform_name,
-        client,
-        retry_policy,
-        cache,
-        reporter,
-    )
-    .await
-}
-
 /// Install a binary from a specific URL.
 async fn bin_install_from_url(
     binary: Binary,
@@ -561,6 +529,7 @@ async fn bin_install_from_url(
     cache: &Cache,
     reporter: &dyn Reporter,
 ) -> Result<PathBuf, Error> {
+    let download_url = DisplaySafeUrl::from_url(download_url.clone());
     let cache_entry = CacheEntry::new(
         cache
             .bucket(CacheBucket::Binaries)
@@ -588,7 +557,7 @@ async fn bin_install_from_url(
         reporter,
         platform_name,
         format,
-        download_url,
+        &download_url,
         &cache_entry,
     )
     .await?;
