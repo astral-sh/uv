@@ -8103,6 +8103,51 @@ fn tool_uv_sources_is_in_preview() -> Result<()> {
     Ok(())
 }
 
+/// Verify that a dependency present in both `dependencies` and `optional-dependencies`,
+/// with `tool.uv.sources` using `extra == '...'` / `extra != '...'` markers, is correctly
+/// installed via `uv pip install`. Previously, `extra != '...'` was simplified to an impossible
+/// marker (`python_version < '0'`) which caused the package to be silently dropped.
+#[test]
+fn tool_uv_sources_extra_negation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.optional-dependencies]
+        cpu = []
+
+        [tool.uv.sources]
+        iniconfig = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", marker = "extra == 'cpu'" },
+        ]
+    "#})?;
+
+    // Install without extras — the `extra != 'cpu'` branch should resolve from the registry.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e")
+        .arg("."), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "
+    );
+
+    Ok(())
+}
+
 /// Allow transitive URLs via recursive extras.
 #[test]
 fn recursive_extra_transitive_url() -> Result<()> {
