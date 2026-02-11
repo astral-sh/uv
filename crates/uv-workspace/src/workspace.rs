@@ -1092,10 +1092,17 @@ impl Workspace {
                     .and_then(|uv| uv.managed)
                     == Some(false)
                 {
-                    debug!(
-                        "Project `{}` is marked as unmanaged; omitting from workspace members",
-                        pyproject_toml.project.as_ref().unwrap().name
-                    );
+                    if let Some(project) = pyproject_toml.project.as_ref() {
+                        debug!(
+                            "Project `{}` is marked as unmanaged; omitting from workspace members",
+                            project.name
+                        );
+                    } else {
+                        debug!(
+                            "Workspace member at `{}` is marked as unmanaged; omitting from workspace members",
+                            member_root.simplified_display()
+                        );
+                    }
                     continue;
                 }
 
