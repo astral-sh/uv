@@ -6220,3 +6220,31 @@ fn run_target_workspace_discovery() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `--preview-features target-workspace-discovery` works with a bare script
+/// filename (no directory component), which would otherwise cause `Path::parent()` to
+/// return an empty path.
+#[test]
+fn run_target_workspace_discovery_bare_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("script.py")
+        .write_str(r"print('success')")?;
+
+    // With the preview feature and a bare filename, the script should run without error.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("target-workspace-discovery")
+        .arg("script.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    success
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
