@@ -4,7 +4,7 @@ use std::str::FromStr;
 use uv_small_str::SmallString;
 
 use crate::tags::AndroidAbi;
-use crate::tags::IosMultiarch;
+use crate::tags::IosPlatform;
 use crate::{Arch, BinaryFormat};
 
 /// A tag to represent the platform compatibility of a Python distribution.
@@ -79,7 +79,8 @@ pub enum PlatformTag {
     Ios {
         major: u16,
         minor: u16,
-        multiarch: IosMultiarch,
+        /// iOS architecture and whether it is a simulator or a real device.
+        platform: IosPlatform,
     },
 }
 
@@ -187,7 +188,7 @@ impl PlatformTag {
                 binary_format: BinaryFormat::Arm64,
                 ..
             } | Self::Ios {
-                multiarch: IosMultiarch::Arm64Device | IosMultiarch::Arm64Simulator,
+                platform: IosPlatform::Arm64Device | IosPlatform::Arm64Simulator,
                 ..
             } | Self::WinArm64
                 | Self::Android {
@@ -223,7 +224,7 @@ impl PlatformTag {
                 binary_format: BinaryFormat::X86_64,
                 ..
             } | Self::Ios {
-                multiarch: IosMultiarch::X86_64Simulator,
+                platform: IosPlatform::X86_64Simulator,
                 ..
             } | Self::WinAmd64
         )
@@ -428,7 +429,7 @@ impl std::fmt::Display for PlatformTag {
             Self::Ios {
                 major,
                 minor,
-                multiarch,
+                platform: multiarch,
             } => write!(f, "ios_{major}_{minor}_{multiarch}"),
         }
     }
@@ -843,26 +844,25 @@ impl FromStr for PlatformTag {
                     tag: s.to_string(),
                 })?;
 
-            let multiarch_str = &rest[second_underscore + 1..];
-            if multiarch_str.is_empty() {
+            let platform = &rest[second_underscore + 1..];
+            if platform.is_empty() {
                 return Err(ParsePlatformTagError::InvalidFormat {
                     platform: "ios",
                     tag: s.to_string(),
                 });
             }
 
-            let multiarch =
-                multiarch_str
-                    .parse()
-                    .map_err(|_| ParsePlatformTagError::InvalidArch {
-                        platform: "ios",
-                        tag: s.to_string(),
-                    })?;
+            let platform = platform
+                .parse()
+                .map_err(|_| ParsePlatformTagError::InvalidArch {
+                    platform: "ios",
+                    tag: s.to_string(),
+                })?;
 
             return Ok(Self::Ios {
                 major,
                 minor,
-                multiarch,
+                platform,
             });
         }
 
@@ -892,7 +892,7 @@ mod tests {
 
     use crate::platform_tag::{ParsePlatformTagError, PlatformTag};
     use crate::tags::AndroidAbi;
-    use crate::tags::IosMultiarch;
+    use crate::tags::IosPlatform;
     use crate::{Arch, BinaryFormat};
 
     #[test]
@@ -1207,7 +1207,7 @@ mod tests {
         let tag = PlatformTag::Ios {
             major: 13,
             minor: 0,
-            multiarch: IosMultiarch::Arm64Device,
+            platform: IosPlatform::Arm64Device,
         };
         assert_eq!(
             PlatformTag::from_str("ios_13_0_arm64_iphoneos").as_ref(),
