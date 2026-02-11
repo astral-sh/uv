@@ -1686,7 +1686,7 @@ mod tests {
 
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
-        let cache = Cache::temp()?;
+        let cache = Cache::temp(true)?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
@@ -1746,7 +1746,7 @@ mod tests {
 
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
-        let cache = Cache::temp()?;
+        let cache = Cache::temp(true)?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();
@@ -1794,7 +1794,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let cache = Cache::temp()?;
+        let cache = Cache::temp(true)?;
         let registry_client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache)
             .allow_cross_origin_credentials()
             .build();

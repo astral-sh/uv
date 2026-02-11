@@ -170,7 +170,7 @@ mod tests {
 
             Ok(Self {
                 tempdir,
-                cache: Cache::temp()?,
+                cache: Cache::temp(true)?,
                 installations: ManagedPythonInstallations::temp()?,
                 search_path: None,
                 workdir,

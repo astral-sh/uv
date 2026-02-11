@@ -70,7 +70,7 @@ async fn clean_force() -> Result<()> {
         .success();
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
+    let _cache = uv_cache::Cache::from_path(context.cache_dir.path(), true)
         .with_exclusive_lock()
         .await;
     uv_snapshot!(context.filters(), context.clean().arg("--verbose").arg("--force"), @"
@@ -229,7 +229,7 @@ async fn cache_timeout() {
     let context = uv_test::test_context!("3.12");
 
     // Simulate another uv process running and locking the cache, e.g., with a source build.
-    let _cache = Cache::from_path(context.cache_dir.path())
+    let _cache = Cache::from_path(context.cache_dir.path(), true)
         .with_exclusive_lock()
         .await;
 

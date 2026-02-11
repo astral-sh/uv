@@ -218,7 +218,7 @@ async fn prune_force() -> Result<()> {
     simple.create_dir_all()?;
 
     // When locked, `--force` should proceed without blocking
-    let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
+    let _cache = uv_cache::Cache::from_path(context.cache_dir.path(), true)
         .with_exclusive_lock()
         .await;
     uv_snapshot!(context.filters(), context.prune().arg("--verbose").arg("--force"), @"

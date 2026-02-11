@@ -8,6 +8,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_pep508::VerbatimUrl;
+use uv_preview::Preview;
 use uv_pypi_types::ParsedUrl;
 use uv_settings::EnvironmentOptions;
 
@@ -21,8 +22,9 @@ pub(crate) struct ValidateZipArgs {
 pub(crate) async fn validate_zip(
     args: ValidateZipArgs,
     environment: EnvironmentOptions,
+    preview: Preview,
 ) -> Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init().await?;
+    let cache = Cache::from_args(args.cache_args, preview)?.init().await?;
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)

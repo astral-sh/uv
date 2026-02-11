@@ -37,6 +37,7 @@ pub enum PreviewFeature {
     AdjustUlimit = 1 << 22,
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
+    RespectUmask = 1 << 25,
 }
 
 impl PreviewFeature {
@@ -68,6 +69,7 @@ impl PreviewFeature {
             Self::AdjustUlimit => "adjust-ulimit",
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
+            Self::RespectUmask => "respect-umask",
         }
     }
 }
@@ -112,6 +114,7 @@ impl FromStr for PreviewFeature {
             "adjust-ulimit" => Self::AdjustUlimit,
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
+            "respect-umask" => Self::RespectUmask,
             _ => return Err(PreviewFeatureParseError),
         })
     }
