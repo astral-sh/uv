@@ -15,6 +15,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
@@ -250,7 +251,7 @@ pub struct GlobalOptions {
         "#
     )]
     pub cache_dir: Option<PathBuf>,
-    /// Whether to enable experimental, preview features.
+    /// Whether to enable all experimental, preview features.
     #[option(
         default = "false",
         value_type = "bool",
@@ -259,6 +260,15 @@ pub struct GlobalOptions {
         "#
     )]
     pub preview: Option<bool>,
+    /// Whether to enable specific experimental, preview features.
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            preview-features = ["python-upgrade"]
+        "#
+    )]
+    pub preview_features: Option<Vec<PreviewFeature>>,
     /// Whether to prefer using Python installations that are already present on the system, or
     /// those that are downloaded and installed by uv.
     #[option(
@@ -2153,6 +2163,7 @@ pub struct OptionsWire {
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
     preview: Option<bool>,
+    preview_features: Option<Vec<PreviewFeature>>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
@@ -2252,6 +2263,7 @@ impl From<OptionsWire> for Options {
             no_cache,
             cache_dir,
             preview,
+            preview_features,
             python_preference,
             python_downloads,
             python_install_mirror,
@@ -2328,6 +2340,7 @@ impl From<OptionsWire> for Options {
                 no_cache,
                 cache_dir,
                 preview,
+                preview_features,
                 python_preference,
                 python_downloads,
                 concurrent_downloads,
