@@ -86,13 +86,13 @@ jobs:
           persist-credentials: false
 
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
         with:
           registry: ghcr.io
@@ -194,13 +194,13 @@ jobs:
           - python:3.9-slim-trixie,python3.9-trixie-slim
     steps:
       # Login to DockerHub (when not pushing, it's to avoid rate-limiting)
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         if: ${{ needs.docker-plan.outputs.login == 'true' }}
         with:
           username: ${{ needs.docker-plan.outputs.push == 'true' && 'astral' || 'astralshbot' }}
           password: ${{ needs.docker-plan.outputs.push == 'true' && secrets.DOCKERHUB_TOKEN_RW || secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -345,12 +345,12 @@ jobs:
       - docker-publish-extra
     if: ${{ needs.docker-plan.outputs.push == 'true' }}
     steps:
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           username: astral
           password: ${{ secrets.DOCKERHUB_TOKEN_RW }}
 
-      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}

@@ -1,8 +1,8 @@
 use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use uv_test::uv_snapshot;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
@@ -10,7 +10,7 @@ use wiremock::{
 
 #[test]
 fn python_list() {
-    let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let mut context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -133,7 +133,7 @@ fn python_list() {
 
 #[test]
 fn python_list_pin() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -173,7 +173,7 @@ fn python_list_pin() {
 
 #[test]
 fn python_list_venv() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -216,7 +216,7 @@ fn python_list_venv() {
 #[cfg(unix)]
 #[test]
 fn python_list_unsupported_version() {
-    let context: TestContext = TestContext::new_with_versions(&["3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys();
 
@@ -291,7 +291,7 @@ fn python_list_unsupported_version() {
 
 #[test]
 fn python_list_duplicate_path_entries() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
         .with_filtered_python_keys()
         .with_collapsed_whitespace();
@@ -360,7 +360,7 @@ fn python_list_duplicate_path_entries() {
 
 #[test]
 fn python_list_downloads() {
-    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_keys();
 
     // We do not test showing all interpreters — as it differs per platform
     // Instead, we choose a Python version where our available distributions are stable
@@ -415,7 +415,7 @@ fn python_list_downloads() {
 fn python_list_downloads_installed() {
     use assert_cmd::assert::OutputAssertExt;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
@@ -487,7 +487,7 @@ fn python_list_downloads_installed() {
 
 #[tokio::test]
 async fn python_list_remote_python_downloads_json_url() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
     let server = MockServer::start().await;
 
     let remote_json = r#"
@@ -592,7 +592,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 
 #[test]
 fn python_list_with_mirrors() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_collapsed_whitespace()
         // Add filters to normalize file paths in URLs

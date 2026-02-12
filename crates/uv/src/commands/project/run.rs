@@ -1605,7 +1605,7 @@ impl RunCommand {
 
     /// Return the directory containing the script, if any.
     fn script_dir(&self) -> Option<&Path> {
-        match self {
+        let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
             | Self::PythonZipapp(target, _) => target.parent(),
@@ -1617,7 +1617,9 @@ impl RunCommand {
             | Self::PythonRemote(..)
             | Self::External(..)
             | Self::Empty => None,
-        }
+        };
+        // The parent is `Some("")` for bare filenames.
+        parent.filter(|parent| !parent.as_os_str().is_empty())
     }
 }
 

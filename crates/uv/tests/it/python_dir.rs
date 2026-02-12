@@ -2,11 +2,11 @@ use assert_fs::fixture::PathChild;
 
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn python_dir() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let python_dir = context.temp_dir.child("python");
     uv_snapshot!(context.filters(), context.python_dir()

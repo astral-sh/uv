@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use std::{env, path::Path, process::Command};
 
-use crate::common::{TestContext, uv_snapshot};
 use anyhow::Context;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
@@ -13,6 +12,7 @@ use assert_fs::{
 use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
+use uv_test::uv_snapshot;
 
 use uv_fs::Simplified;
 use uv_python::managed::platform_key_from_env;
@@ -21,7 +21,7 @@ use walkdir::WalkDir;
 
 #[test]
 fn python_install() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -147,7 +147,7 @@ fn python_install() {
 
 #[test]
 fn python_reinstall() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -203,7 +203,7 @@ fn python_reinstall() {
 
 #[test]
 fn python_reinstall_patch() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -237,7 +237,7 @@ fn python_reinstall_patch() {
 
 #[test]
 fn python_install_automatic() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_python_sources()
@@ -349,7 +349,7 @@ fn python_install_automatic() {
 /// <https://github.com/astral-sh/uv/issues/13610>
 #[test]
 fn regression_cpython() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_python_sources()
@@ -382,7 +382,7 @@ fn regression_cpython() {
 
 #[test]
 fn python_install_force() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -446,7 +446,7 @@ fn python_install_force() {
 
 #[test]
 fn python_install_minor() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -506,7 +506,7 @@ fn python_install_minor() {
 
 #[test]
 fn python_install_multiple_patch() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -586,7 +586,7 @@ fn python_install_multiple_patch() {
 
 #[test]
 fn python_install_preview() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -863,7 +863,7 @@ fn python_install_preview() {
 
 #[test]
 fn python_install_preview_no_bin() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -911,7 +911,7 @@ fn python_install_preview_no_bin() {
 
 #[test]
 fn python_install_preview_upgrade() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -1070,7 +1070,7 @@ fn python_install_preview_upgrade() {
 
 #[test]
 fn python_install_freethreaded() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
@@ -1227,7 +1227,7 @@ fn python_install_freethreaded() {
 
 #[test]
 fn python_upgrade_not_allowed() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
@@ -1257,7 +1257,7 @@ fn python_upgrade_not_allowed() {
 #[cfg(unix)]
 #[test]
 fn python_install_debug() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -1386,7 +1386,7 @@ fn python_install_debug() {
 #[cfg(unix)]
 #[test]
 fn python_install_debug_freethreaded() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -1536,7 +1536,7 @@ fn python_install_debug_freethreaded() {
 
 #[test]
 fn python_install_invalid_request() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -1575,7 +1575,7 @@ fn python_install_invalid_request() {
 
 #[test]
 fn python_install_default() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -1815,7 +1815,7 @@ fn python_install_default() {
 
 #[test]
 fn python_install_default_preview() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -2203,7 +2203,7 @@ fn read_link(path: &Path) -> String {
 
 #[test]
 fn python_install_unknown() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_managed_python_dirs()
         .with_python_download_cache();
 
@@ -2236,7 +2236,7 @@ fn python_install_broken_link() {
     use assert_fs::prelude::PathCreateDir;
     use fs_err::os::unix::fs::symlink;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -2275,7 +2275,7 @@ fn python_install_broken_link() {
 /// python.exe and python3.exe links for pre-release versions.
 #[test]
 fn python_install_default_prerelease() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -2311,7 +2311,7 @@ fn python_install_default_prerelease() {
 
 #[test]
 fn python_install_default_from_env() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_latest_python_versions()
@@ -2404,7 +2404,7 @@ fn python_install_patch_dylib() {
     use assert_cmd::assert::OutputAssertExt;
     use uv_python::managed::platform_key_from_env;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
         .with_python_download_cache();
@@ -2447,7 +2447,7 @@ fn python_install_patch_dylib() {
 
 #[test]
 fn python_install_prerelease() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
@@ -2481,7 +2481,7 @@ fn python_install_prerelease() {
 
 #[test]
 fn python_find_prerelease() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_latest_python_versions()
         .with_managed_python_dirs()
@@ -2556,7 +2556,7 @@ fn python_install_cached() {
         return;
     }
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -2651,7 +2651,7 @@ fn python_install_no_cache() {
         return;
     }
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -2757,7 +2757,7 @@ fn python_install_no_cache() {
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
 fn python_install_emulated_macos() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -2844,7 +2844,7 @@ fn python_install_emulated_macos() {
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 #[test]
 fn python_install_emulated_windows_x86_on_x64() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -2916,7 +2916,7 @@ fn python_install_emulated_windows_x86_on_x64() {
 // A virtual environment should track the latest patch version installed.
 #[test]
 fn install_transparent_patch_upgrade_uv_venv() {
-    let context = TestContext::new_with_versions(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3010,7 +3010,7 @@ fn install_transparent_patch_upgrade_uv_venv() {
 // minor version should point to the highest.
 #[test]
 fn install_multiple_patches() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3101,7 +3101,7 @@ fn install_multiple_patches() {
 // next highest.
 #[test]
 fn uninstall_highest_patch() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3175,7 +3175,7 @@ fn uninstall_highest_patch() {
 // installed.
 #[test]
 fn install_no_transparent_upgrade_with_venv_patch_specification() {
-    let context = TestContext::new_with_versions(&["3.13"])
+    let context = uv_test::test_context_with_versions!(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3245,7 +3245,7 @@ fn install_no_transparent_upgrade_with_venv_patch_specification() {
 // the latest patch version installed.
 #[test]
 fn install_transparent_patch_upgrade_venv_module() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3323,7 +3323,7 @@ fn install_transparent_patch_upgrade_venv_module() {
 // `uv run` should not downgrade virtual environments.
 #[test]
 fn install_lower_patch_automatically() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3393,7 +3393,7 @@ fn install_lower_patch_automatically() {
 
 #[test]
 fn uninstall_last_patch() {
-    let context = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
@@ -3480,7 +3480,7 @@ fn uninstall_last_patch() {
 fn python_install_pyodide() {
     use assert_cmd::assert::OutputAssertExt;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -3651,7 +3651,7 @@ fn python_install_pyodide() {
 fn python_install_build_version() {
     use uv_python::managed::platform_key_from_env;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -3734,7 +3734,7 @@ fn python_install_build_version() {
 fn python_install_build_version_pypy() {
     use uv_python::managed::platform_key_from_env;
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
@@ -3803,7 +3803,7 @@ fn python_install_build_version_pypy() {
 
 #[test]
 fn python_install_upgrade() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -3930,7 +3930,7 @@ fn python_install_upgrade() {
 
 #[test]
 fn python_install_upgrade_version_file() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -3979,7 +3979,7 @@ fn python_install_upgrade_version_file() {
 
 #[test]
 fn python_install_armv7() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_managed_python_dirs()
         .with_python_download_cache()
@@ -4025,7 +4025,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
         Ok(count)
     }
 
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4099,7 +4099,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
 
 #[test]
 fn python_install_compile_bytecode_existing() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4132,7 +4132,7 @@ fn python_install_compile_bytecode_existing() {
 
 #[test]
 fn python_install_compile_bytecode_upgrade() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4166,7 +4166,7 @@ fn python_install_compile_bytecode_upgrade() {
 
 #[test]
 fn python_install_upgrade_build_version() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_python_download_cache()
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -4225,7 +4225,7 @@ fn python_install_upgrade_build_version() {
 
 #[test]
 fn python_install_compile_bytecode_multiple() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4251,7 +4251,7 @@ fn python_install_compile_bytecode_multiple() {
 #[cfg(unix)] // Pyodide cannot be used on Windows
 #[test]
 fn python_install_compile_bytecode_pyodide() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4279,7 +4279,7 @@ fn python_install_compile_bytecode_pyodide() {
 
 #[test]
 fn python_install_compile_bytecode_graalpy() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()
@@ -4302,7 +4302,7 @@ fn python_install_compile_bytecode_graalpy() {
 
 #[test]
 fn python_install_compile_bytecode_pypy() {
-    let context: TestContext = TestContext::new_with_versions(&[])
+    let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_compiled_file_count()

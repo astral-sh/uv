@@ -5,7 +5,7 @@ use indoc::{formatdoc, indoc};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{TestContext, site_packages_path, uv_snapshot};
+use uv_test::{site_packages_path, uv_snapshot};
 
 /// Filter the user scheme, which differs between Windows and Unix.
 fn user_scheme_bin_filter() -> (String, String) {
@@ -32,7 +32,7 @@ print(uv.find_uv_bin())
 
 #[test]
 fn find_uv_bin_venv() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -72,7 +72,7 @@ fn find_uv_bin_venv() {
 
 #[test]
 fn find_uv_bin_target() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -116,7 +116,7 @@ fn find_uv_bin_target() {
 
 #[test]
 fn find_uv_bin_prefix() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -165,7 +165,7 @@ fn find_uv_bin_prefix() {
 
 #[test]
 fn find_uv_bin_base_prefix() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -216,7 +216,7 @@ fn find_uv_bin_base_prefix() {
 
 #[test]
 fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -263,7 +263,7 @@ fn find_uv_bin_in_ephemeral_environment() -> anyhow::Result<()> {
 
 #[test]
 fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -320,7 +320,7 @@ fn find_uv_bin_in_parent_of_ephemeral_environment() -> anyhow::Result<()> {
 
 #[test]
 fn find_uv_bin_user_bin() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -396,7 +396,7 @@ fn find_uv_bin_user_bin() {
 
 #[test]
 fn find_uv_bin_error_message() {
-    let mut context = TestContext::new("3.12")
+    let mut context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -475,7 +475,7 @@ fn find_uv_bin_error_message() {
 #[cfg(feature = "test-python-eol")]
 #[test]
 fn find_uv_bin_py38() {
-    let context = TestContext::new("3.8")
+    let context = uv_test::test_context!("3.8")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -515,7 +515,7 @@ fn find_uv_bin_py38() {
 
 #[test]
 fn find_uv_bin_py39() {
-    let context = TestContext::new("3.9")
+    let context = uv_test::test_context!("3.9")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -555,7 +555,7 @@ fn find_uv_bin_py39() {
 
 #[test]
 fn find_uv_bin_py310() {
-    let context = TestContext::new("3.10")
+    let context = uv_test::test_context!("3.10")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -595,7 +595,7 @@ fn find_uv_bin_py310() {
 
 #[test]
 fn find_uv_bin_py311() {
-    let context = TestContext::new("3.11")
+    let context = uv_test::test_context!("3.11")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -635,7 +635,7 @@ fn find_uv_bin_py311() {
 
 #[test]
 fn find_uv_bin_py312() {
-    let context = TestContext::new("3.12")
+    let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -675,7 +675,7 @@ fn find_uv_bin_py312() {
 
 #[test]
 fn find_uv_bin_py313() {
-    let context = TestContext::new("3.13")
+    let context = uv_test::test_context!("3.13")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()
@@ -715,7 +715,7 @@ fn find_uv_bin_py313() {
 
 #[test]
 fn find_uv_bin_py314() {
-    let context = TestContext::new("3.14")
+    let context = uv_test::test_context!("3.14")
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin()
         .with_filtered_exe_suffix()

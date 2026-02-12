@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.10.0"
+version = "0.10.2"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -56,6 +56,7 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
+uv-test = { workspace = true, optional = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
 uv-trampoline-builder = { workspace = true }
@@ -80,6 +81,7 @@ dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
+jiff = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
 indoc = { workspace = true }
@@ -125,11 +127,11 @@ embed-manifest = { workspace = true }
 
 [dev-dependencies]
 uv-publish = { workspace = true, features = ["test"] }
+uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 backon = { workspace = true }
-base64 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
 filetime = { workspace = true }
@@ -137,14 +139,12 @@ flate2 = { workspace = true, default-features = false }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ignore = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
-similar = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
@@ -169,7 +169,7 @@ performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 self-update = ["axoupdater", "uv-cli/self-update"]
 
 # Features for development only.
-tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export", "uv-settings/tracing-durations-export", "uv-test/tracing-durations-export"]
 
 # Features that only apply when running tests, no-ops otherwise.
 test-defaults = [
@@ -187,7 +187,7 @@ test-defaults = [
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
 # Introduces a testing dependency on Git.
-test-git = []
+test-git = ["uv-test?/git"]
 # Introduces a testing dependency on Git LFS.
 test-git-lfs = ["test-git"]
 # Introduces a testing dependency on PyPI.
@@ -208,6 +208,16 @@ test-slow = []
 test-ecosystem = []
 # Build uvw binary on Windows
 windows-gui-bin = []
+
+[package.metadata.cargo-shear]
+# The uv crate has uv-test as dev-dependency. We want that by default,
+# uv runs tests with `uv-test/git`, so it's a default feature in uv. The
+# problem is that uv-test is only a dev dependency, which gets stripped by
+# `cargo install`, and `cargo install` fails with a missing crate error.
+# As workaround, we make `uv-test` a regular optional dependency. It's never
+# used as a regular dependency, but it allows using `uv-test?/git` as default
+# feature.
+ignored = ["uv-test"]
 
 [package.metadata.dist]
 dist = true

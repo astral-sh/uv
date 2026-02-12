@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
@@ -8,10 +7,11 @@ use insta::assert_snapshot;
 use uv_platform::{Arch, Os};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
+use uv_test::uv_snapshot;
 
 #[test]
 fn python_pin() {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
     uv_snapshot!(context.filters(), context.python_pin(), @"
@@ -185,7 +185,7 @@ fn python_pin() {
 // If there is no project-level `.python-version` file, respect the global pin.
 #[test]
 fn python_pin_global_if_no_local() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
     let uv = context.user_config_dir.child("uv");
     uv.create_dir_all()?;
 
@@ -226,7 +226,7 @@ fn python_pin_global_if_no_local() -> Result<()> {
 // the global pin.
 #[test]
 fn python_pin_global_use_local_if_available() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
     let uv = context.user_config_dir.child("uv");
     uv.create_dir_all()?;
 
@@ -306,7 +306,7 @@ fn python_pin_global_use_local_if_available() -> Result<()> {
 
 #[test]
 fn python_pin_global_creates_parent_dirs() {
-    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
     let uv_global_config_dir = context.user_config_dir.child("uv");
 
     assert!(
@@ -334,7 +334,7 @@ fn python_pin_global_creates_parent_dirs() {
 #[cfg(unix)]
 #[test]
 fn python_pin_no_python() {
-    let context: TestContext = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"
     success: true
@@ -349,8 +349,8 @@ fn python_pin_no_python() {
 
 #[test]
 fn python_pin_compatible_with_requires_python() -> Result<()> {
-    let context: TestContext =
-        TestContext::new_with_versions(&["3.10", "3.11"]).with_filtered_python_sources();
+    let context =
+        uv_test::test_context_with_versions!(&["3.10", "3.11"]).with_filtered_python_sources();
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -518,7 +518,7 @@ fn python_pin_compatible_with_requires_python() -> Result<()> {
 
 #[test]
 fn warning_pinned_python_version_not_installed() -> Result<()> {
-    let context: TestContext = TestContext::new_with_versions(&["3.10", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.10", "3.11"]);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -560,7 +560,7 @@ fn warning_pinned_python_version_not_installed() -> Result<()> {
 /// We do need a Python interpreter for `--resolved` pins
 #[test]
 fn python_pin_resolve_no_python() {
-    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("3.12"), @"
     success: false
     exit_code: 2
@@ -575,7 +575,7 @@ fn python_pin_resolve_no_python() {
 
 #[test]
 fn python_pin_resolve() {
-    let context: TestContext = TestContext::new_with_versions(&["3.12", "3.13"]);
+    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"]);
 
     // We pin the first interpreter on the path
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved").arg("any"), @"
@@ -744,7 +744,7 @@ fn python_pin_resolve() {
 
 #[test]
 fn python_pin_with_comments() -> Result<()> {
-    let context = TestContext::new_with_versions(&[]);
+    let context = uv_test::test_context_with_versions!(&[]);
 
     let content = indoc::indoc! {r"
         3.12
@@ -784,7 +784,7 @@ fn python_pin_with_comments() -> Result<()> {
 #[test]
 #[cfg(feature = "test-python-managed")]
 fn python_pin_install() {
-    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
 
     // Should not install 3.12 when downloads are not automatic
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @"
@@ -809,7 +809,7 @@ fn python_pin_install() {
 
 #[test]
 fn python_pin_rm() {
-    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
 
     uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @"
     success: false

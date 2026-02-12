@@ -45,11 +45,15 @@ impl uWrite for StringBuffer {
 
 #[cold]
 pub(crate) fn write_diagnostic(message: &str, is_error: bool) {
+    let prefix = if is_error { "error" } else { "warning" };
     let mut stderr = std::io::stderr();
     if !stderr.as_raw_handle().is_null() {
+        let _ = stderr.write_all(prefix.as_bytes());
+        let _ = stderr.write_all(b": ");
         let _ = stderr.write_all(message.as_bytes());
     } else if is_error {
-        let nul_terminated = unsafe { CString::new(message.as_bytes()).unwrap_unchecked() };
+        let error = format!("{}: {}", prefix, message);
+        let nul_terminated = unsafe { CString::new(error).unwrap_unchecked() };
         let pcstr_message = PCSTR::from_raw(nul_terminated.as_ptr() as *const _);
         unsafe { MessageBoxA(None, pcstr_message, None, MESSAGEBOX_STYLE(0)) };
     }

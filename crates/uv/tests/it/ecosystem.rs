@@ -1,9 +1,9 @@
-use crate::common::{self, TestContext, get_bin};
 use anyhow::Result;
 use insta::assert_snapshot;
 use std::path::Path;
 use std::process::Command;
 use uv_static::EnvVars;
+use uv_test::get_bin;
 
 // These tests just run `uv lock` on an assorted of ecosystem
 // projects.
@@ -83,7 +83,7 @@ fn airflow() -> Result<()> {
 /// is, there should be a directory at `./test/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
-    let context = TestContext::new(python_version);
+    let context = uv_test::test_context!(python_version);
     context.copy_ecosystem_project(name);
 
     // Cache source distribution builds to speed up the tests.
@@ -91,16 +91,16 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
 
     // Custom command since we need to change the cache dir.
-    let mut command = Command::new(get_bin());
+    let mut command = Command::new(get_bin!());
     context.add_shared_env(&mut command, false);
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
     command.arg("lock").arg("--cache-dir").arg(&cache_dir);
 
-    let (snapshot, _) = common::run_and_format(
+    let (snapshot, _) = uv_test::run_and_format(
         &mut command,
         context.filters(),
         name,
-        Some(common::WindowsFilters::Platform),
+        Some(uv_test::WindowsFilters::Platform),
         None,
     );
 
