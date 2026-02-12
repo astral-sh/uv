@@ -2051,4 +2051,16 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             "The ~= operator requires at least two segments in the release version"
         );
     }
+
+    /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+    #[test]
+    fn bounding_specifiers_u64_max_rejected_at_parse_time() {
+        assert!(VersionSpecifier::from_str("~=3.18446744073709551615.0").is_err());
+        assert!(VersionSpecifier::from_str("~=18446744073709551615.0").is_err());
+
+        // u64::MAX - 1 is accepted and bounding_specifiers does not overflow.
+        let specifier = VersionSpecifier::from_str("~=3.18446744073709551614.0").unwrap();
+        let tilde = TildeVersionSpecifier::from_specifier(specifier).unwrap();
+        let (_lower, _upper) = tilde.bounding_specifiers();
+    }
 }

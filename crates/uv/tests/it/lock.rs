@@ -33416,3 +33416,33 @@ async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_grou
 
     Ok(())
 }
+
+/// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+#[test]
+fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar~=18446744073709551615.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `foo @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse metadata from built wheel
+      ╰─▶ expected number less than or equal to 18446744073709551614, but number found in "18446744073709551615" exceeds it
+          bar ~=18446744073709551615.0
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+    "#);
+
+    Ok(())
+}
