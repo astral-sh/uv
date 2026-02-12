@@ -363,9 +363,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     debug!("uv {}", uv_cli::version::uv_self_version());
     if globals.preview.all_enabled() {
-        debug!("Preview is enabled");
+        debug!("All preview features are enabled");
     } else if globals.preview.any_enabled() {
-        debug!("Enabled preview features: {}", globals.preview);
+        debug!(
+            "The following preview features are enabled: {}",
+            globals.preview
+        );
     }
 
     // Adjust open file limits on Unix if the preview feature is enabled.

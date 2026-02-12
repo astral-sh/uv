@@ -59,9 +59,9 @@ fn main() -> Result<()> {
         Preview::default()
     };
     if preview.all_enabled() {
-        debug!("Preview is enabled");
+        debug!("All preview features are enabled");
     } else if preview.any_enabled() {
-        debug!("Enabled preview features: {preview}");
+        debug!("The following preview features are enabled: {preview}");
     }
 
     match command.as_str() {
