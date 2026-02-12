@@ -152,17 +152,6 @@ impl WheelFilename {
         self.tags.build_tag()
     }
 
-    /// Check if the compressed tag sets are sorted per PEP 425.
-    ///
-    /// PEP 425 states that compressed tag sets (`.`-separated) should be sorted.
-    /// For example, `manylinux_2_17_x86_64.manylinux2014_x86_64` is unsorted and
-    /// should be `manylinux2014_x86_64.manylinux_2_17_x86_64`.
-    ///
-    /// See: <https://github.com/pypi/warehouse/issues/18129>
-    pub fn has_sorted_tags(&self) -> bool {
-        self.tags.has_sorted_tags()
-    }
-
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     pub fn from_stem(stem: &str) -> Result<Self, WheelFilenameError> {
         // The wheel stem should not contain the `.whl` extension.
@@ -496,46 +485,5 @@ mod tests {
         let filename = "correctionlib-2.8.0-cp314-cp314td-macosx_26_0_arm64.whl";
         let parsed = WheelFilename::from_str(filename).unwrap();
         assert_eq!(filename, parsed.to_string());
-    }
-
-    #[test]
-    fn has_sorted_tags_single() {
-        // Single tags are always sorted.
-        let filename = WheelFilename::from_str("foo-1.2.3-py3-none-any.whl").unwrap();
-        assert!(filename.has_sorted_tags());
-
-        let filename = WheelFilename::from_str("foo-1.2.3-cp311-cp311-linux_x86_64.whl").unwrap();
-        assert!(filename.has_sorted_tags());
-    }
-
-    #[test]
-    fn has_sorted_tags_sorted() {
-        // Sorted platform tags (alphabetically: manylinux2014 < manylinux_2_17).
-        let filename = WheelFilename::from_str(
-            "foo-1.2.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
-        )
-        .unwrap();
-        assert!(filename.has_sorted_tags());
-    }
-
-    #[test]
-    fn has_sorted_tags_unsorted() {
-        // Unsorted platform tags (from warehouse issue #18129).
-        // manylinux_2_17_x86_64.manylinux2014_x86_64 should be manylinux2014_x86_64.manylinux_2_17_x86_64
-        let filename = WheelFilename::from_str(
-            "pyvirtualcam-0.13.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-        )
-        .unwrap();
-        assert!(!filename.has_sorted_tags());
-    }
-
-    #[test]
-    fn has_sorted_tags_unsorted_with_build_tag() {
-        // Unsorted platform tags with a build tag.
-        let filename = WheelFilename::from_str(
-            "foo-1.2.3-123-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
-        )
-        .unwrap();
-        assert!(!filename.has_sorted_tags());
     }
 }
