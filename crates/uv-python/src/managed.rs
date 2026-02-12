@@ -1388,6 +1388,11 @@ mod tests {
                 let v3_1 = PythonVersion::from_str("3.1").unwrap();
                 let matched: Vec<_> = installations.find_version(&v3_1).unwrap().collect();
                 assert_eq!(matched.len(), 0);
+
+                // Check that 3.10 matches
+                let v3_10 = PythonVersion::from_str("3.10").unwrap();
+                let matched: Vec<_> = installations.find_version(&v3_10).unwrap().collect();
+                assert_eq!(matched.len(), 1);
             },
         );
     }
