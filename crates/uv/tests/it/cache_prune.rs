@@ -35,10 +35,8 @@ fn prune_no_op() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -76,11 +74,9 @@ fn prune_stale_directory() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
     Removed 1 directory
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -138,12 +134,10 @@ fn prune_cached_env() {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 }
 
@@ -185,11 +179,9 @@ fn prune_stale_symlink() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed 44 files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -217,10 +209,8 @@ async fn prune_force() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Add a stale directory to the cache.
@@ -407,12 +397,10 @@ fn prune_stale_revision() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Uninstall and reinstall the package. We should use the cached version.

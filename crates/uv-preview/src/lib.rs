@@ -154,9 +154,19 @@ impl Preview {
         Self::new(preview_features)
     }
 
-    /// Check if a single feature is enabled
+    /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Check if all preview feature rae enabled.
+    pub fn all_enabled(&self) -> bool {
+        self.flags.is_all()
+    }
+
+    /// Check if any preview feature is enabled.
+    pub fn any_enabled(&self) -> bool {
+        !self.flags.is_empty()
     }
 }
 

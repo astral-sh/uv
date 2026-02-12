@@ -5843,6 +5843,7 @@ version = "0.10.2"
 dependencies = [
  "anstream",
  "anyhow",
+ "tracing",
  "tracing-subscriber",
  "uv-build-backend",
  "uv-logging",
