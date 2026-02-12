@@ -13,6 +13,15 @@ use crate::{
     parse_extras_cursor, split_extras, split_scheme, strip_host,
 };
 
+/// A hint about whether a path refers to a file or directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathHint {
+    /// The path is known to be a file (e.g., a wheel or source distribution).
+    File,
+    /// The path is known to be a directory (e.g., an editable install).
+    Directory,
+}
+
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
 ///
 /// The error type is fixed to the same as the [`Pep508Url`] impl error.
@@ -21,8 +30,39 @@ pub trait UnnamedRequirementUrl: Pep508Url {
     fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>)
     -> Result<Self, Self::Err>;
 
+    /// Parse a URL from a relative or absolute path, with a hint about whether the path is a file
+    /// or directory.
+    ///
+    /// The hint is used to determine whether the path should be parsed as a file or directory. If
+    /// no such hint is provided, we'll query for the path kind; if the path doesn't exist, it'll be
+    /// treated as a directory if and only if it is extensionless.
+    fn parse_path_with_hint(
+        path: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        hint: Option<PathHint>,
+    ) -> Result<Self, Self::Err> {
+        // Default implementation ignores the hint.
+        let _ = hint;
+        Self::parse_path(path, working_dir)
+    }
+
     /// Parse a URL from an absolute path.
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err>;
+
+    /// Parse a URL from an absolute path, with a hint about whether the path is a file or
+    /// directory.
+    ///
+    /// The hint is used to determine whether the path should be parsed as a file or directory. If
+    /// no such hint is provided, we'll query for the path kind; if the path doesn't exist, it'll be
+    /// treated as a directory if and only if it is extensionless.
+    fn parse_absolute_path_with_hint(
+        path: impl AsRef<Path>,
+        hint: Option<PathHint>,
+    ) -> Result<Self, Self::Err> {
+        // Default implementation ignores the hint.
+        let _ = hint;
+        Self::parse_absolute_path(path)
+    }
 
     /// Parse a URL from a string.
     fn parse_unnamed_url(given: impl AsRef<str>) -> Result<Self, Self::Err>;
@@ -110,10 +150,26 @@ impl<Url: UnnamedRequirementUrl> UnnamedRequirement<Url> {
         working_dir: impl AsRef<Path>,
         reporter: &mut impl Reporter,
     ) -> Result<Self, Pep508Error<Url>> {
-        parse_unnamed_requirement(
+        Self::parse_with_hint(input, working_dir, reporter, None)
+    }
+
+    /// Parse a PEP 508-like direct URL requirement without a package name, with a hint about
+    /// whether the path is a file or directory.
+    ///
+    /// The hint is used to determine whether the path should be parsed as a file or directory. If
+    /// no such hint is provided, we'll query for the path kind; if the path doesn't exist, it'll be
+    /// treated as a directory if and only if it is extensionless.
+    pub fn parse_with_hint(
+        input: &str,
+        working_dir: impl AsRef<Path>,
+        reporter: &mut impl Reporter,
+        hint: Option<PathHint>,
+    ) -> Result<Self, Pep508Error<Url>> {
+        parse_unnamed_requirement_with_hint(
             &mut Cursor::new(input),
             Some(working_dir.as_ref()),
             reporter,
+            hint,
         )
     }
 }
@@ -156,10 +212,21 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     working_dir: Option<&Path>,
     reporter: &mut impl Reporter,
 ) -> Result<UnnamedRequirement<Url>, Pep508Error<Url>> {
+    parse_unnamed_requirement_with_hint(cursor, working_dir, reporter, None)
+}
+
+/// Parse a PEP 508-like direct URL specifier without a package name, with a hint about whether
+/// the path is a file or directory.
+fn parse_unnamed_requirement_with_hint<Url: UnnamedRequirementUrl>(
+    cursor: &mut Cursor,
+    working_dir: Option<&Path>,
+    reporter: &mut impl Reporter,
+    hint: Option<PathHint>,
+) -> Result<UnnamedRequirement<Url>, Pep508Error<Url>> {
     cursor.eat_whitespace();
 
     // Parse the URL itself, along with any extras.
-    let (url, extras) = parse_unnamed_url::<Url>(cursor, working_dir)?;
+    let (url, extras) = parse_unnamed_url::<Url>(cursor, working_dir, hint)?;
 
     // wsp*
     cursor.eat_whitespace();
@@ -213,6 +280,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
     cursor: &Cursor,
     start: usize,
     len: usize,
+    #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused))] hint: Option<PathHint>,
 ) -> Result<(Url, Vec<ExtraName>), Pep508Error<Url>> {
     // Split extras _before_ expanding the URL. We assume that the extras are not environment
     // variables. If we parsed the extras after expanding the URL, then the verbatim representation
@@ -251,7 +319,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 
                 #[cfg(feature = "non-pep508-extensions")]
                 if let Some(working_dir) = working_dir {
-                    let url = Url::parse_path(path.as_ref(), working_dir)
+                    let url = Url::parse_path_with_hint(path.as_ref(), working_dir, hint)
                         .map_err(|err| Pep508Error {
                             message: Pep508ErrorSource::UrlError(err),
                             start,
@@ -262,7 +330,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                     return Ok((url, extras));
                 }
 
-                let url = Url::parse_absolute_path(path.as_ref())
+                let url = Url::parse_absolute_path_with_hint(path.as_ref(), hint)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -289,7 +357,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
             // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
             _ => {
                 if let Some(working_dir) = working_dir {
-                    let url = Url::parse_path(expanded.as_ref(), working_dir)
+                    let url = Url::parse_path_with_hint(expanded.as_ref(), working_dir, hint)
                         .map_err(|err| Pep508Error {
                             message: Pep508ErrorSource::UrlError(err),
                             start,
@@ -300,7 +368,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
                     return Ok((url, extras));
                 }
 
-                let url = Url::parse_absolute_path(expanded.as_ref())
+                let url = Url::parse_absolute_path_with_hint(expanded.as_ref(), hint)
                     .map_err(|err| Pep508Error {
                         message: Pep508ErrorSource::UrlError(err),
                         start,
@@ -314,7 +382,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
     } else {
         // Ex) `../editable/`
         if let Some(working_dir) = working_dir {
-            let url = Url::parse_path(expanded.as_ref(), working_dir)
+            let url = Url::parse_path_with_hint(expanded.as_ref(), working_dir, hint)
                 .map_err(|err| Pep508Error {
                     message: Pep508ErrorSource::UrlError(err),
                     start,
@@ -325,7 +393,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
             return Ok((url, extras));
         }
 
-        let url = Url::parse_absolute_path(expanded.as_ref())
+        let url = Url::parse_absolute_path_with_hint(expanded.as_ref(), hint)
             .map_err(|err| Pep508Error {
                 message: Pep508ErrorSource::UrlError(err),
                 start,
@@ -357,6 +425,7 @@ fn preprocess_unnamed_url<Url: UnnamedRequirementUrl>(
 fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
     cursor: &mut Cursor,
     working_dir: Option<&Path>,
+    hint: Option<PathHint>,
 ) -> Result<(Url, Vec<ExtraName>), Pep508Error<Url>> {
     // wsp*
     cursor.eat_whitespace();
@@ -413,7 +482,7 @@ fn parse_unnamed_url<Url: UnnamedRequirementUrl>(
         });
     }
 
-    let url = preprocess_unnamed_url(url, working_dir, cursor, start, len)?;
+    let url = preprocess_unnamed_url(url, working_dir, cursor, start, len, hint)?;
 
     Ok(url)
 }
