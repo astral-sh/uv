@@ -1,11 +1,11 @@
 use std::collections::Bound;
-
+use std::str::FromStr;
 use version_ranges::Ranges;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{
     LowerBound, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
-    release_specifiers_to_ranges,
+    VersionSpecifiersParseError, release_specifiers_to_ranges,
 };
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, CPythonAbiVariants, LanguageTag};
@@ -501,6 +501,19 @@ impl RequiresPython {
                 true
             }
         })
+    }
+
+    /// Remove trailing zeroes from all specifiers
+    pub fn remove_zeroes(&self) -> String {
+        self.specifiers().remove_zeroes().to_string()
+    }
+}
+
+impl FromStr for RequiresPython {
+    type Err = VersionSpecifiersParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        VersionSpecifiers::from_str(s).map(|v| Self::from_specifiers(&v))
     }
 }
 

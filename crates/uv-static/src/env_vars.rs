@@ -1172,6 +1172,27 @@ impl EnvVars {
     #[attr_added_in("0.5.31")]
     pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
 
+    /// Should `uv upgrade` allow recursive search for pyproject.toml files?
+    #[attr_hidden]
+    pub const UV_UPGRADE_RECURSIVE: &'static str = "UV_UPGRADE_RECURSIVE";
+
+    /// Which pyproject.toml tables should `uv upgrade` search?
+    ///
+    /// Default `prod,dev,optional,groups`.
+    ///
+    /// * prod: `project.dependencies`
+    /// * dev: `tool.uv.dev-dependencies`
+    /// * optional: `project.optional-dependencies`
+    /// * groups: `dependency-groups`
+    #[attr_hidden]
+    pub const UV_UPGRADE_TYPES: &'static str = "UV_UPGRADE_TYPES";
+
+    /// Which version digits are allowed to change? Others will be skipped.
+    ///
+    /// Default `1,2,3,4` (major, minor, patch, build number).
+    #[attr_hidden]
+    pub const UV_UPGRADE_ALLOW: &'static str = "UV_UPGRADE_ALLOW";
+
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
     /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.

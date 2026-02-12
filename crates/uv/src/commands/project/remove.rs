@@ -386,7 +386,7 @@ pub(crate) async fn remove(
     Ok(ExitStatus::Success)
 }
 
-/// Represents the destination where dependencies are added, either to a project or a script.
+/// Represents the destination where dependencies are removed, either to a project or a script.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 enum RemoveTarget {

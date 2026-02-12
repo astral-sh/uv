@@ -375,7 +375,7 @@ impl<'a> IndexLocations {
     }
 
     /// Clone the index locations into a [`IndexUrls`] instance.
-    pub fn index_urls(&'a self) -> IndexUrls {
+    pub fn index_urls(&self) -> IndexUrls {
         IndexUrls {
             indexes: self.indexes.clone(),
             no_index: self.no_index,

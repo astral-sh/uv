@@ -1,10 +1,12 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::fmt::Formatter;
+use std::cmp::min;
+use std::fmt::{Display, Formatter};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::LazyLock;
 use std::{
     borrow::Borrow,
+    cmp,
     cmp::Ordering,
     hash::{Hash, Hasher},
     str::FromStr,
@@ -853,6 +855,95 @@ impl Version {
         // release is equal, so compare the other parts
         sortable_tuple(self).cmp(&sortable_tuple(other))
     }
+
+    /// Bump to `latest` version so it is contained in the same operator.
+    ///
+    /// Returns (bumped, upgraded): `upgraded == false` means downgraded.
+    ///
+    /// | old | latest | new |
+    /// |-|-|-|
+    /// | <0.1     | 0.1.2   | <0.2 |
+    /// | ==0.0.*  | 0.1.2   | ==0.1.* |
+    /// | ==0.2.*  | 0.1.2   | ==0.1.* |
+    /// | <1.0     | 1.2.3   | <1.3 |
+    /// | <1.0     | 2.0.0   | <2.1 |
+    /// | <1.2.3   | 1.2.3   | <1.3.0 |
+    /// | <=1.2.2  | 1.2.3   | <=1.2.3 |
+    /// | <=1.2.0  | 1.2.3   | <=1.3.0 |
+    /// | >=2.0.0  | 1.2.3   | >=1.2.0 |
+    /// | >=2.0.2  | 1.2.3   | >=1.2.3 |
+    /// | <1.2.3.4 | 1.2.3.4 | <1.2.3.5 |
+    pub(crate) fn bump_to(&mut self, latest: &Self, operator: Operator) -> (bool, bool) {
+        let op_equal = operator == Operator::Equal
+            || operator == Operator::EqualStar
+            || operator == Operator::ExactEqual;
+        let ordering = self.cmp_slow(latest);
+        // Special case: Correct if > or >= and value > latest (downgrade)
+        let downgrade = ordering == Ordering::Greater
+            && (operator == Operator::GreaterThan
+                || operator == Operator::GreaterThanEqual
+                || operator == Operator::TildeEqual
+                || operator == Operator::Equal
+                || operator == Operator::EqualStar)
+            || ordering == Ordering::Equal && operator == Operator::GreaterThan;
+
+        let new = &*latest.release();
+        let old = &*self.release();
+        let last = *old.last().unwrap();
+        let zero = last == 0;
+        let opgt = operator == Operator::GreaterThan;
+        let opeq = operator == Operator::Equal;
+        let oplt = operator == Operator::LessThan;
+        let ople = operator == Operator::LessThanEqual;
+        let opte = operator == Operator::TildeEqual;
+        let orle = ordering != Ordering::Greater;
+        let enough_len = old.len() >= new.len();
+        let subtract = downgrade && zero && enough_len && !opeq;
+        // Note: Even if there is no unyanked 1.0.0 downgrade, the constraint will find `latest` 1.0.1
+        let delta = if downgrade {
+            // set version to 0 (negative delta) or don't change it
+            if subtract { *new.last().unwrap() } else { 0 }
+        } else {
+            u64::from(!(op_equal || opte || ople && orle && enough_len || opgt)) // add 1 if operator needs
+        };
+        let addsub = |v: u64| if subtract { v - delta } else { v + delta };
+        if downgrade || orle {
+            let minor = oplt || ople && zero;
+            let upgrade = match min(old.len(), new.len()) {
+                // <1     to <=1.0.0 : <2
+                1 => Self::new([addsub(new[0])]),
+                // <1.2   to <=1.2.3 : <1.3
+                2 => Self::new([new[0], addsub(new[1])]),
+                // <1.2.3 to <=1.2.3 : <1.2.4
+                3 => Self::new([
+                    new[0],
+                    new[1] + u64::from(minor),
+                    if minor { 0 } else { addsub(new[2]) },
+                ]),
+                // <1.2.3.4 to <=1.2.3.4 : <1.2.3.5
+                4 => Self::new([new[0], new[1], new[2], addsub(new[3])]),
+                _ => latest.clone(),
+            };
+            self.inner = upgrade.inner;
+            return (true, !downgrade);
+        }
+        (false, false)
+    }
+
+    /// Remove trailing zeroes from the release
+    #[must_use]
+    pub fn remove_zeroes(&self) -> Self {
+        let mut r = vec![];
+        let mut found = false;
+        for d in self.release().to_vec().iter().rev() {
+            if !found && *d == 0 {
+                continue;
+            }
+            found = true;
+            r.push(*d);
+        }
+        Self::new(r.iter().rev())
+    }
 }
 
 impl<'de> Deserialize<'de> for Version {
@@ -1635,6 +1726,68 @@ impl FromStr for VersionPattern {
 /// digits may be stored in a compressed representation.
 pub struct Release<'a> {
     inner: ReleaseInner<'a>,
+}
+
+impl Release<'_> {
+    /// Which digit changed: `1`=major, `2`=minor, `3`=patch, `4`=build number, `None`=undetermined/equal
+    pub(crate) fn semver_change(&self, right: &Self, op: Operator) -> Option<usize> {
+        let l = self.len();
+        let mut me: Vec<_> = self[..].to_vec();
+        // decrease the last digit != 0 to determine major/minor upgrade:
+        // <1     to <1.0.1 is major
+        // <1.2.0 to <1.2.1 is minor
+        if op == Operator::LessThan {
+            for i in (0..l).rev() {
+                if me[i] != 0 {
+                    me[i] -= 1;
+                    break;
+                }
+            }
+        }
+
+        if l < right.len() && (op == Operator::LessThan || op == Operator::GreaterThan) {
+            let lhs = &me[..l];
+            let mut non_zero = 0;
+            for (i, v) in lhs.iter().enumerate() {
+                if *v != 0 {
+                    non_zero = i + 1;
+                }
+            }
+            return Some(non_zero);
+        }
+
+        let l = cmp::min(self.len(), right.len());
+
+        // Slice to the loop iteration range to enable bound check
+        // elimination in the compiler
+        let lhs = &me[..l];
+        let rhs = &right[..l];
+
+        for (i, v) in lhs.iter().enumerate() {
+            match v.cmp(&rhs[i]) {
+                Ordering::Equal => (),
+                _ => return Some(i + 1),
+            }
+        }
+
+        let longer = if self.len() > right.len() {
+            &me[..]
+        } else {
+            &right[..]
+        };
+        if self.cmp(right) == Ordering::Equal {
+            if op == Operator::GreaterThanEqual {
+                return Some(l); // Operator downgrade
+            }
+            for (i, v) in longer.iter().enumerate() {
+                if *v != 0 {
+                    return Some(i + 1);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 enum ReleaseInner<'a> {
@@ -2712,6 +2865,59 @@ impl From<VersionParseError> for VersionPatternParseError {
         Self {
             kind: Box::new(PatternErrorKind::Version(err)),
         }
+    }
+}
+
+/// Store digits for a small version
+#[derive(Default)]
+pub struct VersionDigit {
+    major: usize,
+    minor: usize,
+    patch: usize,
+    build: usize,
+}
+
+impl VersionDigit {
+    /// Increase a digit
+    pub fn add(&mut self, digit: usize) -> bool {
+        match digit {
+            1 => self.major += 1,
+            2 => self.minor += 1,
+            3 => self.patch += 1,
+            4 => self.build += 1,
+            _ => return false,
+        }
+        true
+    }
+
+    /// Increase all digits from `other`
+    pub fn add_other(&mut self, other: &Self) {
+        self.major += other.major;
+        self.minor += other.minor;
+        self.patch += other.patch;
+        self.build = other.build;
+    }
+
+    /// Are all digits empty?
+    pub fn is_empty(&self) -> bool {
+        self.major == 0 && self.minor == 0 && self.patch == 0 && self.build == 0
+    }
+
+    /// Format all digits as 1.2.3.4 if not empty.
+    pub fn format(&self, prefix: &str, suffix: &str) -> String {
+        if self.is_empty() {
+            return String::new();
+        }
+        format!(
+            "{prefix}{}.{}.{}.{}{suffix}",
+            self.major, self.minor, self.patch, self.build
+        )
+    }
+}
+
+impl Display for VersionDigit {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.format("", ""))
     }
 }
 

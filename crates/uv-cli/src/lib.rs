@@ -34,6 +34,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
@@ -664,6 +665,62 @@ pub struct VersionArgs {
     pub python: Option<Maybe<String>>,
 }
 
+#[derive(Args)]
+pub struct UpgradeProjectArgs {
+    /// Run without performing the upgrades.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Search recursively for pyproject.toml files.
+    #[arg(long, env = EnvVars::UV_UPGRADE_RECURSIVE)]
+    pub recursive: bool,
+
+    /// Only search specific tables in pyproject.toml: `prod,dev,optional,groups`.
+    #[arg(
+        long,
+        env = EnvVars::UV_UPGRADE_TYPES,
+        value_delimiter = ',',
+        value_parser = parse_dependency_type,
+    )]
+    pub types: Vec<Maybe<DependencyType>>,
+
+    /// Allow only some version digits to change, others will be skipped:
+    /// `1,2,3,4` (major, minor, patch, build number).
+    #[arg(
+        long,
+        env = EnvVars::UV_UPGRADE_TYPES,
+        value_delimiter = ',',
+        value_parser = parse_version_digit,
+    )]
+    pub allow: Vec<Maybe<usize>>,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// The Python interpreter to use during resolution (overrides pyproject.toml).
+    ///
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum Python version if
+    /// `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
+
+    /// Upgrade only the given requirements (i.e. `uv<0.5`) instead of pyproject.toml files.
+    #[arg(required = false, value_parser = parse_requirement)]
+    pub requirements: Vec<Maybe<Requirement>>,
+}
+
 // Note that the ordering of the variants is significant, as when given a list of operations
 // to perform, we sort them and apply them in order, so users don't have to think too hard about it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
@@ -1108,6 +1165,8 @@ pub enum ProjectCommand {
     Remove(RemoveArgs),
     /// Read or update the project's version.
     Version(VersionArgs),
+    /// Upgrade the project's dependency constraints.
+    Upgrade(UpgradeProjectArgs),
     /// Update the project's environment.
     ///
     /// Syncing ensures that all project dependencies are installed and up-to-date with the
@@ -1300,6 +1359,45 @@ fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     } else {
         match TrustedHost::from_str(input) {
             Ok(host) => Ok(Maybe::Some(host)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`DependencyType`], mapping the empty string to `None`.
+fn parse_dependency_type(input: &str) -> Result<Maybe<DependencyType>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match DependencyType::from_str(input) {
+            Ok(table) => Ok(Maybe::Some(table)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string like `uv<0.5` into an [`Requirement`], mapping the empty string to `None`.
+fn parse_requirement(input: &str) -> Result<Maybe<Requirement>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match Requirement::from_str(input) {
+            Ok(table) => Ok(Maybe::Some(table)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`usize`], mapping the empty string or unknown digits to `None`.
+///
+/// Allowed: 1, 2, 3 or 4.
+fn parse_version_digit(input: &str) -> Result<Maybe<usize>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match usize::from_str(input) {
+            Ok(digit) if (1..=4).contains(&digit) => Ok(Maybe::Some(digit)),
+            Ok(_) => Ok(Maybe::None),
             Err(err) => Err(err.to_string()),
         }
     }
