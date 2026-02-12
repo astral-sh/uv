@@ -15,6 +15,7 @@ use tracing::{debug, warn};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
+use uv_fs::link::{LinkError, LinkMode, LinkOptions, OnExistingDirectory, link_dir};
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, replace_symlink, symlink_or_copy_file,
 };
@@ -954,6 +955,130 @@ fn executable_path_from_base(
         // On Unix, the executable is in `bin/`
         base.join("bin").join(executable_name)
     }
+}
+
+/// Check if a file in a Python installation should be copied instead of hard-linked.
+///
+/// These files are modified after installation and must be copied to avoid
+/// corrupting the source installation:
+/// - `_sysconfigdata_*.py` — patched by `ensure_sysconfig_patched()`
+/// - `*.pc` files in `pkgconfig/` directories — patched by sysconfig
+/// - `libpython*.dylib` on macOS — patched by `ensure_dylib_patched()`
+pub fn needs_mutable_copy(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    let extension = path.extension().and_then(|e| e.to_str());
+
+    // _sysconfigdata_*.py files
+    if file_name.starts_with("_sysconfigdata_")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+    {
+        return true;
+    }
+
+    // *.pc files in pkgconfig directories
+    if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("pc")) {
+        if let Some(parent) = path.parent() {
+            if parent.file_name().and_then(|n| n.to_str()) == Some("pkgconfig") {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // libpython*.dylib on macOS
+    #[cfg(target_os = "macos")]
+    if file_name.starts_with("libpython")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("dylib"))
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Link a Python installation directory to a destination using hardlinks (or clones on macOS),
+/// with automatic fallback to copying.
+///
+/// Files identified by [`needs_mutable_copy`] are always copied to avoid corrupting the source.
+///
+/// When `include_site_packages` is `false`, the source installation's `site-packages` directory
+/// (and its contents) is skipped. This is useful when creating real environments that should
+/// start with a clean `site-packages` rather than inheriting bundled packages (e.g., pip).
+pub fn link_python_installation(
+    src: &Path,
+    dst: &Path,
+    include_site_packages: bool,
+    allow_existing: bool,
+) -> Result<(), LinkError> {
+    let on_existing = if allow_existing {
+        OnExistingDirectory::Merge
+    } else {
+        OnExistingDirectory::Fail
+    };
+    let options = LinkOptions::new(LinkMode::default())
+        .with_mutable_copy_filter(needs_mutable_copy)
+        .with_filter(|path| {
+            include_site_packages
+                || path.file_name().and_then(|n| n.to_str()) != Some("site-packages")
+        })
+        .with_on_existing_directory(on_existing);
+    link_dir(src, dst, &options)?;
+    Ok(())
+}
+
+/// Patch a Python installation at the given path so that embedded paths (in sysconfig data,
+/// pkg-config files, and macOS dylib install names) reference the correct location.
+///
+/// The `old_prefix` should be the original `sys.base_prefix` of the source installation.
+/// This must be called after linking or copying a Python installation to a new directory.
+pub fn patch_python_installation(
+    path: &Path,
+    old_prefix: &Path,
+    interpreter: &Interpreter,
+) -> Result<(), Error> {
+    // Relocate sysconfig data from the old prefix to the new installation path.
+    if cfg!(unix) && interpreter.implementation_name() == "cpython" {
+        let suffix = if interpreter.gil_disabled() { "t" } else { "" };
+        sysconfig::relocate_sysconfig(
+            path,
+            old_prefix,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+            suffix,
+        )?;
+    }
+
+    // Patch the macOS dylib install name to reference the new location.
+    #[cfg(target_os = "macos")]
+    if interpreter.implementation_name() == "cpython" {
+        let dylib_path = path.join("lib").join(format!(
+            "{}python{}.{}{}{}",
+            std::env::consts::DLL_PREFIX,
+            interpreter.python_major(),
+            interpreter.python_minor(),
+            if interpreter.gil_disabled() { "t" } else { "" },
+            std::env::consts::DLL_SUFFIX,
+        ));
+        if dylib_path.exists() {
+            if let Err(err) = macos_dylib::patch_dylib_install_name(dylib_path.clone()) {
+                let detail = if tracing::enabled!(tracing::Level::DEBUG) {
+                    format!("\nUnderlying error: {err}")
+                } else {
+                    String::new()
+                };
+                uv_warnings::warn_user!(
+                    "Failed to patch the install name of the dynamic library for `{}`. \
+                     This may cause issues when building Python native extensions.{detail}",
+                    dylib_path.simplified_display(),
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Create a link to a managed Python executable.

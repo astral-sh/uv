@@ -92,6 +92,65 @@ pub(crate) fn update_sysconfig(
     Ok(())
 }
 
+/// Relocate the `sysconfig` data in a Python installation, replacing references to an old
+/// prefix with a new one.
+///
+/// This is used when copying/linking a Python installation to a new location, where the
+/// sysconfig data has already been patched for the source location and needs to be updated
+/// to reference the destination.
+pub(crate) fn relocate_sysconfig(
+    new_prefix: &Path,
+    old_prefix: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<(), Error> {
+    let new_prefix = std::path::absolute(new_prefix)?;
+    let old_prefix_str = old_prefix.to_string_lossy();
+
+    // Find and patch the `_sysconfigdata_` file.
+    let sysconfigdata = find_sysconfigdata(&new_prefix, major, minor, suffix)?;
+    trace!(
+        "Relocating `sysconfig` data at: {}",
+        sysconfigdata.display()
+    );
+
+    let contents = fs_err::read_to_string(&sysconfigdata)?;
+    let new_prefix_str = new_prefix.to_string_lossy();
+    let patched = contents.replace(old_prefix_str.as_ref(), new_prefix_str.as_ref());
+
+    if contents != patched {
+        let mut file = fs_err::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&sysconfigdata)?;
+        file.write_all(patched.as_bytes())?;
+        file.sync_data()?;
+    }
+
+    // Find and patch `pkgconfig` files.
+    for pkgconfig in find_pkgconfigs(&new_prefix)? {
+        let pkgconfig = pkgconfig?;
+        trace!("Relocating `pkgconfig` data at: {}", pkgconfig.display());
+
+        let contents = fs_err::read_to_string(&pkgconfig)?;
+        let patched = contents.replace(old_prefix_str.as_ref(), new_prefix_str.as_ref());
+
+        if contents != patched {
+            let mut file = fs_err::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&pkgconfig)?;
+            file.write_all(patched.as_bytes())?;
+            file.sync_data()?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Find the `_sysconfigdata_` file in a Python installation.
 ///
 /// For example, on macOS, returns `{real_prefix}/lib/python3.12/_sysconfigdata__darwin_darwin.py"`.

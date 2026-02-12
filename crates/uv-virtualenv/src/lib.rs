@@ -19,6 +19,8 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
+    #[error(transparent)]
+    LinkDir(#[from] uv_fs::link::LinkError),
     #[error("A {name} already exists at `{}`. Use `--clear` to replace it", path.display())]
     Exists {
         /// The type of environment (e.g., "virtual environment").
