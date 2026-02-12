@@ -1660,7 +1660,7 @@ fn install_editable_incompatible_constraint_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only black<=0.1.0 is available and you require black>0.1.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only black<=0.1.0 is available and your constraints (`-c constraints.txt`) require black>0.1.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3949,8 +3949,9 @@ fn install_constraints_with_markers() -> Result<()> {
     Ok(())
 }
 
+/// A single constraint on a direct transitive dependency conflicts.
 #[test]
-fn install_constraints_transitive_conflict_hint() -> Result<()> {
+fn install_constraints_transitive_conflict_simple() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask==3.0.2")?;
@@ -3969,10 +3970,66 @@ fn install_constraints_transitive_conflict_hint() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.2 depends on werkzeug>=3.0.0 and werkzeug==2.0.0, we can conclude that flask==3.0.2 cannot be used.
+      ╰─▶ Because flask==3.0.2 depends on werkzeug>=3.0.0 and your constraints (`-c constraints.txt`) require werkzeug==2.0.0, we can conclude that flask==3.0.2 cannot be used.
           And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+    "
+    );
 
-          hint: `werkzeug` is constrained by `-c constraints.txt`. Constraints are applied transitively, so this may appear in the resolution trace as `flask` depending on `werkzeug`.
+    Ok(())
+}
+
+/// Multiple constraints on transitive dependencies of the same package conflict.
+#[test]
+fn install_constraints_transitive_conflict_multiple() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask==3.0.2")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("werkzeug==2.0.0\njinja2==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.2 depends on jinja2>=3.1.2 and your constraints (`-c constraints.txt`) require jinja2==2.0.0, we can conclude that flask==3.0.2 cannot be used.
+          And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+    "
+    );
+
+    Ok(())
+}
+
+/// A constraint conflicts with a deeper transitive dependency (requests -> urllib3).
+#[test]
+fn install_constraints_transitive_conflict_deep() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("requests==2.31.0")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("urllib3==1.20.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because requests==2.31.0 depends on urllib3>=1.21.1,<3 and your constraints (`-c constraints.txt`) require urllib3==1.20.0, we can conclude that requests==2.31.0 cannot be used.
+          And because you require requests==2.31.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 

@@ -14,6 +14,7 @@ use tracing::trace;
 use uv_configuration::Constraints;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
+    RequirementSource,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 use uv_pep440::{LocalVersionSlice, LowerBound, Version};
@@ -462,6 +463,8 @@ impl std::fmt::Display for NoSolutionError {
             drop_root_dependency_on_project(&mut tree, project);
         }
 
+        rewrite_constraint_dependencies(&mut tree, &self.constraints);
+
         collapse_unavailable_versions(&mut tree);
         collapse_redundant_depends_on_no_versions(&mut tree);
 
@@ -861,6 +864,59 @@ fn collapse_redundant_depends_on_no_versions_inner(
                 }
             }
         }
+    }
+}
+
+/// Rewrite constraint-sourced transitive dependencies as root requirements.
+///
+/// When a constraints file pins a transitive dependency (e.g., `werkzeug==2.0.0`), the resolver
+/// injects it as an additional dependency of the parent package (e.g., `flask depends on
+/// werkzeug==2.0.0`). This is confusing in error messages because users didn't write that
+/// dependency — it came from a constraints file.
+///
+/// This transformation rewrites such `FromDependencyOf(flask, _, werkzeug, ==2.0.0)` nodes into
+/// `FromDependencyOf(Root, full, werkzeug, ==2.0.0)`, so the reporter formats them as a root
+/// requirement (e.g., "your constraints require werkzeug==2.0.0") rather than a transitive
+/// dependency.
+fn rewrite_constraint_dependencies(tree: &mut ErrorTree, constraints: &Constraints) {
+    match tree {
+        DerivationTree::External(External::FromDependencyOf(
+            package,
+            _,
+            dependency,
+            dependency_set,
+        )) => {
+            // Only rewrite non-root packages whose dependency matches a constraint.
+            if !matches!(&**package, PubGrubPackageInner::Root(_)) {
+                if let Some(dependency_name) = dependency.name() {
+                    if let Some(constraint_reqs) = constraints.get(dependency_name) {
+                        // Check if the dependency range matches one of the constraint specifiers.
+                        for constraint in constraint_reqs {
+                            if let RequirementSource::Registry { specifier, .. } =
+                                &constraint.source
+                            {
+                                let constraint_range: Range<Version> = specifier.clone().into();
+                                if dependency_set.subset_of(&constraint_range) {
+                                    // Rewrite this node: the constraint becomes a root requirement.
+                                    *tree = DerivationTree::External(External::FromDependencyOf(
+                                        PubGrubPackage::from(PubGrubPackageInner::Root(None)),
+                                        Range::full(),
+                                        dependency.clone(),
+                                        dependency_set.clone(),
+                                    ));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DerivationTree::Derived(derived) => {
+            rewrite_constraint_dependencies(Arc::make_mut(&mut derived.cause1), constraints);
+            rewrite_constraint_dependencies(Arc::make_mut(&mut derived.cause2), constraints);
+        }
+        DerivationTree::External(_) => {}
     }
 }
 

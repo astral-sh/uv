@@ -11,14 +11,12 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{Constraints, IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    IndexLocations, IndexMetadata, IndexUrl, RequirementSource, RequiresPython,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{
-    MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion, RequirementOrigin,
-};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
@@ -159,6 +157,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
 
                 if let Some(root) = self.format_root_requires(package) {
+                    // Check if this root requirement is actually from a constraints file.
+                    if let Some(constraint_source) =
+                        self.format_constraint_source(dependency, dependency_set)
+                    {
+                        return format!(
+                            "{constraint_source} {}",
+                            self.dependency_range(dependency, dependency_set)
+                        );
+                    }
                     return format!(
                         "{root} {}",
                         self.dependency_range(dependency, dependency_set)
@@ -426,6 +433,40 @@ impl PubGrubReportFormatter<'_> {
         }
     }
 
+    /// If the given package is constrained by a constraints file, return a formatted string
+    /// like `your constraints (-c constraints.txt) require`.
+    /// If the given package+range matches a constraint from a constraints file, return a
+    /// formatted string like `your constraints (-c constraints.txt) require`.
+    fn format_constraint_source(
+        &self,
+        package: &PubGrubPackage,
+        range: &Range<Version>,
+    ) -> Option<String> {
+        let name = package.name()?;
+        let constraint_reqs = self.constraints.get(name)?;
+        // Collect origins only from constraints whose specifier range matches.
+        let origins: Vec<_> = constraint_reqs
+            .iter()
+            .filter(|constraint| {
+                if let RequirementSource::Registry { specifier, .. } = &constraint.source {
+                    let constraint_range: Range<Version> = specifier.clone().into();
+                    range.subset_of(&constraint_range)
+                } else {
+                    false
+                }
+            })
+            .filter_map(|constraint| constraint.origin.as_ref())
+            .collect();
+        if origins.is_empty() {
+            return None;
+        }
+        let files = origins
+            .iter()
+            .map(|origin| format!("`-c {}`", origin.path().portable_display()))
+            .join(", ");
+        Some(format!("your constraints ({files}) require"))
+    }
+
     /// Return whether the given package is the root package.
     fn is_root(package: &PubGrubPackage) -> bool {
         matches!(&**package, PubGrubPackageInner::Root(_))
@@ -677,24 +718,6 @@ impl PubGrubReportFormatter<'_> {
                             package: package_name.clone(),
                             workspace: self.is_workspace() && !self.is_single_project_workspace(),
                         });
-                    }
-
-                    if !Self::is_root(package) {
-                        let origins: BTreeSet<RequirementOrigin> = self
-                            .constraints
-                            .get(dependency_name)
-                            .into_iter()
-                            .flatten()
-                            .filter_map(|constraint| constraint.origin.clone())
-                            .collect();
-
-                        if !origins.is_empty() {
-                            output_hints.insert(PubGrubHint::TransitiveConstraint {
-                                package: package_name.clone(),
-                                dependency: dependency_name.clone(),
-                                origins,
-                            });
-                        }
                     }
                 }
                 // Check for no versions due to `Requires-Python`.
@@ -1235,13 +1258,6 @@ pub(crate) enum PubGrubHint {
     },
     /// The resolution failed for an environment that is different from the current environment.
     DisjointEnvironment,
-    /// A transitive dependency was constrained via a constraints file.
-    TransitiveConstraint {
-        package: PackageName,
-        dependency: PackageName,
-        // excluded from `PartialEq` and `Hash`
-        origins: BTreeSet<RequirementOrigin>,
-    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1320,10 +1336,6 @@ enum PubGrubHintCore {
     },
     DisjointPythonVersion,
     DisjointEnvironment,
-    TransitiveConstraint {
-        package: PackageName,
-        dependency: PackageName,
-    },
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1392,14 +1404,6 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::PlatformTags { package, .. } => Self::PlatformTags { package },
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
-            PubGrubHint::TransitiveConstraint {
-                package,
-                dependency,
-                ..
-            } => Self::TransitiveConstraint {
-                package,
-                dependency,
-            },
         }
     }
 }
@@ -1730,26 +1734,6 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     package.cyan(),
-                )
-            }
-            Self::TransitiveConstraint {
-                package,
-                dependency,
-                origins,
-            } => {
-                let origins = origins
-                    .iter()
-                    .map(|origin| format!("`-c {}`", origin.path().portable_display()))
-                    .join(", ");
-                write!(
-                    f,
-                    "{}{} `{}` is constrained by {}. Constraints are applied transitively, so this may appear in the resolution trace as `{}` depending on `{}`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    dependency.cyan(),
-                    origins.cyan(),
-                    package.cyan(),
-                    dependency.cyan(),
                 )
             }
             Self::LanguageTags {
