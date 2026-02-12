@@ -820,6 +820,14 @@ impl BaseClient {
     pub fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
+
+    /// The reqwest client without middleware.
+    ///
+    /// This strips important features such as retries and authenticating. Only use when passing
+    /// a middleware-enabled client isn't possible.
+    pub fn raw_client(&self) -> &Client {
+        &self.raw_client
+    }
 }
 
 /// Wrapper around [`ClientWithMiddleware`] that manages redirects.
