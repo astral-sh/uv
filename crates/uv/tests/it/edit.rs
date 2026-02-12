@@ -10599,9 +10599,10 @@ fn add_default_index_url() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_index_credentials() -> Result<()> {
+#[tokio::test]
+async fn add_index_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10613,7 +10614,7 @@ fn add_index_credentials() -> Result<()> {
     "#})?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10641,7 +10642,7 @@ fn add_index_credentials() -> Result<()> {
         ]
 
         [[tool.uv.index]]
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "http://[LOCALHOST]/basic-auth/simple"
         default = true
         "#
         );
@@ -10664,10 +10665,10 @@ fn add_index_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -10687,12 +10688,14 @@ fn add_index_credentials() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn existing_index_credentials() -> Result<()> {
+#[tokio::test]
+async fn existing_index_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -10702,12 +10705,14 @@ fn existing_index_credentials() -> Result<()> {
         # Set an internal index as the default, without credentials.
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-    "#})?;
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
     // Provide credentials for the index via the environment variable.
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig==2.0.0").env(EnvVars::UV_DEFAULT_INDEX, proxy.authenticated_url("public", "heron", "/basic-auth/simple")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -10737,7 +10742,7 @@ fn existing_index_credentials() -> Result<()> {
         # Set an internal index as the default, without credentials.
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "http://[LOCALHOST]/basic-auth/simple"
         default = true
         "#
         );
@@ -10760,10 +10765,10 @@ fn existing_index_credentials() -> Result<()> {
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
-        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
-        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
+        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
+        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
+            { url = "http://[LOCALHOST]/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -11041,12 +11046,14 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
 }
 
 /// Add an index with a non-existent relative path with the same name as a defined index.
-#[test]
-fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
+#[tokio::test]
+async fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11055,8 +11062,10 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_uri}/simple"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
     success: false
@@ -11070,12 +11079,14 @@ fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result
     Ok(())
 }
 
-#[test]
-fn add_index_empty_directory() -> Result<()> {
+#[tokio::test]
+async fn add_index_empty_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -11084,8 +11095,10 @@ fn add_index_empty_directory() -> Result<()> {
 
         [[tool.uv.index]]
         name = "test-index"
-        url = "https://pypi-proxy.fly.dev/simple"
-    "#})?;
+        url = "{proxy_uri}/simple"
+    "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
     let packages = context.temp_dir.child("test-index");
     packages.create_dir_all()?;
@@ -13003,8 +13016,8 @@ fn add_unsupported_git_scheme() {
     ");
 }
 
-#[test]
-fn add_index_url_in_keyring() -> Result<()> {
+#[tokio::test]
+async fn add_index_url_in_keyring() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
@@ -13021,9 +13034,11 @@ fn add_index_url_in_keyring() -> Result<()> {
         .success();
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13033,21 +13048,22 @@ fn add_index_url_in_keyring() -> Result<()> {
         keyring-provider = "subprocess"
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{}": {{"public": "heron"}}}}"#, proxy.url("/basic-auth/simple")))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13061,8 +13077,8 @@ fn add_index_url_in_keyring() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn add_full_url_in_keyring() -> Result<()> {
+#[tokio::test]
+async fn add_full_url_in_keyring() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
@@ -13079,9 +13095,11 @@ fn add_full_url_in_keyring() -> Result<()> {
         .success();
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13091,26 +13109,28 @@ fn add_full_url_in_keyring() -> Result<()> {
         keyring-provider = "subprocess"
         [[tool.uv.index]]
         name = "proxy"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::index_username("PROXY"), "public")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple/anyio": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{}": {{"public": "heron"}}}}"#, proxy.url("/basic-auth/simple/anyio")))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -13119,12 +13139,14 @@ fn add_full_url_in_keyring() -> Result<()> {
 
 /// If uv receives an authentication failure from a configured index, it
 /// should not fall back to the default index.
-#[test]
-fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
+#[tokio::test]
+async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13132,11 +13154,12 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
-        "#
-    })?;
+        url = "{proxy_uri}/basic-auth/simple"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13145,7 +13168,7 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -13154,12 +13177,14 @@ fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
 
 /// uv should continue searching the default index if it receives an
 /// authentication failure that is specified in `ignore-error-codes`.
-#[test]
-fn add_ignore_error_codes() -> Result<()> {
+#[tokio::test]
+async fn add_ignore_error_codes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13167,12 +13192,13 @@ fn add_ignore_error_codes() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         ignore-error-codes = [401, 403]
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13313,12 +13339,14 @@ async fn add_unexpected_error_code() -> Result<()> {
 
 /// uv should fail to parse `pyproject.toml` if `ignore-error-codes`
 /// contains an invalid status code number.
-#[test]
-fn add_invalid_ignore_error_code() -> Result<()> {
+#[tokio::test]
+async fn add_invalid_ignore_error_code() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13326,12 +13354,13 @@ fn add_invalid_ignore_error_code() -> Result<()> {
         dependencies = []
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         ignore-error-codes = [401, 403, 1234]
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -13392,12 +13421,14 @@ fn add_invalid_requires_python() -> Result<()> {
 }
 
 /// In authentication "always", the normal authentication flow should still work.
-#[test]
-fn add_auth_policy_always_with_credentials() -> Result<()> {
+#[tokio::test]
+async fn add_auth_policy_always_with_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13406,13 +13437,14 @@ fn add_auth_policy_always_with_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "always"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
         .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     success: true
@@ -13516,12 +13548,14 @@ fn add_auth_policy_always_with_username_no_password() -> Result<()> {
 
 /// In authentication "never", even if the correct credentials are supplied
 /// in the URL, no authenticated requests will be allowed.
-#[test]
-fn add_auth_policy_never_with_url_credentials() -> Result<()> {
+#[tokio::test]
+async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13530,20 +13564,21 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_auth_uri}/basic-auth/simple"
         authenticate = "never"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio"), @"
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+    error: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
+      Caused by: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
     "
     );
 
@@ -13552,12 +13587,14 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
 
 /// In authentication "never", even if the correct credentials are supplied
 /// via env vars, no authenticated requests will be allowed.
-#[test]
-fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
+#[tokio::test]
+async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -13566,13 +13603,14 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
 
         [[tool.uv.index]]
         name = "my-index"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{proxy_uri}/basic-auth/simple"
         authenticate = "never"
         default = true
-        "#
-    })?;
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.add().arg("anyio")
+    uv_snapshot!(context.filters(), context.add().arg("anyio")
         .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
         .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
     success: false
@@ -13583,7 +13621,7 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
@@ -13638,6 +13676,7 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
 #[tokio::test]
 async fn add_redirect_cross_origin() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13655,10 +13694,11 @@ async fn add_redirect_cross_origin() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13690,6 +13730,7 @@ async fn add_redirect_cross_origin() -> Result<()> {
 #[tokio::test]
 async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13707,14 +13748,12 @@ async fn add_redirect_cross_origin_credentials_in_location() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.authenticated_url("public", "heron", "/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
+        .respond_with(move |req: &wiremock::Request| {
             // Responds with credentials in the location
-            let redirect_url = redirect_url_to_base(
-                req,
-                "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/",
-            );
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13759,6 +13798,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
         .success();
 
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13779,10 +13819,11 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     })?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13794,7 +13835,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     uv_snapshot!(filters, context.add().arg("--default-index")
         .arg(redirect_url.as_str())
         .arg("anyio")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @"
     success: false
     exit_code: 1
@@ -13803,6 +13844,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     ----- stderr -----
     Keyring request for public@http://[LOCALHOST]/
     Keyring request for public@[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
@@ -13819,6 +13861,7 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
 #[tokio::test]
 async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let filters = context
         .filters()
         .into_iter()
@@ -13826,13 +13869,17 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
         .collect::<Vec<_>>();
 
     let netrc = context.temp_dir.child(".netrc");
-    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
 
     let redirect_server = MockServer::start().await;
+    let proxy_base = proxy.url("/basic-auth/simple/");
 
     Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
+        .respond_with(move |req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_base(req, &proxy_base);
             ResponseTemplate::new(302).insert_header("Location", &redirect_url)
         })
         .mount(&redirect_server)
@@ -13864,10 +13911,6 @@ async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
     context.assert_command("import anyio").success();
 
     Ok(())
-}
-
-fn redirect_url_to_pypi_proxy(req: &wiremock::Request) -> String {
-    redirect_url_to_base(req, "https://pypi-proxy.fly.dev/basic-auth/simple/")
 }
 
 fn redirect_url_to_base(req: &wiremock::Request, base: &str) -> String {
