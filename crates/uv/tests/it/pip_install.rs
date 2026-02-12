@@ -3949,6 +3949,36 @@ fn install_constraints_with_markers() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn install_constraints_transitive_conflict_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("flask==3.0.2")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("werkzeug==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg("constraints.txt"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.2 depends on werkzeug>=3.0.0 and werkzeug==2.0.0, we can conclude that flask==3.0.2 cannot be used.
+          And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
+
+          hint: `werkzeug` is constrained by `-c constraints.txt`. Constraints are applied transitively, so this may appear in the resolution trace as `flask` depending on `werkzeug`.
+    "
+    );
+
+    Ok(())
+}
+
 /// Tests that we can install `polars==0.14.0`, which has this odd dependency
 /// requirement in its wheel metadata: `pyarrow>=4.0.*; extra == 'pyarrow'`.
 ///

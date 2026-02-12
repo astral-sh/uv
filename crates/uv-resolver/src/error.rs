@@ -11,6 +11,7 @@ use pubgrub::{
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
+use uv_configuration::Constraints;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
@@ -177,6 +178,7 @@ pub struct NoSolutionError {
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
+    constraints: Constraints,
 }
 
 impl NoSolutionError {
@@ -199,6 +201,7 @@ impl NoSolutionError {
         tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
+        constraints: Constraints,
     ) -> Self {
         Self {
             error,
@@ -218,6 +221,7 @@ impl NoSolutionError {
             tags,
             workspace_members,
             options,
+            constraints,
         }
     }
 
@@ -403,6 +407,7 @@ impl std::fmt::Debug for NoSolutionError {
             tags,
             workspace_members,
             options,
+            constraints,
         } = self;
         f.debug_struct("NoSolutionError")
             .field("error", error)
@@ -421,6 +426,7 @@ impl std::fmt::Debug for NoSolutionError {
             .field("tags", tags)
             .field("workspace_members", workspace_members)
             .field("options", options)
+            .field("constraints", constraints)
             .finish()
     }
 }
@@ -434,6 +440,7 @@ impl std::fmt::Display for NoSolutionError {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
+            constraints: &self.constraints,
             tags: self.tags.as_ref(),
         };
 
