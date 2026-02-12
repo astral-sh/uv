@@ -27,7 +27,7 @@ use which::{which, which_all};
 
 use crate::downloads::{ManagedPythonDownloadList, PlatformRequest, PythonDownloadRequest};
 use crate::implementation::ImplementationName;
-use crate::installation::PythonInstallation;
+use crate::installation::{PythonInstallation, PythonInstallationKey};
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
@@ -2973,6 +2973,14 @@ impl VersionRequest {
                     == (major, minor, patch, prerelease)
             }
         }
+    }
+
+    /// Check if a [`PythonInstallationKey`] is compatible with the request.
+    ///
+    /// WARNING: Use [`VersionRequest::matches_interpreter`] too. This method is only suitable to
+    /// avoid querying interpreters if it's clear it cannot fulfill the request.
+    pub(crate) fn matches_installation_key(&self, key: &PythonInstallationKey) -> bool {
+        self.matches_major_minor_patch_prerelease(key.major, key.minor, key.patch, key.prerelease())
     }
 
     /// Whether a patch version segment is present in the request.
