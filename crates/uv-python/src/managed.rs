@@ -24,6 +24,7 @@ use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 
+use crate::discovery::VersionRequest;
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
@@ -305,16 +306,10 @@ impl ManagedPythonInstallations {
         &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
+        let request = VersionRequest::from(version);
         Ok(self
             .find_matching_current_platform()?
-            .filter(move |installation| {
-                let key = installation.key();
-                // Match major and minor versions
-                key.major == version.major()
-                    && key.minor == version.minor()
-                    // If a patch version is requested, also match that
-                    && version.patch().is_none_or(|patch| key.patch == patch)
-            }))
+            .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 
     pub fn root(&self) -> &Path {
