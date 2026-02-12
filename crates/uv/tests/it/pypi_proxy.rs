@@ -19,6 +19,8 @@
 //! | `/basic-auth-eagle/files/…`        | `public:eagle` | 302 redirect → `files.pythonhosted.org`                |
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use serde_json::json;
 
@@ -491,6 +493,16 @@ fn unauthorized_response() -> wiremock::ResponseTemplate {
 }
 
 fn simple_api_response(body: &serde_json::Value) -> wiremock::ResponseTemplate {
+    // Compute a deterministic ETag from the body content.
+    let body_str = body.to_string();
+    let mut hasher = DefaultHasher::new();
+    body_str.hash(&mut hasher);
+    let etag = format!("\"{}\"", hasher.finish());
+
+    // Mirror the cache headers that PyPI returns so our mock behaves like the
+    // real index for HTTP caching purposes (Cache-Control, ETag).
     wiremock::ResponseTemplate::new(200)
-        .set_body_raw(body.to_string(), "application/vnd.pypi.simple.v1+json")
+        .insert_header("Cache-Control", "max-age=600, public")
+        .insert_header("ETag", etag)
+        .set_body_raw(body_str, "application/vnd.pypi.simple.v1+json")
 }

@@ -96,17 +96,6 @@ async fn add_package_native_auth_realm() -> Result<()> {
     "
     );
 
-    // Reset the project so the previously-added `anyio` does not interfere with
-    // the resolution error message for `iniconfig`.
-    pyproject_toml.write_str(indoc::indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.11, <4"
-        dependencies = []
-        "#
-    })?;
-
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
         .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
@@ -217,17 +206,6 @@ async fn add_package_native_auth() -> Result<()> {
     Removed credentials for public@http://[LOCALHOST]/basic-auth
     "
     );
-
-    // Reset the project so the previously-added `anyio` does not interfere with
-    // the resolution error message for `iniconfig`.
-    pyproject_toml.write_str(indoc::indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.11, <4"
-        dependencies = []
-        "#
-    })?;
 
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
