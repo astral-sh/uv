@@ -71,8 +71,8 @@ def main() -> None:
             latest_versions[minor] = prerelease_versions[minor]
 
     # Update the constants in common/mod.rs
-    mod_path = ROOT / "crates" / "uv" / "tests" / "it" / "common" / "mod.rs"
-    content = mod_path.read_text()
+    lib_path = ROOT / "crates" / "uv-test" / "src" / "lib.rs"
+    content = lib_path.read_text()
 
     # Extract old values first
     old_versions: dict[str, str] = {}
@@ -90,7 +90,7 @@ def main() -> None:
         new_value = f'pub const {const_name}: &str = "{latest_versions[minor]}";'
         content = re.sub(old_pattern, new_value, content)
 
-    mod_path.write_text(content)
+    lib_path.write_text(content)
 
     updates = []
     for minor in ["3.15", "3.14", "3.13", "3.12", "3.11", "3.10"]:

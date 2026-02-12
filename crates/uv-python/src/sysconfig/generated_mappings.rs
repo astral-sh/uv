@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `cargo run dev generate-sysconfig-metadata`
-//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260203/cpython-unix/targets.yml>
+//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260211/cpython-unix/targets.yml>
 //!
 #![allow(clippy::all)]
 #![cfg_attr(any(), rustfmt::skip)]

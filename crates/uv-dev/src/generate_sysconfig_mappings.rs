@@ -11,7 +11,7 @@ use crate::ROOT_DIR;
 use crate::generate_all::Mode;
 
 /// Contains current supported targets
-const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260203/cpython-unix/targets.yml";
+const TARGETS_YML_URL: &str = "https://raw.githubusercontent.com/astral-sh/python-build-standalone/refs/tags/20260211/cpython-unix/targets.yml";
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -130,7 +130,7 @@ async fn generate() -> Result<String> {
     output.push_str("//! DO NOT EDIT\n");
     output.push_str("//!\n");
     output.push_str("//! Generated with `cargo run dev generate-sysconfig-metadata`\n");
-    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260203/cpython-unix/targets.yml>\n");
+    output.push_str("//! Targets from <https://github.com/astral-sh/python-build-standalone/blob/20260211/cpython-unix/targets.yml>\n");
     output.push_str("//!\n");
 
     // Disable clippy/fmt
