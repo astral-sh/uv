@@ -66,14 +66,16 @@ impl Accelerator {
     /// 6. `rocm_agent_enumerator`, which lists the AMD GPU architectures.
     /// 7. `/sys/bus/pci/devices`, filtering for the Intel GPU via PCI.
     /// 8. Windows Managmeent Instrumentation (WMI), filtering for the Intel GPU via PCI.
-    pub fn detect() -> Result<Option<Self>, AcceleratorError> {
+    pub fn detect(
+        cuda_driver_version: Option<String>,
+    ) -> Result<Option<Self>, AcceleratorError> {
         // Constants used for PCI device detection.
         const PCI_BASE_CLASS_MASK: u32 = 0x00ff_0000;
         const PCI_BASE_CLASS_DISPLAY: u32 = 0x0003_0000;
         const PCI_VENDOR_ID_INTEL: u32 = 0x8086;
 
         // Read from `UV_CUDA_DRIVER_VERSION`.
-        if let Ok(driver_version) = std::env::var(EnvVars::UV_CUDA_DRIVER_VERSION) {
+        if let Some(driver_version) = cuda_driver_version {
             let driver_version = Version::from_str(&driver_version)?;
             debug!("Detected CUDA driver version from `UV_CUDA_DRIVER_VERSION`: {driver_version}");
             return Ok(Some(Self::Cuda { driver_version }));
