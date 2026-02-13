@@ -406,10 +406,17 @@ async fn perform_install(
     if requests.is_empty() {
         match upgrade {
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
-                writeln!(
-                    printer.stderr(),
-                    "There are no installed versions to upgrade"
-                )?;
+                if existing_installations.is_empty() {
+                    writeln!(
+                        printer.stderr(),
+                        "No Python versions are installed. Use `uv python install` to install Python."
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "All installed Python versions are already on the latest supported patch release"
+                    )?;
+                }
             }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
                 writeln!(
