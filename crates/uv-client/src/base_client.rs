@@ -1281,7 +1281,7 @@ pub struct RetryState {
 }
 
 impl RetryState {
-    /// Initialize the [`RetryState`] and start the backoff timer.
+    /// Initialize the [`RetryState`] and record the start time for the retry policy.
     pub fn start(retry_policy: ExponentialBackoff, url: impl Into<DisplaySafeUrl>) -> Self {
         Self {
             retry_policy,
@@ -1314,12 +1314,16 @@ impl RetryState {
         self.total_retries += error_retries;
         match retryable_on_request_failure(err) {
             Some(Retryable::Transient) => {
+                // Capture `now` before calling the policy so that `execute_after`
+                // (computed from a `SystemTime::now()` inside the library) is always
+                // >= `now`, making `duration_since` reliable.
+                let now = SystemTime::now();
                 let retry_decision = self
                     .retry_policy
                     .should_retry(self.start_time, self.total_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                     let duration = execute_after
-                        .duration_since(SystemTime::now())
+                        .duration_since(now)
                         .unwrap_or_else(|_| Duration::default());
 
                     self.total_retries += 1;
