@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, instrument, trace, warn};
 use walkdir::WalkDir;
 
+use uv_distribution_filename::{WheelFilename, WheelWireMetadata};
 use uv_fs::{Simplified, persist_with_retry_sync, relative_to};
 use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
@@ -728,6 +729,7 @@ pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Se
     cache_info: Option<&Cache>,
     build_info: Option<&Build>,
     installer: Option<&str>,
+    filename: &WheelFilename,
     record: &mut Vec<RecordEntry>,
 ) -> Result<(), Error> {
     let dist_info_dir = PathBuf::from(format!("{dist_info_prefix}.dist-info"));
@@ -766,6 +768,17 @@ pub(crate) fn write_installer_metadata<Cache: serde::Serialize, Build: serde::Se
             record,
         )?;
     }
+    // Write the wheel filename, so we can use it to determine platform compatibility (rather
+    // than relying on the `WHEEL` file, which may have incorrect tags).
+    let wheel_metadata = WheelWireMetadata {
+        filename: filename.clone(),
+    };
+    write_file_recorded(
+        site_packages,
+        &dist_info_dir.join("uv_wheel.json"),
+        serde_json::to_string(&wheel_metadata)?.as_bytes(),
+        record,
+    )?;
     Ok(())
 }
 
@@ -946,10 +959,12 @@ impl RenameOrCopy {
 mod test {
     use std::io::Cursor;
     use std::path::Path;
+    use std::str::FromStr;
 
     use anyhow::Result;
     use assert_fs::prelude::*;
     use indoc::{formatdoc, indoc};
+    use uv_distribution_filename::WheelFilename;
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
@@ -1243,6 +1258,7 @@ mod test {
             .child("foo-0.1.0.dist-info")
             .create_dir_all()
             .unwrap();
+        let filename = WheelFilename::from_str("foo-0.1.0-py3-none-any.whl").unwrap();
         write_installer_metadata::<(), ()>(
             site_packages,
             "foo-0.1.0",
@@ -1251,12 +1267,14 @@ mod test {
             None,
             None,
             Some("uv"),
+            &filename,
             &mut record,
         )
         .unwrap();
         let expected = [
             "foo-0.1.0.dist-info/REQUESTED",
             "foo-0.1.0.dist-info/INSTALLER",
+            "foo-0.1.0.dist-info/uv_wheel.json",
         ]
         .map(ToString::to_string)
         .to_vec();
