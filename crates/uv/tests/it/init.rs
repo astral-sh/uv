@@ -39,19 +39,32 @@ fn init() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
 
-    // Run `uv lock` in the new project.
-    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("foo")), @"
+    // The new project is runnable
+    uv_snapshot!(context.filters(), context.run().arg("main.py").current_dir(context.temp_dir.join("foo")), @"
     success: true
     exit_code: 0
     ----- stdout -----
+    Hello from foo!
 
     ----- stderr -----
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     ");
 
     let python_version = context.read("foo/.python-version");
@@ -62,6 +75,19 @@ fn init() {
             python_version, @"3.12"
         );
     });
+
+    // A default project should build successfully.
+    uv_snapshot!(context.filters(), context.build().current_dir(context.temp_dir.join("foo")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
+    Successfully built dist/foo-0.1.0.tar.gz
+    Successfully built dist/foo-0.1.0-py3-none-any.whl
+    ");
 }
 
 #[test]
@@ -144,6 +170,13 @@ fn init_application() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -154,8 +187,11 @@ fn init_application() -> Result<()> {
     }, {
         assert_snapshot!(
             hello, @r#"
+        from foo import hello
+
+
         def main():
-            print("Hello from foo!")
+            print(hello())
 
 
         if __name__ == "__main__":
@@ -175,7 +211,9 @@ fn init_application() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Audited in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
     ");
 
     Ok(())
@@ -215,6 +253,13 @@ fn init_application_hello_exists() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -266,6 +311,13 @@ fn init_application_other_python_exists() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -276,8 +328,11 @@ fn init_application_other_python_exists() -> Result<()> {
     }, {
         assert_snapshot!(
             hello, @r#"
+        from foo import hello
+
+
         def main():
-            print("Hello from foo!")
+            print(hello())
 
 
         if __name__ == "__main__":
@@ -339,17 +394,16 @@ fn init_application_package() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r#"
-        def main() -> None:
-            print("Hello from foo!")
+        def hello() -> str:
+            return "Hello from foo!"
         "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).arg("foo"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Hello from foo!
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
@@ -359,7 +413,11 @@ fn init_application_package() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    ");
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/foo/.venv/bin/foo", line 4, in <module>
+        from foo import main
+    ImportError: cannot import name 'main' from 'foo' ([TEMP_DIR]/foo/src/foo/__init__.py)
+    "#);
 
     Ok(())
 }
@@ -496,12 +554,12 @@ fn init_bare_lib() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.init().arg("foo").arg("--bare").arg("--lib"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Initialized project `foo` at `[TEMP_DIR]/foo`
+    error: Library projects must be packaged
     ");
 
     // No extra files should be created
@@ -663,6 +721,7 @@ fn init_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `main.py`
     ");
 
@@ -752,6 +811,7 @@ fn init_script_python_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `version.py`
     ");
 
@@ -796,6 +856,7 @@ fn init_script_create_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `test/dir.py`
     ");
 
@@ -838,6 +899,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `name_conflict.py`
     ");
 
@@ -847,6 +909,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     error: `name_conflict.py` is already a PEP 723 script; use `uv run` to execute it
     ");
 
@@ -859,6 +922,7 @@ fn init_script_file_conflicts() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `existing_script.py`
     ");
 
@@ -893,6 +957,7 @@ fn init_script_shebang() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     warning: If you execute script.py directly, it might ignore its inline metadata.
     Consider replacing its shebang with: #!/usr/bin/env -S uv run --script
     Initialized script at `script.py`
@@ -919,6 +984,7 @@ fn init_script_shebang() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: `--package` is a no-op for Python scripts, which are standalone
     Initialized script at `script.py`
     ");
     let resulting_script = fs_err::read_to_string(&script_path)?;
@@ -1084,6 +1150,13 @@ fn init_no_readme() {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1117,6 +1190,13 @@ fn init_no_pin_python() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1218,6 +1298,13 @@ fn init_application_current_dir() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1227,8 +1314,11 @@ fn init_application_current_dir() -> Result<()> {
     }, {
         assert_snapshot!(
             main_py, @r#"
+        from foo import hello
+
+
         def main():
-            print("Hello from foo!")
+            print(hello())
 
 
         if __name__ == "__main__":
@@ -1758,6 +1848,13 @@ fn init_normalized_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        bar-baz = "bar_baz:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1787,6 +1884,13 @@ fn init_normalized_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        baz-bop = "baz_bop:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1947,6 +2051,13 @@ fn init_no_workspace_warning() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        project = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2022,6 +2133,13 @@ fn init_project_inside_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2381,6 +2499,13 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2439,6 +2564,13 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2498,6 +2630,13 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.9.*"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2544,6 +2683,13 @@ fn init_requires_python_version_file() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2593,6 +2739,13 @@ fn init_existing_environment() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2641,6 +2794,13 @@ fn init_existing_environment_parent() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2762,6 +2922,13 @@ fn init_failure() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2968,8 +3135,18 @@ fn init_with_author() {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        authors = [
+            { name = "Alice", email = "alice@example.com" }
+        ]
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2998,6 +3175,13 @@ fn init_with_author() {
         ]
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        bar = "bar:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -3109,17 +3293,16 @@ fn init_application_package_flit() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r#"
-        def main() -> None:
-            print("Hello from foo!")
+        def hello() -> str:
+            return "Hello from foo!"
         "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("foo"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("foo"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Hello from foo!
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -3128,7 +3311,11 @@ fn init_application_package_flit() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    ");
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/foo/.venv/bin/foo", line 4, in <module>
+        from foo import main
+    ImportError: cannot import name 'main' from 'foo' ([TEMP_DIR]/foo/src/foo/__init__.py)
+    "#);
 
     Ok(())
 }
@@ -3399,8 +3586,8 @@ fn init_app_build_backend_maturin() -> Result<()> {
         from foo._core import hello_from_bin
 
 
-        def main() -> None:
-            print(hello_from_bin())
+        def hello() -> str:
+            return hello_from_bin()
         "
         );
     });
@@ -3528,8 +3715,8 @@ fn init_app_build_backend_scikit() -> Result<()> {
         from foo._core import hello_from_bin
 
 
-        def main() -> None:
-            print(hello_from_bin())
+        def hello() -> str:
+            return hello_from_bin()
         "
         );
     });
@@ -3884,17 +4071,16 @@ fn init_application_package_hatchling() -> Result<()> {
     }, {
         assert_snapshot!(
             init, @r#"
-        def main() -> None:
-            print("Hello from foo!")
+        def hello() -> str:
+            return "Hello from foo!"
         "#
         );
     });
 
-    uv_snapshot!(context.filters(), context.run().arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.run().arg("foo").current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
-    Hello from foo!
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
@@ -3903,7 +4089,11 @@ fn init_application_package_hatchling() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + foo==0.1.0 (from file://[TEMP_DIR]/foo)
-    ");
+    Traceback (most recent call last):
+      File "[TEMP_DIR]/foo/.venv/bin/foo", line 4, in <module>
+        from foo import main
+    ImportError: cannot import name 'main' from 'foo' ([TEMP_DIR]/foo/src/foo/__init__.py)
+    "#);
 
     Ok(())
 }
@@ -4131,6 +4321,13 @@ fn init_project_flag_is_ignored_with_explicit_path() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
