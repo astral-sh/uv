@@ -106,7 +106,7 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
-    There are no installed versions to upgrade
+    No managed Python installations were found to upgrade
     ");
 
     // Install earlier patch versions for different minor versions
