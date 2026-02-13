@@ -3566,6 +3566,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) prerelease: PrereleaseMode,
     pub(crate) resolution: ResolutionMode,
     pub(crate) sources: NoSources,
+    pub(crate) cuda_driver_version: Option<String>,
     pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) upgrade: Upgrade,
 }
@@ -3719,6 +3720,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                     value.no_sources,
                     value.no_sources_package.unwrap_or_default(),
                 ),
+                cuda_driver_version: value.cuda_driver_version,
                 torch_backend: value.torch_backend,
                 upgrade: value.upgrade.unwrap_or_default(),
             },
@@ -3745,6 +3747,7 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) cuda_driver_version: Option<String>,
     pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
@@ -4047,6 +4050,8 @@ impl PipSettings {
                 .config_settings_package
                 .combine(config_settings_package)
                 .unwrap_or_default(),
+            cuda_driver_version: environment
+                .cuda_driver_version,
             torch_backend: args.torch_backend.combine(torch_backend),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
