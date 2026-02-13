@@ -409,7 +409,8 @@ async fn perform_install(
                 if existing_installations.is_empty() {
                     writeln!(
                         printer.stderr(),
-                        "No Python versions are installed. Use `uv python install` to install Python."
+                        "No Python versions are installed. Use {} to install Python.",
+                        "uv python install".cyan()
                     )?;
                 } else {
                     writeln!(
@@ -421,7 +422,8 @@ async fn perform_install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
                 writeln!(
                     printer.stderr(),
-                    "No Python versions specified for upgrade; did you mean `uv python upgrade`?"
+                    "No Python versions specified for upgrade; did you mean {}?",
+                    "uv python upgrade".cyan()
                 )?;
             }
             PythonUpgrade::Disabled => {}
