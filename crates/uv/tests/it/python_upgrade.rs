@@ -106,7 +106,7 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
-    No Python versions are installed. Use uv python install to install Python.
+    No Python versions are installed. Use `uv python install` to install Python.
     ");
 
     // Install earlier patch versions for different minor versions
