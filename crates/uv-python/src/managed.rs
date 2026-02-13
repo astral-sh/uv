@@ -85,12 +85,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to create directory for Python executable link at {}", to.user_display())]
-    ExecutableDirectory {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
+    #[error("Failed to create directory for Python executable link")]
+    ExecutableDirectory(#[source] io::Error),
     #[error("Failed to read Python installation directory: {0}", dir.user_display())]
     ReadError {
         dir: PathBuf,
@@ -957,10 +953,7 @@ fn executable_path_from_base(
 /// If the file already exists at the link path, an error will be returned.
 pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
@@ -1005,10 +998,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
 pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         replace_symlink(executable, link).map_err(|err| Error::LinkExecutable {
