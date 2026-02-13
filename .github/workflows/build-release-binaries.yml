@@ -32,7 +32,7 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -405,7 +405,7 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -633,7 +633,7 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         platform:
@@ -845,7 +845,7 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         target:
@@ -938,7 +938,7 @@ jobs:
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
     strategy:
       matrix:
         platform:
