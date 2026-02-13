@@ -8,8 +8,8 @@ use uv_configuration::{
     Reinstall, RequiredVersion, TargetTriple, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, PackageConfigSettings, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettings, ExtraBuildVariables, FindLinksStrategy, Index, IndexUrl, PackageConfigSettings,
+    PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
@@ -87,6 +87,7 @@ impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
+impl_combine_or!(FindLinksStrategy);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);

@@ -21,9 +21,9 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
-    NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    UnresolvedRequirementSpecification, Verbatim,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, FindLinksStrategy, HashGeneration,
+    Index, IndexLocations, NameRequirementSpecification, Origin, PackageConfigSettings,
+    Requirement, RequiresPython, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -425,6 +425,7 @@ pub(crate) async fn pip_compile(
             .map(|index| index.with_origin(Origin::RequirementsTxt))
             .collect(),
         no_index,
+        FindLinksStrategy::default(),
     );
 
     // Determine the PyTorch backend.
@@ -578,6 +579,7 @@ pub(crate) async fn pip_compile(
         Conflicts::empty(),
         &client,
         &flat_index,
+        index_locations.find_links_strategy(),
         &top_level_index,
         &build_dispatch,
         concurrency,
