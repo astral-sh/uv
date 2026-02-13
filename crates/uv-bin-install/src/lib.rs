@@ -21,7 +21,7 @@ use uv_distribution_filename::SourceDistExtension;
 use uv_cache::{Cache, CacheBucket, CacheEntry, Error as CacheError};
 use uv_client::{BaseClient, RetryState};
 use uv_extract::{Error as ExtractError, stream};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_platform::Platform;
 use uv_redacted::DisplaySafeUrl;
 
@@ -32,11 +32,19 @@ pub enum Binary {
 }
 
 impl Binary {
-    /// Get the default version for this binary.
-    pub fn default_version(&self) -> Version {
+    /// Get the default version constraints for this binary.
+    ///
+    /// Returns a version range constraint (e.g., `>=0.15,<0.16`) rather than a pinned version,
+    /// allowing patch version updates without requiring a uv release.
+    pub fn default_constraints(&self) -> VersionSpecifiers {
         match self {
             // TODO(zanieb): Figure out a nice way to automate updating this
-            Self::Ruff => Version::new([0, 15, 0]),
+            Self::Ruff => [
+                VersionSpecifier::greater_than_equal_version(Version::new([0, 15])),
+                VersionSpecifier::less_than_version(Version::new([0, 16])),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 

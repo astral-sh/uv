@@ -5079,7 +5079,7 @@ pub struct FormatArgs {
     /// Accepts either a version (e.g., `0.8.2`) which will be treated as an exact pin,
     /// a version specifier (e.g., `>=0.8.0`), or `latest` to use the latest available version.
     ///
-    /// By default, a pinned version of Ruff will be used.
+    /// By default, a constrained version range of Ruff will be used (e.g., `>=0.15,<0.16`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub version: Option<String>,
 

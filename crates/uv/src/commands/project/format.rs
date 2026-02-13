@@ -79,8 +79,24 @@ pub(crate) async fn format(
 
     let resolved = match bin_version {
         BinVersion::Default => {
-            // Use the default pinned version
-            ResolvedVersion::from_version(Binary::Ruff, Binary::Ruff.default_version())?
+            // Find the best version matching the default constraints
+            let constraints = Binary::Ruff.default_constraints();
+            let resolved = find_matching_version(
+                Binary::Ruff,
+                Some(&constraints),
+                exclude_newer,
+                &client,
+                &retry_policy,
+            )
+            .await
+            .with_context(|| {
+                format!("Failed to find ruff version matching default constraints: {constraints}")
+            })?;
+            debug!(
+                "Resolved `ruff@{constraints}` to `ruff=={}`",
+                resolved.version
+            );
+            resolved
         }
         BinVersion::Pinned(version) => {
             // Use the exact version directly without manifest lookup.
