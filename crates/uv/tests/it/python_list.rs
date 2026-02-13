@@ -463,6 +463,23 @@ fn python_list_downloads_installed() {
     ----- stderr -----
     ");
 
+    // Managed symlinks should also be shown with `--managed-python`.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("3.10")
+        .arg("--managed-python")
+        .env(EnvVars::UV_TEST_PYTHON_PATH, context.bin_dir.as_os_str())
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.19-[PLATFORM]    [BIN]/[PYTHON] -> managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    cpython-3.10.19-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+
     // But, the display should be reverted if `--only-downloads` is used
     uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
