@@ -873,19 +873,17 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${MODULE_NAME} --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall;
+            .venv/bin/${MODULE_NAME} --help;
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${MODULE_NAME} --help
-            .venv/bin/uvx --help
+            # .venv/bin/python -m ${MODULE_NAME} --help;
+            .venv/bin/uvx --help;
+          "
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -922,17 +920,16 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Test wheel uv-build"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${MODULE_NAME}-build --help
-            .venv/bin/python -m ${MODULE_NAME}_build --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall;
+            .venv/bin/${MODULE_NAME}-build --help;
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${MODULE_NAME}_build --help;
+          "
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
