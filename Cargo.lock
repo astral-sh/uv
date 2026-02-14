@@ -6880,7 +6880,6 @@ dependencies = [
  "indoc",
  "insta",
  "itertools 0.14.0",
- "memchr",
  "regex",
  "reqwest",
  "rustc-hash",
