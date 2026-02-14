@@ -62,6 +62,14 @@ configuration tables, the project-level value will be used, and the user-level v
 ignored. If an array is present in both tables, the arrays will be concatenated, with the
 project-level settings appearing earlier in the merged array.
 
+!!! tip "Local development overrides"
+
+    The `[sources]` table can be defined in both `uv.toml` and `pyproject.toml`. When both are
+    present, sources from `uv.toml` override those from `pyproject.toml` on a per-package basis.
+    This enables local development workflows where different team members have dependencies at
+    different filesystem locations. See [Dependency sources](projects/dependencies.md#local-development-overrides-with-uvtoml)
+    for more details.
+
 Settings provided via environment variables take precedence over persistent configuration, and
 settings provided via the command line take precedence over both.
 
