@@ -5935,6 +5935,7 @@ dependencies = [
  "rustc-hash",
  "same-file",
  "serde",
+ "shellexpand",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
