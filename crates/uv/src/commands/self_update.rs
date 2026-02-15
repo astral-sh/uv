@@ -33,7 +33,9 @@ pub(crate) async fn self_update(
     }
 
     let mut updater = AxoUpdater::new_for("uv");
-    updater.disable_installer_output();
+    updater
+        .set_client(client_builder.build().raw_client().clone())
+        .disable_installer_output();
 
     if let Some(ref token) = token {
         updater.set_github_token(token);
