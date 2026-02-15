@@ -1444,7 +1444,7 @@ fn relocatable_real_environment() {
     let output = std::process::Command::new(python.path())
         .args([
             "-c",
-            "import sys; print(sys.prefix); print(sys.base_prefix)",
+            "import sys, sysconfig; print('prefix:', sys.prefix); print('base_prefix:', sys.base_prefix); print('purelib:', sysconfig.get_path('purelib')); print('scripts:', sysconfig.get_path('scripts'))",
         ])
         .output()
         .expect("python should run");
@@ -1454,14 +1454,42 @@ fn relocatable_real_environment() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    eprintln!(
+        "Python paths in real environment:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
 
     // Install a package into the real environment with `uv pip install`.
-    context
+    let pip_output = context
         .pip_install()
         .env(EnvVars::VIRTUAL_ENV, venv_dir.as_os_str())
         .arg("iniconfig")
-        .assert()
-        .success();
+        .output()
+        .expect("pip install should run");
+    assert!(
+        pip_output.status.success(),
+        "pip install failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&pip_output.stdout),
+        String::from_utf8_lossy(&pip_output.stderr),
+    );
+    eprintln!(
+        "pip install output:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&pip_output.stdout),
+        String::from_utf8_lossy(&pip_output.stderr),
+    );
+
+    // List files in site-packages to see where iniconfig was installed.
+    if let Ok(entries) = std::fs::read_dir(site_packages.path()) {
+        eprintln!("site-packages contents:");
+        for entry in entries.flatten() {
+            eprintln!("  {}", entry.path().display());
+        }
+    } else {
+        eprintln!(
+            "site-packages directory does not exist: {}",
+            site_packages.path().display()
+        );
+    }
 
     // The package should be installed in site-packages.
     site_packages
