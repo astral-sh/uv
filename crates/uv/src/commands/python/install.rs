@@ -408,7 +408,7 @@ async fn perform_install(
             PythonUpgrade::Enabled(PythonUpgradeSource::Upgrade) => {
                 writeln!(
                     printer.stderr(),
-                    "There are no installed versions to upgrade"
+                    "No uv-managed Python installations found to upgrade. Use `uv python install` to install a Python version first."
                 )?;
             }
             PythonUpgrade::Enabled(PythonUpgradeSource::Install) => {
@@ -750,7 +750,7 @@ async fn perform_install(
         {
             writeln!(
                 printer.stderr(),
-                "There are no installed versions to upgrade"
+                "No uv-managed Python installations found to upgrade. Use `uv python install` to install a Python version first."
             )?;
         } else if let [request] = requests.as_slice() {
             // Convert to the inner request
