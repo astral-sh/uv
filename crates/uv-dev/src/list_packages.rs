@@ -5,6 +5,7 @@ use clap::Parser;
 use uv_cache::{Cache, CacheArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
+use uv_preview::Preview;
 use uv_settings::EnvironmentOptions;
 
 #[derive(Parser)]
@@ -18,8 +19,9 @@ pub(crate) struct ListPackagesArgs {
 pub(crate) async fn list_packages(
     args: ListPackagesArgs,
     environment: EnvironmentOptions,
+    preview: Preview,
 ) -> Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init().await?;
+    let cache = Cache::from_args(args.cache_args, preview)?.init().await?;
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)

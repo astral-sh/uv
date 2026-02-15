@@ -9,6 +9,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
 use uv_pep508::VerbatimUrl;
+use uv_preview::Preview;
 use uv_pypi_types::ParsedUrl;
 use uv_settings::EnvironmentOptions;
 
@@ -22,8 +23,9 @@ pub(crate) struct WheelMetadataArgs {
 pub(crate) async fn wheel_metadata(
     args: WheelMetadataArgs,
     environment: EnvironmentOptions,
+    preview: Preview,
 ) -> Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init().await?;
+    let cache = Cache::from_args(args.cache_args, preview)?.init().await?;
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)

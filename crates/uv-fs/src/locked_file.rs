@@ -34,6 +34,9 @@ static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
     }
 });
 
+/// The permissions the lockfile should end up with
+const DESIRED_MODE: u32 = 0o666;
+
 #[derive(Debug, Error)]
 pub enum LockedFileError {
     #[error(
@@ -211,8 +214,9 @@ impl LockedFile {
         path: impl AsRef<Path>,
         mode: LockedFileMode,
         resource: impl Display,
+        override_umask: bool,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(&path)?;
+        let file = Self::create(&path, override_umask)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -226,21 +230,37 @@ impl LockedFile {
         path: impl AsRef<Path>,
         mode: LockedFileMode,
         resource: impl Display,
+        override_umask: bool,
     ) -> Option<Self> {
-        let file = Self::create(path).ok()?;
+        let file = Self::create(path, override_umask).ok()?;
         let resource = resource.to_string();
         Self::lock_file_no_wait(file, mode, &resource)
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+    fn create(
+        path: impl AsRef<Path>,
+        override_umask: bool,
+    ) -> Result<fs_err::File, LockedFileError> {
+        use fs_err::os::unix::fs::OpenOptionsExt;
+
+        if override_umask {
+            Self::create_override_umask(path)
+        } else {
+            Ok(fs_err::OpenOptions::new()
+                .read(true)
+                .create(true)
+                .mode(DESIRED_MODE)
+                .open(path.as_ref())?)
+        }
+    }
+
+    #[cfg(unix)]
+    fn create_override_umask(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
         #[expect(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
-
-        /// The permissions the lockfile should end up with
-        const DESIRED_MODE: u32 = 0o666;
 
         #[expect(clippy::disallowed_types)]
         fn try_set_permissions(file: &File, path: &Path) {
@@ -321,7 +341,10 @@ impl LockedFile {
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+    fn create(
+        path: impl AsRef<Path>,
+        _override_umask: bool,
+    ) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)

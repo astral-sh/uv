@@ -59,7 +59,7 @@ fn setup(manifest: Manifest) -> impl Fn(bool) {
         .build()
         .unwrap();
 
-    let cache = Cache::from_path("../../.cache")
+    let cache = Cache::from_path("../../.cache", false)
         .init_no_wait()
         .expect("No cache contention when running benchmarks")
         .unwrap();

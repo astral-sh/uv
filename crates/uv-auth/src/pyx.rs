@@ -464,9 +464,10 @@ impl PyxTokenStore {
         let lock_path = self.lock_path(&tokens);
 
         // Acquire a lock to prevent concurrent refresh attempts for this token
-        let _lock = LockedFile::acquire(&lock_path, LockedFileMode::Exclusive, "pyx refresh")
-            .await
-            .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
+        let _lock =
+            LockedFile::acquire(&lock_path, LockedFileMode::Exclusive, "pyx refresh", false)
+                .await
+                .map_err(|err| TokenStoreError::Io(io::Error::other(err.to_string())))?;
 
         // Check if another process has already refreshed the tokens
         if let Some(tokens) = self.read().await? {

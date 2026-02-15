@@ -50,46 +50,65 @@ pub enum Error {
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
-pub struct CacheEntry(PathBuf);
+pub struct CacheEntry {
+    path: PathBuf,
+    lock_file_ignore_umask: bool,
+}
 
 impl CacheEntry {
     /// Create a new [`CacheEntry`] from a directory and a file name.
-    pub fn new(dir: impl Into<PathBuf>, file: impl AsRef<Path>) -> Self {
-        Self(dir.into().join(file))
+    pub fn new(
+        dir: impl Into<PathBuf>,
+        file: impl AsRef<Path>,
+        lock_file_ignore_umask: bool,
+    ) -> Self {
+        Self {
+            path: dir.into().join(file),
+            lock_file_ignore_umask,
+        }
     }
 
     /// Create a new [`CacheEntry`] from a path.
-    pub fn from_path(path: impl Into<PathBuf>) -> Self {
-        Self(path.into())
+    pub fn from_path(path: impl Into<PathBuf>, lock_file_ignore_umask: bool) -> Self {
+        Self {
+            path: path.into(),
+            lock_file_ignore_umask,
+        }
     }
 
     /// Return the cache entry's parent directory.
     pub fn shard(&self) -> CacheShard {
-        CacheShard(self.dir().to_path_buf())
+        CacheShard {
+            path: self.dir().to_path_buf(),
+            lock_file_ignore_umask: self.lock_file_ignore_umask,
+        }
     }
 
     /// Convert the [`CacheEntry`] into a [`PathBuf`].
     #[inline]
     pub fn into_path_buf(self) -> PathBuf {
-        self.0
+        self.path
     }
 
     /// Return the path to the [`CacheEntry`].
     #[inline]
     pub fn path(&self) -> &Path {
-        &self.0
+        &self.path
     }
 
     /// Return the cache entry's parent directory.
     #[inline]
     pub fn dir(&self) -> &Path {
-        self.0.parent().expect("Cache entry has no parent")
+        self.path.parent().expect("Cache entry has no parent")
     }
 
     /// Create a new [`CacheEntry`] with the given file name.
     #[must_use]
     pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
-        Self(self.dir().join(file))
+        Self {
+            path: self.dir().join(file),
+            lock_file_ignore_umask: self.lock_file_ignore_umask,
+        }
     }
 
     /// Acquire the [`CacheEntry`] as an exclusive lock.
@@ -99,6 +118,7 @@ impl CacheEntry {
             self.path(),
             LockedFileMode::Exclusive,
             self.path().display(),
+            self.lock_file_ignore_umask,
         )
         .await?)
     }
@@ -106,24 +126,30 @@ impl CacheEntry {
 
 impl AsRef<Path> for CacheEntry {
     fn as_ref(&self) -> &Path {
-        &self.0
+        &self.path
     }
 }
 
 /// A subdirectory within the cache.
 #[derive(Debug, Clone)]
-pub struct CacheShard(PathBuf);
+pub struct CacheShard {
+    path: PathBuf,
+    lock_file_ignore_umask: bool,
+}
 
 impl CacheShard {
     /// Return a [`CacheEntry`] within this shard.
     pub fn entry(&self, file: impl AsRef<Path>) -> CacheEntry {
-        CacheEntry::new(&self.0, file)
+        CacheEntry::new(&self.path, file, self.lock_file_ignore_umask)
     }
 
     /// Return a [`CacheShard`] within this shard.
     #[must_use]
     pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
-        Self(self.0.join(dir.as_ref()))
+        Self {
+            path: self.path.join(dir.as_ref()),
+            lock_file_ignore_umask: self.lock_file_ignore_umask,
+        }
     }
 
     /// Acquire the cache entry as an exclusive lock.
@@ -133,19 +159,20 @@ impl CacheShard {
             self.join(".lock"),
             LockedFileMode::Exclusive,
             self.display(),
+            self.lock_file_ignore_umask,
         )
         .await?)
     }
 
     /// Return the [`CacheShard`] as a [`PathBuf`].
     pub fn into_path_buf(self) -> PathBuf {
-        self.0
+        self.path
     }
 }
 
 impl AsRef<Path> for CacheShard {
     fn as_ref(&self) -> &Path {
-        &self.0
+        &self.path
     }
 }
 
@@ -153,7 +180,7 @@ impl Deref for CacheShard {
     type Target = Path;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.path
     }
 }
 
@@ -174,27 +201,31 @@ pub struct Cache {
     /// Ensure that `uv cache` operations don't remove items from the cache that are used by another
     /// uv process.
     lock_file: Option<Arc<LockedFile>>,
+    /// Whether to ignore the umask when creating new lock files
+    pub lock_file_ignore_umask: bool,
 }
 
 impl Cache {
     /// A persistent cache directory at `root`.
-    pub fn from_path(root: impl Into<PathBuf>) -> Self {
+    pub fn from_path(root: impl Into<PathBuf>, lock_file_ignore_umask: bool) -> Self {
         Self {
             root: root.into(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: None,
             lock_file: None,
+            lock_file_ignore_umask,
         }
     }
 
     /// Create a temporary cache directory.
-    pub fn temp() -> Result<Self, io::Error> {
+    pub fn temp(lock_file_ignore_umask: bool) -> Result<Self, io::Error> {
         let temp_dir = tempfile::tempdir()?;
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
             refresh: Refresh::None(Timestamp::now()),
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
+            lock_file_ignore_umask,
         })
     }
 
@@ -211,6 +242,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
+            lock_file_ignore_umask,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -225,6 +257,7 @@ impl Cache {
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
+            self.lock_file_ignore_umask,
         )
         .await?;
 
@@ -233,6 +266,7 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
+            lock_file_ignore_umask,
         })
     }
 
@@ -245,24 +279,28 @@ impl Cache {
             refresh,
             temp_dir,
             lock_file,
+            lock_file_ignore_umask,
         } = self;
 
         match LockedFile::acquire_no_wait(
             root.join(".lock"),
             LockedFileMode::Exclusive,
             root.simplified_display(),
+            self.lock_file_ignore_umask,
         ) {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
+                lock_file_ignore_umask,
             }),
             None => Err(Self {
                 root,
                 refresh,
                 temp_dir,
                 lock_file,
+                lock_file_ignore_umask,
             }),
         }
     }
@@ -284,7 +322,10 @@ impl Cache {
 
     /// Compute an entry in the cache.
     pub fn shard(&self, cache_bucket: CacheBucket, dir: impl AsRef<Path>) -> CacheShard {
-        CacheShard(self.bucket(cache_bucket).join(dir.as_ref()))
+        CacheShard {
+            path: self.bucket(cache_bucket).join(dir.as_ref()),
+            lock_file_ignore_umask: self.lock_file_ignore_umask,
+        }
     }
 
     /// Compute an entry in the cache.
@@ -294,7 +335,11 @@ impl Cache {
         dir: impl AsRef<Path>,
         file: impl AsRef<Path>,
     ) -> CacheEntry {
-        CacheEntry::new(self.bucket(cache_bucket).join(dir), file)
+        CacheEntry::new(
+            self.bucket(cache_bucket).join(dir),
+            file,
+            self.lock_file_ignore_umask,
+        )
     }
 
     /// Return the path to an archive in the cache.
@@ -477,6 +522,7 @@ impl Cache {
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
+            self.lock_file_ignore_umask,
         )
         .await
         {
@@ -513,6 +559,7 @@ impl Cache {
             root.join(".lock"),
             LockedFileMode::Shared,
             root.simplified_display(),
+            self.lock_file_ignore_umask,
         ) else {
             return Ok(None);
         };

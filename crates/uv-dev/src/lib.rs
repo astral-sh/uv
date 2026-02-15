@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::instrument;
 
+use uv_preview::Preview;
 use uv_settings::EnvironmentOptions;
 
 use crate::clear_compile::ClearCompileArgs;
@@ -68,12 +69,15 @@ enum Cli {
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
     let environment = EnvironmentOptions::new()?;
+    let preview = Preview::new(&[]);
     match cli {
-        Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args, environment).await?,
-        Cli::ValidateZip(args) => validate_zip::validate_zip(args, environment).await?,
-        Cli::Compile(args) => compile::compile(args).await?,
+        Cli::WheelMetadata(args) => {
+            wheel_metadata::wheel_metadata(args, environment, preview).await?;
+        }
+        Cli::ValidateZip(args) => validate_zip::validate_zip(args, environment, preview).await?,
+        Cli::Compile(args) => compile::compile(args, preview).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
-        Cli::ListPackages(args) => list_packages::list_packages(args, environment).await?,
+        Cli::ListPackages(args) => list_packages::list_packages(args, environment, preview).await?,
         Cli::GenerateAll(args) => generate_all::main(&args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
         Cli::GenerateOptionsReference(args) => generate_options_reference::main(&args)?,

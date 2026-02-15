@@ -31,7 +31,7 @@ impl ResolvedWheel {
 
         // Convert to a cached wheel.
         let archive = cache.resolve_link(path).ok()?;
-        let entry = CacheEntry::from_path(archive);
+        let entry = CacheEntry::from_path(archive, cache.lock_file_ignore_umask);
         Some(Self { filename, entry })
     }
 }
