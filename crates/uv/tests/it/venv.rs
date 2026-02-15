@@ -1448,7 +1448,6 @@ fn relocatable_real_environment() {
 
 /// With `--relocatable` and a managed Python, `uv sync` works with a pre-created real environment.
 #[test]
-#[cfg(unix)] // On Windows, `uv sync` recreates the venv without `--relocatable`.
 fn relocatable_real_environment_sync() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
@@ -1484,7 +1483,17 @@ fn relocatable_real_environment_sync() -> Result<()> {
         .success();
 
     // Run `uv sync` which should reuse the real environment and install dependencies.
-    context.sync().assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
 
     let pyvenv_cfg = venv_dir.child("pyvenv.cfg");
     pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
