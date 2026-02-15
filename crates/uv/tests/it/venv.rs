@@ -1432,6 +1432,21 @@ fn relocatable_real_environment() {
         );
     }
 
+    // The Python interpreter in the real environment should be functional.
+    let output = std::process::Command::new(python.path())
+        .args([
+            "-c",
+            "import sys; print(sys.prefix); print(sys.base_prefix)",
+        ])
+        .output()
+        .expect("python should run");
+    assert!(
+        output.status.success(),
+        "python should start successfully in the real environment:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+
     // Install a package into the real environment with `uv pip install`.
     context
         .pip_install()
