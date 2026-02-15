@@ -7,7 +7,6 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Component, Path, PathBuf};
 use std::{io, mem};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -58,7 +57,7 @@ pub fn build_wheel(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     write_wheel(
@@ -319,7 +318,7 @@ pub fn build_editable(
         fs_err::remove_file(&wheel_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(wheel_dir)?;
+    let temp_file = uv_fs::tempfile_in(wheel_dir)?;
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(temp_file.as_file());
 
     debug!("Adding pth file to {}", wheel_path.user_display());
