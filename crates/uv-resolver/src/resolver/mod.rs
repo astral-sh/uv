@@ -3834,6 +3834,13 @@ impl Forks {
         for set in conflicts.iter() {
             let mut new = vec![];
             for fork in std::mem::take(&mut forks) {
+                // Check if this conflict set is relevant to this fork. We need two conditions:
+                //
+                // 1. At least one item has dependencies in this fork (otherwise there's nothing to
+                //    fork on).
+                // 2. At least two items are not already excluded in this fork's environment
+                //    (otherwise the conflict constraint is already satisfied and no fork is
+                //    needed).
                 let mut has_conflicting_dependency = false;
                 for item in set.iter() {
                     if fork.contains_conflicting_item(item.as_ref()) {
@@ -3845,6 +3852,53 @@ impl Forks {
                 if !has_conflicting_dependency {
                     new.push(fork);
                     continue;
+                }
+
+                // If fewer than two items in this conflict set are still possible (not already
+                // excluded) in this fork, the conflict constraint is already satisfied by prior
+                // forking. We can skip the full N+1 fork split if the single remaining non-excluded
+                // item doesn't appear in any other conflict set (since it would never need its own
+                // "excluded" variant).
+                let non_excluded: Vec<_> = set
+                    .iter()
+                    .filter(|item| fork.env.included_by_group(item.as_ref()))
+                    .collect();
+                if non_excluded.len() < 2 {
+                    // Check if any non-excluded item still has a live conflict in another set —
+                    // i.e., another set where this item AND at least one other non-excluded item
+                    // both appear. If so, we still need to fork to create the "excluded" variant
+                    // for that item.
+                    let dominated = non_excluded.iter().all(|item| {
+                        !conflicts.iter().any(|other_set| {
+                            !std::ptr::eq(set, other_set)
+                                && other_set.contains(item.package(), item.kind().as_ref())
+                                && other_set
+                                    .iter()
+                                    .filter(|other_item| {
+                                        other_item.package() != item.package()
+                                            || other_item.kind() != item.kind()
+                                    })
+                                    .any(|other_item| {
+                                        fork.env.included_by_group(other_item.as_ref())
+                                    })
+                        })
+                    });
+                    if dominated {
+                        // When dependencies are added to forks, we check `included_by_marker` but
+                        // not on whether the dependency's conflict item is included by the fork's
+                        // environment so there may be extraneous dependencies and we need to filter
+                        // the fork to clean up dependencies gated on already-excluded extras.
+                        let rules: Vec<_> = set
+                            .iter()
+                            .filter(|item| !fork.env.included_by_group(item.as_ref()))
+                            .cloned()
+                            .map(Err)
+                            .collect();
+                        if let Some(filtered) = fork.filter(rules) {
+                            new.push(filtered);
+                        }
+                        continue;
+                    }
                 }
 
                 // Create a fork that excludes ALL conflicts.
