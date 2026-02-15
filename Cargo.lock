@@ -6351,6 +6351,7 @@ name = "uv-fs"
 version = "0.0.22"
 dependencies = [
  "backon",
+ "clap",
  "dunce",
  "either",
  "encoding_rs_io",
@@ -6358,6 +6359,8 @@ dependencies = [
  "junction",
  "path-slash",
  "percent-encoding",
+ "reflink-copy",
+ "rustc-hash",
  "rustix",
  "same-file",
  "schemars",
@@ -6367,6 +6370,8 @@ dependencies = [
  "tokio",
  "tracing",
  "uv-static",
+ "uv-warnings",
+ "walkdir",
  "windows",
 ]
 
@@ -6440,7 +6445,6 @@ dependencies = [
  "mailparse",
  "owo-colors",
  "pathdiff",
- "reflink-copy",
  "regex",
  "rustc-hash",
  "same-file",
@@ -6449,7 +6453,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tempfile",
  "thiserror 2.0.18",
  "tracing",
  "uv-distribution-filename",

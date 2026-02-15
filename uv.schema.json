@@ -1051,24 +1051,25 @@
       ]
     },
     "LinkMode": {
+      "description": "The method to use when linking.\n\nDefaults to [`Clone`](LinkMode::Clone) on macOS (since APFS supports copy-on-write), and\n[`Hardlink`](LinkMode::Hardlink) on other platforms.",
       "oneOf": [
         {
-          "description": "Clone (i.e., copy-on-write or reflink) packages from the wheel into the `site-packages` directory.",
+          "description": "Clone (i.e., copy-on-write) packages from the source into the destination.",
           "type": "string",
           "const": "clone"
         },
         {
-          "description": "Copy packages from the wheel into the `site-packages` directory.",
+          "description": "Copy packages from the source into the destination.",
           "type": "string",
           "const": "copy"
         },
         {
-          "description": "Hard link packages from the wheel into the `site-packages` directory.",
+          "description": "Hard link packages from the source into the destination.",
           "type": "string",
           "const": "hardlink"
         },
         {
-          "description": "Symbolically link packages from the wheel into the `site-packages` directory.",
+          "description": "Symbolically link packages from the source into the destination.",
           "type": "string",
           "const": "symlink"
         }
