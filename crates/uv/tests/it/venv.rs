@@ -1459,6 +1459,46 @@ fn relocatable_real_environment() {
         String::from_utf8_lossy(&output.stdout)
     );
 
+    // Debug: list files in temp_dir and .venv root to understand the layout
+    eprintln!("temp_dir: {}", context.temp_dir.path().display());
+    eprintln!("venv_dir: {}", venv_dir.path().display());
+    if let Ok(entries) = std::fs::read_dir(context.temp_dir.path()) {
+        eprintln!("temp_dir contents:");
+        for entry in entries.flatten() {
+            let ft = entry
+                .file_type()
+                .map(|ft| {
+                    if ft.is_dir() {
+                        "dir"
+                    } else if ft.is_file() {
+                        "file"
+                    } else {
+                        "other"
+                    }
+                })
+                .unwrap_or("?");
+            eprintln!("  {} ({})", entry.file_name().to_string_lossy(), ft);
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(venv_dir.path()) {
+        eprintln!(".venv contents:");
+        for entry in entries.flatten() {
+            let ft = entry
+                .file_type()
+                .map(|ft| {
+                    if ft.is_dir() {
+                        "dir"
+                    } else if ft.is_file() {
+                        "file"
+                    } else {
+                        "other"
+                    }
+                })
+                .unwrap_or("?");
+            eprintln!("  {} ({})", entry.file_name().to_string_lossy(), ft);
+        }
+    }
+
     // Install a package into the real environment with `uv pip install`.
     let pip_output = context
         .pip_install()
