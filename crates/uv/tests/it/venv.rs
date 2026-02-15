@@ -1444,7 +1444,7 @@ fn relocatable_real_environment() {
     let output = std::process::Command::new(python.path())
         .args([
             "-c",
-            "import sys, sysconfig; print('prefix:', sys.prefix); print('base_prefix:', sys.base_prefix); print('purelib:', sysconfig.get_path('purelib')); print('scripts:', sysconfig.get_path('scripts'))",
+            "import sys, sysconfig; print('executable:', sys.executable); print('prefix:', sys.prefix); print('base_prefix:', sys.base_prefix); print('purelib:', sysconfig.get_path('purelib')); print('scripts:', sysconfig.get_path('scripts'))",
         ])
         .output()
         .expect("python should run");
