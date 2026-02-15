@@ -67,13 +67,14 @@ pub enum OnExistingDirectory {
 /// Returns the [`LinkMode`] that was actually used, which may differ from the requested mode if a
 /// fallback was needed, e.g., if hard linking was requested but the source and destination are on
 /// different filesystems.
-pub fn link_dir<F>(
+pub fn link_dir<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     match options.mode {
         LinkMode::Clone => clone_dir(src, dst, options),
@@ -127,12 +128,15 @@ impl CopyLocks {
 
 /// Options for directory link operations.
 #[derive(Debug)]
-pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
+pub struct LinkOptions<'a, F = fn(&Path) -> bool, S = fn(&Path) -> bool> {
     /// The linking strategy to use.
     mode: LinkMode,
     /// Predicate that returns `true` for files that need a mutable (safe to
     /// write) copy. Only applied in hardlink and symlink modes.
     needs_mutable_copy: F,
+    /// Predicate that returns `true` for paths that should be included.
+    /// When a directory returns `false`, the entire subtree is skipped.
+    filter: S,
     /// Optional locks for synchronized copying during concurrent operations.
     copy_locks: Option<&'a CopyLocks>,
     /// What to do when the destination directory already exists.
@@ -145,13 +149,14 @@ impl LinkOptions<'static> {
         Self {
             mode,
             needs_mutable_copy: |_| false,
+            filter: |_| true,
             copy_locks: None,
             on_existing_directory: OnExistingDirectory::default(),
         }
     }
 }
 
-impl<'a, F> LinkOptions<'a, F> {
+impl<'a, F, S> LinkOptions<'a, F, S> {
     /// Set a predicate for files that need to be writable after linking.
     ///
     /// Should be used for cases where the destination file will be mutated after linking and
@@ -162,13 +167,31 @@ impl<'a, F> LinkOptions<'a, F> {
     ///
     /// Has no effect when using [`LinkMode::Copy`] or [`LinkMode::Clone`], since the linked file is
     /// already mutable without affecting source.
-    pub fn with_mutable_copy_filter<G>(self, f: G) -> LinkOptions<'a, G>
+    pub fn with_mutable_copy_filter<G>(self, f: G) -> LinkOptions<'a, G, S>
     where
         G: Fn(&Path) -> bool,
     {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: f,
+            filter: self.filter,
+            copy_locks: self.copy_locks,
+            on_existing_directory: self.on_existing_directory,
+        }
+    }
+
+    /// Set a predicate for paths that should be included during linking.
+    ///
+    /// Paths for which the predicate returns `false` are skipped. When a directory is skipped,
+    /// the entire subtree is excluded.
+    pub fn with_filter<T>(self, f: T) -> LinkOptions<'a, F, T>
+    where
+        T: Fn(&Path) -> bool,
+    {
+        LinkOptions {
+            mode: self.mode,
+            needs_mutable_copy: self.needs_mutable_copy,
+            filter: f,
             copy_locks: self.copy_locks,
             on_existing_directory: self.on_existing_directory,
         }
@@ -183,6 +206,7 @@ impl<'a, F> LinkOptions<'a, F> {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: self.needs_mutable_copy,
+            filter: self.filter,
             copy_locks: Some(locks),
             on_existing_directory: self.on_existing_directory,
         }
@@ -194,6 +218,7 @@ impl<'a, F> LinkOptions<'a, F> {
         LinkOptions {
             mode: self.mode,
             needs_mutable_copy: self.needs_mutable_copy,
+            filter: self.filter,
             copy_locks: self.copy_locks,
             on_existing_directory,
         }
@@ -272,9 +297,14 @@ pub enum LinkError {
 ///
 /// On all platforms, attempts to reflink individual files. If reflinking is not supported,
 /// falls back to hard linking, then copying.
-fn clone_dir<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<LinkMode, LinkError>
+fn clone_dir<F, S>(
+    src: &Path,
+    dst: &Path,
+    options: &LinkOptions<'_, F, S>,
+) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     // On macOS, try to clone the entire directory in one syscall.
     #[cfg(target_os = "macos")]
@@ -300,17 +330,21 @@ where
 ///
 /// Attempts to reflink each file. If reflinking fails (e.g., unsupported filesystem),
 /// falls back to hard linking, then copying.
-fn reflink_dir<F>(
+fn reflink_dir<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     let mut attempt = Attempt::Initial;
 
-    for entry in WalkDir::new(src) {
+    for entry in WalkDir::new(src)
+        .into_iter()
+        .filter_entry(|e| (options.filter)(e.path()))
+    {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
             err,
@@ -418,13 +452,14 @@ where
 
 /// Try to clone a directory, handling `merge_directories` option.
 #[cfg(target_os = "macos")]
-fn try_clone_dir_recursive<F>(
+fn try_clone_dir_recursive<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     match reflink_copy::reflink(src, dst) {
         Ok(()) => {
@@ -452,13 +487,14 @@ where
 
 /// Clone a directory by merging into an existing destination.
 #[cfg(target_os = "macos")]
-fn clone_dir_merge<F>(
+fn clone_dir_merge<F, S>(
     src: &Path,
     dst: &Path,
-    _options: &LinkOptions<'_, F>,
+    _options: &LinkOptions<'_, F, S>,
 ) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     for entry in fs_err::read_dir(src)? {
         let entry = entry?;
@@ -514,17 +550,21 @@ where
 ///
 /// Tries hard linking first for efficiency, falling back to copying if hard links
 /// are not supported (e.g., cross-filesystem operations).
-fn hardlink_dir<F>(
+fn hardlink_dir<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     let mut attempt = Attempt::Initial;
 
-    for entry in WalkDir::new(src) {
+    for entry in WalkDir::new(src)
+        .into_iter()
+        .filter_entry(|e| (options.filter)(e.path()))
+    {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
             err,
@@ -623,14 +663,15 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 /// Atomically overwrite an existing file with a hard link.
-fn atomic_hardlink_overwrite<F>(
+fn atomic_hardlink_overwrite<F, S>(
     src: &Path,
     dst: &Path,
     attempt: &mut Attempt,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
     // instead of panicking if `dst` has no parent or file name.
@@ -658,13 +699,14 @@ where
 }
 
 /// Atomically overwrite an existing file with a copy.
-fn atomic_copy_overwrite<F>(
+fn atomic_copy_overwrite<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
     // instead of panicking if `dst` has no parent or file name.
@@ -686,11 +728,19 @@ where
 ///
 /// Always copies files (no linking). Supports synchronized copying and
 /// directory merging via options.
-fn copy_dir<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<LinkMode, LinkError>
+fn copy_dir<F, S>(
+    src: &Path,
+    dst: &Path,
+    options: &LinkOptions<'_, F, S>,
+) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
-    for entry in WalkDir::new(src) {
+    for entry in WalkDir::new(src)
+        .into_iter()
+        .filter_entry(|e| (options.filter)(e.path()))
+    {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
             err,
@@ -726,17 +776,21 @@ where
 /// Symbolically link a directory tree from `src` to `dst`.
 ///
 /// Tries creating symlinks first, falling back to copying if symlinks are not supported.
-fn symlink_dir<F>(
+fn symlink_dir<F, S>(
     src: &Path,
     dst: &Path,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     let mut attempt = Attempt::Initial;
 
-    for entry in WalkDir::new(src) {
+    for entry in WalkDir::new(src)
+        .into_iter()
+        .filter_entry(|e| (options.filter)(e.path()))
+    {
         let entry = entry.map_err(|err| LinkError::WalkDir {
             path: src.to_path_buf(),
             err,
@@ -833,14 +887,15 @@ where
 }
 
 /// Atomically overwrite an existing file with a symlink.
-fn atomic_symlink_overwrite<F>(
+fn atomic_symlink_overwrite<F, S>(
     src: &Path,
     dst: &Path,
     attempt: &mut Attempt,
-    options: &LinkOptions<'_, F>,
+    options: &LinkOptions<'_, F, S>,
 ) -> Result<(), LinkError>
 where
     F: Fn(&Path) -> bool,
+    S: Fn(&Path) -> bool,
 {
     // TODO(zanieb): These unwraps were copied from `uv-install-wheel`; consider propagating errors
     // instead of panicking if `dst` has no parent or file name.

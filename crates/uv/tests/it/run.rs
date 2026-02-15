@@ -1501,6 +1501,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     // The project's gui entrypoint should be rewritten to use the overlay interpreter.
@@ -1515,6 +1517,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 6 packages in [TIME]
     Audited 4 packages in [TIME]
     Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
     ");
 
     // The package, its dependencies, and the overlay dependencies should be available.
@@ -1558,6 +1562,11 @@ fn run_with_overlay_interpreter() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + idna==3.6
+     + sniffio==1.3.1
     ");
 
     // When layering the project on top (via `--with`), the overlay gui interpreter also should be used.
