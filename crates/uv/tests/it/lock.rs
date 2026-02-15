@@ -23670,6 +23670,55 @@ fn lock_dry_run_noop() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/16839>.
+///
+/// When multi-version (forking) resolution markers go through the
+/// simplify-complexify round-trip during lockfile deserialization, they may
+/// differ structurally from the markers the resolver produces directly. This
+/// caused `--dry-run --upgrade` to report false "Lockfile changes detected"
+/// when the lockfile was actually up-to-date.
+#[test]
+fn lock_dry_run_upgrade_multi_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "markupsafe<2 ; sys_platform != 'win32'",
+            "markupsafe==2.0.0 ; sys_platform == 'win32'",
+        ]
+        "#,
+    )?;
+
+    // Create the initial lockfile.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Dry-run with --upgrade should report no changes.
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run").arg("-U"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No lockfile changes detected
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn lock_group_include() -> Result<()> {
     let context = uv_test::test_context!("3.12");

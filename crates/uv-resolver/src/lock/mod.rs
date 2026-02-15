@@ -869,6 +869,36 @@ impl Lock {
                 }
             }
         }
+
+        // Normalize fork markers by round-tripping through simplify/complexify.
+        // This ensures markers produced by the resolver have the same form as
+        // markers read from an existing lockfile, which go through the same
+        // round-trip during deserialization. Without this, the `PartialEq`
+        // comparison between a freshly-resolved lock and one read from disk
+        // can report false differences (e.g., `--dry-run` showing changes
+        // when there are none).
+        let fork_markers = fork_markers
+            .into_iter()
+            .map(|marker| {
+                let complexified =
+                    SimplifiedMarkerTree::new(&requires_python, marker.combined())
+                        .into_marker(&requires_python);
+                UniversalMarker::from_combined(complexified)
+            })
+            .collect();
+        for package in &mut packages {
+            package.fork_markers = package
+                .fork_markers
+                .iter()
+                .map(|marker| {
+                    let complexified =
+                        SimplifiedMarkerTree::new(&requires_python, marker.combined())
+                            .into_marker(&requires_python);
+                    UniversalMarker::from_combined(complexified)
+                })
+                .collect();
+        }
+
         let lock = Self {
             version,
             revision,
