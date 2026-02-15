@@ -5733,6 +5733,10 @@ pub struct ToolUpgradeArgs {
     #[arg(hide = true, long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    #[arg(hide = true, long, help_heading = "Resolver options")]
+    pub no_upgrade_package: Vec<PackageName>,
+
     #[command(flatten)]
     pub index_args: IndexArgs,
 
@@ -7052,6 +7056,10 @@ pub struct ResolverArgs {
     #[arg(long, short = 'P', help_heading = "Resolver options")]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
 
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    #[arg(long, help_heading = "Resolver options")]
+    pub no_upgrade_package: Vec<PackageName>,
+
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and limit
@@ -7262,6 +7270,10 @@ pub struct ResolverInstallerArgs {
     /// Implies `--refresh-package`.
     #[arg(long, short = 'P', help_heading = "Resolver options", value_hint = ValueHint::Other)]
     pub upgrade_package: Vec<Requirement<VerbatimParsedUrl>>,
+
+    /// Allow package upgrades for all packages, excluding the specified packages.
+    #[arg(long, help_heading = "Resolver options", value_hint = ValueHint::Other)]
+    pub no_upgrade_package: Vec<PackageName>,
 
     /// Reinstall all packages, regardless of whether they're already installed. Implies
     /// `--refresh`.

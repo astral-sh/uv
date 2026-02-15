@@ -1070,6 +1070,7 @@ impl ValidatedLock {
                 // here, but we shouldn't if the fork markers cannot be
                 // reused.
             }
+            Upgrade::Exclude(_) => {}
         }
 
         // NOTE: It's important that this appears before any possible path that
