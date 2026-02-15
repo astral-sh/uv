@@ -323,7 +323,7 @@ async fn upgrade_tool(
         Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
 
     // Resolve the requirements.
-    let spec = RequirementsSpecification::from_overrides(
+    let mut spec = RequirementsSpecification::from_overrides(
         existing_tool_receipt.requirements().to_vec(),
         existing_tool_receipt
             .constraints()
@@ -333,6 +333,9 @@ async fn upgrade_tool(
             .collect(),
         existing_tool_receipt.overrides().to_vec(),
     );
+
+    // Add excludes from tool receipt to requirements
+    spec.excludes = existing_tool_receipt.excludes().to_vec();
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -446,6 +449,7 @@ async fn upgrade_tool(
             existing_tool_receipt.requirements().to_vec(),
             existing_tool_receipt.constraints().to_vec(),
             existing_tool_receipt.overrides().to_vec(),
+            existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
             printer,
         )?;
