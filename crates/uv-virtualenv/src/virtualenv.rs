@@ -673,11 +673,37 @@ fn create_real_environment(
         )?;
     }
     // On Windows, the managed Python installation places `python.exe` at the root
-    // (not in `Scripts/`). After linking, it ends up at `<env>/python.exe`. We do NOT
-    // copy it into `Scripts/` because the copied executable would load `python3XX.dll`
-    // via the Windows DLL search path, potentially finding a different version. The
-    // root `python.exe` loads the correct DLL since it's adjacent to it. The
-    // `virtualenv_python_executable` function already falls back to `<env>/python.exe`.
+    // (not in `Scripts/`). After linking, it ends up at `<env>/python.exe`. We need
+    // to copy it into `Scripts/` for the standard venv layout because `site.py`
+    // calculates `sys.prefix = dirname(dirname(sys.executable))`, so the executable
+    // must be in a subdirectory (like `Scripts/`) for `sys.prefix` to resolve to the
+    // environment root. We also copy the Python DLLs so the executable finds the
+    // correct version (Windows DLL search looks in the exe's directory first).
+    #[cfg(windows)]
+    {
+        let root_python = location.join("python.exe");
+        if root_python.exists() && !executable.exists() {
+            fs_err::copy(&root_python, &executable)?;
+        }
+        let root_pythonw = location.join("pythonw.exe");
+        let scripts_pythonw = scripts.join("pythonw.exe");
+        if root_pythonw.exists() && !scripts_pythonw.exists() {
+            fs_err::copy(&root_pythonw, &scripts_pythonw)?;
+        }
+        // Copy Python DLLs so the Scripts/python.exe loads the correct version.
+        // Without these, Windows DLL search may find a different python3XX.dll.
+        for entry in fs_err::read_dir(location)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if name_str.ends_with(".dll") {
+                let dest = scripts.join(&name);
+                if !dest.exists() {
+                    fs_err::copy(entry.path(), &dest)?;
+                }
+            }
+        }
+    }
 
     // Add all the activation scripts for different shells.
     for (name, template) in ACTIVATE_TEMPLATES {

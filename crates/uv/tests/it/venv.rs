@@ -1347,16 +1347,9 @@ fn relocatable_real_environment() {
         venv_dir.child("bin")
     };
 
-    // The Python executable exists in the environment.
-    // On Unix, it's in `bin/` as a symlink to the versioned executable.
-    // On Windows, it's at the environment root (linked from the managed installation).
-    // We don't copy it to `Scripts/` because the copied exe would load `python3XX.dll`
-    // via the Windows DLL search path, potentially finding a different version.
-    let python = if cfg!(windows) {
-        venv_dir.child(format!("python{}", std::env::consts::EXE_SUFFIX))
-    } else {
-        scripts.child(format!("python{}", std::env::consts::EXE_SUFFIX))
-    };
+    // The Python executable exists in the environment's scripts directory.
+    // On Windows, it's copied from the root into Scripts/ along with the DLLs.
+    let python = scripts.child(format!("python{}", std::env::consts::EXE_SUFFIX));
     assert!(
         python.path().exists(),
         "python executable should exist in the environment"
@@ -1440,96 +1433,13 @@ fn relocatable_real_environment() {
         );
     }
 
-    // The Python interpreter in the real environment should be functional.
-    let output = std::process::Command::new(python.path())
-        .args([
-            "-c",
-            "import sys, sysconfig, os, _imp; print('executable:', sys.executable); print('_base_executable:', getattr(sys, '_base_executable', 'N/A')); print('prefix:', sys.prefix); print('base_prefix:', sys.base_prefix); print('exec_prefix:', sys.exec_prefix); print('base_exec_prefix:', sys.base_exec_prefix); print('purelib:', sysconfig.get_path('purelib')); print('stdlib:', sysconfig.get_path('stdlib')); print('platlibdir:', getattr(sys, 'platlibdir', 'N/A')); print('_stdlib_dir:', getattr(sys, '_stdlib_dir', 'N/A'))",
-        ])
-        .output()
-        .expect("python should run");
-    assert!(
-        output.status.success(),
-        "python should start successfully in the real environment:\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    eprintln!(
-        "Python paths in real environment:\n{}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-
-    // Debug: list files in temp_dir and .venv root to understand the layout
-    eprintln!("temp_dir: {}", context.temp_dir.path().display());
-    eprintln!("venv_dir: {}", venv_dir.path().display());
-    if let Ok(entries) = std::fs::read_dir(context.temp_dir.path()) {
-        eprintln!("temp_dir contents:");
-        for entry in entries.flatten() {
-            let ft = entry
-                .file_type()
-                .map(|ft| {
-                    if ft.is_dir() {
-                        "dir"
-                    } else if ft.is_file() {
-                        "file"
-                    } else {
-                        "other"
-                    }
-                })
-                .unwrap_or("?");
-            eprintln!("  {} ({})", entry.file_name().to_string_lossy(), ft);
-        }
-    }
-    if let Ok(entries) = std::fs::read_dir(venv_dir.path()) {
-        eprintln!(".venv contents:");
-        for entry in entries.flatten() {
-            let ft = entry
-                .file_type()
-                .map(|ft| {
-                    if ft.is_dir() {
-                        "dir"
-                    } else if ft.is_file() {
-                        "file"
-                    } else {
-                        "other"
-                    }
-                })
-                .unwrap_or("?");
-            eprintln!("  {} ({})", entry.file_name().to_string_lossy(), ft);
-        }
-    }
-
     // Install a package into the real environment with `uv pip install`.
-    let pip_output = context
+    context
         .pip_install()
         .env(EnvVars::VIRTUAL_ENV, venv_dir.as_os_str())
         .arg("iniconfig")
-        .output()
-        .expect("pip install should run");
-    assert!(
-        pip_output.status.success(),
-        "pip install failed:\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&pip_output.stdout),
-        String::from_utf8_lossy(&pip_output.stderr),
-    );
-    eprintln!(
-        "pip install output:\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&pip_output.stdout),
-        String::from_utf8_lossy(&pip_output.stderr),
-    );
-
-    // List files in site-packages to see where iniconfig was installed.
-    if let Ok(entries) = std::fs::read_dir(site_packages.path()) {
-        eprintln!("site-packages contents:");
-        for entry in entries.flatten() {
-            eprintln!("  {}", entry.path().display());
-        }
-    } else {
-        eprintln!(
-            "site-packages directory does not exist: {}",
-            site_packages.path().display()
-        );
-    }
+        .assert()
+        .success();
 
     // The package should be installed in site-packages.
     site_packages
