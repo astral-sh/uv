@@ -1498,7 +1498,7 @@ fn relocatable_real_environment_sync() -> Result<()> {
         .success();
 
     // Run `uv sync` which should reuse the real environment and install dependencies.
-    uv_snapshot!(context.filters(), context.sync(), @r"
+    uv_snapshot!(context.filters(), context.sync().arg("-v"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
