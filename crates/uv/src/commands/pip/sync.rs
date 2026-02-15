@@ -62,6 +62,7 @@ pub(crate) async fn pip_sync(
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    cuda_driver_version: Option<String>,
     torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
@@ -309,6 +310,7 @@ pub(crate) async fn pip_sync(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
             )
         })
         .transpose()?;

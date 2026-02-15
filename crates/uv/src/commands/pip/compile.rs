@@ -88,6 +88,7 @@ pub(crate) async fn pip_compile(
     include_annotations: bool,
     include_header: bool,
     custom_compile_command: Option<String>,
+    cuda_driver_version: Option<String>,
     include_index_url: bool,
     include_find_links: bool,
     include_build_options: bool,
@@ -445,6 +446,7 @@ pub(crate) async fn pip_compile(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
             )
         })
         .transpose()?;
