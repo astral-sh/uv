@@ -64,6 +64,7 @@ pub(crate) async fn install(
     overrides: &[RequirementsSource],
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    system_site_packages: bool,
     entrypoints: &[PackageName],
     lfs: GitLfsSetting,
     python: Option<String>,
@@ -809,6 +810,7 @@ pub(crate) async fn install(
                         receipt_overrides.clone(),
                         receipt_excludes.clone(),
                         receipt_build_constraints.clone(),
+                        system_site_packages,
                         python,
                         existing_tool_receipt.entrypoints().iter().cloned(),
                         options.clone(),
@@ -1014,7 +1016,8 @@ pub(crate) async fn install(
         } else {
             HashStrategy::default()
         };
-        let environment = installed_tools.create_environment(package_name, interpreter)?;
+        let environment =
+            installed_tools.create_environment(package_name, interpreter, system_site_packages)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.
@@ -1068,6 +1071,7 @@ pub(crate) async fn install(
         receipt_overrides,
         receipt_excludes,
         receipt_build_constraints,
+        system_site_packages,
         tool_lock.as_ref(),
         printer,
     )?;

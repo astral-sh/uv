@@ -5797,6 +5797,10 @@ pub struct ToolInstallArgs {
     )]
     pub build_constraints: Vec<Maybe<RequirementsInput>>,
 
+    /// Give the tool virtual environment access to the system site packages directory.
+    #[arg(long)]
+    pub system_site_packages: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 

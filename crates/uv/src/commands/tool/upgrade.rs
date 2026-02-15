@@ -365,6 +365,8 @@ async fn upgrade_tool(
     );
     let build_constraints = Constraints::from_specifications(build_constraints);
 
+    let system_site_packages = *existing_tool_receipt.system_site_packages();
+
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
@@ -418,8 +420,11 @@ async fn upgrade_tool(
         let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {
-            let environment =
-                installed_tools.create_environment(name, target_interpreter.clone())?;
+            let environment = installed_tools.create_environment(
+                name,
+                target_interpreter.clone(),
+                system_site_packages,
+            )?;
             let environment = sync_environment(
                 environment,
                 &resolution,
@@ -532,7 +537,8 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        let environment =
+            installed_tools.create_environment(name, interpreter.clone(), system_site_packages)?;
         let environment = sync_environment(
             environment,
             &resolution.into(),
@@ -618,6 +624,7 @@ async fn upgrade_tool(
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
+            *existing_tool_receipt.system_site_packages(),
             tool_lock.as_ref(),
             printer,
         )?;
