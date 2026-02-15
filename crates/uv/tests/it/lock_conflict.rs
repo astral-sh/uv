@@ -15347,3 +15347,220 @@ fn conflict_item_unknown_field() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that a project-level conflict (i.e., `{ package = "pkg-a" }` without
+/// extra or group) properly excludes the package's extras from the conflicting
+/// fork.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18015>
+#[test]
+fn project_level_conflict_with_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["pkg-a", "pkg-b"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { package = "pkg-a" },
+                { package = "pkg-b", extra = "extra1" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let pkg_a_pyproject_toml = context.temp_dir.child("pkg-a").child("pyproject.toml");
+    pkg_a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let pkg_b_pyproject_toml = context.temp_dir.child("pkg-b").child("pyproject.toml");
+    pkg_b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Resolution should succeed: pkg-a (with sortedcontainers==2.3.0) and
+    // pkg-b[extra1] (with sortedcontainers==2.4.0) are in separate forks
+    // because of the declared project-level conflict.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that a project-level conflict works when the conflicting package has
+/// extras that are also declared in additional conflict sets. This mirrors the
+/// exact scenario from the issue: pkg-a depends on datasets<4, pkg-b[unsafe]
+/// depends on datasets>4, and pkg-a depends on pkg-b[safe].
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18015>
+#[test]
+fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["pkg-a", "pkg-b"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { package = "pkg-a" },
+                { package = "pkg-b", extra = "extra1" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let pkg_a_pyproject_toml = context.temp_dir.child("pkg-a").child("pyproject.toml");
+    pkg_a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "sortedcontainers==2.3.0",
+            "pkg-b[safe]",
+        ]
+
+        [project.optional-dependencies]
+        all = [
+            "pkg-a[foo]",
+            "pkg-a[bar]",
+        ]
+        foo = ["idna==3.4"]
+        bar = ["sniffio==1.3.0"]
+
+        [tool.uv.sources]
+        pkg-b = { workspace = true }
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let pkg_b_pyproject_toml = context.temp_dir.child("pkg-b").child("pyproject.toml");
+    pkg_b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        safe = ["sortedcontainers"]
+        extra1 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Resolution should succeed. pkg-a depends on sortedcontainers==2.3.0 and
+    // pkg-b[extra1] depends on sortedcontainers==2.4.0. The project-level
+    // conflict between pkg-a and pkg-b[extra1] should properly separate these
+    // into different forks, including pkg-a's extras (all, foo, bar).
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 7 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
