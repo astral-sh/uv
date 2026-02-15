@@ -26,6 +26,8 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
 uv-install-wheel = { workspace = true }
+uv-normalize = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-installer = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }

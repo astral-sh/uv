@@ -36,7 +36,9 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
+use uv_types::{
+    BuildContext, BuildIsolation, BuildPreferences, EmptyInstalledPackages, HashStrategy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Editability, Workspace, WorkspaceCache, WorkspaceMember};
 
@@ -744,6 +746,16 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
+    // Extract build dependency preferences from the existing lock file, if available.
+    // These are used as hints so the resolver prefers previously locked versions.
+    // We walk the full dependency graph (direct + transitive) to ensure all build
+    // dep versions are pinned, not just direct requirements.
+    let build_preferences = if let Some(ref lock) = existing_lock {
+        BuildPreferences::new(lock.build_dep_preferences())
+    } else {
+        BuildPreferences::default()
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -768,7 +780,16 @@ async fn do_lock(
         workspace_cache.clone(),
         concurrency,
         preview,
-    );
+    )
+    .with_build_preferences(build_preferences);
+
+    // Use universal resolution for build dependencies when locking, so the
+    // resolved build deps work on all platforms.
+    let build_dispatch = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+        build_dispatch.with_universal_resolution()
+    } else {
+        build_dispatch
+    };
 
     let database = DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
 
@@ -955,7 +976,7 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(&resolution, target.install_path())?
+            let mut lock = Lock::from_resolution(&resolution, target.install_path())?
                 .with_manifest(manifest)
                 .with_conflicts(conflicts)
                 .with_supported_environments(
@@ -970,6 +991,12 @@ async fn do_lock(
                         .map(SupportedEnvironments::into_markers)
                         .unwrap_or_default(),
                 );
+
+            // Only record build dependencies in the lock file when the preview feature is enabled.
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+                let build_resolutions = build_dispatch.build_resolutions().snapshot();
+                lock = lock.with_build_resolutions(&build_resolutions, target.install_path())?;
+            }
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
@@ -1389,6 +1416,18 @@ impl ValidatedLock {
                     debug!(
                         "Resolving despite existing lockfile due to mismatched extras for: `{name}`\n  Requested: {:?}\n  Existing: {:?}",
                         expected, actual
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildRequires(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system.requires` for: `{name}`"
                     );
                 }
                 Ok(Self::Preferable(lock))

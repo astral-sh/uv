@@ -27,16 +27,19 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
-    PythonRequirement, Resolver, ResolverEnvironment,
+    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder, Preference,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
-    HashStrategy, InFlight,
+    AnyErrorBuild, BuildArena, BuildContext, BuildDepEdge, BuildDepPackageEntry, BuildIsolation,
+    BuildPreferences, BuildResolutionInfo, BuildResolutions, BuildStack, EmptyInstalledPackages,
+    HashStrategy, InFlight, LockedBuildResolutions, ResolvedBuildDep,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -101,6 +104,11 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
+    build_resolutions: BuildResolutions,
+    locked_build_resolutions: LockedBuildResolutions,
+    build_preferences: BuildPreferences,
+    /// Whether to use universal resolution for build dependencies (for lock files).
+    universal_resolution: bool,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -153,6 +161,10 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
+            build_resolutions: BuildResolutions::default(),
+            locked_build_resolutions: LockedBuildResolutions::default(),
+            build_preferences: BuildPreferences::default(),
+            universal_resolution: false,
         }
     }
 
@@ -169,6 +181,42 @@ impl<'a> BuildDispatch<'a> {
             .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
             .collect();
         self
+    }
+
+    /// Set the locked build resolutions from a previous lock file.
+    ///
+    /// When set, build dependency resolution is skipped entirely for packages
+    /// that have locked build resolutions, and the pre-built resolution is
+    /// returned directly.
+    #[must_use]
+    pub fn with_locked_build_resolutions(mut self, resolutions: LockedBuildResolutions) -> Self {
+        self.locked_build_resolutions = resolutions;
+        self
+    }
+
+    /// Set the build dependency preferences from a previous lock file.
+    ///
+    /// Used during `uv lock` so the resolver prefers previously locked build dep
+    /// versions but can deviate if needed.
+    #[must_use]
+    pub fn with_build_preferences(mut self, preferences: BuildPreferences) -> Self {
+        self.build_preferences = preferences;
+        self
+    }
+
+    /// Use universal resolution for build dependencies.
+    ///
+    /// When enabled, build dependencies are resolved for all platforms rather
+    /// than just the current one. This is needed for lock files.
+    #[must_use]
+    pub fn with_universal_resolution(mut self) -> Self {
+        self.universal_resolution = true;
+        self
+    }
+
+    /// Return the collected build resolutions.
+    pub fn build_resolutions(&self) -> &BuildResolutions {
+        &self.build_resolutions
     }
 }
 
@@ -239,14 +287,52 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        package_name: Option<&'data PackageName>,
+        package_version: Option<&'data Version>,
         build_stack: &'data BuildStack,
     ) -> Result<Resolution, BuildDispatchError> {
+        // If we have a locked build resolution for this package, return it directly
+        // without running the resolver.
+        if let Some(name) = package_name {
+            if let Some(resolution) = self.locked_build_resolutions.get(name, package_version) {
+                debug!("Using locked build resolution for `{name}` (skipping resolver)");
+                return Ok(resolution.clone());
+            }
+        }
+
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
-        let tags = self.interpreter.tags()?;
+        let resolver_env = if self.universal_resolution {
+            ResolverEnvironment::universal(vec![])
+        } else {
+            ResolverEnvironment::specific(marker_env)
+        };
+        let tags = if self.universal_resolution {
+            None
+        } else {
+            Some(self.interpreter.tags()?)
+        };
+
+        // When the lock file has stored build dependencies for this package, use
+        // them as preferences so the resolver prefers the same versions.
+        let preferences = package_name
+            .and_then(|name| self.build_preferences.get(name, package_version))
+            .map(|deps| {
+                Preferences::from_iter(
+                    deps.iter().map(|(name, version)| {
+                        Preference::from_build(name.clone(), version.clone())
+                    }),
+                    &resolver_env,
+                )
+            })
+            .unwrap_or_default();
+
+        let manifest = Manifest::simple(requirements.to_vec())
+            .with_constraints(self.constraints.clone())
+            .with_preferences(preferences);
 
         let resolver = Resolver::new(
-            Manifest::simple(requirements.to_vec()).with_constraints(self.constraints.clone()),
+            manifest,
             OptionsBuilder::new()
                 .exclude_newer(self.exclude_newer.clone())
                 .index_strategy(self.index_strategy)
@@ -254,11 +340,11 @@ impl BuildContext for BuildDispatch<'_> {
                 .flexibility(Flexibility::Fixed)
                 .build(),
             &python_requirement,
-            ResolverEnvironment::specific(marker_env),
+            resolver_env,
             self.interpreter.markers(),
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
-            Some(tags),
+            tags,
             self.flat_index,
             &self.shared_state.index,
             self.hasher,
@@ -267,7 +353,7 @@ impl BuildContext for BuildDispatch<'_> {
             DistributionDatabase::new(self.client, self, self.concurrency.downloads)
                 .with_build_stack(build_stack),
         )?;
-        let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
+        let resolver_output = resolver.resolve().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements
@@ -275,7 +361,45 @@ impl BuildContext for BuildDispatch<'_> {
                     .map(|requirement| format!("`{requirement}`"))
                     .join(", ")
             )
-        })?);
+        })?;
+
+        // If doing universal resolution, capture the build resolution graph
+        // (direct requirements + all packages with their dependency edges).
+        if self.universal_resolution {
+            if let Some(name) = package_name {
+                let (roots, packages) = resolver_output.build_resolution_graph();
+                let roots = roots
+                    .into_iter()
+                    .map(|(dist, hashes, marker)| ResolvedBuildDep {
+                        dist,
+                        hashes,
+                        marker,
+                    })
+                    .collect();
+                let packages = packages
+                    .into_iter()
+                    .map(|(dist, hashes, deps)| BuildDepPackageEntry {
+                        dist,
+                        hashes,
+                        dependencies: deps
+                            .into_iter()
+                            .map(|(name, version, marker)| BuildDepEdge {
+                                name,
+                                version,
+                                marker,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                self.build_resolutions.insert(
+                    name.clone(),
+                    package_version.cloned(),
+                    BuildResolutionInfo { roots, packages },
+                );
+            }
+        }
+
+        let resolution = Resolution::from(resolver_output);
         Ok(resolution)
     }
 
