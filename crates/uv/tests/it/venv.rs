@@ -1348,7 +1348,15 @@ fn relocatable_real_environment() {
     };
 
     // The Python executable exists in the environment.
-    let python = scripts.child(format!("python{}", std::env::consts::EXE_SUFFIX));
+    // On Unix, it's in `bin/` as a symlink to the versioned executable.
+    // On Windows, it's at the environment root (linked from the managed installation).
+    // We don't copy it to `Scripts/` because the copied exe would load `python3XX.dll`
+    // via the Windows DLL search path, potentially finding a different version.
+    let python = if cfg!(windows) {
+        venv_dir.child(format!("python{}", std::env::consts::EXE_SUFFIX))
+    } else {
+        scripts.child(format!("python{}", std::env::consts::EXE_SUFFIX))
+    };
     assert!(
         python.path().exists(),
         "python executable should exist in the environment"
@@ -1498,7 +1506,7 @@ fn relocatable_real_environment_sync() -> Result<()> {
         .success();
 
     // Run `uv sync` which should reuse the real environment and install dependencies.
-    uv_snapshot!(context.filters(), context.sync().arg("-v"), @r"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

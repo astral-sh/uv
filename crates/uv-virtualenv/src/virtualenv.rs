@@ -672,22 +672,12 @@ fn create_real_environment(
             scripts.join(format!("python{}", interpreter.python_major())),
         )?;
     }
-    #[cfg(windows)]
-    {
-        // On Windows, the managed Python installation places `python.exe` at the root.
-        // After linking, it ends up at `<env>/python.exe`. Copy it into `Scripts/` so
-        // the environment follows the standard venv layout.
-        let root_python = location.join("python.exe");
-        if root_python.exists() && !executable.exists() {
-            fs_err::copy(&root_python, &executable)?;
-        }
-        // Also copy `pythonw.exe` if present.
-        let root_pythonw = location.join("pythonw.exe");
-        let scripts_pythonw = scripts.join("pythonw.exe");
-        if root_pythonw.exists() && !scripts_pythonw.exists() {
-            fs_err::copy(&root_pythonw, &scripts_pythonw)?;
-        }
-    }
+    // On Windows, the managed Python installation places `python.exe` at the root
+    // (not in `Scripts/`). After linking, it ends up at `<env>/python.exe`. We do NOT
+    // copy it into `Scripts/` because the copied executable would load `python3XX.dll`
+    // via the Windows DLL search path, potentially finding a different version. The
+    // root `python.exe` loads the correct DLL since it's adjacent to it. The
+    // `virtualenv_python_executable` function already falls back to `<env>/python.exe`.
 
     // Add all the activation scripts for different shells.
     for (name, template) in ACTIVATE_TEMPLATES {
