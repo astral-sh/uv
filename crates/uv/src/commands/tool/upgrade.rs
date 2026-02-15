@@ -292,15 +292,14 @@ async fn upgrade_tool(
         }
     };
 
-    let environment = match installed_tools.get_environment(name, cache) {
-        Ok(Some(environment)) => environment,
+    // Get the existing environment, if it exists and is valid
+    let existing_environment = match installed_tools.get_environment(name, cache) {
+        Ok(Some(environment)) => Some(environment),
         Ok(None) => {
-            let install_command = format!("uv tool install {name}");
-            return Err(anyhow::anyhow!(
-                "`{}` is not installed; run `{}` to install",
-                name.cyan(),
-                install_command.green()
-            ));
+            // Environment directory exists but Python interpreter is missing/invalid
+            // This happens after Python upgrades - we'll handle recreation below
+            debug!("Tool `{name}` environment has invalid Python interpreter, will recreate");
+            None
         }
         Err(_) => {
             let install_command = format!("uv tool install --force {name}");
@@ -340,48 +339,92 @@ async fn upgrade_tool(
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
-    let (environment, outcome) = if let Some(interpreter) =
-        interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
-    {
-        // If we're using a new interpreter, re-create the environment for each tool.
-        let resolution = resolve_environment(
-            spec.into(),
-            interpreter,
-            python_platform,
-            build_constraints.clone(),
-            &settings.resolver,
-            client_builder,
-            &state,
-            Box::new(SummaryResolveLogger),
-            concurrency,
-            cache,
-            printer,
-            preview,
-        )
-        .await?;
+    let (environment, outcome) = if let Some(interpreter) = interpreter {
+        // Check if we need to recreate the environment
+        let needs_recreation = existing_environment
+            .as_ref()
+            .map(|env| !env.environment().uses(interpreter))
+            .unwrap_or(true); // If no environment exists, we need to create one
 
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        if needs_recreation {
+            // If we're using a new interpreter, re-create the environment for each tool.
+            let resolution = resolve_environment(
+                spec.into(),
+                interpreter,
+                python_platform,
+                build_constraints.clone(),
+                &settings.resolver,
+                client_builder,
+                &state,
+                Box::new(SummaryResolveLogger),
+                concurrency,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
 
-        let environment = sync_environment(
-            environment,
-            &resolution.into(),
-            Modifications::Exact,
-            build_constraints,
-            (&settings).into(),
-            client_builder,
-            &state,
-            Box::new(DefaultInstallLogger),
-            installer_metadata,
-            concurrency,
-            cache,
-            printer,
-            preview,
-        )
-        .await?;
+            let environment = installed_tools.create_environment(name, interpreter.clone())?;
 
-        (environment, UpgradeOutcome::UpgradeEnvironment)
-    } else {
-        // Otherwise, upgrade the existing environment.
+            let environment = sync_environment(
+                environment,
+                &resolution.into(),
+                Modifications::Exact,
+                build_constraints,
+                (&settings).into(),
+                client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                concurrency,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
+
+            (environment, UpgradeOutcome::UpgradeEnvironment)
+        } else {
+            // Interpreter specified but environment already uses it - upgrade in place
+            let environment =
+                existing_environment.expect("environment must exist if needs_recreation is false");
+            let EnvironmentUpdate {
+                environment,
+                changelog,
+            } = update_environment(
+                environment.into_environment(),
+                spec,
+                Modifications::Exact,
+                python_platform,
+                build_constraints,
+                ExtraBuildRequires::default(),
+                &settings,
+                client_builder,
+                &state,
+                Box::new(SummaryResolveLogger),
+                Box::new(UpgradeInstallLogger::new(name.clone())),
+                installer_metadata,
+                concurrency,
+                cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await?;
+
+            let outcome = if changelog.includes(name) {
+                UpgradeOutcome::UpgradeTool
+            } else if changelog.is_empty() {
+                UpgradeOutcome::NoOp
+            } else {
+                UpgradeOutcome::UpgradeDependencies
+            };
+
+            (environment, outcome)
+        }
+    } else if let Some(environment) = existing_environment {
+        // No interpreter specified - upgrade the existing environment in place
         // TODO(zanieb): Build the environment in the cache directory then copy into the tool
         // directory.
         let EnvironmentUpdate {
@@ -418,6 +461,14 @@ async fn upgrade_tool(
         };
 
         (environment, outcome)
+    } else {
+        // No valid environment and no interpreter specified
+        let install_command = format!("uv tool install --force {name}");
+        return Err(anyhow::anyhow!(
+            "`{}` environment is missing or has an invalid Python interpreter; run `{}` to reinstall",
+            name.cyan(),
+            install_command.green()
+        ));
     };
 
     if matches!(
