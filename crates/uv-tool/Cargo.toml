@@ -39,3 +39,7 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }

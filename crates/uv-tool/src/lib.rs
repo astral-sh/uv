@@ -209,6 +209,19 @@ impl InstalledTools {
         .await?)
     }
 
+    /// Acquire a shared file lock for read-only access to the tools directory.
+    ///
+    /// Unlike [`Self::lock`], this acquires a shared lock that allows multiple concurrent
+    /// readers. Use this for read-only operations like checking installed tool status.
+    pub async fn lock_shared(&self) -> Result<LockedFile, Error> {
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Shared,
+            self.root.user_display(),
+        )
+        .await?)
+    }
+
     /// Add a receipt for a tool.
     ///
     /// Any existing receipt will be replaced.
@@ -479,4 +492,117 @@ pub fn entrypoint_paths(
     }
 
     Ok(entrypoints)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// Helper to create an `InstalledTools` instance backed by a temporary directory.
+    fn create_temp_installed_tools(dir: &Path) -> InstalledTools {
+        let tools = InstalledTools::from_path(dir);
+        tools.init().expect("Failed to init InstalledTools")
+    }
+
+    #[tokio::test]
+    async fn test_lock_shared_acquires_shared_lock() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let tools = create_temp_installed_tools(tmp.path());
+
+        // Acquiring a shared lock should succeed.
+        let lock = tools.lock_shared().await;
+        assert!(lock.is_ok(), "lock_shared() should succeed");
+
+        // Lock is held until dropped — just verify we got it.
+        drop(lock);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_shared_locks_coexist() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let tools = create_temp_installed_tools(tmp.path());
+
+        // Acquire two shared locks concurrently — they should not block each other.
+        let lock1 = tools.lock_shared().await;
+        assert!(lock1.is_ok(), "First shared lock should succeed");
+
+        let lock2 = tools.lock_shared().await;
+        assert!(
+            lock2.is_ok(),
+            "Second shared lock should succeed while first is held"
+        );
+
+        // Both locks are held simultaneously.
+        let _l1 = lock1.unwrap();
+        let _l2 = lock2.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_multiple_shared_locks_concurrent_no_blocking() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let path = tmp.path().to_path_buf();
+
+        // Spawn two tasks that each acquire a shared lock and hold it briefly.
+        // If shared locks blocked each other, this would deadlock or timeout.
+        let path1 = path.clone();
+        let path2 = path.clone();
+
+        // Init the directory first.
+        let _ = create_temp_installed_tools(&path);
+
+        let handle1 = tokio::spawn(async move {
+            let tools = InstalledTools::from_path(&path1);
+            let lock = tools.lock_shared().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            drop(lock);
+        });
+
+        let handle2 = tokio::spawn(async move {
+            let tools = InstalledTools::from_path(&path2);
+            let lock = tools.lock_shared().await.unwrap();
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            drop(lock);
+        });
+
+        // Both tasks should complete within a reasonable time (not block each other).
+        let result = tokio::time::timeout(Duration::from_secs(5), async {
+            handle1.await.unwrap();
+            handle2.await.unwrap();
+        })
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "Concurrent shared locks should not block each other"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_exclusive_lock_still_works() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let tools = create_temp_installed_tools(tmp.path());
+
+        // Acquiring an exclusive lock should succeed.
+        let lock = tools.lock().await;
+        assert!(lock.is_ok(), "Exclusive lock() should succeed");
+
+        drop(lock);
+    }
+
+    #[tokio::test]
+    async fn test_exclusive_lock_after_shared_released() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let tools = create_temp_installed_tools(tmp.path());
+
+        // Acquire and release a shared lock, then acquire an exclusive lock.
+        let shared = tools.lock_shared().await.unwrap();
+        drop(shared);
+
+        let exclusive = tools.lock().await;
+        assert!(
+            exclusive.is_ok(),
+            "Exclusive lock should succeed after shared lock is released"
+        );
+    }
 }

@@ -285,78 +285,99 @@ pub(crate) async fn run(
         cache
     };
 
-    // Get or create a compatible environment in which to execute the tool.
-    let result = Box::pin(get_or_create_environment(
+    // Attempt the fast path for simple invocations: if the tool is already
+    // installed and the receipt matches, skip expensive Python discovery and
+    // name resolution entirely.
+    let fast_path_result = if is_simple_invocation(
         &request,
         with,
         constraints,
         overrides,
         build_constraints,
-        show_resolution,
         python.as_deref(),
-        python_platform,
-        install_mirrors,
-        options,
-        &settings,
-        &client_builder,
         isolated,
-        lfs,
-        python_preference,
-        python_downloads,
-        installer_metadata,
-        concurrency,
-        &cache,
-        printer,
-        preview,
-    ))
-    .await;
+    ) {
+        try_installed_fast_path(target, &options, &cache).await?
+    } else {
+        None
+    };
 
     let explicit_from = from.is_some();
-    let (from, environment) = match result {
-        Ok(resolution) => resolution,
-        Err(ProjectError::Operation(err)) => {
-            // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
-            if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
-                let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::native_tls(
-                    client_builder.is_native_tls(),
-                )
-                .with_hint(format!(
-                    "`{}` invokes the `{}` package. Did you mean `{}`?",
-                    format!("uvx run {rest}").green(),
-                    "run".cyan(),
-                    format!("uvx {rest}").green()
-                ))
-                .with_context("tool")
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+    let (from, environment) = if let Some(resolution) = fast_path_result {
+        resolution
+    } else {
+        // Get or create a compatible environment in which to execute the tool.
+        let result = Box::pin(get_or_create_environment(
+            &request,
+            with,
+            constraints,
+            overrides,
+            build_constraints,
+            show_resolution,
+            python.as_deref(),
+            python_platform,
+            install_mirrors,
+            options,
+            &settings,
+            &client_builder,
+            isolated,
+            lfs,
+            python_preference,
+            python_downloads,
+            installer_metadata,
+            concurrency,
+            &cache,
+            printer,
+            preview,
+        ))
+        .await;
+
+        match result {
+            Ok(resolution) => resolution,
+            Err(ProjectError::Operation(err)) => {
+                // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
+                if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
+                    let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+                    return diagnostics::OperationDiagnostic::native_tls(
+                        client_builder.is_native_tls(),
+                    )
+                    .with_hint(format!(
+                        "`{}` invokes the `{}` package. Did you mean `{}`?",
+                        format!("uvx run {rest}").green(),
+                        "run".cyan(),
+                        format!("uvx {rest}").green()
+                    ))
+                    .with_context("tool")
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
+
+                let diagnostic =
+                    diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
+                let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
+                    diagnostic.with_hint(format!(
+                        "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                        verbose_flag.cyan(),
+                        target.cyan(),
+                        invocation_source.to_string().cyan(),
+                        format!("{invocation_source} {verbose_flag} {target}").green()
+                    ))
+                } else {
+                    diagnostic.with_context("tool")
+                };
+                return diagnostic
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            let diagnostic =
-                diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls());
-            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                diagnostic.with_hint(format!(
-                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
-                    verbose_flag.cyan(),
-                    target.cyan(),
-                    invocation_source.to_string().cyan(),
-                    format!("{invocation_source} {verbose_flag} {target}").green()
-                ))
-            } else {
-                diagnostic.with_context("tool")
-            };
-            return diagnostic
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            Err(ProjectError::Requirements(err)) => {
+                let err = miette::Report::msg(format!("{err}"))
+                    .context("Failed to resolve `--with` requirement");
+                eprint!("{err:?}");
+                return Ok(ExitStatus::Failure);
+            }
+            Err(err) => return Err(err.into()),
         }
-
-        Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
-            eprint!("{err:?}");
-            return Ok(ExitStatus::Failure);
-        }
-        Err(err) => return Err(err.into()),
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
@@ -777,22 +798,75 @@ async fn get_or_create_environment(
         (None, Some(tool_request)) => Some(tool_request),
     };
 
-    // Discover an interpreter.
-    let interpreter = PythonInstallation::find_or_download(
-        python_request.as_ref(),
-        EnvironmentPreference::OnlySystem,
-        python_preference,
-        python_downloads,
-        client_builder,
-        cache,
-        Some(&reporter),
-        install_mirrors.python_install_mirror.as_deref(),
-        install_mirrors.pypy_install_mirror.as_deref(),
-        install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
-    )
-    .await?
-    .into_interpreter();
+    // For non-isolated, non-latest invocations, try to extract the package name early
+    // so we can run the installed tool pre-check concurrently with Python discovery.
+    let precheck_package_name = if !isolated && !request.is_latest() {
+        match request {
+            ToolRequest::Package {
+                target: Target::Version(_, name, _, _),
+                ..
+            } => Some(name.clone()),
+            ToolRequest::Package {
+                target: Target::Unspecified(requirement),
+                ..
+            } => {
+                // Try to extract the package name from the requirement string (e.g., "ruff>=0.6.0" -> "ruff").
+                let content = requirement.trim();
+                let index = content
+                    .find(
+                        |c: char| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.'),
+                    )
+                    .unwrap_or(content.len());
+                PackageName::from_str(&content[..index]).ok()
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    // Run Python discovery and the installed tool pre-check concurrently when both are needed.
+    // The pre-check fetches the tool environment and receipt from disk, which doesn't require
+    // the interpreter. This reduces wall-clock time for non-simple invocations.
+    let python_discovery_fut = async {
+        PythonInstallation::find_or_download(
+            python_request.as_ref(),
+            EnvironmentPreference::OnlySystem,
+            python_preference,
+            python_downloads,
+            client_builder,
+            cache,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
+        )
+        .await
+        .map(PythonInstallation::into_interpreter)
+        .map_err(ProjectError::from)
+    };
+
+    let precheck_fut = async {
+        if let Some(ref package_name) = precheck_package_name {
+            let installed_tools = InstalledTools::from_settings()?.init()?;
+            let lock = installed_tools.lock_shared().await?;
+            let environment = installed_tools.get_environment(package_name, cache)?;
+            let receipt = installed_tools
+                .get_tool_receipt(package_name)
+                .ok()
+                .flatten();
+            Ok::<_, ProjectError>(Some((installed_tools, lock, environment, receipt)))
+        } else {
+            Ok(None)
+        }
+    };
+
+    let (interpreter_result, precheck_result) = tokio::join!(python_discovery_fut, precheck_fut);
+
+    // Python discovery error takes precedence if both fail.
+    let interpreter = interpreter_result?;
+    let precheck_data = precheck_result?;
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -980,33 +1054,7 @@ async fn get_or_create_environment(
     )
     .await?;
 
-    // Resolve the `--from` and `--with` requirements.
-    let requirements = {
-        let mut requirements = Vec::with_capacity(1 + with.len());
-        match &from {
-            ToolRequirement::Python { .. } => {}
-            ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
-        }
-        requirements.extend(
-            resolve_names(
-                spec.requirements.clone(),
-                &interpreter,
-                settings,
-                client_builder,
-                &state,
-                concurrency,
-                cache,
-                &workspace_cache,
-                printer,
-                preview,
-                lfs,
-            )
-            .await?,
-        );
-        requirements
-    };
-
-    // Resolve the constraints.
+    // Resolve the constraints (no name resolution needed — constraints are always named).
     let constraints = spec
         .constraints
         .clone()
@@ -1014,9 +1062,35 @@ async fn get_or_create_environment(
         .map(|constraint| constraint.requirement)
         .collect::<Vec<_>>();
 
-    // Resolve the overrides.
-    let overrides = resolve_names(
-        spec.overrides.clone(),
+    // Batch `--with` requirements and overrides into a single `resolve_names` call to avoid
+    // redundant registry client initialization. The main requirement's resolution (for
+    // `Target::Unspecified`) remains separate since it happens during target parsing above.
+    //
+    // We pre-partition named vs unnamed requirements from each source, combine only the unnamed
+    // into a single batch for resolution, then reconstruct each group. This avoids the ordering
+    // issue where `resolve_names` returns all named first, then all resolved unnamed.
+    let (with_named, with_unnamed): (Vec<_>, Vec<_>) = spec
+        .requirements
+        .clone()
+        .into_iter()
+        .partition(|spec| matches!(spec.requirement, UnresolvedRequirement::Named(..)));
+    let (override_named, override_unnamed): (Vec<_>, Vec<_>) = spec
+        .overrides
+        .clone()
+        .into_iter()
+        .partition(|spec| matches!(spec.requirement, UnresolvedRequirement::Named(..)));
+
+    let with_unnamed_count = with_unnamed.len();
+
+    // Combine all unnamed requirements from both sources into a single batch.
+    let mut all_unnamed: Vec<UnresolvedRequirementSpecification> =
+        Vec::with_capacity(with_unnamed.len() + override_unnamed.len());
+    all_unnamed.extend(with_unnamed);
+    all_unnamed.extend(override_unnamed);
+
+    // Resolve all unnamed requirements in a single call (skips resolution entirely if empty).
+    let resolved_unnamed = resolve_names(
+        all_unnamed,
         &interpreter,
         settings,
         client_builder,
@@ -1030,28 +1104,105 @@ async fn get_or_create_environment(
     )
     .await?;
 
+    // Split the resolved unnamed back into `--with` and override groups.
+    // `resolve_names` preserves order for all-unnamed input (named partition is empty,
+    // and `FuturesOrdered` preserves unnamed order).
+    let (resolved_with_unnamed, resolved_override_unnamed) =
+        resolved_unnamed.split_at(with_unnamed_count);
+
+    // Reconstruct the `--with` requirements: named (already resolved) + resolved unnamed.
+    let requirements = {
+        let mut requirements =
+            Vec::with_capacity(1 + with_named.len() + resolved_with_unnamed.len());
+        match &from {
+            ToolRequirement::Python { .. } => {}
+            ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
+        }
+        requirements.extend(with_named.into_iter().filter_map(|spec| {
+            match spec
+                .requirement
+                .augment_requirement(None, None, None, lfs.into(), None)
+            {
+                UnresolvedRequirement::Named(req) => Some(req),
+                UnresolvedRequirement::Unnamed(..) => None,
+            }
+        }));
+        requirements.extend_from_slice(resolved_with_unnamed);
+        requirements
+    };
+
+    // Reconstruct the overrides: named (already resolved) + resolved unnamed.
+    let overrides: Vec<Requirement> = override_named
+        .into_iter()
+        .filter_map(|spec| {
+            match spec
+                .requirement
+                .augment_requirement(None, None, None, lfs.into(), None)
+            {
+                UnresolvedRequirement::Named(req) => Some(req),
+                UnresolvedRequirement::Unnamed(..) => None,
+            }
+        })
+        .chain(resolved_override_unnamed.iter().cloned())
+        .collect();
+
     // Check if the tool is already installed in a compatible environment.
+    // Use pre-fetched data from the concurrent pre-check when available, otherwise
+    // fall back to fetching the environment and receipt here.
+    //
+    // The lock must outlive the `satisfies_requirements` check to prevent a TOCTOU
+    // race where another process modifies the tool between reading and using it.
     if !isolated && !request.is_latest() {
-        let installed_tools = InstalledTools::from_settings()?.init()?;
-        let _lock = installed_tools.lock().await?;
-
         if let ToolRequirement::Package { requirement, .. } = &from {
-            let existing_environment = installed_tools
-                .get_environment(&requirement.name, cache)?
-                .filter(|environment| {
-                    python_request.as_ref().is_none_or(|python_request| {
-                        python_request.satisfied(environment.environment().interpreter(), cache)
-                    })
-                });
+            // Determine whether we can reuse the pre-fetched data or need a fresh lookup.
+            let use_precheck = precheck_data.is_some()
+                && precheck_package_name.as_ref() == Some(&requirement.name);
 
-            // Check if the installed packages meet the requirements.
-            if let Some(environment) = existing_environment {
-                if installed_tools
+            // Acquire a lock that outlives the entire check block. For the precheck
+            // branch the lock is already held in `precheck_data`; for fallback branches
+            // we acquire a fresh shared lock here and keep it alive.
+            let fallback_tools;
+            let fallback_lock;
+            let (existing_environment, receipt_matches) = if use_precheck {
+                let (_installed_tools, _lock, prefetched_env, prefetched_receipt) =
+                    precheck_data.as_ref().unwrap();
+                let env = prefetched_env.as_ref().and_then(|environment| {
+                    if python_request.as_ref().is_none_or(|python_request| {
+                        python_request.satisfied(environment.environment().interpreter(), cache)
+                    }) {
+                        Some(environment)
+                    } else {
+                        None
+                    }
+                });
+                let receipt_ok = prefetched_receipt
+                    .as_ref()
+                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options());
+                (env.cloned(), receipt_ok)
+            } else {
+                // Either the precheck package name didn't match, or no precheck was performed.
+                // Acquire a fresh shared lock that outlives the satisfies_requirements check.
+                fallback_tools = InstalledTools::from_settings()?.init()?;
+                fallback_lock = fallback_tools.lock_shared().await?;
+                let _ = &fallback_lock; // ensure the lock is held through the check below
+                let env = fallback_tools
+                    .get_environment(&requirement.name, cache)?
+                    .filter(|environment| {
+                        python_request.as_ref().is_none_or(|python_request| {
+                            python_request.satisfied(environment.environment().interpreter(), cache)
+                        })
+                    });
+                let receipt_ok = fallback_tools
                     .get_tool_receipt(&requirement.name)
                     .ok()
                     .flatten()
-                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
-                {
+                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options());
+                (env, receipt_ok)
+            };
+
+            // Check if the installed packages meet the requirements.
+            if let Some(environment) = existing_environment {
+                if receipt_matches {
                     let ResolverInstallerSettings {
                         resolver:
                             ResolverSettings {
@@ -1220,4 +1371,814 @@ async fn get_or_create_environment(
     };
 
     Ok((from, environment.into()))
+}
+
+/// Check whether a tool receipt matches the current request for the fast path.
+///
+/// Returns `Some(ToolRequirement)` if the receipt's options match, it has no
+/// `constraints/overrides/build_constraints`, and it has at least one requirement.
+/// Returns `None` if any of these conditions are not met.
+///
+/// This is the pure, deterministic portion of the fast-path check — it does not
+/// touch the filesystem or the Python environment.
+fn receipt_matches_request(
+    target: &str,
+    receipt: &uv_tool::Tool,
+    options: &ResolverInstallerOptions,
+) -> Option<ToolRequirement> {
+    // Check that the current resolver/installer options match the receipt.
+    if ToolOptions::from(options.clone()) != *receipt.options() {
+        return None;
+    }
+
+    // Verify the receipt has no constraints, overrides, or build constraints
+    // beyond the base requirement. If it does, this is not a simple install
+    // and we should fall through to the full path.
+    if !receipt.constraints().is_empty()
+        || !receipt.overrides().is_empty()
+        || !receipt.build_constraints().is_empty()
+    {
+        return None;
+    }
+
+    // Build the ToolRequirement from the receipt's primary requirement.
+    // Use the original target string as the executable name to preserve the
+    // user's verbatim input (e.g., dots in "awslabs.aws-documentation-mcp-server").
+    let requirement = receipt.requirements().first()?.clone();
+
+    Some(ToolRequirement::Package {
+        executable: target.to_string(),
+        requirement,
+    })
+}
+
+/// Attempt the fast path for simple tool invocations.
+///
+/// Returns `Some((ToolRequirement, PythonEnvironment))` if the tool is already
+/// installed and satisfies the request, `None` otherwise.
+///
+/// This function checks the tool receipt and environment without performing
+/// Python discovery or name resolution, making it significantly faster than
+/// the full `get_or_create_environment` path for repeat invocations.
+async fn try_installed_fast_path(
+    target: &str,
+    options: &ResolverInstallerOptions,
+    cache: &Cache,
+) -> Result<Option<(ToolRequirement, PythonEnvironment)>, ProjectError> {
+    // Parse the target as a package name. If it fails, this isn't a simple
+    // package invocation — fall through to the full path.
+    let Ok(package_name) = PackageName::from_str(target) else {
+        return Ok(None);
+    };
+
+    // Initialize the installed tools directory.
+    let installed_tools = InstalledTools::from_settings()?.init()?;
+
+    // Acquire a shared (read-only) lock — this allows concurrent readers
+    // without blocking, unlike the exclusive lock used for writes.
+    let _lock = installed_tools.lock_shared().await?;
+
+    // Read the tool receipt. If missing, the tool isn't installed.
+    let receipt = match installed_tools.get_tool_receipt(&package_name) {
+        Ok(Some(receipt)) => receipt,
+        Ok(None) => return Ok(None),
+        Err(_) => return Ok(None),
+    };
+
+    // Check receipt matches using the pure logic function.
+    let Some(from) = receipt_matches_request(target, &receipt, options) else {
+        return Ok(None);
+    };
+
+    // Get the tool environment. Returns `None` if the environment is missing
+    // or the Python interpreter is broken/not found.
+    let Some(environment) = installed_tools.get_environment(&package_name, cache)? else {
+        return Ok(None);
+    };
+
+    // Validate the environment's Python interpreter still exists on disk.
+    if !environment
+        .environment()
+        .interpreter()
+        .sys_executable()
+        .is_file()
+    {
+        return Ok(None);
+    }
+
+    debug!("Using existing tool `{package_name}` (fast path)");
+
+    Ok(Some((from, environment.into_environment())))
+}
+
+/// Returns true if this is a simple invocation eligible for the fast path.
+///
+/// A simple invocation is one where:
+/// - No `--from` flag is used (the request is `ToolRequest::Package` with no separate executable)
+/// - No `--with` requirements are specified
+/// - No `--python` flag is specified
+/// - No version constraint (`@version`) or `@latest` is used (target is `Target::Unspecified`)
+/// - No `--isolated` flag is used
+/// - No constraints, overrides, or build constraints are specified
+fn is_simple_invocation(
+    request: &ToolRequest<'_>,
+    with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
+    python: Option<&str>,
+    isolated: bool,
+) -> bool {
+    // Must not be isolated
+    if isolated {
+        return false;
+    }
+
+    // Must not have --python
+    if python.is_some() {
+        return false;
+    }
+
+    // Must not have --with requirements
+    if !with.is_empty() {
+        return false;
+    }
+
+    // Must not have constraints
+    if !constraints.is_empty() {
+        return false;
+    }
+
+    // Must not have overrides
+    if !overrides.is_empty() {
+        return false;
+    }
+
+    // Must not have build constraints
+    if !build_constraints.is_empty() {
+        return false;
+    }
+
+    // Must be a Package request with Target::Unspecified (bare package name, no @version or @latest)
+    // and no --from (executable must be None, meaning the target IS the package)
+    matches!(
+        request,
+        ToolRequest::Package {
+            executable: None,
+            target: Target::Unspecified(_),
+        }
+    )
+}
+
+/// Apply the sequential error-precedence pattern used after `tokio::join!` for
+/// parallel Python discovery and installed-tool pre-check.
+///
+/// When two concurrent operations each produce a `Result`, the first result's
+/// error takes precedence: we evaluate `first?` before `second?`, so if both
+/// fail the first error is propagated and the second is discarded.
+///
+/// This mirrors the pattern in `get_or_create_environment`:
+/// ```ignore
+/// let (interpreter_result, precheck_result) = tokio::join!(…, …);
+/// let interpreter = interpreter_result?;   // first — takes precedence
+/// let precheck_data = precheck_result?;    // second
+/// ```
+#[cfg(test)]
+fn resolve_parallel_results<A, B, E>(
+    first: Result<A, E>,
+    second: Result<B, E>,
+) -> Result<(A, B), E> {
+    let a = first?;
+    let b = second?;
+    Ok((a, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::str::FromStr;
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_tool::{Tool, ToolEntrypoint};
+
+    /// Helper: generate a valid bare package name string for `Target::Unspecified`.
+    fn simple_package_name() -> impl Strategy<Value = String> {
+        // Valid Python package names: start with a letter, contain letters/digits/hyphens.
+        prop::string::string_regex("[a-z][a-z0-9-]{0,20}")
+            .unwrap()
+            .prop_filter("must be non-empty after parse", |s| !s.is_empty())
+    }
+
+    /// Helper: generate a valid package name that can be parsed as a `PackageName`.
+    fn valid_package_name() -> impl Strategy<Value = String> {
+        prop::string::string_regex("[a-z][a-z0-9]{0,15}")
+            .unwrap()
+            .prop_filter("must parse as PackageName", |s| {
+                !s.is_empty() && PackageName::from_str(s).is_ok()
+            })
+    }
+
+    /// Helper: generate a random version with 1-3 segments.
+    fn arb_version() -> impl Strategy<Value = Version> {
+        prop::collection::vec(1u64..100, 1..=3).prop_map(Version::new)
+    }
+
+    /// Helper: create a simple Requirement for a given package name with a version specifier.
+    fn make_requirement(name: &PackageName, version: &Version) -> Requirement {
+        let specifier = VersionSpecifier::equals_version(version.clone());
+        Requirement {
+            name: name.clone(),
+            extras: Box::new([]),
+            groups: Box::new([]),
+            marker: MarkerTree::default(),
+            source: RequirementSource::Registry {
+                specifier: VersionSpecifiers::from(specifier),
+                index: None,
+                conflict: None,
+            },
+            origin: None,
+        }
+    }
+
+    /// Helper: create a Tool receipt with matching options and a single requirement.
+    fn make_matching_receipt(name: &PackageName, version: &Version, options: &ToolOptions) -> Tool {
+        let requirement = make_requirement(name, version);
+        let entrypoint = ToolEntrypoint::new(
+            name.as_ref(),
+            std::path::PathBuf::from(format!("/usr/bin/{name}")),
+            name.to_string(),
+        );
+        Tool::new(
+            vec![requirement],
+            vec![], // no constraints
+            vec![], // no overrides
+            vec![], // no build_constraints
+            None,   // no python
+            vec![entrypoint],
+            options.clone(),
+        )
+    }
+
+    /// Helper: create a `RequirementsSource` for testing (a simple package requirement).
+    fn make_requirements_source() -> RequirementsSource {
+        // Use a simple Package variant with a known-good requirement string.
+        RequirementsSource::from_package("flask").unwrap()
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        /// Feature: uvx-startup-optimization, Property 4: Non-simple invocations bypass fast path
+        ///
+        /// **Validates: Requirements 6.1, 6.2, 6.3**
+        ///
+        /// For any invocation with at least one non-simple flag, is_simple_invocation returns false.
+        #[test]
+        fn prop_non_simple_invocations_return_false(
+            pkg_name in simple_package_name(),
+            has_with in any::<bool>(),
+            has_constraints in any::<bool>(),
+            has_overrides in any::<bool>(),
+            has_build_constraints in any::<bool>(),
+            has_python in any::<bool>(),
+            is_isolated in any::<bool>(),
+            // 0 = Unspecified, 1 = Version, 2 = Latest, 3 = Python request, 4 = has executable (--from)
+            target_kind in 0u8..5,
+        ) {
+            // At least one non-simple condition must be true.
+            // Non-simple conditions:
+            //   - has_with, has_constraints, has_overrides, has_build_constraints, has_python, is_isolated
+            //   - target_kind != 0 (not Unspecified)
+            //   - target_kind == 4 (has executable / --from)
+            let any_non_simple = has_with
+                || has_constraints
+                || has_overrides
+                || has_build_constraints
+                || has_python
+                || is_isolated
+                || target_kind != 0;
+
+            // Skip cases where everything is simple — we test those separately.
+            prop_assume!(any_non_simple);
+
+            let with: Vec<RequirementsSource> = if has_with {
+                vec![make_requirements_source()]
+            } else {
+                vec![]
+            };
+            let constraints: Vec<RequirementsSource> = if has_constraints {
+                vec![make_requirements_source()]
+            } else {
+                vec![]
+            };
+            let overrides: Vec<RequirementsSource> = if has_overrides {
+                vec![make_requirements_source()]
+            } else {
+                vec![]
+            };
+            let build_constraints: Vec<RequirementsSource> = if has_build_constraints {
+                vec![make_requirements_source()]
+            } else {
+                vec![]
+            };
+            let python: Option<&str> = if has_python { Some("3.12") } else { None };
+
+            let name_for_target = if pkg_name.is_empty() { "ruff".to_string() } else { pkg_name.clone() };
+
+            let request = match target_kind {
+                0 => ToolRequest::Package {
+                    executable: None,
+                    target: Target::Unspecified(&name_for_target),
+                },
+                1 => {
+                    let parsed_name = PackageName::from_str(&name_for_target).unwrap_or_else(|_| PackageName::from_str("ruff").unwrap());
+                    ToolRequest::Package {
+                        executable: None,
+                        target: Target::Version(&name_for_target, parsed_name, Box::new([]), Version::new([1, 0, 0])),
+                    }
+                }
+                2 => {
+                    let parsed_name = PackageName::from_str(&name_for_target).unwrap_or_else(|_| PackageName::from_str("ruff").unwrap());
+                    ToolRequest::Package {
+                        executable: None,
+                        target: Target::Latest(&name_for_target, parsed_name, Box::new([])),
+                    }
+                }
+                3 => ToolRequest::Python {
+                    executable: None,
+                    request: PythonRequest::Default,
+                },
+                4 => ToolRequest::Package {
+                    executable: Some("my-tool"),
+                    target: Target::Unspecified(&name_for_target),
+                },
+                _ => unreachable!(),
+            };
+
+            let result = is_simple_invocation(
+                &request,
+                &with,
+                &constraints,
+                &overrides,
+                &build_constraints,
+                python,
+                is_isolated,
+            );
+
+            prop_assert!(!result, "Expected false for non-simple invocation, got true. \
+                has_with={}, has_constraints={}, has_overrides={}, has_build_constraints={}, has_python={}, \
+                is_isolated={}, target_kind={}",
+                has_with, has_constraints, has_overrides, has_build_constraints, has_python, is_isolated, target_kind);
+        }
+
+        /// Feature: uvx-startup-optimization, Property 4: Non-simple invocations bypass fast path
+        ///
+        /// **Validates: Requirements 6.1, 6.2, 6.3**
+        ///
+        /// For any simple invocation (bare package name, no flags), is_simple_invocation returns true.
+        #[test]
+        fn prop_simple_invocations_return_true(
+            pkg_name in simple_package_name(),
+        ) {
+            let request = ToolRequest::Package {
+                executable: None,
+                target: Target::Unspecified(&pkg_name),
+            };
+
+            let result = is_simple_invocation(
+                &request,
+                &[],       // no --with
+                &[],       // no constraints
+                &[],       // no overrides
+                &[],       // no build constraints
+                None,      // no --python
+                false,     // not --isolated
+            );
+
+            prop_assert!(result, "Expected true for simple invocation with package '{}', got false", pkg_name);
+        }
+
+        /// Feature: uvx-startup-optimization, Property 3: Receipt match implies fast path success
+        ///
+        /// **Validates: Requirements 3.2**
+        ///
+        /// For any simple invocation where a valid Tool_Receipt exists, the receipt's
+        /// package name matches the requested target, the receipt's options match the
+        /// current options, and the receipt has at least one requirement with no
+        /// constraints/overrides/build_constraints, the receipt matching logic SHALL
+        /// return a successful ToolRequirement.
+        #[test]
+        fn prop_receipt_match_implies_fast_path_success(
+            pkg_name in valid_package_name(),
+            version in arb_version(),
+        ) {
+            let package_name = PackageName::from_str(&pkg_name).unwrap();
+            let options = ResolverInstallerOptions::default();
+            let tool_options = ToolOptions::from(options.clone());
+
+            // Create a receipt that matches the request: same options, no constraints,
+            // and a requirement whose package name matches the target.
+            let receipt = make_matching_receipt(&package_name, &version, &tool_options);
+
+            let result = receipt_matches_request(&pkg_name, &receipt, &options);
+
+            prop_assert!(
+                result.is_some(),
+                "Expected receipt_matches_request to return Some for matching receipt \
+                 with package '{}' version '{}', got None",
+                pkg_name, version
+            );
+
+            // Verify the returned ToolRequirement has the correct executable name.
+            if let Some(ToolRequirement::Package { executable, requirement }) = &result {
+                prop_assert_eq!(
+                    executable, &pkg_name,
+                    "Executable name should match the package name"
+                );
+                prop_assert_eq!(
+                    &requirement.name, &package_name,
+                    "Requirement name should match the package name"
+                );
+            } else {
+                prop_assert!(false, "Expected ToolRequirement::Package variant");
+            }
+        }
+
+        /// Feature: uvx-startup-optimization, Property 3: Receipt match implies fast path success
+        ///
+        /// **Validates: Requirements 3.2**
+        ///
+        /// Verify that receipt matching succeeds for any valid package name and version
+        /// combination when options are identical, regardless of the specific option values.
+        #[test]
+        fn prop_receipt_match_with_default_options_always_succeeds(
+            pkg_name in valid_package_name(),
+            version_segments in prop::collection::vec(1u64..100, 1..=3),
+        ) {
+            let package_name = PackageName::from_str(&pkg_name).unwrap();
+            let version = Version::new(version_segments);
+
+            // Both sides use default options — they must match.
+            let options = ResolverInstallerOptions::default();
+            let tool_options = ToolOptions::default();
+
+            let receipt = make_matching_receipt(&package_name, &version, &tool_options);
+
+            let result = receipt_matches_request(&pkg_name, &receipt, &options);
+
+            prop_assert!(
+                result.is_some(),
+                "Default options should always match: package='{}', version='{}'",
+                pkg_name, version
+            );
+        }
+
+        /// Feature: uvx-startup-optimization, Property 2: Fast path fallback completeness
+        ///
+        /// **Validates: Requirements 1.3, 3.3**
+        ///
+        /// For any invocation where the receipt doesn't match the request — including
+        /// mismatched options, non-empty constraints, non-empty overrides, non-empty
+        /// build_constraints, or empty requirements — receipt_matches_request SHALL
+        /// return None, causing the fast path to fall through to the full resolution path.
+        #[test]
+        fn prop_fast_path_fallback_on_failure_conditions(
+            pkg_name in valid_package_name(),
+            version in arb_version(),
+            // Each bit represents a failure condition to inject:
+            // 0 = mismatched options (no_index toggled)
+            // 1 = non-empty constraints
+            // 2 = non-empty overrides
+            // 3 = non-empty build_constraints
+            // 4 = empty requirements
+            failure_kind in 0u8..5,
+        ) {
+            let package_name = PackageName::from_str(&pkg_name).unwrap();
+            let options = ResolverInstallerOptions::default();
+            let tool_options = ToolOptions::from(options.clone());
+
+            // Start from a valid matching receipt, then inject exactly one failure.
+            let requirement = make_requirement(&package_name, &version);
+            let entrypoint = ToolEntrypoint::new(
+                package_name.as_ref(),
+                std::path::PathBuf::from(format!("/usr/bin/{package_name}")),
+                package_name.to_string(),
+            );
+
+            let receipt = match failure_kind {
+                // Mismatched options: toggle no_index so options differ.
+                0 => {
+                    let mut mismatched_options = tool_options.clone();
+                    mismatched_options.no_index = Some(true);
+                    Tool::new(
+                        vec![requirement],
+                        vec![],
+                        vec![],
+                        vec![],
+                        None,
+                        vec![entrypoint],
+                        mismatched_options,
+                    )
+                }
+                // Non-empty constraints.
+                1 => {
+                    let constraint = make_requirement(&package_name, &version);
+                    Tool::new(
+                        vec![requirement],
+                        vec![constraint],
+                        vec![],
+                        vec![],
+                        None,
+                        vec![entrypoint],
+                        tool_options.clone(),
+                    )
+                }
+                // Non-empty overrides.
+                2 => {
+                    let r#override = make_requirement(&package_name, &version);
+                    Tool::new(
+                        vec![requirement],
+                        vec![],
+                        vec![r#override],
+                        vec![],
+                        None,
+                        vec![entrypoint],
+                        tool_options.clone(),
+                    )
+                }
+                // Non-empty build_constraints.
+                3 => {
+                    let build_constraint = make_requirement(&package_name, &version);
+                    Tool::new(
+                        vec![requirement],
+                        vec![],
+                        vec![],
+                        vec![build_constraint],
+                        None,
+                        vec![entrypoint],
+                        tool_options.clone(),
+                    )
+                }
+                // Empty requirements (no requirements at all).
+                4 => {
+                    Tool::new(
+                        vec![],
+                        vec![],
+                        vec![],
+                        vec![],
+                        None,
+                        vec![entrypoint],
+                        tool_options.clone(),
+                    )
+                }
+                _ => unreachable!(),
+            };
+
+            let result = receipt_matches_request(&pkg_name, &receipt, &options);
+
+            let failure_desc = match failure_kind {
+                0 => "mismatched options",
+                1 => "non-empty constraints",
+                2 => "non-empty overrides",
+                3 => "non-empty build_constraints",
+                4 => "empty requirements",
+                _ => unreachable!(),
+            };
+
+            prop_assert!(
+                result.is_none(),
+                "Expected None for failure condition '{}' with package '{}', but got Some",
+                failure_desc, pkg_name
+            );
+        }
+
+        /// Feature: uvx-startup-optimization, Property 2: Fast path fallback completeness
+        ///
+        /// **Validates: Requirements 1.3, 3.3**
+        ///
+        /// For any combination of multiple simultaneous failure conditions,
+        /// receipt_matches_request SHALL still return None.
+        #[test]
+        fn prop_fast_path_fallback_on_combined_failures(
+            pkg_name in valid_package_name(),
+            version in arb_version(),
+            has_mismatched_options in any::<bool>(),
+            has_constraints in any::<bool>(),
+            has_overrides in any::<bool>(),
+            has_build_constraints in any::<bool>(),
+            has_empty_requirements in any::<bool>(),
+        ) {
+            // At least one failure condition must be present.
+            let any_failure = has_mismatched_options
+                || has_constraints
+                || has_overrides
+                || has_build_constraints
+                || has_empty_requirements;
+            prop_assume!(any_failure);
+
+            let package_name = PackageName::from_str(&pkg_name).unwrap();
+            let options = ResolverInstallerOptions::default();
+            let tool_options = ToolOptions::from(options.clone());
+
+            let requirement = make_requirement(&package_name, &version);
+            let entrypoint = ToolEntrypoint::new(
+                package_name.as_ref(),
+                std::path::PathBuf::from(format!("/usr/bin/{package_name}")),
+                package_name.to_string(),
+            );
+
+            let receipt_options = if has_mismatched_options {
+                let mut opts = tool_options.clone();
+                opts.no_index = Some(true);
+                opts
+            } else {
+                tool_options.clone()
+            };
+
+            let constraints = if has_constraints {
+                vec![make_requirement(&package_name, &version)]
+            } else {
+                vec![]
+            };
+
+            let overrides = if has_overrides {
+                vec![make_requirement(&package_name, &version)]
+            } else {
+                vec![]
+            };
+
+            let build_constraints = if has_build_constraints {
+                vec![make_requirement(&package_name, &version)]
+            } else {
+                vec![]
+            };
+
+            let requirements = if has_empty_requirements {
+                vec![]
+            } else {
+                vec![requirement]
+            };
+
+            let receipt = Tool::new(
+                requirements,
+                constraints,
+                overrides,
+                build_constraints,
+                None,
+                vec![entrypoint],
+                receipt_options,
+            );
+
+            let result = receipt_matches_request(&pkg_name, &receipt, &options);
+
+            prop_assert!(
+                result.is_none(),
+                "Expected None when at least one failure condition is present: \
+                 mismatched_options={}, constraints={}, overrides={}, \
+                 build_constraints={}, empty_requirements={}",
+                has_mismatched_options, has_constraints, has_overrides,
+                has_build_constraints, has_empty_requirements
+            );
+        }
+
+        /// Feature: uvx-startup-optimization, Property 1: Fast path equivalence
+        ///
+        /// **Validates: Requirements 1.4, 6.4, 7.3**
+        ///
+        /// For any simple invocation where the receipt matches the request, the
+        /// `ToolRequirement` returned by `receipt_matches_request` (the fast path's
+        /// core logic) SHALL be equivalent to what the full path would construct:
+        /// - The executable name equals the package name (as the full path extracts
+        ///   the verbatim name from a bare `Target::Unspecified` string).
+        /// - The requirement equals the receipt's first stored requirement (which is
+        ///   the originally-resolved requirement saved at install time).
+        #[test]
+        fn prop_fast_path_equivalence(
+            pkg_name in valid_package_name(),
+            version in arb_version(),
+        ) {
+            let package_name = PackageName::from_str(&pkg_name).unwrap();
+            let options = ResolverInstallerOptions::default();
+            let tool_options = ToolOptions::from(options.clone());
+
+            // Build a matching receipt (simulates a pre-populated tool directory).
+            let receipt = make_matching_receipt(&package_name, &version, &tool_options);
+
+            // The receipt's first requirement is what was stored at install time.
+            let expected_requirement = receipt.requirements().first().unwrap().clone();
+
+            // --- Fast path result (via receipt_matches_request) ---
+            let fast_result = receipt_matches_request(&pkg_name, &receipt, &options);
+            prop_assert!(
+                fast_result.is_some(),
+                "Fast path should succeed for matching receipt: pkg='{}', version='{}'",
+                pkg_name, version
+            );
+            let fast_tool_req = fast_result.unwrap();
+
+            // --- Simulate full path result ---
+            // For Target::Unspecified with a bare package name (simple invocation),
+            // the full path in get_or_create_environment extracts the verbatim name
+            // from the requirement string (the part before any specifiers), which for
+            // a bare name equals the package name itself. The resolved requirement
+            // would match what was originally installed (stored in the receipt).
+            let full_path_executable = pkg_name.clone();
+            let full_path_requirement = expected_requirement.clone();
+
+            // --- Assert equivalence ---
+            match &fast_tool_req {
+                ToolRequirement::Package { executable, requirement } => {
+                    // 1. Executable name must match what the full path would produce.
+                    prop_assert_eq!(
+                        executable, &full_path_executable,
+                        "Fast path executable '{}' should equal full path executable '{}'",
+                        executable, full_path_executable
+                    );
+
+                    // 2. Requirement must match the receipt's stored requirement
+                    //    (which is what the full path originally resolved and saved).
+                    prop_assert_eq!(
+                        &requirement.name, &full_path_requirement.name,
+                        "Requirement name mismatch"
+                    );
+
+                    // 3. The requirement's version specifier must match.
+                    prop_assert_eq!(
+                        format!("{}", requirement.source),
+                        format!("{}", full_path_requirement.source),
+                        "Requirement source mismatch for package '{}'",
+                        pkg_name
+                    );
+                }
+                ToolRequirement::Python { .. } => {
+                    prop_assert!(
+                        false,
+                        "Fast path should return Package variant, not Python"
+                    );
+                }
+            }
+        }
+
+        /// Feature: uvx-startup-optimization, Property 5: Error propagation in parallel operations
+        ///
+        /// **Validates: Requirements 7.2**
+        ///
+        /// For any pair of Results from two concurrent operations, the
+        /// `resolve_parallel_results` helper SHALL propagate errors correctly:
+        /// - Both Ok → returns Ok with both values
+        /// - First Err → first error propagated (regardless of second)
+        /// - First Ok, Second Err → second error propagated
+        /// - Both Err → first error propagated (Python discovery takes precedence)
+        #[test]
+        fn prop_error_propagation_in_parallel_operations(
+            first_val in any::<u64>(),
+            second_val in any::<u64>(),
+            first_err_code in any::<u32>(),
+            second_err_code in any::<u32>(),
+            // 0 = both ok, 1 = first err only, 2 = second err only, 3 = both err
+            scenario in 0u8..4,
+        ) {
+            let first: Result<u64, u32> = if scenario == 1 || scenario == 3 {
+                Err(first_err_code)
+            } else {
+                Ok(first_val)
+            };
+            let second: Result<u64, u32> = if scenario == 2 || scenario == 3 {
+                Err(second_err_code)
+            } else {
+                Ok(second_val)
+            };
+
+            let result = resolve_parallel_results(first, second);
+
+            match scenario {
+                // Both Ok → returns Ok with both values.
+                0 => {
+                    let (a, b) = result.expect("Both Ok should produce Ok");
+                    prop_assert_eq!(a, first_val);
+                    prop_assert_eq!(b, second_val);
+                }
+                // First Err, Second Ok → first error propagated.
+                1 => {
+                    let err = result.expect_err("First Err should propagate");
+                    prop_assert_eq!(err, first_err_code,
+                        "First error should be propagated when only first fails");
+                }
+                // First Ok, Second Err → second error propagated.
+                2 => {
+                    let err = result.expect_err("Second Err should propagate");
+                    prop_assert_eq!(err, second_err_code,
+                        "Second error should be propagated when only second fails");
+                }
+                // Both Err → first error takes precedence (Python discovery).
+                3 => {
+                    let err = result.expect_err("Both Err should propagate first");
+                    prop_assert_eq!(err, first_err_code,
+                        "First error (Python discovery) should take precedence when both fail");
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
 }

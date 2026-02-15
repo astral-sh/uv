@@ -229,6 +229,7 @@ temp-env = { version = "0.3.6" }
 test-case = { version = "3.3.1" }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
 tokio-rustls = { version = "0.26.2", default-features = false }
+proptest = { version = "1.6.0" }
 whoami = { version = "2.0.0" }
 
 [workspace.lints.rust]

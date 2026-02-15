@@ -1739,6 +1739,10 @@ impl std::ops::Deref for ScriptEnvironment {
 }
 
 /// Resolve any [`UnresolvedRequirementSpecification`] into a fully-qualified [`Requirement`].
+///
+/// The returned requirements preserve the input order: all named requirements appear first
+/// (in their original order), followed by all unnamed requirements (in their original order,
+/// resolved concurrently via [`FuturesOrdered`]). Callers may rely on this ordering guarantee.
 pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,

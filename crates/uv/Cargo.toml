@@ -143,6 +143,7 @@ hyper-util = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 predicates = { workspace = true }
+proptest = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
