@@ -502,9 +502,19 @@ impl InstalledDist {
         let contents = fs_err::read_to_string(path.join("WHEEL"))?;
         let wheel_file = WheelFile::parse(&contents)?;
 
-        // Parse the tags.
+        // Parse the tags. If parsing fails (e.g., due to invalid platform tags), warn but
+        // assume the wheel is compatible.
         let tags = if let Some(tags) = wheel_file.tags() {
-            Some(ExpandedTags::parse(tags.iter().map(String::as_str))?)
+            match ExpandedTags::parse(tags.iter().map(String::as_str)) {
+                Ok(tags) => Some(tags),
+                Err(err) => {
+                    warn!(
+                        "Failed to parse `WHEEL` tags for {}, assuming compatible: {err}",
+                        self.name()
+                    );
+                    None
+                }
+            }
         } else {
             None
         };
