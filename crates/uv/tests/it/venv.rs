@@ -1448,6 +1448,7 @@ fn relocatable_real_environment() {
 
 /// With `--relocatable` and a managed Python, `uv sync` works with a pre-created real environment.
 #[test]
+#[cfg(unix)] // On Windows, `uv sync` recreates the venv without `--relocatable`.
 fn relocatable_real_environment_sync() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
