@@ -4,7 +4,6 @@ use serde::{Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::{self, FromStr};
@@ -26,6 +25,10 @@ use crate::{BuildBackendSettings, Error, error_on_venv};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
+
+/// No breaking changes were introduced to the uv build backend since those releases, so we can use
+/// the fast path for them too.
+const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30"];
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -68,7 +71,17 @@ pub enum ValidationError {
 }
 
 /// Check if the build backend is matching the currently running uv version.
-pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
+///
+/// If it isn't compatible, returns a half-sentence with reason why it isn't.
+///
+/// Example table compatible with uv 0.4.21:
+///
+/// ```toml
+/// [build-system]
+/// requires = ["uv_build>=0.4.15,<0.5.0"]
+/// build-backend = "uv_build"
+/// ```
+pub fn check_direct_build(source_tree: &Path, uv_version: &str) -> Result<(), String> {
     #[derive(Deserialize)]
     #[serde(rename_all = "kebab-case")]
     struct PyProjectToml {
@@ -83,31 +96,67 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
             }) {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
-                debug!(
-                    "Not using uv build backend direct build for source tree `{name}`, \
-                    failed to parse pyproject.toml: {err}"
-                );
-                return false;
+                return Err(format!("its `pyproject.toml` failed to parse: {err}"));
             }
         };
-    match pyproject_toml
-        .build_system
-        .check_build_system(uv_version::version())
-        .as_slice()
-    {
-        // No warnings -> match
-        [] => true,
-        // Any warning -> no match
-        [first, others @ ..] => {
-            debug!(
-                "Not using uv build backend direct build of `{name}`, pyproject.toml does not match: {first}"
-            );
-            for other in others {
-                trace!("Further uv build backend direct build of `{name}` mismatch: {other}");
+
+    if pyproject_toml.build_system.build_backend.as_deref() != Some("uv_build") {
+        return Err(format!(
+            "`build_system.build-backend` is not `uv_build`, but `{}`",
+            pyproject_toml
+                .build_system
+                .build_backend
+                .clone()
+                .unwrap_or_default()
+        ));
+    }
+
+    let compatible: Vec<Version> = COMPATIBLE_VERSIONS
+        .iter()
+        .chain([&uv_version])
+        .map(|version| {
+            Version::from_str(version).expect("hardcoded version is not PEP 440 compliant")
+        })
+        .collect();
+
+    let [uv_requirement] = &pyproject_toml.build_system.requires.as_slice() else {
+        return Err(format!(
+            "there is not only the `uv_build` requirement in `build-system.requires`: `{}`",
+            pyproject_toml
+                .build_system
+                .requires
+                .iter()
+                .map(ToString::to_string)
+                .join("`, `")
+        ));
+    };
+    if uv_requirement.name.as_str() != "uv-build" {
+        return Err(format!(
+            "`build-system.requires` is not `uv_build`, but `{}`",
+            uv_requirement.name
+        ));
+    }
+    match &uv_requirement.version_or_url {
+        None => {
+            // If the user doesn't set any upper bound, we don't help them by not using the fast
+            // path, their build may equally fail if the index version of `uv_build`.
+        }
+        Some(VersionOrUrl::Url(_)) => {
+            // We can't validate the url
+            return Err("`build_system.requires` uses a URL requirement".to_string());
+        }
+        Some(VersionOrUrl::VersionSpecifier(specifier)) => {
+            // If the user doesn't set an upper bound, we don't help them by not using the fast
+            // path, their build may equally fail if the index version of `uv_build`.
+            if !compatible.iter().any(|version| specifier.contains(version)) {
+                return Err(format!(
+                    "`uv_build{specifier}` is not a known compatible range",
+                ));
             }
-            false
         }
     }
+
+    Ok(())
 }
 
 /// A package name as provided in a `pyproject.toml`.
@@ -838,7 +887,7 @@ impl BuildSystem {
         let mut warnings = Vec::new();
         if self.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
+                r#"`build_system.build-backend` in `pyproject.toml` should be `"uv_build"`, not `"{}"`"#,
                 self.build_backend.clone().unwrap_or_default()
             ));
         }
@@ -850,8 +899,8 @@ impl BuildSystem {
 
         let expected = || {
             format!(
-                "Expected a single uv requirement in `build-system.requires`, found `{}`",
-                toml::to_string(&self.requires).unwrap_or_default()
+                "Expected a single uv_build requirement in `build-system.requires`, found `{}`",
+                self.requires.iter().map(ToString::to_string).join("`, `")
             )
         };
 
@@ -1315,7 +1364,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @"Expected a single uv requirement in `build-system.requires`, found ``"
+            @"Expected a single uv_build requirement in `build-system.requires`, found `uv-build>=0.4.15,<0.5.0`, `wheel`"
         );
     }
 
@@ -1333,7 +1382,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @"Expected a single uv requirement in `build-system.requires`, found ``"
+            @"Expected a single uv_build requirement in `build-system.requires`, found `setuptools`"
         );
     }
 
@@ -1351,7 +1400,7 @@ mod tests {
         let pyproject_toml: PyProjectToml = toml::from_str(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"#
+            @r#"`build_system.build-backend` in `pyproject.toml` should be `"uv_build"`, not `"setuptools"`"#
         );
     }
 
@@ -1535,5 +1584,154 @@ mod tests {
         "#
         });
         assert_snapshot!(script_error(&contents), @"Use `project.gui-scripts` instead of `project.entry-points.gui_scripts`");
+    }
+
+    #[test]
+    fn check_direct_build_ok() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build>=0.10.0,<0.11"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        assert_eq!(check_direct_build(temp_dir.path(), "0.10.0"), Ok(()));
+    }
+
+    #[test]
+    fn check_direct_build_parse_error() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            "invalid toml >>>>>>>",
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @r#"
+            its `pyproject.toml` failed to parse: TOML parse error at line 1, column 9
+              |
+            1 | invalid toml >>>>>>>
+              |         ^
+            key with no value, expected `=`
+            "#
+        );
+    }
+
+    #[test]
+    fn check_direct_build_wrong_backend() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["setuptools"]
+                build-backend = "setuptools"
+            "#},
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @"`build_system.build-backend` is not `uv_build`, but `setuptools`"
+        );
+    }
+
+    #[test]
+    fn check_direct_build_multiple_requires() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build>=0.10.0,<0.11", "wheel"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @"there is not only the `uv_build` requirement in `build-system.requires`: `uv-build>=0.10.0,<0.11`, `wheel`"
+        );
+    }
+
+    #[test]
+    fn check_direct_build_wrong_package() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["setuptools>=70"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @"`build-system.requires` is not `uv_build`, but `setuptools`"
+        );
+    }
+
+    #[test]
+    fn check_direct_build_url_requirement() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build @ https://example.com/uv_build-0.10.0-py3-none-any.whl"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @"`build_system.requires` uses a URL requirement"
+        );
+    }
+
+    #[test]
+    fn check_direct_build_incompatible_range() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::write(
+            temp_dir.path().join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "hello-world"
+                version = "0.1.0"
+
+                [build-system]
+                requires = ["uv_build>=0.5.0,<0.6"]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+        assert_snapshot!(
+            check_direct_build(temp_dir.path(), "0.10.0").unwrap_err(),
+            @"`uv_build>=0.5.0, <0.6` is not a known compatible range"
+        );
     }
 }
