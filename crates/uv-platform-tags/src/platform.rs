@@ -11,8 +11,12 @@ pub enum PlatformError {
     IOError(#[from] io::Error),
     #[error("Failed to detect the operating system version: {0}")]
     OsVersionDetectionError(String),
-    #[error("Failed to detect the arch: {0}")]
-    ArchDetectionError(String),
+    #[error("Invalid Android architecture: {0}")]
+    InvalidAndroidArch(Arch),
+    #[error("Invalid iOS simulator architecture: {0}")]
+    InvalidIosSimulatorArch(Arch),
+    #[error("Invalid iOS device architecture: {0}")]
+    InvalidIosDeviceArch(Arch),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
