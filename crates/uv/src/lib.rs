@@ -157,7 +157,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
             );
         }
-        Some(FilesystemOptions::from_file(config_file)?)
+        let options = FilesystemOptions::from_file(config_file)?;
+        tracing::debug!(
+            "Using configuration file at `{}`; ignoring user-level and workspace configuration",
+            config_file.simplified_display()
+        );
+        Some(options)
     } else if deprecated_isolated || cli.top_level.no_config {
         None
     } else if matches!(&*cli.command, Commands::Tool(_) | Commands::Self_(_)) {
