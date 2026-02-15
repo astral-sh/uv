@@ -15420,3 +15420,173 @@ fn package_conflict_allows_extra_sync() -> Result<()> {
 
     Ok(())
 }
+
+/// When a conflict set spans multiple packages, a `ConflictKind::Project`
+/// item should **not** be suppressed by an active extra — doing so could
+/// allow conflicting cross-package dependencies through.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17744>
+#[test]
+fn cross_package_conflict_project_not_suppressed() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let dep1 = context.temp_dir.child("packages/dep1");
+    dep1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep1"]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers>=2.3.0"]
+
+        [tool.uv.sources]
+        dep1 = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/dep1"]
+
+        [tool.uv]
+        conflicts = [
+            [
+              { package = "project", extra = "extra1" },
+              { package = "dep1" },
+            ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Syncing with the extra should fail because the project entry for dep1
+    // must remain active (cross-package conflict set).
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `dep1` and extra `extra1` are incompatible with the declared conflicts: {dep1, `project[extra1]`}
+    ");
+
+    Ok(())
+}
+
+/// When a project participates in two conflict sets — one single-package
+/// and one cross-package — syncing with an extra from the single-package
+/// set should correctly suppress the project entry and install the right
+/// dependency versions.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17744>
+#[test]
+fn multi_set_project_suppression_consistent() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let dep1 = context.temp_dir.child("packages/dep1");
+    dep1.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers>=2.3.0"]
+
+        [project.optional-dependencies]
+        dep1-extra = ["iniconfig>=2"]
+        "#,
+    )?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep1"]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.3.0"]
+
+        [tool.uv.sources]
+        dep1 = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["packages/dep1"]
+
+        [tool.uv]
+        conflicts = [
+            [
+              { package = "project", extra = "extra1" },
+              { package = "project" },
+            ],
+            [
+              { package = "dep1", extra = "dep1-extra" },
+              { package = "project" },
+            ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Syncing with --extra=extra1 should succeed: the single-package set
+    // suppresses the project entry, and the cross-package set sees only
+    // one active item (no conflict).
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--extra=extra1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dep1==0.1.0 (from file://[TEMP_DIR]/packages/dep1)
+     + sortedcontainers==2.3.0
+    ");
+
+    // Syncing without extras should also succeed (base fork).
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - sortedcontainers==2.3.0
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}

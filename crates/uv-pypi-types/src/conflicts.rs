@@ -235,6 +235,37 @@ impl ConflictSet {
         self.set.iter()
     }
 
+    /// Returns `true` if a `ConflictKind::Project` item for `package` should
+    /// be considered suppressed (inactive) because an extra from this set is
+    /// active.
+    ///
+    /// This only applies when **all** items in the set refer to the same
+    /// package. When the set spans multiple packages, deactivating one
+    /// project could allow conflicting cross-package dependencies through.
+    pub fn is_project_suppressed_by_extra(
+        &self,
+        package: &PackageName,
+        active_extras: impl Fn(&ExtraName) -> bool,
+    ) -> bool {
+        // All items must belong to the same package.
+        let all_same_package = self.iter().all(|item| item.package() == package);
+        if !all_same_package {
+            return false;
+        }
+        // The set must contain a bare project entry for this package.
+        let has_project_item = self
+            .iter()
+            .any(|item| matches!(item.kind(), ConflictKind::Project));
+        if !has_project_item {
+            return false;
+        }
+        // At least one extra in the set must be active.
+        self.iter().any(|item| match item.kind() {
+            ConflictKind::Extra(extra) => active_extras(extra),
+            ConflictKind::Project | ConflictKind::Group(_) => false,
+        })
+    }
+
     /// Returns true if this conflicting item contains the given package and
     /// extra name pair.
     pub fn contains<'a>(

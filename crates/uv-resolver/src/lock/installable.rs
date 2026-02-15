@@ -14,7 +14,7 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictKind, ResolverMarkerEnvironment};
+use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{HashedDist, LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
@@ -91,34 +91,14 @@ pub trait Installable<'lock> {
                 }
             }
 
-            // A `ConflictKind::Project` item represents the "base" fork
-            // of a package (without the extras from its conflict set).
-            // When the conflict set only involves a single package and
-            // an extra for that package is active, the project should
-            // not be considered active — the user is selecting that
-            // extra's fork. This is not safe when the set spans
-            // multiple packages, as deactivating one project could
-            // allow conflicting cross-package deps through.
+            // Deactivate project entries that are suppressed by an
+            // active extra in the same (single-package) conflict set.
+            let activated_extras_set: FxHashSet<(&PackageName, &ExtraName)> =
+                activated_extras.iter().copied().collect();
             activated_projects.retain(|project| {
                 !self.lock().conflicts().iter().any(|set| {
-                    // Only deactivate when all items in the set refer to the same package.
-                    let all_same_package = set.iter().all(|item| item.package() == *project);
-                    if !all_same_package {
-                        return false;
-                    }
-                    // Check if this project appears as a bare package in this set.
-                    let has_project_item = set
-                        .iter()
-                        .any(|item| matches!(item.kind(), ConflictKind::Project));
-                    if !has_project_item {
-                        return false;
-                    }
-                    // Check if any extra in this set is active.
-                    set.iter().any(|item| match item.kind() {
-                        ConflictKind::Project | ConflictKind::Group(_) => false,
-                        ConflictKind::Extra(extra) => activated_extras
-                            .iter()
-                            .any(|(p, e)| *p == *project && *e == extra),
+                    set.is_project_suppressed_by_extra(project, |extra| {
+                        activated_extras_set.contains(&(*project, extra))
                     })
                 })
             });
