@@ -494,6 +494,7 @@ impl SourceBuild {
                 lock_path,
                 LockedFileMode::Exclusive,
                 self.source_tree.to_string_lossy(),
+                false,
             )
             .await
             .inspect_err(|err| {

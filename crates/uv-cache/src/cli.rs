@@ -1,5 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use uv_preview::{Preview, PreviewFeature};
 use uv_static::EnvVars;
 
 use crate::Cache;
@@ -40,17 +41,22 @@ impl Cache {
     /// 4. A `.uv_cache` directory in the current working directory.
     ///
     /// Returns an absolute cache dir.
-    pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
+    pub fn from_settings(
+        no_cache: bool,
+        cache_dir: Option<PathBuf>,
+        preview: Preview,
+    ) -> Result<Self, io::Error> {
+        let lock_file_override_umask = !preview.is_enabled(PreviewFeature::RespectUmask);
         if no_cache {
-            Self::temp()
+            Self::temp(lock_file_override_umask)
         } else if let Some(cache_dir) = cache_dir {
-            Ok(Self::from_path(cache_dir))
+            Ok(Self::from_path(cache_dir, lock_file_override_umask))
         } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
         {
             // If the user has an existing directory at (e.g.) `/Users/user/Library/Caches/uv`,
             // respect it for backwards compatibility. Otherwise, prefer the XDG strategy, even on
             // macOS.
-            Ok(Self::from_path(cache_dir))
+            Ok(Self::from_path(cache_dir, lock_file_override_umask))
         } else if let Some(cache_dir) = uv_dirs::user_cache_dir() {
             if cfg!(windows) {
                 // On Windows, we append `cache` to the LocalAppData directory, i.e., prefer
@@ -68,21 +74,17 @@ impl Cache {
                     );
                 }
 
-                Ok(Self::from_path(destination))
+                Ok(Self::from_path(destination, lock_file_override_umask))
             } else {
-                Ok(Self::from_path(cache_dir))
+                Ok(Self::from_path(cache_dir, lock_file_override_umask))
             }
         } else {
-            Ok(Self::from_path(".uv_cache"))
+            Ok(Self::from_path(".uv_cache", lock_file_override_umask))
         }
     }
-}
 
-impl TryFrom<CacheArgs> for Cache {
-    type Error = io::Error;
-
-    fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Self::from_settings(value.no_cache, value.cache_dir)
+    pub fn from_args(args: CacheArgs, preview: Preview) -> Result<Self, io::Error> {
+        Self::from_settings(args.no_cache, args.cache_dir, preview)
     }
 }
 

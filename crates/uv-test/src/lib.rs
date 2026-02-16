@@ -611,7 +611,7 @@ impl TestContext {
             EnvVars::UV_PYTHON_CACHE_DIR.into(),
             // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory
             env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                uv_cache::Cache::from_settings(false, None)
+                uv_cache::Cache::from_settings(false, None, Preview::all())
                     .unwrap()
                     .bucket(CacheBucket::Python)
                     .into()
@@ -1939,7 +1939,7 @@ pub fn python_installations_for_versions(
     python_versions: &[&str],
     download_list: &ManagedPythonDownloadList,
 ) -> anyhow::Result<Vec<PathBuf>> {
-    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf())
+    let cache = Cache::from_path(temp_dir.child("cache").to_path_buf(), false)
         .init_no_wait()?
         .expect("No cache contention when setting up Python in tests");
     let selected_pythons = python_versions
