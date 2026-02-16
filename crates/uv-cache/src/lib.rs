@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use rustc_hash::FxHashMap;
 use tracing::{debug, trace, warn};
@@ -495,14 +496,31 @@ impl Cache {
             Err(err) => return Err(err.into()),
         };
 
-        Ok(Self {
+        let cache = Self {
             root: std::path::absolute(root).map_err(Error::Absolute)?,
             lock_file,
             ..self
-        })
+        };
+
+        // Spawn background autoprune task (fire-and-forget).
+        if !cache.is_temporary() {
+            let root = cache.root.clone();
+            tokio::spawn(async move {
+                // Brief delay to avoid competing with startup I/O.
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                if let Err(err) = autoprune(&root) {
+                    debug!("Autoprune failed: {err}");
+                }
+            });
+        }
+
+        Ok(cache)
     }
 
     /// Initialize the [`Cache`], assuming that there are no other uv processes running.
+    ///
+    /// Note: This does not spawn the background autoprune task because it is a synchronous
+    /// function with no guarantee of a tokio runtime being available.
     pub fn init_no_wait(self) -> Result<Option<Self>, Error> {
         let root = &self.root;
 
@@ -716,23 +734,7 @@ impl Cache {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
-                for entry in walker.filter_entry(|entry| {
-                    !(
-                        // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
-                        // `.http` files, along with the `src` directory, which represents the
-                        // unpacked source distribution.
-                        entry.file_name() == "src"
-                            || entry.file_name() == ".lock"
-                            || entry.file_name() == ".gitignore"
-                            || entry.path().extension().is_some_and(|ext| {
-                                ext.eq_ignore_ascii_case("lock")
-                                    || ext.eq_ignore_ascii_case("whl")
-                                    || ext.eq_ignore_ascii_case("http")
-                                    || ext.eq_ignore_ascii_case("rev")
-                                    || ext.eq_ignore_ascii_case("msgpack")
-                            })
-                    )
-                }) {
+                for entry in walker.filter_entry(is_potential_archive_link) {
                     let entry = entry?;
 
                     // On Unix, archive references use symlinks.
@@ -854,6 +856,145 @@ impl Cache {
     pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
         path.as_ref().canonicalize()
     }
+}
+
+/// Filter for [`walkdir`] that skips entries which cannot be archive links.
+///
+/// Used by both [`Cache::find_archive_references`] and [`find_archive_references_for_autoprune`].
+fn is_potential_archive_link(entry: &walkdir::DirEntry) -> bool {
+    !(entry.file_name() == "src"
+        || entry.file_name() == ".lock"
+        || entry.file_name() == ".gitignore"
+        || entry.path().extension().is_some_and(|ext| {
+            ext.eq_ignore_ascii_case("lock")
+                || ext.eq_ignore_ascii_case("whl")
+                || ext.eq_ignore_ascii_case("http")
+                || ext.eq_ignore_ascii_case("rev")
+                || ext.eq_ignore_ascii_case("msgpack")
+        }))
+}
+
+/// Resolve an archive link to its target path.
+///
+/// On Unix, archive references are symlinks, so [`canonicalize`] suffices.
+/// On Windows, archive references are files containing structured [`Link`] data.
+fn resolve_archive_link(root: &Path, path: &Path) -> io::Result<PathBuf> {
+    #[cfg(unix)]
+    {
+        let _ = root;
+        path.canonicalize()
+    }
+    #[cfg(windows)]
+    {
+        let contents = fs_err::read_to_string(path)?;
+        let link = Link::from_str(&contents)?;
+        if link.version != ARCHIVE_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "The link target does not exist.",
+            ));
+        }
+        root.join(CacheBucket::Archive.to_str())
+            .join(link.id.as_ref())
+            .canonicalize()
+    }
+}
+
+/// Prune cache entries that are safe to remove without an exclusive lock.
+///
+/// This function is designed to run in the background while other uv processes are using the cache.
+/// It only removes archives that have no symlinks pointing to them and are old enough that any
+/// in-flight operations would have completed. Archives are immutable and uniquely identified,
+/// so if there's no symlink referencing an archive, no process can be using it.
+///
+/// Note: This intentionally does NOT remove outdated bucket versions (e.g., `wheels-v4`), as
+/// different uv versions may be running concurrently on the same system.
+fn autoprune(root: &Path) -> io::Result<()> {
+    // Grace period: only remove archives older than this to avoid races with in-flight operations.
+    let grace_period = Duration::from_secs(3600);
+    let cutoff = SystemTime::now() - grace_period;
+
+    // Find all archive references.
+    let references = find_archive_references_for_autoprune(root)?;
+
+    // Remove old unreferenced archives.
+    let archive_dir = root.join(CacheBucket::Archive.to_str());
+    if archive_dir.is_dir() {
+        for entry in fs_err::read_dir(&archive_dir)? {
+            let Ok(entry) = entry else { continue };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+
+            // Skip if modified recently (might be in-flight).
+            if let Ok(modified) = metadata.modified() {
+                if modified > cutoff {
+                    continue;
+                }
+            }
+
+            // Skip if referenced.
+            if let Ok(canonical) = fs_err::canonicalize(entry.path()) {
+                if references.contains(&canonical) {
+                    continue;
+                }
+            }
+
+            debug!(
+                "Autoprune: removing unreferenced archive: {}",
+                entry.path().display()
+            );
+            if let Err(err) = rm_rf(entry.path()) {
+                debug!(
+                    "Autoprune: failed to remove {}: {err}",
+                    entry.path().display()
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Find all paths that reference entries in the archive bucket.
+///
+/// This is a simplified version of [`Cache::find_archive_references`] that only returns
+/// the set of referenced archive paths (not the reverse mapping).
+fn find_archive_references_for_autoprune(
+    root: &Path,
+) -> io::Result<rustc_hash::FxHashSet<PathBuf>> {
+    let mut references = rustc_hash::FxHashSet::default();
+
+    for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
+        let bucket_path = root.join(bucket.to_str());
+        if !bucket_path.is_dir() {
+            continue;
+        }
+
+        for entry in walkdir::WalkDir::new(&bucket_path)
+            .into_iter()
+            .filter_entry(is_potential_archive_link)
+        {
+            let entry = entry?;
+
+            // On Unix, archive references use symlinks.
+            #[cfg(unix)]
+            let is_link = entry.file_type().is_symlink();
+            // On Windows, archive references are files containing structured data.
+            #[cfg(windows)]
+            let is_link = entry.file_type().is_file();
+
+            if !is_link {
+                continue;
+            }
+
+            if let Ok(target) = resolve_archive_link(root, entry.path()) {
+                references.insert(target);
+            }
+        }
+    }
+
+    Ok(references)
 }
 
 /// An archive (unzipped wheel) that exists in the local cache.
@@ -1456,5 +1597,145 @@ mod tests {
         assert!(Link::from_str("archive/foo").is_err());
         assert!(Link::from_str("v1/foo").is_err());
         assert!(Link::from_str("archive-v0/").is_err());
+    }
+}
+
+#[cfg(test)]
+mod autoprune_tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+    use tempfile::TempDir;
+
+    fn create_test_cache() -> TempDir {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+
+        // Create current bucket versions
+        fs_err::create_dir_all(root.join(CacheBucket::Archive.to_str())).unwrap();
+        fs_err::create_dir_all(root.join(CacheBucket::Wheels.to_str())).unwrap();
+        fs_err::create_dir_all(root.join(CacheBucket::SourceDistributions.to_str())).unwrap();
+
+        // Create marker files
+        fs_err::write(root.join(".gitignore"), "*").unwrap();
+        fs_err::write(root.join("CACHEDIR.TAG"), "").unwrap();
+
+        temp
+    }
+
+    #[test]
+    fn test_autoprune_removes_old_unreferenced_archives() {
+        let temp = create_test_cache();
+        let root = temp.path();
+
+        // Create an unreferenced archive
+        let archive_path = root
+            .join(CacheBucket::Archive.to_str())
+            .join("test-archive-123");
+        fs_err::create_dir_all(&archive_path).unwrap();
+        fs_err::write(archive_path.join("somefile"), "data").unwrap();
+
+        // Set mtime to 2 hours ago (beyond grace period)
+        let old_time = SystemTime::now() - Duration::from_secs(7200);
+        filetime::set_file_mtime(
+            &archive_path,
+            filetime::FileTime::from_system_time(old_time),
+        )
+        .unwrap();
+
+        assert!(archive_path.exists());
+
+        autoprune(root).unwrap();
+
+        // Unreferenced old archive should be removed
+        assert!(!archive_path.exists());
+    }
+
+    #[test]
+    fn test_autoprune_preserves_recent_unreferenced_archives() {
+        let temp = create_test_cache();
+        let root = temp.path();
+
+        // Create an unreferenced archive with recent mtime
+        let archive_path = root
+            .join(CacheBucket::Archive.to_str())
+            .join("recent-archive");
+        fs_err::create_dir_all(&archive_path).unwrap();
+        fs_err::write(archive_path.join("somefile"), "data").unwrap();
+        // mtime is now (within grace period)
+
+        autoprune(root).unwrap();
+
+        // Recent archive should be preserved (grace period protection)
+        assert!(archive_path.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_autoprune_preserves_referenced_archives() {
+        let temp = create_test_cache();
+        let root = temp.path();
+
+        // Create an archive
+        let archive_path = root
+            .join(CacheBucket::Archive.to_str())
+            .join("referenced-archive");
+        fs_err::create_dir_all(&archive_path).unwrap();
+        fs_err::write(archive_path.join("somefile"), "data").unwrap();
+
+        // Set mtime to 2 hours ago
+        let old_time = SystemTime::now() - Duration::from_secs(7200);
+        filetime::set_file_mtime(
+            &archive_path,
+            filetime::FileTime::from_system_time(old_time),
+        )
+        .unwrap();
+
+        // Create a symlink referencing the archive
+        let wheel_dir = root
+            .join(CacheBucket::Wheels.to_str())
+            .join("pypi")
+            .join("somepackage");
+        fs_err::create_dir_all(&wheel_dir).unwrap();
+        fs_err::os::unix::fs::symlink(&archive_path, wheel_dir.join("link")).unwrap();
+
+        autoprune(root).unwrap();
+
+        // Referenced archive should be preserved even though it's old
+        assert!(archive_path.exists());
+    }
+
+    #[test]
+    fn test_find_archive_references_empty() {
+        let temp = create_test_cache();
+        let root = temp.path();
+
+        let refs = find_archive_references_for_autoprune(root).unwrap();
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_find_archive_references_with_symlinks() {
+        let temp = create_test_cache();
+        let root = temp.path();
+
+        // Create an archive
+        let archive_path = root.join(CacheBucket::Archive.to_str()).join("my-archive");
+        fs_err::create_dir_all(&archive_path).unwrap();
+
+        // Create symlinks in wheels bucket
+        let wheel_dir = root
+            .join(CacheBucket::Wheels.to_str())
+            .join("pypi")
+            .join("pkg");
+        fs_err::create_dir_all(&wheel_dir).unwrap();
+        fs_err::os::unix::fs::symlink(&archive_path, wheel_dir.join("link1")).unwrap();
+        fs_err::os::unix::fs::symlink(&archive_path, wheel_dir.join("link2")).unwrap();
+
+        let refs = find_archive_references_for_autoprune(root).unwrap();
+
+        // Should find the canonical path of the archive
+        let canonical = fs_err::canonicalize(&archive_path).unwrap();
+        assert!(refs.contains(&canonical));
     }
 }
