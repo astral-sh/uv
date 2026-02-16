@@ -659,7 +659,7 @@ jobs:
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12.7"
+          python-version: "3.14.3"
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -966,7 +966,7 @@ jobs:
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
