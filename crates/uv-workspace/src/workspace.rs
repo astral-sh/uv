@@ -1617,8 +1617,8 @@ fn has_only_gitignored_files(path: &Path) -> bool {
             return false;
         };
 
-        // Skip the root directory itself.
-        if entry.path() == path {
+        // Skip directories.
+        if entry.path().is_dir() {
             continue;
         }
 
