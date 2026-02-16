@@ -880,9 +880,8 @@ impl Lock {
         let fork_markers = fork_markers
             .into_iter()
             .map(|marker| {
-                let complexified =
-                    SimplifiedMarkerTree::new(&requires_python, marker.combined())
-                        .into_marker(&requires_python);
+                let complexified = SimplifiedMarkerTree::new(&requires_python, marker.combined())
+                    .into_marker(&requires_python);
                 UniversalMarker::from_combined(complexified)
             })
             .collect();
