@@ -962,6 +962,81 @@ fn workspace_gitignored_member() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that workspace discovery skips directories that only contain gitignored
+/// files even if they're nested inside non-ignored directories.
+#[test]
+fn workspace_gitignored_member_in_subdirectory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Build the main workspace ...
+    let workspace = context.temp_dir.child("workspace");
+    workspace.child("pyproject.toml").write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+    "#})?;
+
+    // ... with a `.gitignore` that ignores `__pycache__` ...
+    workspace.child(".gitignore").write_str("__pycache__/\n")?;
+
+    // ... with a  ...
+    let deps = indoc! {r#"
+        dependencies = ["b"]
+
+        [tool.uv.sources]
+        b = { workspace = true }
+    "#};
+    make_project(&workspace.join("packages").join("a"), "a", deps)?;
+
+    // ... and b.
+    let deps = indoc! {r"
+    "};
+    make_project(&workspace.join("packages").join("b"), "b", deps)?;
+
+    // ... and a c that only contains gitignored files.
+    fs_err::create_dir_all(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("foo")
+            .join("__pycache__"),
+    )?;
+    fs_err::write(
+        workspace
+            .join("packages")
+            .join("c")
+            .join("foo")
+            .join("__pycache__")
+            .join("test.cpython-312.pyc"),
+        "fake",
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock: SourceLock = toml::from_str(&fs_err::read_to_string(workspace.join("uv.lock"))?)?;
+
+    assert_json_snapshot!(lock.sources(), @r#"
+    {
+      "a": {
+        "editable": "packages/a"
+      },
+      "b": {
+        "editable": "packages/b"
+      }
+    }
+    "#);
+
+    Ok(())
+}
+
 /// Ensure that workspace discovery skips directories that only contain files ignored via
 /// `.ignore` (not just `.gitignore`).
 #[test]
