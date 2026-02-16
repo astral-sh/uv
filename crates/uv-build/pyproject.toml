@@ -1,6 +1,6 @@
 [project]
 name = "uv-build"
-version = "0.10.2"
+version = "0.10.3"
 description = "The uv build backend"
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
