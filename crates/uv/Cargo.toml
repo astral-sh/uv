@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.10.2"
+version = "0.10.3"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }

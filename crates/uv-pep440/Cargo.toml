@@ -1,6 +1,6 @@
 [package]
 name = "uv-pep440"
-version = "0.0.22"
+version = "0.0.23"
 description = "This is an internal component crate of uv"
 license = "Apache-2.0 OR BSD-2-Clause"
 include = ["/src", "Changelog.md", "License-Apache", "License-BSD", "Readme.md", "pyproject.toml"]

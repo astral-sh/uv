@@ -3,6 +3,38 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.3
+
+Released on 2026-02-16.
+
+### Enhancements
+
+- Don't open lock files for writing ([#17956](https://github.com/astral-sh/uv/pull/17956))
+- Make trampoline error messages consistent with uv proper ([#17969](https://github.com/astral-sh/uv/pull/17969))
+
+### Preview features
+
+- Add support for ruff version constraints and `exclude-newer` in `uv format` ([#17651](https://github.com/astral-sh/uv/pull/17651))
+- Fix parent path handling with bare scripts ([#17965](https://github.com/astral-sh/uv/pull/17965))
+- Use version constraints for default ruff version in `uv format` ([#17977](https://github.com/astral-sh/uv/pull/17977))
+
+### Bug fixes
+
+- Do not match cpython 3.10 for cpython-3.1 ([#17972](https://github.com/astral-sh/uv/pull/17972))
+- Fix handling of `--allow-existing` with minor version links on Windows ([#17978](https://github.com/astral-sh/uv/pull/17978))
+- Fix panic in `debug!` log ([#17974](https://github.com/astral-sh/uv/pull/17974))
+- More resilient retry timer ([#18007](https://github.com/astral-sh/uv/pull/18007))
+- Reject `u64::MAX` in version segments to prevent overflow ([#17985](https://github.com/astral-sh/uv/pull/17985))
+
+### Documentation
+
+- Use trixie instead of bookworm in the docs ([#17991](https://github.com/astral-sh/uv/pull/17991))
+
+### Other changes
+
+- Add CPython 3.15.0a6 ([#17987](https://github.com/astral-sh/uv/pull/17987))
+- Log which preview features are enabled ([#17968](https://github.com/astral-sh/uv/pull/17968))
+
 ## 0.10.2
 
 Released on 2026-02-10.
