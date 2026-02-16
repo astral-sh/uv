@@ -12,7 +12,6 @@ use std::io;
 use std::io::{BufReader, Cursor, Write};
 use std::path::{Component, Path, PathBuf};
 use tar::{EntryType, Header};
-use tempfile::NamedTempFile;
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
@@ -39,7 +38,7 @@ pub fn build_source_dist(
         fs_err::remove_file(&source_dist_path)?;
     }
 
-    let temp_file = NamedTempFile::new_in(source_dist_directory)?;
+    let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
     let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
