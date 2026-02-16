@@ -313,7 +313,7 @@ jobs:
           packages-dir: "astral-test-pypa-gh-action/dist"
 
       - name: "Request GitLab OIDC tokens for impersonation"
-        uses: digital-blueprint/gitlab-pipeline-trigger-action@20e77989b24af658ba138a0aa5291bdc657f1505 # v1.3.0
+        uses: digital-blueprint/gitlab-pipeline-trigger-action@c59b56e9d2688ab42c1304322ac8831a4ef6f7d2 # v1.4.0
         with:
           host: gitlab.com
           id: astral-test-publish/astral-test-gitlab-pypi-tp
