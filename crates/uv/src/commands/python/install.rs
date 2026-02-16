@@ -1021,7 +1021,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+            Err(uv_python::managed::Error::LinkExecutable { to, err })
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(
