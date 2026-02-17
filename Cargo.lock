@@ -962,6 +962,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "combine"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+dependencies = [
+ "bytes",
+ "memchr",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6058,7 +6068,7 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
- "reqwest",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "tempfile",
@@ -6317,6 +6327,7 @@ dependencies = [
  "uv-torch",
  "uv-version",
  "uv-warnings",
+ "webpki-root-certs",
  "wiremock",
 ]
 
