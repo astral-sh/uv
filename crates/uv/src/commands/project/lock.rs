@@ -1078,20 +1078,14 @@ impl ValidatedLock {
             }
         }
 
-        match upgrade {
-            Upgrade::None => {}
-            Upgrade::All => {
-                // If the user specified `--upgrade`, then we can't use the existing lockfile.
-                debug!("Ignoring existing lockfile due to `--upgrade`");
-                return Ok(Self::Unusable(lock));
-            }
-            Upgrade::Packages(_) => {
-                // This is handled below, after some checks regarding fork
-                // markers. In particular, we'd like to return `Preferable`
-                // here, but we shouldn't if the fork markers cannot be
-                // reused.
-            }
+        if upgrade.is_all() {
+            // If the user specified `--upgrade`, then we can't use the existing lockfile.
+            debug!("Ignoring existing lockfile due to `--upgrade`");
+            return Ok(Self::Unusable(lock));
         }
+        // If upgrade is `Packages`, this is handled below, after some checks regarding fork
+        // markers. In particular, we'd like to return `Preferable` here, but we shouldn't if
+        // the fork markers cannot be reused.
 
         // NOTE: It's important that this appears before any possible path that
         // returns `Self::Preferable`. In particular, if our fork markers are
@@ -1200,7 +1194,7 @@ impl ValidatedLock {
 
         // If the user specified `--upgrade-package`, then at best we can prefer some of
         // the existing versions.
-        if let Upgrade::Packages(_) = upgrade {
+        if !(upgrade.is_none() || upgrade.is_all()) {
             debug!("Resolving despite existing lockfile due to `--upgrade-package`");
             return Ok(Self::Preferable(lock));
         }
