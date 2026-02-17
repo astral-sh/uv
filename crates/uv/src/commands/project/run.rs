@@ -205,6 +205,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // The lockfile used for the base environment.
     let mut base_lock: Option<(Lock, PathBuf)> = None;
 
+    // The workspace for the base environment.
+    let mut workspace: Option<Workspace> = None;
+
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
@@ -639,6 +642,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
         }
 
+        workspace = project.as_ref().map(|p| p.workspace().clone());
+
         if let Some(project) = project {
             if let Some(project_name) = project.project_name() {
                 debug!(
@@ -1015,6 +1020,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 &base_interpreter,
                 python_platform.as_ref(),
                 &settings,
+                workspace.as_ref(),
                 &client_builder,
                 &sync_state,
                 if show_resolution {
