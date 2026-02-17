@@ -253,7 +253,11 @@ impl LockedFile {
         }
 
         // If path already exists, return it.
-        if let Ok(file) = fs_err::OpenOptions::new().read(true).open(path.as_ref()) {
+        if let Ok(file) = fs_err::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path.as_ref())
+        {
             return Ok(file);
         }
 
@@ -274,6 +278,7 @@ impl LockedFile {
                 if err.error.kind() == std::io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
+                        .write(true)
                         .open(path.as_ref())
                         .map_err(Into::into)
                 } else if matches!(
@@ -295,6 +300,7 @@ impl LockedFile {
                     // bits, it's less likely to ever matter.
                     let file = fs_err::OpenOptions::new()
                         .read(true)
+                        .write(true)
                         .create(true)
                         .open(path.as_ref())?;
 
