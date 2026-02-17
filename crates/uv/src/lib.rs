@@ -194,7 +194,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             );
             let client_builder = BaseClientBuilder::new(
                 settings.network_settings.connectivity,
-                settings.network_settings.native_tls,
+                settings.network_settings.tls_backend,
                 settings.network_settings.allow_insecure_host,
                 settings.preview,
                 settings.network_settings.read_timeout,
@@ -490,7 +490,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
-        globals.network_settings.native_tls,
+        globals.network_settings.tls_backend,
         globals.network_settings.allow_insecure_host.clone(),
         globals.preview,
         globals.network_settings.read_timeout,

@@ -322,7 +322,7 @@
       "type": ["boolean", "null"]
     },
     "native-tls": {
-      "description": "Whether to use the native-tls TLS backend instead of rustls.\n\nBy default, uv uses the rustls TLS backend, which loads certificates from the platform's\nnative certificate store via the `rustls-platform-verifier` crate. This provides a good\nbalance of portability and performance across platforms.\n\nHowever, in some cases, you may want to use the native-tls backend instead, which uses\nthe platform's native TLS implementation (e.g., SChannel on Windows, Secure Transport on\nmacOS, OpenSSL on Linux).",
+      "description": "Whether to use the native-tls TLS backend instead of the default rustls backend.\n\nBy default, uv uses rustls with bundled webpki-root-certs certificates, which provides\nconsistent and portable TLS verification across all platforms.\n\nSetting this to `true` is equivalent to `--tls-backend native-tls`, which uses\nthe platform's native TLS implementation.",
       "type": ["boolean", "null"]
     },
     "no-binary": {
