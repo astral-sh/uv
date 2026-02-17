@@ -5,7 +5,7 @@ use axoupdater::{AxoUpdater, AxoupdateError, UpdateRequest};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-use uv_client::{BaseClientBuilder, WrappedReqwestError};
+use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
@@ -210,7 +210,7 @@ pub(crate) async fn self_update(
                     )?;
                     Ok(ExitStatus::Error)
                 } else {
-                    Err(WrappedReqwestError::from(err).into())
+                    Err(err.into())
                 }
             } else {
                 Err(err.into())
