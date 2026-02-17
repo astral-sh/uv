@@ -130,6 +130,11 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
+    // Filter SSL certificate loading debug messages (environment-dependent)
+    (
+        r"DEBUG Loaded \d+ certificate\(s\) from SSL_CERT_[A-Z]+: [^\n]+\n",
+        "",
+    ),
 ];
 
 /// Create a context for tests which simplifies shared behavior across tests.
