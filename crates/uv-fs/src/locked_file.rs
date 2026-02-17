@@ -257,7 +257,8 @@ impl LockedFile {
 
         // While `flock` itself does not need write permissions to take an exclusive lock, on Linux
         // it can be silently translated to a POSIX byte-range lock (`fcntl`/`lockf`) on the whole
-        // file when NFS is involved. POSIX locks require the file to be opened for writing.
+        // file when NFS is involved. Exclusive POSIX locks require the file to be opened for
+        // writing.
         //
         // To accommodate this, we conditionally open for writing when taking exclusive locks.
         //
