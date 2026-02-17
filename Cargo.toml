@@ -201,7 +201,7 @@ reqsign = { version = "0.19.0", features = [
   "google",
   "default-context",
 ], default-features = false }
-reqwest = { version = "0.13.1", default-features = false, features = [
+reqwest = { version = "=0.13.1", default-features = false, features = [
   "json",
   "gzip",
   "deflate",
