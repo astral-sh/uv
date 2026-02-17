@@ -255,14 +255,20 @@ impl LockedFile {
             }
         }
 
-        // Right now our locked files should be world writable anyway but in the
-        // future when we want to support respecting the umask, they might not
-        // be world writable and so this will begin to matter.
+        // While `flock` itself does not need write permissions to take an exclusive lock, on Linux
+        // it can be silently translated to a POSIX byte-range lock (`fcntl`/`lockf`) on the whole
+        // file when NFS is involved. POSIX locks require the file to be opened for writing.
         //
-        // If we're trying to lock exclusively, we are probably going to need to
-        // write something in the location of the lockfile anyway. So in the
-        // case that the lockfile is _not_ writable by us, we would just be
-        // moving the error earlier, which should be fine.
+        // To accommodate this, we conditionally open for writing when taking exclusive locks.
+        //
+        // Future versions of uv may respect the umask when creating lock files, which could produce
+        // lock files we cannot open for writing. This is acceptable: exclusive locks are only used
+        // when we intend to modify the locked resource, so the lock file permissions should mirror
+        // the resource permissions. If we cannot open the lock file for writing, we would have
+        // failed anyway when opening the resource itself for writing.
+        //
+        // Therefore trying to only open for writing when we know we're on NFS would be an
+        // unnecessary complication.
         let need_write = match mode {
             LockedFileMode::Shared => false,
             LockedFileMode::Exclusive => true,
@@ -342,6 +348,8 @@ impl LockedFile {
         }
     }
 
+    // TODO(tk): Investigate if the file must be opened for writing in order to take a shared lock
+    // on windows.
     #[cfg(not(unix))]
     fn create(
         path: impl AsRef<Path>,
