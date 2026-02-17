@@ -259,7 +259,7 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Failure)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
+            diagnostics::OperationDiagnostic::with_tls_backend(client_builder.tls_backend())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
