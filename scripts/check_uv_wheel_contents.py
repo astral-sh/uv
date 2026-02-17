@@ -36,6 +36,9 @@ uv_build_expected = {
 def check_uv_wheel(uv_wheel: Path) -> None:
     if uv_wheel.name.startswith("uv-"):
         expected = uv_expected
+        # Windows wheels contain uvw, the windowed launcher.
+        if "-win" in uv_wheel.name:
+            expected = expected | {"uv-VERSION.data/scripts/uvw"}
     elif uv_wheel.name.startswith("uv_build-"):
         expected = uv_build_expected
     else:
@@ -52,8 +55,8 @@ def check_uv_wheel(uv_wheel: Path) -> None:
     }
     if expected != actual:
         # Verbose log
-        print(f"Expected: {expected}", file=sys.stderr)
-        print(f"Actual: {actual}", file=sys.stderr)
+        print(f"Expected: {sorted(expected)}", file=sys.stderr)
+        print(f"Actual:   {sorted(actual)}", file=sys.stderr)
         print("", file=sys.stderr)
         # Concise error
         print("error: uv wheel has unexpected contents", file=sys.stderr)
