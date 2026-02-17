@@ -226,10 +226,12 @@ impl LoweredRequirement {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
                             else {
-                                return Err(LoweringError::MissingIndex(
-                                    requirement.name.clone(),
+                                let hint = missing_index_hint(locations, &index);
+                                return Err(LoweringError::MissingIndex {
+                                    package: requirement.name.clone(),
                                     index,
-                                ));
+                                    hint,
+                                });
                             };
                             if let Some(credentials) = index.credentials() {
                                 credentials_cache.store_credentials(index.raw_url(), credentials);
@@ -462,10 +464,12 @@ impl LoweredRequirement {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
                             else {
-                                return Err(LoweringError::MissingIndex(
-                                    requirement.name.clone(),
+                                let hint = missing_index_hint(locations, &index);
+                                return Err(LoweringError::MissingIndex {
+                                    package: requirement.name.clone(),
                                     index,
-                                ));
+                                    hint,
+                                });
                             };
                             if let Some(credentials) = index.credentials() {
                                 credentials_cache.store_credentials(index.raw_url(), credentials);
@@ -528,8 +532,12 @@ pub enum LoweringError {
     MoreThanOneGitRef,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Package `{0}` references an undeclared index: `{1}`")]
-    MissingIndex(PackageName, IndexName),
+    #[error("Package `{package}` references an undeclared index: `{index}`{}", hint.as_deref().unwrap_or_default())]
+    MissingIndex {
+        package: PackageName,
+        index: IndexName,
+        hint: Option<String>,
+    },
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
@@ -577,6 +585,23 @@ impl std::fmt::Display for SourceKind {
             Self::Registry => write!(f, "registry"),
         }
     }
+}
+
+/// Generate a hint for a missing index if the index name is found in a configuration file
+/// (e.g., `uv.toml`) rather than in the project's `pyproject.toml`.
+fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<String> {
+    let config_index = locations
+        .simple_indexes()
+        .filter(|idx| !matches!(idx.origin, Some(Origin::Cli)))
+        .find(|idx| idx.name.as_ref().is_some_and(|name| *name == *index));
+
+    config_index.map(|_| {
+        format!(
+            "\n\n  hint: `{index}` was found in a configuration file, but indexes \
+             referenced via `tool.uv.sources` must be defined in the project's \
+             `pyproject.toml` (e.g., `[[tool.uv.index]]`)"
+        )
+    })
 }
 
 /// Convert a Git source into a [`RequirementSource`].
