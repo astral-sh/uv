@@ -41,7 +41,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1daa54020e05aa0b163ee10434fff35a0f18d28a1cafa142bd1290e1abe630e"
 dependencies = [
  "astral-reqwest-middleware",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "secrecy",
  "serde",
  "serde_json",
@@ -239,7 +239,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "serde",
  "thiserror 2.0.18",
  "tower-service",
@@ -258,7 +258,7 @@ dependencies = [
  "getrandom 0.2.16",
  "http",
  "hyper",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -312,7 +312,7 @@ dependencies = [
  "http-content-range",
  "itertools 0.14.0",
  "memmap2",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -3999,7 +3999,7 @@ dependencies = [
  "http",
  "http-body-util",
  "reqsign-core",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "wasm-bindgen-futures",
 ]
 
@@ -4043,9 +4043,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.2"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -5906,7 +5906,7 @@ dependencies = [
  "petgraph",
  "predicates",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rkyv",
  "rustc-hash",
  "self-replace",
@@ -6006,7 +6006,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqsign",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rust-netrc",
  "rustc-hash",
  "schemars",
@@ -6068,7 +6068,7 @@ dependencies = [
  "fs-err",
  "futures",
  "jiff",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "serde",
  "serde_json",
  "tempfile",
@@ -6292,7 +6292,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "rcgen",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
@@ -6341,7 +6341,7 @@ dependencies = [
  "fs-err",
  "insta",
  "rayon",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rustc-hash",
  "same-file",
  "schemars",
@@ -6385,7 +6385,7 @@ dependencies = [
  "owo-colors",
  "poloto",
  "pretty_assertions",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "resvg",
  "schemars",
  "serde",
@@ -6477,7 +6477,7 @@ dependencies = [
  "insta",
  "nanoid",
  "owo-colors",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -6583,7 +6583,7 @@ dependencies = [
  "md-5",
  "rayon",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rustc-hash",
  "sha2",
  "tar",
@@ -6647,7 +6647,7 @@ dependencies = [
  "dashmap",
  "fs-err",
  "owo-colors",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6962,7 +6962,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -7041,7 +7041,7 @@ dependencies = [
  "owo-colors",
  "ref-cast",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -7142,7 +7142,7 @@ dependencies = [
  "itertools 0.14.0",
  "memchr",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "rustc-hash",
  "tempfile",
  "test-case",
@@ -7346,7 +7346,7 @@ dependencies = [
  "itertools 0.14.0",
  "predicates",
  "regex",
- "reqwest 0.13.2",
+ "reqwest 0.13.1",
  "similar",
  "tempfile",
  "tokio",
@@ -7670,9 +7670,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.5.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
 dependencies = [
  "futures-util",
  "js-sys",
