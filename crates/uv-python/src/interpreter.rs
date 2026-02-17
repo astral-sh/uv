@@ -267,7 +267,16 @@ impl Interpreter {
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
         // Maybe this should return `false` if it's a target?
-        self.sys_prefix != self.sys_base_prefix
+
+        // A traditional virtualenv has sys.prefix != sys.base_prefix.
+        if self.sys_prefix != self.sys_base_prefix {
+            return true;
+        }
+
+        // A "real environment" (created by `uv venv --relocatable` with a managed Python)
+        // has sys.prefix == sys.base_prefix because the entire Python installation is
+        // linked into the environment. We detect it by the presence of `pyvenv.cfg`.
+        self.sys_prefix.join("pyvenv.cfg").is_file()
     }
 
     /// Returns `true` if the environment is a `--target` environment.

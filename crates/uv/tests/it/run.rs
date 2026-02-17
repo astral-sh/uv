@@ -1491,6 +1491,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
     fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
+    // The test Python is not managed, so `--relocatable` creates a regular relocatable
+    // venv (not a real environment) and the overlay cache is preserved.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
     success: true
     exit_code: 0
@@ -1550,6 +1552,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     );
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
+    // Cache is preserved since this is a regular relocatable venv (not a real environment).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
     success: true
     exit_code: 0

@@ -23,7 +23,7 @@ use url::Url;
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
-use uv_fs::link::{LinkError, LinkMode, LinkOptions, link_dir};
+use uv_fs::link::LinkError;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -35,7 +35,7 @@ use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
 use crate::installation::PythonInstallationKey;
-use crate::managed::ManagedPythonInstallation;
+use crate::managed::{ManagedPythonInstallation, link_python_installation};
 use crate::python_version::{BuildVersionError, python_build_version_from_env};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
@@ -1068,48 +1068,6 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
     Ok(buf)
 }
 
-/// Check if a file should be copied instead of hard-linked.
-///
-/// These files are modified after installation and must be copied to avoid
-/// corrupting the cache:
-/// - `_sysconfigdata_*.py` - patched by `ensure_sysconfig_patched()`
-/// - `*.pc` files in `pkgconfig/` directories - patched by sysconfig
-/// - `libpython*.dylib` on macOS - patched by `ensure_dylib_patched()`
-fn needs_mutable_copy(path: &Path) -> bool {
-    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
-        return false;
-    };
-
-    let extension = path.extension().and_then(|e| e.to_str());
-
-    // _sysconfigdata_*.py files
-    if file_name.starts_with("_sysconfigdata_")
-        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
-    {
-        return true;
-    }
-
-    // *.pc files in pkgconfig directories
-    if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("pc")) {
-        if let Some(parent) = path.parent() {
-            if parent.file_name().and_then(|n| n.to_str()) == Some("pkgconfig") {
-                return true;
-            }
-        }
-        return true;
-    }
-
-    // libpython*.dylib on macOS
-    #[cfg(target_os = "macos")]
-    if file_name.starts_with("libpython")
-        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("dylib"))
-    {
-        return true;
-    }
-
-    false
-}
-
 impl ManagedPythonDownload {
     /// Return a display type that includes the build information.
     pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
@@ -1258,9 +1216,7 @@ impl ManagedPythonDownload {
                 }
 
                 // Link from unpacked cache to installation directory
-                let options = LinkOptions::new(LinkMode::default())
-                    .with_mutable_copy_filter(needs_mutable_copy);
-                link_dir(&target_unpacked, &path, &options)?;
+                link_python_installation(&target_unpacked, &path, true, false)?;
 
                 return Ok(DownloadResult::Fetched(path));
             }
@@ -1446,9 +1402,7 @@ impl ManagedPythonDownload {
             }
 
             // Link from unpacked cache to installation directory
-            let options =
-                LinkOptions::new(LinkMode::default()).with_mutable_copy_filter(needs_mutable_copy);
-            link_dir(&target_unpacked, &path, &options)?;
+            link_python_installation(&target_unpacked, &path, true, false)?;
         } else {
             // No caching - just move to target
             debug!("Moving {} to {}", extracted.display(), path.user_display());

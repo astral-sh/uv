@@ -3,6 +3,8 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+#[cfg(unix)]
+use uv_fs::Simplified;
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
@@ -1305,6 +1307,301 @@ fn verify_pyvenv_cfg_relocatable() {
     // be generated when --relocatable is used.
     let activate_csh = scripts.child("activate.csh");
     activate_csh.assert(predicates::path::missing());
+}
+
+/// With `--relocatable` and a managed (standalone) Python, a "real environment" is created
+/// by hardlinking the entire Python installation into the environment directory.
+#[test]
+fn relocatable_real_environment() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install a managed Python.
+    context.python_install().arg("3.12").assert().success();
+
+    // Create a relocatable environment using the managed Python.
+    let venv_dir = context.temp_dir.child(".venv");
+    context
+        .venv()
+        .arg(venv_dir.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    let pyvenv_cfg = venv_dir.child("pyvenv.cfg");
+    venv_dir.assert(predicates::path::is_dir());
+    pyvenv_cfg.assert(predicates::path::is_file());
+
+    // Relocatable flag is set.
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+
+    let scripts = if cfg!(windows) {
+        venv_dir.child("Scripts")
+    } else {
+        venv_dir.child("bin")
+    };
+
+    // The Python executable exists in the environment's scripts directory.
+    // On Windows, it's copied from the root into Scripts/ along with the DLLs.
+    let python = scripts.child(format!("python{}", std::env::consts::EXE_SUFFIX));
+    assert!(
+        python.path().exists(),
+        "python executable should exist in the environment"
+    );
+
+    // On Unix, `python` should be a symlink to the versioned executable.
+    #[cfg(unix)]
+    {
+        assert!(
+            python.path().is_symlink(),
+            "python should be a symlink in a real environment"
+        );
+    }
+
+    // The standard library should be present (hardlinked from the installation).
+    let lib_dir = if cfg!(windows) {
+        venv_dir.child("Lib")
+    } else {
+        venv_dir.child("lib").child("python3.12")
+    };
+    lib_dir.assert(predicates::path::is_dir());
+
+    // `os.py` is part of the standard library and should be present.
+    lib_dir.child("os.py").assert(predicates::path::is_file());
+
+    // `site-packages` should exist for installing packages.
+    let site_packages = if cfg!(windows) {
+        venv_dir.child("Lib").child("site-packages")
+    } else {
+        venv_dir
+            .child("lib")
+            .child("python3.12")
+            .child("site-packages")
+    };
+    site_packages.assert(predicates::path::is_dir());
+
+    // Activation scripts are present.
+    scripts
+        .child("activate")
+        .assert(predicates::path::is_file());
+
+    // activate.csh should not be generated for relocatable environments.
+    scripts
+        .child("activate.csh")
+        .assert(predicates::path::missing());
+
+    // Real environments omit `home` so CPython uses executable-relative path detection,
+    // which ensures the environment works after relocation.
+    pyvenv_cfg.assert(predicates::str::contains("home = ").not());
+
+    // Sysconfig data should reference the environment path, not the source installation.
+    #[cfg(unix)]
+    {
+        let venv_path = venv_dir.path().simplified_display().to_string();
+        let managed_path = context.temp_dir.child("managed").path().to_path_buf();
+
+        // Find _sysconfigdata_*.py in the environment.
+        let sysconfigdata = walkdir::WalkDir::new(lib_dir.path())
+            .into_iter()
+            .filter_map(Result::ok)
+            .find(|e| {
+                let path = e.path();
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with("_sysconfigdata_"))
+                    && path.extension().is_some_and(|ext| ext == "py")
+            })
+            .expect("_sysconfigdata_*.py should exist in the environment");
+
+        let contents = fs_err::read_to_string(sysconfigdata.path()).unwrap();
+
+        // Paths in sysconfig should reference the environment, not the managed installation.
+        let managed_str = managed_path.simplified_display().to_string();
+        assert!(
+            !contents.contains(&managed_str),
+            "sysconfig data should not reference the managed installation path"
+        );
+        assert!(
+            contents.contains(&venv_path),
+            "sysconfig data should reference the environment path"
+        );
+    }
+
+    // Install a package into the real environment with `uv pip install`.
+    context
+        .pip_install()
+        .env(EnvVars::VIRTUAL_ENV, venv_dir.as_os_str())
+        .arg("iniconfig")
+        .assert()
+        .success();
+
+    // The package should be installed in site-packages.
+    site_packages
+        .child("iniconfig")
+        .assert(predicates::path::is_dir());
+}
+
+/// With `--relocatable` and a managed Python, `uv sync` works with a pre-created real environment.
+#[test]
+fn relocatable_real_environment_sync() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install a managed Python.
+    context.python_install().arg("3.12").assert().success();
+
+    // Create a project with a dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // First, create a real environment with `uv venv --relocatable`.
+    let venv_dir = context.temp_dir.child(".venv");
+    context
+        .venv()
+        .arg(venv_dir.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    // Run `uv sync` which should reuse the real environment and install dependencies.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyvenv_cfg = venv_dir.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+
+    // The standard library should be present (hardlinked from the installation).
+    let lib_dir = if cfg!(windows) {
+        venv_dir.child("Lib")
+    } else {
+        venv_dir.child("lib").child("python3.12")
+    };
+    lib_dir.child("os.py").assert(predicates::path::is_file());
+
+    // The dependency should be installed.
+    let site_packages = if cfg!(windows) {
+        venv_dir.child("Lib").child("site-packages")
+    } else {
+        venv_dir
+            .child("lib")
+            .child("python3.12")
+            .child("site-packages")
+    };
+    site_packages
+        .child("iniconfig")
+        .assert(predicates::path::is_dir());
+
+    Ok(())
+}
+
+/// Same as `relocatable_real_environment_sync` but with Python 3.14.
+///
+/// Python 3.14 changed how `sys.prefix` is calculated for virtual environments:
+/// `getpath.py` now sets `sys.prefix = venv_prefix` directly, whereas 3.12-3.13
+/// relied on `site.py` to do `sys.prefix = dirname(dirname(executable))`. Our
+/// Scripts/ layout works with both code paths, but this test verifies it.
+#[test]
+fn relocatable_real_environment_sync_python314() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror()
+        .with_python_download_cache();
+
+    // Install a managed Python 3.14.
+    context.python_install().arg("3.14").assert().success();
+
+    // Create a project with a dependency.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.14"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // First, create a real environment with `uv venv --relocatable`.
+    let venv_dir = context.temp_dir.child(".venv");
+    context
+        .venv()
+        .arg(venv_dir.as_os_str())
+        .arg("--python")
+        .arg("3.14")
+        .arg("--relocatable")
+        .assert()
+        .success();
+
+    // Run `uv sync` which should reuse the real environment and install dependencies.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    let pyvenv_cfg = venv_dir.child("pyvenv.cfg");
+    pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
+
+    // The standard library should be present (linked from the installation).
+    let lib_dir = if cfg!(windows) {
+        venv_dir.child("Lib")
+    } else {
+        venv_dir.child("lib").child("python3.14")
+    };
+    lib_dir.child("os.py").assert(predicates::path::is_file());
+
+    // The dependency should be installed.
+    let site_packages = if cfg!(windows) {
+        venv_dir.child("Lib").child("site-packages")
+    } else {
+        venv_dir
+            .child("lib")
+            .child("python3.14")
+            .child("site-packages")
+    };
+    site_packages
+        .child("iniconfig")
+        .assert(predicates::path::is_dir());
+
+    Ok(())
 }
 
 /// With `relocatable-envs-default` preview feature, venvs are relocatable by default.
