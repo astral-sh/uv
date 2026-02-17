@@ -33,7 +33,7 @@ use url::Url;
 
 use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
 use uv_configuration::ProxyUrlKind;
-use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
+use uv_configuration::{KeyringProviderType, ProxyUrl, TlsBackend, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -89,7 +89,7 @@ pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
-    native_tls: bool,
+    tls_backend: TlsBackend,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -159,7 +159,7 @@ impl Default for BaseClientBuilder<'_> {
             keyring: KeyringProviderType::default(),
             preview: Preview::default(),
             allow_insecure_host: vec![],
-            native_tls: false,
+            tls_backend: TlsBackend::default(),
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -186,7 +186,7 @@ impl Default for BaseClientBuilder<'_> {
 impl<'a> BaseClientBuilder<'a> {
     pub fn new(
         connectivity: Connectivity,
-        native_tls: bool,
+        tls_backend: TlsBackend,
         allow_insecure_host: Vec<TrustedHost>,
         preview: Preview,
         read_timeout: Duration,
@@ -196,7 +196,7 @@ impl<'a> BaseClientBuilder<'a> {
         Self {
             preview,
             allow_insecure_host,
-            native_tls,
+            tls_backend,
             retries,
             connectivity,
             read_timeout,
@@ -237,12 +237,6 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn retries(mut self, retries: u32) -> Self {
         self.retries = retries;
-        self
-    }
-
-    #[must_use]
-    pub fn native_tls(mut self, native_tls: bool) -> Self {
-        self.native_tls = native_tls;
         self
     }
 
@@ -356,8 +350,8 @@ impl<'a> BaseClientBuilder<'a> {
         self.credentials_cache.store_credentials(url, credentials);
     }
 
-    pub fn is_native_tls(&self) -> bool {
-        self.native_tls
+    pub fn tls_backend(&self) -> TlsBackend {
+        self.tls_backend
     }
 
     pub fn is_offline(&self) -> bool {
@@ -646,22 +640,47 @@ impl<'a> BaseClientBuilder<'a> {
             Security::Insecure => client_builder.danger_accept_invalid_certs(true),
         };
 
-        // Choose TLS backend:
-        // - Use native-tls only when explicitly requested via --native-tls flag
-        // - Otherwise use rustls with platform-verifier (loads from OS certificate stores)
-        let client_builder = if self.native_tls {
-            client_builder.tls_backend_native()
-        } else {
-            client_builder.tls_backend_rustls()
-        };
+        // Choose TLS backend based on the configured option:
+        // - RustlsWebpki (default): rustls with embedded webpki-root-certs certificates
+        // - Rustls: rustls with platform-verifier (loads from OS certificate stores)
+        // - NativeTls: native-tls (system TLS implementation)
+        let client_builder = match self.tls_backend {
+            TlsBackend::NativeTls => {
+                let client_builder = client_builder.tls_backend_native();
+                // Merge custom certificates for native-tls
+                if !custom_certs.is_empty() {
+                    client_builder.tls_certs_merge(custom_certs.to_vec())
+                } else {
+                    client_builder
+                }
+            }
+            TlsBackend::Rustls => {
+                let client_builder = client_builder.tls_backend_rustls();
+                // Merge custom certificates for rustls with platform-verifier
+                if !custom_certs.is_empty() {
+                    client_builder.tls_certs_merge(custom_certs.to_vec())
+                } else {
+                    client_builder
+                }
+            }
+            TlsBackend::RustlsWebpki => {
+                // Convert webpki-root-certs to reqwest::Certificate objects
+                let webpki_certs: Vec<Certificate> = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+                    .iter()
+                    .filter_map(|cert_der| Certificate::from_der(cert_der).ok())
+                    .collect();
 
-        // Merge custom certificates from `SSL_CERT_FILE`/`SSL_CERT_DIR` with OS certificate store
-        // This works with both rustls and native-tls backends, since they are not supported
-        // natively on macOS/Windows, so we add them programmatically here.
-        let client_builder = if !custom_certs.is_empty() {
-            client_builder.tls_certs_merge(custom_certs.to_vec())
-        } else {
-            client_builder
+                let client_builder = client_builder
+                    .tls_backend_rustls()
+                    .tls_certs_only(webpki_certs);
+
+                // Merge custom certificates on top of webpki-root-certs
+                if !custom_certs.is_empty() {
+                    client_builder.tls_certs_merge(custom_certs.to_vec())
+                } else {
+                    client_builder
+                }
+            }
         };
 
         // Configure mTLS.

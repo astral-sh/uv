@@ -1,8 +1,15 @@
 # TLS certificates
 
-By default, uv uses the rustls TLS backend with platform-verifier, which loads certificates from the
-operating system's certificate store. This provides a balance of security, performance, and
-compatibility with corporate environments that use custom root certificates.
+By default, uv uses rustls with bundled
+[webpki-root-certs](https://crates.io/crates/webpki-root-certs) certificates, providing consistent
+and portable TLS verification across all platforms.
+
+Supported backends:
+
+- **rustls + webpki-root-certs (Default)**: Uses bundled roots for consistent behavior across
+  platforms.
+- **Native TLS**: Uses the platform's native TLS implementation (SChannel on Windows, Secure
+  Transport on macOS, OpenSSL on Linux).
 
 ## System certificates
 
@@ -17,10 +24,9 @@ To use custom CA certificates, you can set the `SSL_CERT_FILE` environment varia
 certificate bundle (PEM format), or set `SSL_CERT_DIR` to a directory containing certificate files
 (`.pem`, `.crt`, or `.cer` extensions).
 
-When using the default TLS backend (rustls), these custom certificates are merged with the
-platform's certificate store loaded via `rustls-platform-verifier`. When using `--native-tls`, the
-custom certificates are used alongside the certificates loaded from the platform's native
-certificate store.
+Custom certificates are merged with the certificate store used by the active TLS backend. When using
+the default rustls backend, they are layered on top of the bundled webpki-root-certs. When using
+native TLS, they are layered on top of the platform's certificate store.
 
 The `SSL_CERT_FILE` can point to a single certificate or a bundle containing multiple certificates.
 The `SSL_CERT_DIR` can contain multiple certificate files, and uv will load all valid certificates
