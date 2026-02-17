@@ -191,9 +191,9 @@ pub(crate) fn create(
     // Use the absolute path for all further operations.
     let location = absolute;
 
-    // If relocatable and using a standalone (managed) Python, create a "real environment"
+    // If relocatable and using a managed Python, create a "real environment"
     // by linking the entire Python installation into the environment directory.
-    if relocatable && interpreter.is_standalone() {
+    if relocatable && interpreter.is_managed() {
         return create_real_environment(
             &location,
             interpreter,

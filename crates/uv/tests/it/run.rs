@@ -1491,26 +1491,9 @@ fn run_with_overlay_interpreter() -> Result<()> {
     fs_err::remove_file(context.temp_dir.child("main_gui"))?;
 
     // The project's entrypoint should be rewritten to use the overlay interpreter.
-    // On Unix, the test Python is standalone so `--relocatable` creates a real environment,
-    // which changes the interpreter and invalidates the overlay cache — iniconfig gets
-    // reinstalled. On Windows, the test Python is not standalone so the venv stays regular
-    // and the cache is preserved.
-    #[cfg(unix)]
+    // The test Python is not managed, so `--relocatable` creates a regular relocatable
+    // venv (not a real environment) and the overlay cache is preserved.
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
-
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 4 packages in [TIME]
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    ");
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1569,24 +1552,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
     );
 
     // When layering the project on top (via `--with`), the overlay interpreter also should be used.
-    // Same platform split as above: real environment on Unix invalidates the cache.
-    #[cfg(unix)]
+    // Cache is preserved since this is a regular relocatable venv (not a real environment).
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/python
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
-     + idna==3.6
-     + sniffio==1.3.1
-    ");
-    #[cfg(windows)]
-    uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
