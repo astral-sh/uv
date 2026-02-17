@@ -8,8 +8,8 @@ use uv_configuration::{
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
-    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -169,6 +169,40 @@ impl Options {
             top_level,
             ..Default::default()
         }
+    }
+
+    /// Set the [`Origin`] on all indexes without an existing origin.
+    #[must_use]
+    pub fn with_origin(mut self, origin: Origin) -> Self {
+        if let Some(indexes) = &mut self.top_level.index {
+            for index in indexes {
+                index.origin.get_or_insert(origin);
+            }
+        }
+        if let Some(index_url) = &mut self.top_level.index_url {
+            index_url.try_set_origin(origin);
+        }
+        if let Some(extra_index_urls) = &mut self.top_level.extra_index_url {
+            for index_url in extra_index_urls {
+                index_url.try_set_origin(origin);
+            }
+        }
+        if let Some(pip) = &mut self.pip {
+            if let Some(indexes) = &mut pip.index {
+                for index in indexes {
+                    index.origin.get_or_insert(origin);
+                }
+            }
+            if let Some(index_url) = &mut pip.index_url {
+                index_url.try_set_origin(origin);
+            }
+            if let Some(extra_index_urls) = &mut pip.extra_index_url {
+                for index_url in extra_index_urls {
+                    index_url.try_set_origin(origin);
+                }
+            }
+        }
+        self
     }
 
     /// Resolve the [`Options`] relative to the given root directory.

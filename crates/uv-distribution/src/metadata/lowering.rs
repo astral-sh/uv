@@ -3,6 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use either::Either;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
@@ -532,7 +533,7 @@ pub enum LoweringError {
     MoreThanOneGitRef,
     #[error(transparent)]
     GitUrlParse(#[from] GitUrlParseError),
-    #[error("Package `{package}` references an undeclared index: `{index}`{}", hint.as_deref().unwrap_or_default())]
+    #[error("Package `{package}` references an undeclared index: `{index}`{}", if let Some(hint) = hint { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
     MissingIndex {
         package: PackageName,
         index: IndexName,
@@ -595,12 +596,18 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
         .filter(|idx| !matches!(idx.origin, Some(Origin::Cli)))
         .find(|idx| idx.name.as_ref().is_some_and(|name| *name == *index));
 
-    config_index.map(|_| {
-        format!(
-            "\n\n  hint: `{index}` was found in a configuration file, but indexes \
+    config_index.and_then(|idx| {
+        let source = match idx.origin {
+            Some(Origin::User) => "a user-level `uv.toml`",
+            Some(Origin::System) => "a system-level `uv.toml`",
+            Some(Origin::Project) => "a project-level `uv.toml`",
+            Some(Origin::Cli | Origin::RequirementsTxt) | None => return None,
+        };
+        Some(format!(
+            "Index `{index}` was found in {source}, but indexes \
              referenced via `tool.uv.sources` must be defined in the project's \
-             `pyproject.toml` (e.g., `[[tool.uv.index]]`)"
-        )
+             `pyproject.toml`"
+        ))
     })
 }
 
