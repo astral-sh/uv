@@ -1743,6 +1743,7 @@ pub(crate) async fn resolve_names(
     requirements: Vec<UnresolvedRequirementSpecification>,
     interpreter: &Interpreter,
     settings: &ResolverInstallerSettings,
+    workspace: Option<&Workspace>,
     client_builder: &BaseClientBuilder<'_>,
     state: &SharedState,
     concurrency: Concurrency,
@@ -1798,6 +1799,21 @@ pub(crate) async fn resolve_names(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires = if let Some(workspace) = workspace {
+        LoweredExtraBuildDependencies::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            sources,
+            client_builder.credentials_cache(),
+        )
+        .map_err(uv_distribution::Error::from)?
+    } else {
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+    }
+    .into_inner();
+
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
         .map(|mode| {
@@ -1843,11 +1859,6 @@ pub(crate) async fn resolve_names(
     let flat_index = FlatIndex::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
-
-    // Lower the extra build dependencies, if any.
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -1936,6 +1947,7 @@ pub(crate) async fn resolve_environment(
     python_platform: Option<&TargetTriple>,
     build_constraints: Constraints,
     settings: &ResolverSettings,
+    workspace: Option<&Workspace>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
@@ -1979,6 +1991,20 @@ pub(crate) async fn resolve_environment(
     } = spec.requirements;
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
+
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires = if let Some(workspace) = workspace {
+        LoweredExtraBuildDependencies::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            sources,
+            client_builder.credentials_cache(),
+        )?
+    } else {
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+    }
+    .into_inner();
 
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = pip::resolution_tags(None, python_platform, interpreter)?;
@@ -2080,11 +2106,6 @@ pub(crate) async fn resolve_environment(
 
     let workspace_cache = WorkspaceCache::default();
 
-    // Lower the extra build dependencies, if any.
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
-
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -2151,6 +2172,7 @@ pub(crate) async fn sync_environment(
     modifications: Modifications,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
+    workspace: Option<&Workspace>,
     client_builder: &BaseClientBuilder<'_>,
     state: &PlatformState,
     logger: Box<dyn InstallLogger>,
@@ -2179,6 +2201,20 @@ pub(crate) async fn sync_environment(
     } = settings;
 
     let client_builder = client_builder.clone().keyring(keyring_provider);
+
+    // Lower the extra build dependencies, if any.
+    let extra_build_requires = if let Some(workspace) = workspace {
+        LoweredExtraBuildDependencies::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            &sources,
+            client_builder.credentials_cache(),
+        )?
+    } else {
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+    }
+    .into_inner();
 
     let site_packages = SitePackages::from_environment(&venv)?;
 
@@ -2218,11 +2254,6 @@ pub(crate) async fn sync_environment(
             .await?;
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
-
-    // Lower the extra build dependencies, if any.
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(

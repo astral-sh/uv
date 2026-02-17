@@ -23,8 +23,8 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, RequiresPython, SourceDist,
+    ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables, Index,
+    IndexLocations, PackageConfigSettings, RequiresPython, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -40,7 +40,6 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
-use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::ExitStatus;
@@ -251,6 +250,21 @@ async fn build_impl(
     )
     .await;
 
+    // Lower the extra build dependencies with source resolution.
+    let extra_build_requires = if let Ok(workspace) = workspace.as_ref() {
+        LoweredExtraBuildDependencies::from_workspace(
+            extra_build_dependencies.clone(),
+            workspace,
+            index_locations,
+            sources,
+            client_builder.credentials_cache(),
+        )
+        .map_err(ProjectError::from)?
+    } else {
+        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+    }
+    .into_inner();
+
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
@@ -354,7 +368,7 @@ async fn build_impl(
             clear,
             build_constraints,
             build_isolation,
-            extra_build_dependencies,
+            &extra_build_requires,
             extra_build_variables,
             *index_strategy,
             *keyring_provider,
@@ -463,7 +477,7 @@ async fn build_package(
     clear: bool,
     build_constraints: &[RequirementsSource],
     build_isolation: &BuildIsolation,
-    extra_build_dependencies: &ExtraBuildDependencies,
+    extra_build_requires: &ExtraBuildRequires,
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
@@ -604,10 +618,6 @@ async fn build_package(
     let state = SharedState::default();
     let workspace_cache = WorkspaceCache::default();
 
-    let extra_build_requires =
-        LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
-            .into_inner();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -622,7 +632,7 @@ async fn build_package(
         config_setting,
         config_settings_package,
         types_build_isolation,
-        &extra_build_requires,
+        extra_build_requires,
         extra_build_variables,
         link_mode,
         build_options,
