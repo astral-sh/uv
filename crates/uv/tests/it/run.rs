@@ -5338,13 +5338,14 @@ fn run_groups_include_requires_python() -> Result<()> {
 fn exit_status_signal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let script = context.temp_dir.child("segfault.py");
+    let script = context.temp_dir.child("term_signal.py");
     script.write_str(indoc! {r"
         import os
-        os.kill(os.getpid(), 11)
+
+        os.kill(os.getpid(), 15)
     "})?;
     let status = context.run().arg(script.path()).status()?;
-    assert_eq!(status.code().expect("a status code"), 139);
+    assert_eq!(status.code().expect("a status code"), 143);
     Ok(())
 }
 
