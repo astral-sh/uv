@@ -212,7 +212,7 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(&path)?;
+        let file = Self::create(&path, mode)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -227,13 +227,16 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Option<Self> {
-        let file = Self::create(path).ok()?;
+        let file = Self::create(path, mode).ok()?;
         let resource = resource.to_string();
         Self::lock_file_no_wait(file, mode, &resource)
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+    fn create(
+        path: impl AsRef<Path>,
+        mode: LockedFileMode,
+    ) -> Result<fs_err::File, LockedFileError> {
         use rustix::io::Errno;
         #[expect(clippy::disallowed_types)]
         use std::{fs::File, os::unix::fs::PermissionsExt};
@@ -252,8 +255,25 @@ impl LockedFile {
             }
         }
 
+        // Right now our locked files should be world writable anyway but in the
+        // future when we want to support respecting the umask, they might not
+        // be world writable and so this will begin to matter.
+        //
+        // If we're trying to lock exclusively, we are probably going to need to
+        // write something in the location of the lockfile anyway. So in the
+        // case that the lockfile is _not_ writable by us, we would just be
+        // moving the error earlier, which should be fine.
+        let need_write = match mode {
+            LockedFileMode::Shared => false,
+            LockedFileMode::Exclusive => true,
+        };
+
         // If path already exists, return it.
-        if let Ok(file) = fs_err::OpenOptions::new().read(true).open(path.as_ref()) {
+        if let Ok(file) = fs_err::OpenOptions::new()
+            .read(true)
+            .write(need_write)
+            .open(path.as_ref())
+        {
             return Ok(file);
         }
 
@@ -274,6 +294,7 @@ impl LockedFile {
                 if err.error.kind() == std::io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
+                        .write(need_write)
                         .open(path.as_ref())
                         .map_err(Into::into)
                 } else if matches!(
@@ -295,6 +316,7 @@ impl LockedFile {
                     // bits, it's less likely to ever matter.
                     let file = fs_err::OpenOptions::new()
                         .read(true)
+                        .write(need_write)
                         .create(true)
                         .open(path.as_ref())?;
 
@@ -321,7 +343,10 @@ impl LockedFile {
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+    fn create(
+        path: impl AsRef<Path>,
+        _mode: LockedFileMode,
+    ) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
