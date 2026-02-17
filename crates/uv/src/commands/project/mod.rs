@@ -2683,7 +2683,12 @@ pub(crate) fn detect_conflicts(
                 continue;
             }
             let is_conflicting = match item.kind() {
-                ConflictKind::Project => groups.prod(),
+                ConflictKind::Project => {
+                    groups.prod()
+                        && !set.is_project_suppressed_by_extra(item.package(), |extra| {
+                            extras.contains(extra)
+                        })
+                }
                 ConflictKind::Extra(extra) => extras.contains(extra),
                 ConflictKind::Group(group1) => groups.contains(group1),
             };
