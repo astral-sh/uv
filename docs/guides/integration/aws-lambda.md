@@ -395,9 +395,9 @@ From there, we can build and deploy the updated image as before.
 
 The AWS-provided Lambda base images for Python include additional software and libraries that are
 not necessary for all Lambda functions, and occasionally lag behind on updates for known
-vulnerabilities. As an alternative, you can build Lambda images on a minimal
-Debian base using [`awslambdaric`](https://github.com/aws/aws-lambda-python-runtime-interface-client)
-(the AWS Lambda Runtime Interface Client) to handle the Lambda lifecycle.
+vulnerabilities. As an alternative, you can build Lambda images on a minimal Debian base using
+[`awslambdaric`](https://github.com/aws/aws-lambda-python-runtime-interface-client) (the AWS Lambda
+Runtime Interface Client) to handle the Lambda lifecycle.
 
 This approach gives you full control over the base image, making it easier to mitigate CVEs quickly
 and reducing the overall image size. For a minimal Lambda function, the resulting image is roughly
@@ -440,10 +440,10 @@ def lambda_handler(event, context):
     return {"statusCode": 200, "body": f"Hello, {name}!"}
 ```
 
-Now, create the Dockerfile. Unlike the previous examples which use `public.ecr.aws/lambda/python`
-as a base, this Dockerfile uses a uv image with Debian for the builder stage and a bare
-`debian:trixie-slim` image for the final stage. Since the final image doesn't include Python, we
-use uv's managed Python to install it into a known location and copy it into the final image:
+Now, create the Dockerfile. Unlike the previous examples which use `public.ecr.aws/lambda/python` as
+a base, this Dockerfile uses a uv image with Debian for the builder stage and a bare
+`debian:trixie-slim` image for the final stage. Since the final image doesn't include Python, we use
+uv's managed Python to install it into a known location and copy it into the final image:
 
 ```dockerfile title="Dockerfile"
 # Stage 1: Build dependencies using the uv Debian base image.
@@ -531,9 +531,9 @@ $ docker build -t lambda-example .
 
 The key differences from the AWS-provided base image approach are:
 
-1. **uv-managed Python.** The builder stage uses `UV_MANAGED_PYTHON=1` with
-   `UV_PYTHON_INSTALL_DIR` to install Python into a known location (`/lambda/python`), which is
-   then copied into the final image alongside the virtual environment.
+1. **uv-managed Python.** The builder stage uses `UV_MANAGED_PYTHON=1` with `UV_PYTHON_INSTALL_DIR`
+   to install Python into a known location (`/lambda/python`), which is then copied into the final
+   image alongside the virtual environment.
 2. **Relocatable virtual environment.** `uv venv --relocatable` creates a virtual environment that
    can be moved between stages without breaking.
 3. **`awslambdaric` entry point.** Since the final image doesn't include the AWS Lambda runtime,
