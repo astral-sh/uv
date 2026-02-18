@@ -32,7 +32,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
 
     // Try to add a package without credentials.
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -41,8 +41,10 @@ async fn add_package_native_auth_realm() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 
@@ -98,7 +100,7 @@ async fn add_package_native_auth_realm() -> Result<()> {
 
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -107,8 +109,10 @@ async fn add_package_native_auth_realm() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 
@@ -143,7 +147,7 @@ async fn add_package_native_auth() -> Result<()> {
 
     // Try to add a package without credentials.
     uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -152,8 +156,10 @@ async fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 
@@ -209,7 +215,7 @@ async fn add_package_native_auth() -> Result<()> {
 
     // Authentication should fail again
     uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--default-index").arg(proxy.username_url("public", "/basic-auth/simple"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @r"
+        .env(EnvVars::UV_PREVIEW_FEATURES, "native-auth"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -218,8 +224,10 @@ async fn add_package_native_auth() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 

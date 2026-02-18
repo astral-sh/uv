@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::env;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -11,6 +12,7 @@ use regex::Regex;
 use thiserror::Error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
+use uv_errors::Hint;
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -115,6 +117,19 @@ impl IsBuildBackendError for Error {
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)
             | Self::BuildScriptPath(_) => true,
+        }
+    }
+}
+
+impl Hint for Error {
+    fn hints(&self) -> Vec<Cow<'_, str>> {
+        match self {
+            Self::BuildBackend(_) => vec![Cow::Borrowed(
+                "This usually indicates a problem with the package or the build environment.",
+            )],
+            Self::MissingHeader(err) => vec![Cow::Owned(err.cause.to_string())],
+            Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
+            _ => Vec::new(),
         }
     }
 }
@@ -322,13 +337,6 @@ impl Display for BuildBackendError {
             writeln!(f)?;
         }
 
-        write!(
-            f,
-            "\n{}{} This usually indicates a problem with the package or the build environment.",
-            "hint".bold().cyan(),
-            ":".bold()
-        )?;
-
         Ok(())
     }
 }
@@ -353,14 +361,6 @@ impl Display for MissingHeaderError {
         if self.stderr.iter().any(|line| !line.trim().is_empty()) {
             write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
         }
-
-        write!(
-            f,
-            "\n\n{}{} {}",
-            "hint".bold().cyan(),
-            ":".bold(),
-            self.cause
-        )?;
 
         Ok(())
     }
@@ -467,6 +467,7 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_errors::Hint;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
 
@@ -507,10 +508,11 @@ mod test {
 
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
+        let mut formatted = std::error::Error::source(&err)
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
+        uv_errors::write_hints(&mut formatted, &err.hints());
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -532,7 +534,6 @@ mod test {
               |          ^~~~~~~~~~~~~~~~~~~
         compilation terminated.
         error: command '/usr/bin/gcc' failed with exit code 1
-
         hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
         "#);
     }
@@ -565,10 +566,11 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
+        let mut formatted = std::error::Error::source(&err)
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
+        uv_errors::write_hints(&mut formatted, &err.hints());
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -579,7 +581,6 @@ mod test {
         /usr/bin/ld: cannot find -lncurses: No such file or directory
         collect2: error: ld returned 1 exit status
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
-
         hint: This error likely indicates that you need to install the library that provides a shared library for `ncurses` for `pygraphviz-1.11` (e.g., `libncurses-dev`)
         ");
     }
@@ -613,10 +614,11 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
+        let mut formatted = std::error::Error::source(&err)
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
+        uv_errors::write_hints(&mut formatted, &err.hints());
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
@@ -628,7 +630,6 @@ mod test {
            or: setup.py cmd --help
 
         error: invalid command 'bdist_wheel'
-
         hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
         [tool.uv.extra-build-dependencies]
@@ -664,10 +665,11 @@ mod test {
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
         // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
+        let mut formatted = std::error::Error::source(&err)
             .unwrap()
             .to_string()
             .replace("exit status: ", "exit code: ");
+        uv_errors::write_hints(&mut formatted, &err.hints());
         let formatted = anstream::adapter::strip_str(&formatted);
         insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
@@ -675,7 +677,6 @@ mod test {
         [stderr]
         import distutils.core
         ModuleNotFoundError: No module named 'distutils'
-
         hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of `pygraphviz` that depends on `distutils`.
         ");
     }

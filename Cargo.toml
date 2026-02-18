@@ -32,6 +32,7 @@ uv-dispatch = { version = "0.0.24", path = "crates/uv-dispatch" }
 uv-distribution = { version = "0.0.24", path = "crates/uv-distribution" }
 uv-distribution-filename = { version = "0.0.24", path = "crates/uv-distribution-filename" }
 uv-distribution-types = { version = "0.0.24", path = "crates/uv-distribution-types" }
+uv-errors = { version = "0.0.24", path = "crates/uv-errors" }
 uv-extract = { version = "0.0.24", path = "crates/uv-extract" }
 uv-flags = { version = "0.0.24", path = "crates/uv-flags" }
 uv-fs = { version = "0.0.24", path = "crates/uv-fs", features = ["serde", "tokio"] }

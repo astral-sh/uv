@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::fmt;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
@@ -25,6 +27,48 @@ use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
 use crate::{InstallationStrategy, SitePackages};
+
+/// A wheel dependency is incompatible with the current platform.
+#[derive(Debug)]
+pub struct IncompatibleWheelError {
+    /// The kind of dependency (URL or path).
+    kind: IncompatibleWheelKind,
+    /// The location of the dependency (URL or path string).
+    location: String,
+    /// Optional compatibility hint generated from wheel tags.
+    compatibility_hint: Option<String>,
+}
+
+#[derive(Debug)]
+enum IncompatibleWheelKind {
+    Url,
+    Path,
+}
+
+impl fmt::Display for IncompatibleWheelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match self.kind {
+            IncompatibleWheelKind::Url => "A URL dependency",
+            IncompatibleWheelKind::Path => "A path dependency",
+        };
+        write!(
+            f,
+            "{kind} is incompatible with the current platform: {}",
+            self.location,
+        )
+    }
+}
+
+impl std::error::Error for IncompatibleWheelError {}
+
+impl uv_errors::Hint for IncompatibleWheelError {
+    fn hints(&self) -> Vec<Cow<'_, str>> {
+        self.compatibility_hint
+            .as_deref()
+            .map(|hint| vec![Cow::Borrowed(hint)])
+            .unwrap_or_default()
+    }
+}
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -216,20 +260,15 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        let hint = generate_wheel_compatibility_hint(&wheel.filename, tags);
-                        if let Some(hint) = hint {
-                            bail!(
-                                "A URL dependency is incompatible with the current platform: {}\n\n{}{} {}",
-                                wheel.url,
-                                "hint".bold().cyan(),
-                                ":".bold(),
-                                hint
-                            );
+                        return Err(IncompatibleWheelError {
+                            kind: IncompatibleWheelKind::Url,
+                            location: wheel.url.to_string(),
+                            compatibility_hint: generate_wheel_compatibility_hint(
+                                &wheel.filename,
+                                tags,
+                            ),
                         }
-                        bail!(
-                            "A URL dependency is incompatible with the current platform: {}",
-                            wheel.url
-                        );
+                        .into());
                     }
 
                     if no_binary {
@@ -290,20 +329,15 @@ impl<'a> Planner<'a> {
                     }
 
                     if !wheel.filename.is_compatible(tags) {
-                        let hint = generate_wheel_compatibility_hint(&wheel.filename, tags);
-                        if let Some(hint) = hint {
-                            bail!(
-                                "A path dependency is incompatible with the current platform: {}\n\n{}{} {}",
-                                wheel.install_path.user_display(),
-                                "hint".bold().cyan(),
-                                ":".bold(),
-                                hint
-                            );
+                        return Err(IncompatibleWheelError {
+                            kind: IncompatibleWheelKind::Path,
+                            location: wheel.install_path.user_display().to_string(),
+                            compatibility_hint: generate_wheel_compatibility_hint(
+                                &wheel.filename,
+                                tags,
+                            ),
                         }
-                        bail!(
-                            "A path dependency is incompatible with the current platform: {}",
-                            wheel.install_path.user_display()
-                        );
+                        .into());
                     }
 
                     if no_binary {

@@ -65,18 +65,10 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements
+        let has_editable = requirements
             .iter()
-            .any(|source| matches!(source, RequirementsSource::Editable(_)))
-        {
-            "Use `<dir>[extra]` syntax or `-r <file>` instead."
-        } else {
-            "Use `package[extra]` syntax instead."
-        };
-        return Err(anyhow!(
-            "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
-        )
-        .into());
+            .any(|source| matches!(source, RequirementsSource::Editable(_)));
+        return Err(anyhow::Error::new(ExtrasWithoutSourceError { has_editable }).into());
     }
 
     // Read all requirements from the provided sources.
@@ -1097,4 +1089,32 @@ pub(crate) enum Error {
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
     OutdatedEnvironment,
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::Resolve(resolve_err) => resolve_err.hints(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// Extras were requested but no valid source was provided.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
+)]
+pub(crate) struct ExtrasWithoutSourceError {
+    pub(crate) has_editable: bool,
+}
+
+impl uv_errors::Hint for ExtrasWithoutSourceError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        vec![std::borrow::Cow::Borrowed(if self.has_editable {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+        } else {
+            "Use `package[extra]` syntax instead."
+        })]
+    }
 }

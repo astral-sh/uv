@@ -204,6 +204,15 @@ impl From<reqwest_middleware::Error> for Error {
     }
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::Build(err) => err.hints(),
+            _ => Vec::new(),
+        }
+    }
+}
+
 impl IsBuildBackendError for Error {
     fn is_build_backend_error(&self) -> bool {
         match self {

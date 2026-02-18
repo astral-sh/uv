@@ -9,7 +9,7 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml, PylockTomlError,
     PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
     VERSION, cyclonedx_json,
 };
@@ -17,6 +17,7 @@ pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
+pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,

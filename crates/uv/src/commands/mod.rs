@@ -81,7 +81,7 @@ mod cache_clean;
 mod cache_dir;
 mod cache_prune;
 mod cache_size;
-mod diagnostics;
+pub(crate) mod diagnostics;
 mod help;
 pub(crate) mod pip;
 mod project;

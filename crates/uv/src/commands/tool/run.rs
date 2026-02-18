@@ -48,6 +48,7 @@ use uv_workspace::WorkspaceCache;
 
 use crate::child::run_to_completion;
 use crate::commands::ExitStatus;
+
 use crate::commands::pip;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
@@ -197,19 +198,12 @@ pub(crate) async fn run(
     if let Some(ref from) = from {
         if has_python_script_ext(Path::new(from)) {
             let package_name = PackageName::from_str(from)?;
-            return Err(anyhow::anyhow!(
-                "It looks like you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
-                "hint".bold().cyan(),
-                ":".bold(),
-                package_name.cyan(),
-                format!(
-                    "{} --from {} {}",
-                    invocation_source,
-                    package_name.cyan(),
-                    target
-                )
-                .green(),
-            ));
+            return Err(ToolRunScriptError::FromScript {
+                package_name,
+                target: target.to_string(),
+                invocation: invocation_source,
+            }
+            .into());
         }
     } else {
         let target_path = Path::new(target);
@@ -217,24 +211,19 @@ pub(crate) async fn run(
         // If the user tries to invoke `uvx script.py`, hint them towards `uv run`.
         if has_python_script_ext(target_path) {
             return if target_path.try_exists()? {
-                Err(anyhow::anyhow!(
-                    "It looks like you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
-                    target_path.user_display(),
-                    invocation_source,
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    format!("uv run {}", target_path.user_display()).green(),
-                ))
+                Err(ToolRunScriptError::TargetScriptExists {
+                    path: target_path.to_path_buf(),
+                    invocation: invocation_source,
+                }
+                .into())
             } else {
                 let package_name = PackageName::from_str(target)?;
-                Err(anyhow::anyhow!(
-                    "It looks like you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
-                    invocation_source,
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                    package_name.cyan(),
-                    format!("{invocation_source} --from {package_name} {target}").green(),
-                ))
+                Err(ToolRunScriptError::TargetScriptMissing {
+                    package_name,
+                    target: target.to_string(),
+                    invocation: invocation_source,
+                }
+                .into())
             };
         }
     }
@@ -1220,4 +1209,64 @@ async fn get_or_create_environment(
     };
 
     Ok((from, environment.into()))
+}
+
+/// A Python script was passed to `uvx` / `--from`, which doesn't support scripts.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ToolRunScriptError {
+    /// Script path passed to `--from`.
+    #[error("It looks like you provided a Python script to `--from`, which is not supported")]
+    FromScript {
+        package_name: PackageName,
+        target: String,
+        invocation: ToolRunCommand,
+    },
+
+    /// Existing script path passed as the target of `uvx`.
+    #[error(
+        "It looks like you tried to run a Python script at `{path}`, which is not supported by `{invocation}`"
+    )]
+    TargetScriptExists {
+        path: PathBuf,
+        invocation: ToolRunCommand,
+    },
+
+    /// Non-existing script path passed as the target of `uvx`.
+    #[error(
+        "It looks like you provided a Python script to run, which is not supported by `{invocation}`"
+    )]
+    TargetScriptMissing {
+        package_name: PackageName,
+        target: String,
+        invocation: ToolRunCommand,
+    },
+}
+
+impl uv_errors::Hint for ToolRunScriptError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        vec![std::borrow::Cow::Owned(match self {
+            Self::FromScript {
+                package_name,
+                target,
+                invocation,
+            } => format!(
+                "If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                package_name.cyan(),
+                format!("{invocation} --from {} {target}", package_name.cyan()).green(),
+            ),
+            Self::TargetScriptExists { path, .. } => format!(
+                "Use `{}` instead",
+                format!("uv run {}", path.display()).green(),
+            ),
+            Self::TargetScriptMissing {
+                package_name,
+                target,
+                invocation,
+            } => format!(
+                "We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                package_name.cyan(),
+                format!("{invocation} --from {package_name} {target}").green(),
+            ),
+        })]
+    }
 }

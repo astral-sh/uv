@@ -254,6 +254,12 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
+impl uv_errors::Hint for AnyErrorBuild {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        self.0.hints()
+    }
+}
+
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
         Self(Box::new(err))

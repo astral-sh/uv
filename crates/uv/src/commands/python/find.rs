@@ -154,6 +154,10 @@ pub(crate) async fn find_script(
     {
         Err(error) => {
             writeln!(printer.stderr(), "{error}")?;
+            for hint in uv_errors::Hint::hints(&error) {
+                writeln!(printer.stderr())?;
+                writeln!(printer.stderr(), "{} {hint}", uv_errors::HintPrefix)?;
+            }
             return Ok(ExitStatus::Failure);
         }
         Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,

@@ -431,7 +431,9 @@ dependencies = ["flask==1.0.x"]
           ValueError: invalid pyproject.toml config: `project.dependencies[0]`.
           configuration error: `project.dependencies[0]` must be pep508
 
-          hint: This usually indicates a problem with the package or the build environment.
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     "##
     );
 
@@ -1386,7 +1388,7 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `<dir>[extra]` syntax or `-r <file>` instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
     "
     );
 
@@ -1399,7 +1401,7 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
     "
     );
 
@@ -1415,7 +1417,7 @@ fn install_extras() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file. Use `package[extra]` syntax instead.
+    error: Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file
     "
     );
 
@@ -1989,7 +1991,8 @@ fn install_no_index() {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -2013,7 +2016,8 @@ fn install_no_index_version() {
       × No solution found when resolving dependencies:
       ╰─▶ Because flask was not found in the provided package locations and you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -2633,7 +2637,7 @@ fn install_git_private_https_interactive() {
 
     // The path to a git binary may be arbitrary, filter and replace
     // The trailing space is load bearing, as to not match on false positives
-    let filters: Vec<_> = [("\\/([[:alnum:]]*\\/)*git ", "/usr/bin/git ")]
+    let filters: Vec<_> = [("\\/([[:alnum:]._-]*\\/)*git ", "/usr/bin/git ")]
         .into_iter()
         .chain(context.filters())
         .collect();
@@ -2961,9 +2965,10 @@ fn install_only_binary_all_and_no_binary_all() {
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-          hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
+    hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
+    hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
 
@@ -3056,7 +3061,8 @@ fn only_binary_requirements_txt() {
       × No solution found when resolving dependencies:
       ╰─▶ Because django-allauth==0.51.0 has no usable wheels and you require django-allauth==0.51.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
+
+    hint: Wheels are required for `django-allauth` because building from source is disabled for `django-allauth` (i.e., with `--no-build-package django-allauth`)
     "
     );
 }
@@ -3886,7 +3892,8 @@ fn build_prerelease_hint() -> Result<()> {
       ╰─▶ Because only transitive-package-only-prereleases-in-range-b<=0.1 is available and transitive-package-only-prereleases-in-range-a==0.1.0 depends on transitive-package-only-prereleases-in-range-b>0.1, we can conclude that transitive-package-only-prereleases-in-range-a==0.1.0 cannot be used.
           And because only transitive-package-only-prereleases-in-range-a==0.1.0 is available and you require transitive-package-only-prereleases-in-range-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
+
+    hint: Only pre-releases of `transitive-package-only-prereleases-in-range-b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `transitive-package-only-prereleases-in-range-b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
     "
     );
 
@@ -5213,12 +5220,13 @@ fn no_build_isolation() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          anyio = ["setuptools"]
+    hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    [tool.uv.extra-build-dependencies]
+    anyio = ["setuptools"]
+
+    or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -5286,12 +5294,13 @@ fn respect_no_build_isolation_env_var() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'setuptools'
 
-          hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          anyio = ["setuptools"]
+    hint: This error likely indicates that `anyio` depends on `setuptools`, but doesn't declare it as a build dependency. If `anyio` is a first-party package, consider adding `setuptools` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
+    [tool.uv.extra-build-dependencies]
+    anyio = ["setuptools"]
+
+    or `uv pip install setuptools` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -5958,7 +5967,8 @@ async fn install_package_basic_auth_from_keyring_wrong_password() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
@@ -6003,7 +6013,8 @@ async fn install_package_basic_auth_from_keyring_wrong_username() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
@@ -6170,7 +6181,8 @@ fn reinstall_no_index() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 }
@@ -6537,7 +6549,8 @@ fn already_installed_local_version_of_remote_package() {
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the provided package locations and you require anyio==4.2.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
     );
 
@@ -6797,7 +6810,8 @@ fn already_installed_remote_url() {
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 
     // Request installation again with just the full URL
@@ -6843,7 +6857,8 @@ fn already_installed_remote_url() {
       × No solution found when resolving dependencies:
       ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+
+    hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
 }
 
@@ -9022,12 +9037,13 @@ fn install_build_isolation_package() -> Result<()> {
             File "<string>", line 8, in <module>
           ModuleNotFoundError: No module named 'hatchling'
 
-          hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          [tool.uv.extra-build-dependencies]
-          iniconfig = ["hatchling"]
+    hint: This error likely indicates that `iniconfig` depends on `hatchling`, but doesn't declare it as a build dependency. If `iniconfig` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
-          or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
+    [tool.uv.extra-build-dependencies]
+    iniconfig = ["hatchling"]
+
+    or `uv pip install hatchling` into the environment and re-run with `--no-build-isolation`.
     "#
     );
 
@@ -9365,8 +9381,10 @@ fn sklearn() {
           More information is available at
           https://github.com/scikit-learn/sklearn-pypi-package
 
-          hint: This usually indicates a problem with the package or the build environment.
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     "
     );
 }
@@ -9421,8 +9439,10 @@ fn resolve_derivation_chain() -> Result<()> {
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
-          hint: This usually indicates a problem with the package or the build environment.
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     "#
     );
 
@@ -12995,8 +13015,10 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 3.0 but got 4.3.0
 
-          hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -13048,7 +13070,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13062,8 +13084,10 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
           [stderr]
           Expected `anyio` version 4.0 but got 3.7.1
 
-          hint: This usually indicates a problem with the package or the build environment.
       help: `child` was included because `parent` (v0.1.0) depends on `child`
+
+
+    hint: This usually indicates a problem with the package or the build environment.
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
@@ -14096,7 +14120,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14116,7 +14140,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
