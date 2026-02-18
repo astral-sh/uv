@@ -92,7 +92,10 @@ pub mod test {
     /// consequence of how `HELD` is used to check for tests which are missing
     /// the guard.
     pub fn with_features(features: &[super::PreviewFeature]) -> FeaturesGuard {
-        assert!(!HELD.get(), "Nested calls to uv_preview::test::with_features are not allowed");
+        assert!(
+            !HELD.get(),
+            "Nested calls to uv_preview::test::with_features are not allowed"
+        );
 
         let guard = match MUTEX.lock() {
             Ok(guard) => guard,
@@ -111,7 +114,9 @@ pub mod test {
                 *rwlock.write().unwrap() = Some(Preview::new(features));
             }
             PreviewMode::Normal(_) => {
-                panic!("Cannot use `uv_preview::test::with_features` after `uv_preview::init` has been called");
+                panic!(
+                    "Cannot use `uv_preview::test::with_features` after `uv_preview::init` has been called"
+                );
             }
         }
         FeaturesGuard(guard)
