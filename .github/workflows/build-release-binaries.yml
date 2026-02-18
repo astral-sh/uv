@@ -1083,3 +1083,31 @@ jobs:
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
+
+  check-wheels:
+    name: "Check wheel contents"
+    runs-on: ubuntu-slim
+    needs:
+      - macos-x86_64
+      - macos-aarch64
+      - windows
+      - linux
+      - linux-arm
+      - linux-s390x
+      - linux-powerpc
+      - linux-riscv64
+      - musllinux
+      - musllinux-cross
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: wheels_*-*
+          path: wheels
+          merge-multiple: true
+      - name: "Check wheel contents"
+        run: uv run scripts/check_uv_wheel_contents.py wheels/*
