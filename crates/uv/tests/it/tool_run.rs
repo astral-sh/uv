@@ -1113,14 +1113,14 @@ fn tool_run_git_lfs() {
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
     // In addition, we can get different error codes depending on where the failure occurs,
     // although we know the error code cannot be 0.
-    let mut filters = context.filters();
-    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
-    filters.push((
-        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
-    ));
+    let context = context
+        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
+        .with_filter((
+            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+        ));
 
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
@@ -1143,7 +1143,7 @@ fn tool_run_git_lfs() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
@@ -1171,7 +1171,7 @@ fn tool_run_git_lfs() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
