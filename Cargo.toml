@@ -15,10 +15,6 @@ repository = "https://github.com/astral-sh/uv"
 authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
-[workspace.metadata.cargo-shear]
-# xz2 is used by uv-extract to enable the `static` feature for static linking
-ignored = ["xz2"]
-
 [workspace.dependencies]
 uv-auth = { version = "0.0.24", path = "crates/uv-auth" }
 uv-bin-install = { version = "0.0.24", path = "crates/uv-bin-install" }
