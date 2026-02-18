@@ -716,7 +716,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         ) => {
             // Source: https://github.com/pypa/packaging/blob/e9b9d09ebc5992ecad1799da22ee5faefb9cc7cb/src/packaging/tags.py#L484
             let mut platform_tags = vec![];
-            let platform = IosPlatform::from_arch(arch, *simulator)?;
+            let multiarch = IosMultiarch::from_arch(arch, *simulator)?;
 
             // Consider any iOS major.minor version from the version requested, down to
             // 12.0. 12.0 is the first iOS version that is known to have enough features
@@ -735,7 +735,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags.push(PlatformTag::Ios {
                 major: *major,
                 minor: *minor,
-                platform,
+                multiarch,
             });
 
             // Consider every minor version from X.0 to the minor version prior to the
@@ -744,7 +744,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 platform_tags.push(PlatformTag::Ios {
                     major: *major,
                     minor: min,
-                    platform,
+                    multiarch,
                 });
             }
             for maj in (12..*major).rev() {
@@ -752,7 +752,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                     platform_tags.push(PlatformTag::Ios {
                         major: maj,
                         minor: min,
-                        platform,
+                        multiarch,
                     });
                 }
             }
@@ -961,6 +961,8 @@ impl AndroidAbi {
 }
 
 /// iOS architecture and whether it is a simulator or a real device.
+///
+/// Not to be confused with the Linux mulitarch concept.
 #[derive(
     Debug,
     Copy,
@@ -975,20 +977,20 @@ impl AndroidAbi {
     rkyv::Serialize,
 )]
 #[rkyv(derive(Debug))]
-pub enum IosPlatform {
+pub enum IosMultiarch {
     // Source: https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#ios
     Arm64Device,
     Arm64Simulator,
     X86_64Simulator,
 }
 
-impl std::fmt::Display for IosPlatform {
+impl std::fmt::Display for IosMultiarch {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl FromStr for IosPlatform {
+impl FromStr for IosMultiarch {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -1001,7 +1003,7 @@ impl FromStr for IosPlatform {
     }
 }
 
-impl IosPlatform {
+impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
     pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
