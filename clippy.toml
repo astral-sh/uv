@@ -9,6 +9,7 @@ doc-valid-idents = [
   "ROCm",
   "XPU",
   "PowerShell",
+  "CycloneDX",
   "UV_DEV",
   "UV_FROZEN",
   "UV_ISOLATED",
