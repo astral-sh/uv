@@ -338,7 +338,16 @@ impl Lock {
             };
 
             let mut package = Package::from_annotated_dist(dist, fork_markers, root)?;
-            Self::remove_unreachable_wheels(resolution, &requires_python, node_index, &mut package);
+            let wheels = &mut package.wheels;
+            wheels.retain(|wheel| {
+                !is_wheel_unreachable(
+                    &wheel.filename,
+                    resolution,
+                    &requires_python,
+                    node_index,
+                    None,
+                )
+            });
 
             // Add all dependencies
             for edge in resolution.graph.edges(node_index) {
@@ -437,280 +446,6 @@ impl Lock {
             resolution.fork_markers.clone(),
         )?;
         Ok(lock)
-    }
-
-    /// Remove wheels that can't be selected for installation due to environment markers.
-    ///
-    /// For example, a package included under `sys_platform == 'win32'` does not need Linux
-    /// wheels.
-    fn remove_unreachable_wheels(
-        graph: &ResolverOutput,
-        requires_python: &RequiresPython,
-        node_index: NodeIndex,
-        locked_dist: &mut Package,
-    ) {
-        // Remove wheels that don't match `requires-python` and can't be selected for installation.
-        locked_dist
-            .wheels
-            .retain(|wheel| requires_python.matches_wheel_tag(&wheel.filename));
-
-        // Filter by platform tags.
-        locked_dist.wheels.retain(|wheel| {
-            // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-            // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-            // own sufficient to exclude linux wheels), but due to
-            // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-            // a single disjointness check with the intersection is sufficient, so we have one
-            // constant per platform.
-            let platform_tags = wheel.filename.platform_tags();
-
-            if platform_tags.iter().all(PlatformTag::is_any) {
-                return true;
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_linux) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_PPC64LE_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_PPC64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_s390x) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_S390X_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_RISCV64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARMV7L_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*LINUX_ARMV6L_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_windows) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*WINDOWS_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*WINDOWS_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_macos) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*MAC_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_android) {
-                if platform_tags.iter().all(PlatformTag::is_arm) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_ARM_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_64_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if platform_tags.iter().all(PlatformTag::is_x86) {
-                    if graph.graph[node_index]
-                        .marker()
-                        .is_disjoint(*ANDROID_X86_MARKERS)
-                    {
-                        return false;
-                    }
-                } else if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ANDROID_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_arm) {
-                if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86_64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*X86_64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_x86) {
-                if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_ppc64le) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*PPC64LE_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_ppc64) {
-                if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_s390x) {
-                if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_riscv64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*RISCV64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_loongarch64) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*LOONGARCH64_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_armv7l) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ARMV7L_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            if platform_tags.iter().all(PlatformTag::is_armv6l) {
-                if graph.graph[node_index]
-                    .marker()
-                    .is_disjoint(*ARMV6L_MARKERS)
-                {
-                    return false;
-                }
-            }
-
-            true
-        });
     }
 
     /// Initialize a [`Lock`] from a list of [`Package`] entries.
@@ -6343,6 +6078,288 @@ fn simplified_universal_markers(
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
         .collect()
+}
+
+/// Filter out wheels that can't be selected for installation due to environment markers.
+///
+/// For example, a package included under `sys_platform == 'win32'` does not need Linux
+/// wheels.
+///
+/// Returns `false` if the wheel is definitely unreachable, and `true` if it may be reachable,
+/// including if the wheel tag isn't recognized.
+pub(crate) fn is_wheel_unreachable(
+    filename: &WheelFilename,
+    graph: &ResolverOutput,
+    requires_python: &RequiresPython,
+    node_index: NodeIndex,
+    tags: Option<&Tags>,
+) -> bool {
+    if let Some(tags) = tags
+        && !filename.compatibility(tags).is_compatible()
+    {
+        return true;
+    }
+    // Remove wheels that don't match `requires-python` and can't be selected for installation.
+    if !requires_python.matches_wheel_tag(filename) {
+        return true;
+    }
+
+    // Filter by platform tags.
+
+    // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
+    // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
+    // own sufficient to exclude linux wheels), but due to
+    // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
+    // a single disjointness check with the intersection is sufficient, so we have one
+    // constant per platform.
+    let platform_tags = filename.platform_tags();
+
+    if platform_tags.iter().all(PlatformTag::is_any) {
+        return false;
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_linux) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_PPC64LE_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_ppc64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_PPC64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_s390x) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_S390X_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_riscv64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_RISCV64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_LOONGARCH64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv7l) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARMV7L_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_armv6l) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*LINUX_ARMV6L_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index].marker().is_disjoint(*LINUX_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_windows) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*WINDOWS_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*WINDOWS_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_macos) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*MAC_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index].marker().is_disjoint(*MAC_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_android) {
+        if platform_tags.iter().all(PlatformTag::is_arm) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_ARM_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86_64) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_X86_64_MARKERS)
+            {
+                return true;
+            }
+        } else if platform_tags.iter().all(PlatformTag::is_x86) {
+            if graph.graph[node_index]
+                .marker()
+                .is_disjoint(*ANDROID_X86_MARKERS)
+            {
+                return true;
+            }
+        } else if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ANDROID_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_arm) {
+        if graph.graph[node_index].marker().is_disjoint(*ARM_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86_64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*X86_64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_x86) {
+        if graph.graph[node_index].marker().is_disjoint(*X86_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64le) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*PPC64LE_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_ppc64) {
+        if graph.graph[node_index].marker().is_disjoint(*PPC64_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_s390x) {
+        if graph.graph[node_index].marker().is_disjoint(*S390X_MARKERS) {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_riscv64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*RISCV64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_loongarch64) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*LOONGARCH64_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv7l) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ARMV7L_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    if platform_tags.iter().all(PlatformTag::is_armv6l) {
+        if graph.graph[node_index]
+            .marker()
+            .is_disjoint(*ARMV6L_MARKERS)
+        {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]
