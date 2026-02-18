@@ -66,9 +66,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/20/12/38679034af33278
 
 [[packages]]
 name = "packse"
-version = "0.3.53"
-sdist = { url = "https://files.pythonhosted.org/packages/52/58/373b6281bb741e875893dc351ac5f180c3fdce18a3b889f773725ff964b2/packse-0.3.53.tar.gz", upload-time = 2025-09-16T09:37:55Z, size = 5879063, hashes = { sha256 = "fcdbbb60f8ad4af94901891699a95ade4f15b9e769b4d8f443a2f3ef7aa74067" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/fc/86/d5482bb2933fe47d282b1dae74cc9084b094f28229848ba8ea01a77fe0da/packse-0.3.53-py3-none-any.whl", upload-time = 2025-09-16T09:37:53Z, size = 34039, hashes = { sha256 = "78cf05f5e0b916f4070a66f04f3b371e2d4ac0c3917f38cb692a33fa6e9d764b" } }]
+version = "0.3.58"
+sdist = { url = "https://files.pythonhosted.org/packages/55/fd/9f2512cdde46bf4220cf837fffef2475c5b7d0f9031fc48ddd5948bf0c4e/packse-0.3.58.tar.gz", upload-time = 2026-02-18T16:47:38Z, size = 5880412, hashes = { sha256 = "8b18b8ce5e966da7843749807c2397eb2e9ecb2c40b325bf9bc31099fe908026" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/58/43/550ef1de1ab1a40f0b17b0176412beccfceb4d1764104e0bec60984a9e49/packse-0.3.58-py3-none-any.whl", upload-time = 2026-02-18T16:47:39Z, size = 34107, hashes = { sha256 = "3ba063df4e17adf5c0aa724ffac8b207620bdb2c095e140afdbcacc71822ef9a" } }]
 
 [[packages]]
 name = "pathspec"

@@ -1,10 +1,11 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.58/scenarios>
 //!
 #![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
+use std::env;
 use std::process::Command;
 
 use anyhow::Result;

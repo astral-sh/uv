@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.53/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.58/scenarios>
 //!
 #![cfg(all(feature = "test-python", feature = "test-pypi", unix))]
 
@@ -21,6 +21,119 @@ fn command(context: &TestContext) -> Command {
         .arg(build_vendor_links_url());
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
+}
+
+/// There are two packages, `a` and `b`. All versions of `b` require a specific
+/// version of `a`, but that version requires a package `c` that does not exist. The resolver
+/// must backtrack through all versions of `b` and eventually fail because no solution exists.
+///
+/// ```text
+/// backtrack-to-missing-package
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-2.0.0
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       ├── satisfied by b-1.0.0
+/// │       ├── satisfied by b-2.0.0
+/// │       └── satisfied by b-3.0.0
+/// ├── a
+/// │   ├── a-2.0.0
+/// │   └── a-1.0.0
+/// │       └── requires c
+/// │           └── unsatisfied: no versions for package
+/// └── b
+///     ├── b-1.0.0
+///     │   └── requires a==1.0.0
+///     │       └── satisfied by a-1.0.0
+///     ├── b-2.0.0
+///     │   └── requires a==1.0.0
+///     │       └── satisfied by a-1.0.0
+///     └── b-3.0.0
+///         └── requires a==1.0.0
+///             └── satisfied by a-1.0.0
+/// ```
+#[test]
+fn backtrack_to_missing_package() {
+    let context = uv_test::test_context!("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"backtrack-to-missing-package-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("backtrack-to-missing-package-a")
+                .arg("backtrack-to-missing-package-b")
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because package-c was not found in the package registry and package-a==1.0.0 depends on package-c, we can conclude that package-a==1.0.0 cannot be used.
+          And because all versions of package-b depend on package-a==1.0.0 and you require package-b, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    context.assert_not_installed("backtrack_to_missing_package_a");
+    context.assert_not_installed("backtrack_to_missing_package_b");
+}
+
+/// There are two packages, `a` and `b`. The latest version of `b` requires
+/// a specific version of `a`. The older version of `b` requires a package `c` that does not
+/// exist. The resolver should backtrack on `a` (not `b`) to find a solution without needing
+/// to try `b==1.0.0` which would fail due to the missing package.
+///
+/// ```text
+/// backtrack-with-missing-package
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b
+/// │       ├── satisfied by b-1.0.0
+/// │       └── satisfied by b-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// └── b
+///     ├── b-1.0.0
+///     │   └── requires c
+///     │       └── unsatisfied: no versions for package
+///     └── b-2.0.0
+///         └── requires a==1.0.0
+///             └── satisfied by a-1.0.0
+/// ```
+#[test]
+fn backtrack_with_missing_package() {
+    let context = uv_test::test_context!("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"backtrack-with-missing-package-", "package-"));
+
+    uv_snapshot!(filters, command(&context)
+        .arg("backtrack-with-missing-package-a")
+                .arg("backtrack-with-missing-package-b")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + package-a==1.0.0
+     + package-b==2.0.0
+    ");
+
+    context.assert_installed("backtrack_with_missing_package_a", "1.0.0");
+    context.assert_installed("backtrack_with_missing_package_b", "2.0.0");
 }
 
 /// The user requires an exact version of package `a` but only other versions exist
