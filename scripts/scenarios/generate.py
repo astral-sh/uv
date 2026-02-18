@@ -45,7 +45,6 @@ SCENARIOS_DIR = PROJECT_ROOT / "test" / "scenarios"
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
 
 
-
 class TemplateKind(StrEnum):
     install = auto()
     compile = auto()
