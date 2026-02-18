@@ -697,100 +697,16 @@ impl InternerGuard<'_> {
         {
             return i;
         }
-
         let py_range = Ranges::from_range_bounds((py_lower.cloned(), py_upper.cloned()));
         if py_range.is_empty() {
-            // Oops, the bounds imply there is nothing that can match,
-            // so we always evaluate to false.
             return NodeId::FALSE;
         }
-        if matches!(i, NodeId::TRUE) {
-            let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
-            let edges = Edges::Version {
-                edges: Edges::from_range(&py_range),
-            };
-            return self.create_node(var, edges).negate(i);
-        }
-
-        let node = self.shared.node(i);
-        let Node {
-            var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { edges },
-        } = node
-        else {
-            // Complexify all nodes recursively.
-            let children = node.children.map(i, |node_id| {
-                self.complexify_python_versions(node_id, py_lower, py_upper)
-            });
-            return self.create_node(node.var.clone(), children);
+        let var = Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion);
+        let edges = Edges::Version {
+            edges: Edges::from_range(&py_range),
         };
-        // The approach we take here is to filter out any range that
-        // has no intersection with our Python lower/upper bounds.
-        // These ranges will now always be false, so we can dismiss
-        // them entirely.
-        //
-        // Then, depending on whether we have finite lower/upper bound,
-        // we "fix up" the edges by clipping the existing ranges and
-        // adding an additional range that covers the Python versions
-        // outside of our bounds by always mapping them to false.
-        let mut new: SmallVec<_> = edges
-            .iter()
-            .filter(|(range, _)| !py_range.intersection(range).is_empty())
-            .cloned()
-            .collect();
-        // Below, we assume `new` has at least one element. It's
-        // subtle, but since 1) edges is a disjoint covering of the
-        // universe and 2) our `py_range` is non-empty at this point,
-        // it must intersect with at least one range.
-        assert!(
-            !new.is_empty(),
-            "expected at least one non-empty intersection"
-        );
-        // This is the NodeId we map to anything that should
-        // always be false. We have to "negate" it in case the
-        // parent is negated.
-        let exclude_node_id = NodeId::FALSE.negate(i);
-        if !matches!(py_lower, Bound::Unbounded) {
-            let &(ref first_range, first_node_id) = new.first().unwrap();
-            let first_upper = first_range.bounding_range().unwrap().1;
-            // When the first range is always false, then we can just
-            // "expand" it out to negative infinity to reflect that
-            // anything less than our lower bound should evaluate to
-            // false. If we don't do this, then we could have two
-            // adjacent ranges map to the same node, which would not be
-            // a canonical representation.
-            if exclude_node_id == first_node_id {
-                let clipped = Ranges::from_range_bounds((Bound::Unbounded, first_upper.cloned()));
-                *new.first_mut().unwrap() = (clipped, first_node_id);
-            } else {
-                let clipped = Ranges::from_range_bounds((py_lower.cloned(), first_upper.cloned()));
-                *new.first_mut().unwrap() = (clipped, first_node_id);
-
-                let py_range_lower =
-                    Ranges::from_range_bounds((py_lower.cloned(), Bound::Unbounded));
-                new.insert(0, (py_range_lower.complement(), NodeId::FALSE.negate(i)));
-            }
-        }
-        if !matches!(py_upper, Bound::Unbounded) {
-            let &(ref last_range, last_node_id) = new.last().unwrap();
-            let last_lower = last_range.bounding_range().unwrap().0;
-            // See lower bound case above for why we do this. The
-            // same reasoning applies here: to maintain a canonical
-            // representation.
-            if exclude_node_id == last_node_id {
-                let clipped = Ranges::from_range_bounds((last_lower.cloned(), Bound::Unbounded));
-                *new.last_mut().unwrap() = (clipped, last_node_id);
-            } else {
-                let clipped = Ranges::from_range_bounds((last_lower.cloned(), py_upper.cloned()));
-                *new.last_mut().unwrap() = (clipped, last_node_id);
-
-                let py_range_upper =
-                    Ranges::from_range_bounds((Bound::Unbounded, py_upper.cloned()));
-                new.push((py_range_upper.complement(), exclude_node_id));
-            }
-        }
-        self.create_node(node.var.clone(), Edges::Version { edges: new })
-            .negate(i)
+        let py_node = self.create_node(var, edges);
+        self.and(i, py_node)
     }
 
     /// The disjunction of known incompatible conditions.
