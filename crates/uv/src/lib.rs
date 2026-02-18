@@ -2539,6 +2539,43 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Audit(audit_args) => {
+            let args = settings::AuditSettings::resolve(audit_args, filesystem, environment);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init().await?;
+
+            // Unwrap the script.
+            let script = script.map(|script| match script {
+                Pep723Item::Script(script) => script,
+                Pep723Item::Stdin(..) => unreachable!("`uv audit` does not support stdin"),
+                Pep723Item::Remote(..) => unreachable!("`uv audit` does not support remote files"),
+            });
+
+            Box::pin(commands::audit(
+                project_dir,
+                args.extras,
+                args.groups,
+                args.lock_check,
+                args.frozen,
+                script,
+                args.universal,
+                args.python_version,
+                args.python_platform,
+                args.install_mirrors,
+                args.settings,
+                client_builder.subcommand(vec!["audit".to_owned()]),
+                globals.python_preference,
+                globals.python_downloads,
+                globals.concurrency,
+                no_config,
+                cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
     }
 }
 
