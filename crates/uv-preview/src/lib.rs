@@ -94,7 +94,14 @@ pub mod test {
     pub fn with_features(features: &[super::PreviewFeature]) -> FeaturesGuard {
         assert!(!HELD.get(), "Nested calls to uv_preview::test::with_features are not allowed");
 
-        let guard = MUTEX.lock().expect("Could not acquire preview test mutex");
+        let guard = match MUTEX.lock() {
+            Ok(guard) => guard,
+            // This is okay because the mutex isn't guarding any data, so when
+            // it gets poisoned, it just means a test thread died while holding
+            // it, so it's safe to just re-grab it from the PoisonError, there's
+            // no chance of any corruption.
+            Err(err) => err.into_inner(),
+        };
 
         HELD.set(true);
 
