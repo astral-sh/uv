@@ -654,6 +654,9 @@ jobs:
           miniconda-version: "latest"
           activate-environment: uv
           python-version: ${{ matrix.python-version }}
+        env:
+          CONDA_REMOTE_MAX_RETRIES: "5"
+          CONDA_REMOTE_BACKOFF_FACTOR: "2"
 
       - name: Conda info
         shell: bash -el {0}
