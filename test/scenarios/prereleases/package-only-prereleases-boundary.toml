@@ -1,0 +1,18 @@
+name = "package-only-prereleases-boundary"
+description = "The user requires a non-prerelease version of `a` which only has prerelease versions available. There are pre-releases on the boundary of their range."
+
+[root]
+requires = ["a<0.2.0"]
+
+[expected]
+satisfiable = true
+explanation = "Since there are only prerelease versions of `a` available, a prerelease is allowed. Since the user did not explicitly request a pre-release, pre-releases at the boundary should not be selected."
+
+[expected.packages]
+a = "0.1.0a1"
+
+[packages.a.versions."0.1.0a1"]
+
+[packages.a.versions."0.2.0a1"]
+
+[packages.a.versions."0.3.0a1"]

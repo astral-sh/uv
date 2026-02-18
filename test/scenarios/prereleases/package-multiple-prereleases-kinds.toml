@@ -1,0 +1,18 @@
+name = "package-multiple-prereleases-kinds"
+description = "The user requires `a` which has multiple prereleases available with different labels."
+
+[root]
+requires = ["a>=1.0.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "Release candidates should be the highest precedence prerelease kind."
+
+[expected.packages]
+a = "1.0.0rc1"
+
+[packages.a.versions."1.0.0a1"]
+
+[packages.a.versions."1.0.0b1"]
+
+[packages.a.versions."1.0.0rc1"]

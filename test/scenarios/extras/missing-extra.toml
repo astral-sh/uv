@@ -1,0 +1,14 @@
+name = "missing-extra"
+description = "Optional dependencies are requested for the package, but the extra does not exist."
+
+[root]
+requires = ["a[extra]"]
+
+[expected]
+satisfiable = true
+explanation = "Missing extras are ignored during resolution."
+
+[expected.packages]
+a = "1.0.0"
+
+[packages.a.versions."1.0.0"]

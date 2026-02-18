@@ -1081,11 +1081,6 @@ impl EnvVars {
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// Used to set a packse index url for tests.
-    #[attr_hidden]
-    #[attr_added_in("0.2.12")]
-    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
-
     /// Used for testing named indexes in tests.
     #[attr_hidden]
     #[attr_added_in("0.5.21")]

@@ -1,0 +1,38 @@
+name = "wrong-backtracking-basic"
+description = """There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
+
+We need to detect this conflict and prioritize `b` over `a` instead of backtracking down to the too old version of `b==1.0.0` that doesn't depend on `a` anymore."""
+
+[expected]
+satisfiable = true
+
+[resolver_options]
+universal = true
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.9"
+
+[root]
+requires = ["a", "b"]
+
+[packages.a.versions]
+"1.0.0" = {}
+"2.0.0" = {}
+
+[packages.too-old.versions]
+"1.0.0" = {}
+
+[packages.b.versions]
+# We must not backtrack to this very old versions
+"1.0.0" = { requires = ["too-old"] }
+"2.0.0" = { requires = ["a==1.0.0"] }
+"2.0.1" = { requires = ["a==1.0.0"] }
+"2.0.2" = { requires = ["a==1.0.0"] }
+"2.0.3" = { requires = ["a==1.0.0"] }
+"2.0.4" = { requires = ["a==1.0.0"] }
+"2.0.5" = { requires = ["a==1.0.0"] }
+"2.0.6" = { requires = ["a==1.0.0"] }
+"2.0.7" = { requires = ["a==1.0.0"] }
+"2.0.8" = { requires = ["a==1.0.0"] }
+"2.0.9" = { requires = ["a==1.0.0"] }

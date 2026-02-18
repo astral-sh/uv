@@ -3,7 +3,7 @@
 //! Generated with `{{generated_with}}`
 //! Scenarios from <{{generated_from}}>
 //!
-#![cfg(all(feature = "test-python", feature = "test-pypi"))]
+#![cfg(feature = "test-python")]
 #![allow(clippy::needless_raw_string_hashes)]
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::doc_lazy_continuation)]
@@ -15,7 +15,8 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 
-use uv_test::{packse_index_url, uv_snapshot};
+use uv_test::packse::PackseServer;
+use uv_test::uv_snapshot;
 
 {{#scenarios}}
 
@@ -30,10 +31,7 @@ use uv_test::{packse_index_url, uv_snapshot};
 #[test]
 fn {{module_name}}() -> Result<()> {
     let context = uv_test::test_context!("{{environment.python}}");
-
-    // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = context.filters();
-    filters.push((r"{{name}}-", "package-"));
+    let server = PackseServer::new("{{scenario_path}}");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -60,9 +58,13 @@ fn {{module_name}}() -> Result<()> {
         "###
     )?;
 
+    let mut filters = context.filters();
+    // The "hint" about non-current environments is platform-dependent, so filter it out.
+    filters.push((r"\n\s+hint: .*", ""));
+
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    cmd.arg("--index-url").arg(packse_index_url());
+    cmd.arg("--index-url").arg(server.index_url());
     {{#expected.explanation}}
     // {{expected.explanation}}
     {{/expected.explanation}}
@@ -87,7 +89,7 @@ fn {{module_name}}() -> Result<()> {
         .arg("--locked")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("--index-url")
-        .arg(packse_index_url())
+        .arg(server.index_url())
         .assert()
         .success();
     {{/expected.satisfiable}}

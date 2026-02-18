@@ -1,0 +1,39 @@
+name = "fork-filter-sibling-dependencies"
+description = '''
+This tests that sibling dependencies of a package that provokes a
+fork are correctly filtered out of forks where they are otherwise
+impossible.
+
+In this case, a previous version of the universal resolver would
+include both `b` and `c` in *both* of the forks produced by the
+conflicting dependency specifications on `a`. This in turn led to
+transitive dependency specifications on both `d==1.0.0` and `d==2.0.0`.
+Since the universal resolver only forks based on local conditions, this
+led to a failed resolution.
+
+The correct thing to do here is to ensure that `b` is only part of the
+`a==4.4.0` fork and `c` is only par of the `a==4.3.0` fork.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a==4.4.0 ; sys_platform == 'linux'",
+  "a==4.3.0 ; sys_platform == 'darwin'",
+  "b==1.0.0 ; sys_platform == 'linux'",
+  "c==1.0.0 ; sys_platform == 'darwin'",
+]
+
+[packages.a.versions."4.3.0"]
+[packages.a.versions."4.4.0"]
+[packages.b.versions."1.0.0"]
+requires = ["d==1.0.0"]
+[packages.c.versions."1.0.0"]
+requires = ["d==2.0.0"]
+[packages.d.versions."1.0.0"]
+[packages.d.versions."2.0.0"]

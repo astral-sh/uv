@@ -25,7 +25,9 @@ tracing-durations-export = []
 uv-cache = { workspace = true, features = ["clap"] }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-fs = { workspace = true }
+uv-normalize = { workspace = true }
 uv-preview = { workspace = true }
 uv-python = { workspace = true }
 uv-static = { workspace = true }
@@ -35,6 +37,7 @@ anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 base64 = { workspace = true }
+flate2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 ignore = { workspace = true }
@@ -44,6 +47,13 @@ itertools = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
 similar = { workspace = true }
+tar = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+toml = { workspace = true }
+wiremock = { workspace = true }
+zip = { workspace = true }

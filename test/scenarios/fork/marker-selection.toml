@@ -1,0 +1,28 @@
+name = "fork-marker-selection"
+description = '''
+This tests a case where the resolver forks because of non-overlapping marker
+expressions on `b`. In the original universal resolver implementation, this
+resulted in multiple versions of `a` being unconditionally included in the lock
+file. So this acts as a regression test to ensure that only one version of `a`
+is selected.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a",
+  "b>=2 ; sys_platform == 'linux'",
+  "b<2 ; sys_platform == 'darwin'",
+]
+
+[packages.a.versions."0.1.0"]
+[packages.a.versions."0.2.0"]
+requires = ["b>=2.0.0"]
+
+[packages.b.versions."1.0.0"]
+[packages.b.versions."2.0.0"]

@@ -1,0 +1,12 @@
+name = "post-local-greater-than"
+description = "A greater-than version constraint should not match a post-release version with a local version identifier."
+
+[root]
+requires = ["a>1.2.3"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.2.3.post1"]
+
+[packages.a.versions."1.2.3.post1+local"]

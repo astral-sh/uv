@@ -1,0 +1,20 @@
+name = "transitive-package-only-prereleases-in-range-opt-in"
+description = "The user requires package `a` which has a dependency on a package which only matches prerelease versions; the user has opted into allowing prereleases in `b` explicitly."
+
+[root]
+requires = ["a", "b>0.0.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user included a dependency on `b` with a prerelease specifier, a prerelease version can be selected."
+
+[expected.packages]
+a = "0.1.0"
+b = "1.0.0a1"
+
+[packages.a.versions."0.1.0"]
+requires = ["b>0.1"]
+
+[packages.b.versions."0.1.0"]
+
+[packages.b.versions."1.0.0a1"]

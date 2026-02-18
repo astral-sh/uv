@@ -1,0 +1,17 @@
+name = "requires-package-yanked-and-unyanked-any"
+description = "The user requires any version of package `a` has a yanked version available and an older unyanked version."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "The unyanked version should be selected."
+
+[expected.packages]
+a = "0.1.0"
+
+[packages.a.versions."0.1.0"]
+
+[packages.a.versions."1.0.0"]
+yanked = true

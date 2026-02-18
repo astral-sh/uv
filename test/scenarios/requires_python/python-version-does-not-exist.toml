@@ -1,0 +1,11 @@
+name = "python-version-does-not-exist"
+description = "The user requires a package which requires a Python version that does not exist"
+
+[root]
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.30"
