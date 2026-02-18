@@ -12616,17 +12616,17 @@ fn sync_required_environment_hint() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let mut filters = context.filters();
-    filters.push((
-        r"You're on [^ ]+ \(`.*`\)",
-        "You're on [PLATFORM] (`[TAG]`)",
-    ));
-    filters.push((
-        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
-        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
-    ));
+    let context = context
+        .with_filter((
+            r"You're on [^ ]+ \(`.*`\)",
+            "You're on [PLATFORM] (`[TAG]`)",
+        ))
+        .with_filter((
+            r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+            "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+        ));
 
-    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
     exit_code: 2
     ----- stdout -----

@@ -609,12 +609,11 @@ fn format_no_matching_version() -> Result<()> {
     "})?;
 
     // Run format with impossible version constraints - should fail
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         r"\b[a-z0-9_]+-(?:apple|pc|unknown)-[a-z0-9_]+(?:-[a-z0-9_]+)?\b",
         "[PLATFORM]",
     ));
-    uv_snapshot!(filters, context.format().arg("--version").arg(">=999.0.0"), @"
+    uv_snapshot!(context.filters(), context.format().arg("--version").arg(">=999.0.0"), @"
     success: false
     exit_code: 2
     ----- stdout -----
