@@ -786,14 +786,14 @@ fn add_git_lfs() -> Result<()> {
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
     // In addition, we can get different error codes depending on where the failure occurs,
     // although we know the error code cannot be 0.
-    let context = context
-        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
-        .with_filter((
-            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
-        ));
+    let mut filters = context.filters();
+    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
+    filters.push((
+        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+    ));
 
-    uv_snapshot!(context.filters(), context.add()
+    uv_snapshot!(filters, context.add()
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
         .arg("git+https://github.com/astral-sh/test-lfs-repo")
         .arg("--rev").arg("0fe88f7c2e2883521bf065c108d9ee8eb115674b")
@@ -11121,7 +11121,7 @@ async fn add_index_empty_directory() -> Result<()> {
 #[test]
 fn add_index_with_ambiguous_relative_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let context = context.with_filter((r"\./|\.\\\\", r"[PREFIX]"));
+    let context = context.with_filter((r"\./|\.\\", r"[PREFIX]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"

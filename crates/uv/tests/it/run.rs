@@ -144,7 +144,7 @@ fn run_args() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let context = context
-        .with_filter((r"Usage: (uv|\.exe) run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
+        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
         .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
