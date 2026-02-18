@@ -1,0 +1,18 @@
+name = "python-patch-override-no-patch"
+description = "The user requires a package which requires a Python version with a patch version and the user provides a target version without a patch version."
+
+[root]
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = false
+explanation = "Since the resolver is asked to solve with 3.9, the minimum compatible Python requirement is treated as 3.9.0."
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.9.4"
+
+[resolver_options]
+python = "3.9"
+
+[environment]
+python = "3.9.21"

@@ -1,0 +1,76 @@
+name = "preferences-dependent-forking"
+description = '''
+This test contains a scenario where the solution depends on whether we fork, and whether we fork depends on the
+preferences.
+
+Consider a fresh run without preferences:
+* We start with cleaver 2
+* We fork
+* We reject cleaver 2
+* We find cleaver solution in fork 1 with foo 2 with bar 1
+* We find cleaver solution in fork 2 with foo 1 with bar 2
+* We write cleaver 1, foo 1, foo 2, bar 1 and bar 2 to the lockfile
+
+In a subsequent run, we read the preference cleaver 1 from the lockfile (the preferences for foo and bar don't matter):
+* We start with cleaver 1
+* We're in universal mode, we resolve foo 1 and bar 1
+* We write cleaver 1 and bar 1 to the lockfile
+
+We call a resolution that's different on the second run to the first unstable.
+
+Design sketch:
+```text
+root -> clear, foo, bar
+# Cause a fork, then forget that version.
+cleaver 2 -> unrelated-dep==1; fork==1
+cleaver 2 -> unrelated-dep==2; fork==2
+cleaver 2 -> reject-cleaver-2
+# Allow different versions when forking, but force foo 1, bar 1 in universal mode without forking.
+cleaver 1 -> foo==1; fork==1
+cleaver 1 -> bar==1; fork==2
+```
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "cleaver",
+  # The reporter packages.
+  "foo",
+  "bar",
+]
+
+[packages.cleaver.versions."2.0.0"]
+requires = [
+  # Provoke a fork
+  "unrelated-dep==1; sys_platform == 'linux'",
+  "unrelated-dep==2; sys_platform != 'linux'",
+  "reject-cleaver-2",
+]
+
+[packages.reject-cleaver-2.versions."1.0.0"]
+requires = [
+  # That's a conflict with `cleaver==2`.
+  "unrelated-dep==3",
+]
+
+[packages.unrelated-dep.versions."1.0.0"]
+[packages.unrelated-dep.versions."2.0.0"]
+[packages.unrelated-dep.versions."3.0.0"]
+
+[packages.cleaver.versions."1.0.0"]
+requires = [
+  # Allow different versions when forking, but force foo 1, bar 1 in universal mode without forking.
+  "foo==1; sys_platform == 'linux'",
+  "bar==1; sys_platform != 'linux'",
+]
+
+[packages.foo.versions."1.0.0"]
+[packages.foo.versions."2.0.0"]
+[packages.bar.versions."1.0.0"]
+[packages.bar.versions."2.0.0"]

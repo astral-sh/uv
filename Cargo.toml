@@ -259,6 +259,7 @@ smallvec = { version = "1.13.2" }
 spdx = { version = "0.13.0" }
 syn = { version = "2.0.77" }
 target-lexicon = { version = "0.13.0" }
+tar = { version = "0.4.43" }
 tempfile = { version = "3.14.0" }
 textwrap = { version = "0.16.1" }
 thiserror = { version = "2.0.0" }
@@ -315,6 +316,7 @@ windows-registry = { version = "0.5.0" }
 windows-version = { version = "0.1.6" }
 wiremock = { version = "0.6.4" }
 xz2 = { version = "0.1.7", features = ["static"] }
+zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 zeroize = { version = "1.8.1" }
 
 # dev-dependencies

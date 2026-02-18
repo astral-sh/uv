@@ -1,0 +1,24 @@
+name = "markers-change-after-selection"
+description = '''A package is first used under a marker that is a subset of the required environments that it fulfills, and then under a marker that is a subset it doesn't fulfill.
+
+`a` has a wheel only supports Windows, and the required platforms are Linux and Windows. The first time we encounter `a`, it's used with a Windows-only marker, so it doesn't violate. Afterwards, we select `b`, and while it doesn't change the version for `a`, it requires it universally. Now the resolution needs to fail, as `a` is now missing the Linux wheel.
+
+See <https://github.com/astral-sh/uv/pull/16824#discussion_r2556176057>
+'''
+
+[resolver_options]
+universal = true
+required_environments = ['sys_platform == "linux"', 'sys_platform == "win32"']
+
+[root]
+requires = ["a; sys_platform == 'win32'", "b"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+sdist = false
+wheel_tags = ["cp312-abi3-win_amd64"]
+
+[packages.b.versions."1.0.0"]
+requires = ["a; sys_platform == 'linux'"]

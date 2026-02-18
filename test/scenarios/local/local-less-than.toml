@@ -1,0 +1,10 @@
+name = "local-less-than"
+description = "A local version should be excluded in exclusive ordered comparisons."
+
+[root]
+requires = ["a<1.2.3"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.2.3+foo"]
