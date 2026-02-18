@@ -221,6 +221,7 @@ jobs:
           FROM ${BASE_IMAGE}
           COPY --from=${UV_GHCR_IMAGE}:latest /uv /uvx /usr/local/bin/
           ENV UV_TOOL_BIN_DIR="/usr/local/bin"
+          ENV PATH="$HOME/.local/bin:$PATH"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
           EOF
