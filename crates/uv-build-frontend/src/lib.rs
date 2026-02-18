@@ -219,7 +219,7 @@ pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
     default_resolution: Arc<Mutex<Option<Resolution>>>,
     /// A shared semaphore to limit the number of concurrent builds.
-    concurrency: Arc<Semaphore>,
+    concurrent_build_slots: Arc<Semaphore>,
 }
 
 impl SourceBuildContext {
@@ -227,7 +227,7 @@ impl SourceBuildContext {
     pub fn new(concurrent_builds: usize) -> Self {
         Self {
             default_resolution: Arc::default(),
-            concurrency: Arc::new(Semaphore::new(concurrent_builds)),
+            concurrent_build_slots: Arc::new(Semaphore::new(concurrent_builds)),
         }
     }
 }
@@ -437,7 +437,7 @@ impl SourceBuild {
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        let runner = PythonRunner::new(source_build_context.concurrency.clone(), level);
+        let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
 
@@ -1105,7 +1105,7 @@ async fn create_pep517_build_environment(
 /// concurrency limit.
 #[derive(Debug)]
 struct PythonRunner {
-    control: Arc<Semaphore>,
+    concurrent_build_slots: Arc<Semaphore>,
     level: BuildOutput,
 }
 
@@ -1118,9 +1118,9 @@ struct PythonRunnerOutput {
 
 impl PythonRunner {
     /// Create a `PythonRunner` with the provided shared concurrency semaphore and output level.
-    fn new(concurrency: Arc<Semaphore>, level: BuildOutput) -> Self {
+    fn new(concurrent_build_slots: Arc<Semaphore>, level: BuildOutput) -> Self {
         Self {
-            control: concurrency,
+            concurrent_build_slots,
             level,
         }
     }
@@ -1158,7 +1158,7 @@ impl PythonRunner {
             }
         }
 
-        let _permit = self.control.acquire().await.unwrap();
+        let _permit = self.concurrent_build_slots.acquire().await.unwrap();
 
         let mut child = Command::new(venv.python_executable())
             .args(["-c", script])
