@@ -33446,3 +33446,54 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `uv lock --frozen` and `UV_FROZEN=1` show a warning.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12783>
+#[test]
+fn lock_frozen_warning() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+        "#,
+    )?;
+
+    // Create the initial lockfile.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Running `uv lock --frozen` should show a warning.
+    uv_snapshot!(context.filters(), context.lock().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `--frozen` was provided; use `--check` instead
+    ");
+
+    // Running `uv lock` with `UV_FROZEN=1` should show a warning.
+    uv_snapshot!(context.filters(), context.lock().env(EnvVars::UV_FROZEN, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The lockfile at `uv.lock` was only checked for validity, not whether it is up-to-date, because `UV_FROZEN=1` was provided; use `--no-frozen` or `--check` instead
+    ");
+
+    Ok(())
+}

@@ -143,9 +143,9 @@ fn run_with_python_version() -> Result<()> {
 fn run_args() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let mut filters = context.filters();
-    filters.push((r"Usage: (uv|\.exe) run \[OPTIONS\] (?s).*", "[UV RUN HELP]"));
-    filters.push((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
+    let context = context
+        .with_filter((r"Usage: uv(\.exe)? run \[OPTIONS\] (?s).*", "[UV RUN HELP]"))
+        .with_filter((r"usage: .*(\n|.*)*", "usage: [PYTHON HELP]"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -162,7 +162,7 @@ fn run_args() -> Result<()> {
     })?;
 
     // We treat arguments before the command as uv arguments
-    uv_snapshot!(filters, context.run().arg("--help").arg("python"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--help").arg("python"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -172,7 +172,7 @@ fn run_args() -> Result<()> {
     ");
 
     // We don't treat arguments after the command as uv arguments
-    uv_snapshot!(filters, context.run().arg("python").arg("--help"), @"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--help"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -180,7 +180,7 @@ fn run_args() -> Result<()> {
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(filters, context.run().arg("--").arg("python").arg("--version"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4452,12 +4452,11 @@ fn run_gui_script_explicit_stdin_unix() -> Result<()> {
 #[test]
 fn run_remote_pep723_script() {
     let context = uv_test::test_context!("3.12").with_filtered_python_names();
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         r"(?m)^Downloaded remote script to:.*\.py$",
         "Downloaded remote script to: [TEMP_PATH].py",
     ));
-    uv_snapshot!(filters, context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
+    uv_snapshot!(context.filters(), context.run().arg("https://raw.githubusercontent.com/astral-sh/uv/df45b9ac2584824309ff29a6a09421055ad730f6/scripts/uv-run-remote-script-test.py").arg(EnvVars::CI), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4735,13 +4734,12 @@ fn run_with_not_existing_env_file() -> Result<()> {
        "
     })?;
 
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         r"(?m)^error: Failed to read environment file `.env.development`: .*$",
         "error: Failed to read environment file `.env.development`: [ERR]",
     ));
 
-    uv_snapshot!(filters, context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("test.py"), @"
     success: false
     exit_code: 2
     ----- stdout -----

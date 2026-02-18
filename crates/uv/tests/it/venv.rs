@@ -1416,14 +1416,13 @@ fn path_with_trailing_space_gives_proper_error() {
 
     // Set a custom cache directory with a trailing space
     let path_with_trailing_slash = format!("{} ", context.cache_dir.path().display());
-    let mut filters = context.filters();
     // Windows translates error messages, for example i get:
     // ": Das System kann den angegebenen Pfad nicht finden. (os error 3)"
-    filters.push((
+    let context = context.with_filter((
         r"CACHEDIR.TAG`: .* \(os error 3\)",
         "CACHEDIR.TAG`: The system cannot find the path specified. (os error 3)",
     ));
-    uv_snapshot!(filters, std::process::Command::new(uv_test::get_bin!())
+    uv_snapshot!(context.filters(), std::process::Command::new(uv_test::get_bin!())
         .arg("venv")
         .env(EnvVars::UV_CACHE_DIR, path_with_trailing_slash), @r###"
     success: false

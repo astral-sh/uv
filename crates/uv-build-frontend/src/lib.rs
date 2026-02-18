@@ -12,9 +12,8 @@ use std::fmt::Write;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::{env, iter};
 
 use fs_err as fs;
@@ -214,11 +213,23 @@ impl Pep517Backend {
     }
 }
 
-/// Uses an [`Rc`] internally, clone freely.
-#[derive(Debug, Default, Clone)]
+/// Uses an [`Arc`] internally, clone freely.
+#[derive(Debug, Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
-    default_resolution: Rc<Mutex<Option<Resolution>>>,
+    default_resolution: Arc<Mutex<Option<Resolution>>>,
+    /// A shared semaphore to limit the number of concurrent builds.
+    concurrent_build_slots: Arc<Semaphore>,
+}
+
+impl SourceBuildContext {
+    /// Create a [`SourceBuildContext`] with the given concurrent build limit.
+    pub fn new(concurrent_builds: usize) -> Self {
+        Self {
+            default_resolution: Arc::default(),
+            concurrent_build_slots: Arc::new(Semaphore::new(concurrent_builds)),
+        }
+    }
 }
 
 /// Holds the state through a series of PEP 517 frontend to backend calls or a single `setup.py`
@@ -290,7 +301,6 @@ impl SourceBuild {
         build_kind: BuildKind,
         mut environment_variables: FxHashMap<OsString, OsString>,
         level: BuildOutput,
-        concurrent_builds: usize,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, Error> {
         let temp_dir = build_context.cache().venv_dir()?;
@@ -379,7 +389,7 @@ impl SourceBuild {
 
             let resolved_requirements = Self::get_resolved_requirements(
                 build_context,
-                source_build_context,
+                source_build_context.clone(),
                 &pep517_backend,
                 extra_build_dependencies,
                 build_stack,
@@ -427,7 +437,7 @@ impl SourceBuild {
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
         // environment is already setup.
-        let runner = PythonRunner::new(concurrent_builds, level);
+        let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
 
@@ -1095,7 +1105,7 @@ async fn create_pep517_build_environment(
 /// concurrency limit.
 #[derive(Debug)]
 struct PythonRunner {
-    control: Semaphore,
+    concurrent_build_slots: Arc<Semaphore>,
     level: BuildOutput,
 }
 
@@ -1107,10 +1117,10 @@ struct PythonRunnerOutput {
 }
 
 impl PythonRunner {
-    /// Create a `PythonRunner` with the provided concurrency limit and output level.
-    fn new(concurrency: usize, level: BuildOutput) -> Self {
+    /// Create a `PythonRunner` with the provided shared concurrency semaphore and output level.
+    fn new(concurrent_build_slots: Arc<Semaphore>, level: BuildOutput) -> Self {
         Self {
-            control: Semaphore::new(concurrency),
+            concurrent_build_slots,
             level,
         }
     }
@@ -1148,7 +1158,7 @@ impl PythonRunner {
             }
         }
 
-        let _permit = self.control.acquire().await.unwrap();
+        let _permit = self.concurrent_build_slots.acquire().await.unwrap();
 
         let mut child = Command::new(venv.python_executable())
             .args(["-c", script])

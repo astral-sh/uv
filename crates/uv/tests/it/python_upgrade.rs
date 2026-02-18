@@ -122,11 +122,10 @@ fn python_upgrade_without_version() {
      + cpython-3.13.1-[PLATFORM] (python3.13)
     ");
 
-    let mut filters = context.filters().clone();
-    filters.push((r"3.13.\d+", "3.13.[X]"));
+    let context = context.with_filter((r"3.13.\d+", "3.13.[X]"));
 
     // Upgrade one patch version
-    uv_snapshot!(filters, context.python_upgrade().arg("3.13"), @"
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.13"), @"
     success: true
     exit_code: 0
     ----- stdout -----
