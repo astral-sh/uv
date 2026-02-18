@@ -3378,6 +3378,64 @@ fn update() -> Result<()> {
     Ok(())
 }
 
+/// Verify that `-E` works as a shorthand for `--extra` in `uv add`.
+#[test]
+#[cfg(feature = "test-git")]
+fn add_extra_shorthand() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests==2.31.0",
+        ]
+    "#})?;
+
+    // Use `-E` to enable extras (multiple times).
+    uv_snapshot!(context.filters(), context.add().arg("requests; python_version > '3.7'").args(["-E", "use_chardet_on_py3", "-E", "socks"]), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + certifi==2024.2.2
+     + chardet==5.2.0
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + pysocks==1.7.1
+     + requests==2.31.0
+     + urllib3==2.2.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests==2.31.0",
+            "requests[socks,use-chardet-on-py3]>=2.31.0 ; python_full_version >= '3.8'",
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Add and update a requirement, with different markers
 #[test]
 fn add_update_marker() -> Result<()> {

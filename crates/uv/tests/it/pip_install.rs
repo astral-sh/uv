@@ -14201,3 +14201,51 @@ fn warn_on_lzma_wheel() {
     "
     );
 }
+
+#[test]
+fn pip_install_extra_shorthand() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [tool.poetry]
+name = "poetry-editable"
+version = "0.1.0"
+description = ""
+authors = ["Astral Software Inc. <hey@astral.sh>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+anyio = "^3"
+iniconfig = { version = "*", optional = true }
+
+[tool.poetry.extras]
+test = ["iniconfig"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+"#,
+    })?;
+
+    uv_snapshot!(context.pip_install()
+            .arg("-r")
+            .arg("pyproject.toml")
+            .arg("-E")
+            .arg("test"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.1
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
