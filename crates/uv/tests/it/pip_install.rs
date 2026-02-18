@@ -215,13 +215,12 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         "expected one of `required-version`, `native-tls`, .*",
         "expected one of `required-version`, `native-tls`, [...]",
     ));
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @r#"
     success: true
@@ -2205,14 +2204,12 @@ fn update_ref_git_public_https() {
 #[test]
 #[cfg(feature = "test-git")]
 fn install_git_public_https_missing_branch_or_tag() {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
-
-    let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
-    filters.push(("exit status", "exit code"));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"))
+        .with_filter(("exit status", "exit code"));
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @"
     success: false
@@ -2293,20 +2290,17 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
 #[test]
 #[cfg(feature = "test-git")]
 fn install_git_public_https_missing_commit() {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
-
-    let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"));
-    filters.push(("exit status", "exit code"));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"))
+        .with_filter(("exit status", "exit code"))
+        // There are flakes on Windows where this irrelevant error is appended
+        .with_filter((
+            "fatal: unable to write response end packet: Broken pipe\n",
+            "",
+        ));
 
-    // There are flakes on Windows where this irrelevant error is appended
-    filters.push((
-        "fatal: unable to write response end packet: Broken pipe\n",
-        "",
-    ));
-
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
         , @"
@@ -2536,16 +2530,16 @@ fn install_git_private_https_pat_not_authorized() {
     // A revoked token
     let token = "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";
 
-    let mut filters = context.filters();
     // TODO(john): We need this filter because we are displaying the token when
     // an underlying process error message is being displayed. We should actually
     // mask it.
-    filters.push((token, "***"));
-    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = context
+        .with_filter((token, "***"))
+        .with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
         , @"
     success: false

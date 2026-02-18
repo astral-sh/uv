@@ -2622,12 +2622,11 @@ fn python_install_cached() {
     ");
 
     // 3.12 isn't cached, so it can't be installed
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         "cpython-3.12.*.tar.gz",
         "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
     ));
-    uv_snapshot!(filters, context
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("3.12")
         .arg("--offline")
@@ -2733,13 +2732,13 @@ fn python_install_no_cache() {
     ");
 
     // 3.12 isn't cached, so it can't be installed
-    let mut filters = context.filters();
-    filters.push((
-        "cpython-3.12.*.tar.gz",
-        "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
-    ));
-    filters.push((r"releases/download/\d{8}/", "releases/download/[DATE]/"));
-    uv_snapshot!(filters, context
+    let context = context
+        .with_filter((
+            "cpython-3.12.*.tar.gz",
+            "cpython-3.12.[PATCH]-[DATE]-[PLATFORM].tar.gz",
+        ))
+        .with_filter((r"releases/download/\d{8}/", "releases/download/[DATE]/"));
+    uv_snapshot!(context.filters(), context
         .python_install()
         .arg("3.12")
         .arg("--offline"), @"
@@ -3497,11 +3496,10 @@ fn uninstall_last_patch() {
     "
     );
 
-    let mut filters = context.filters();
-    filters.push(("python3", "python"));
+    let context = context.with_filter(("python3", "python"));
 
     #[cfg(unix)]
-    uv_snapshot!(filters, context.run().arg("python").arg("--version"), @"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3515,7 +3513,7 @@ fn uninstall_last_patch() {
     );
 
     #[cfg(windows)]
-    uv_snapshot!(filters, context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
