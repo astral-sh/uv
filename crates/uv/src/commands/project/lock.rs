@@ -1051,7 +1051,7 @@ impl ValidatedLock {
             if !change.is_relative_timestamp_change() {
                 let _ = writeln!(
                     printer.stderr(),
-                    "Ignoring existing lockfile due to {change}",
+                    "Resolving despite existing lockfile due to {change}",
                 );
                 return Ok(Self::Preferable(lock));
             }
