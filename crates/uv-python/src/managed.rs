@@ -61,11 +61,7 @@ pub enum Error {
     #[error("Failed to create canonical Python executable")]
     CanonicalizeExecutable(#[source] io::Error),
     #[error("Failed to create Python executable link")]
-    LinkExecutable {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
+    LinkExecutable(#[source] io::Error),
     #[error("Failed to create Python minor version link directory")]
     PythonMinorVersionLinkDirectory(#[source] io::Error),
     #[error("Failed to create directory for Python executable link")]
@@ -927,10 +923,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Err(Error::MissingExecutable(executable.to_path_buf()))
             }
-            Err(err) => Err(Error::LinkExecutable {
-                to: link.to_path_buf(),
-                err,
-            }),
+            Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
@@ -944,10 +937,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
-                .map_err(|err| Error::LinkExecutable {
-                    to: link.to_path_buf(),
-                    err,
-                })
+                .map_err(Error::LinkExecutable)
         }
     } else {
         unimplemented!("Only Windows and Unix are supported.")
@@ -964,19 +954,13 @@ pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), 
     fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(|err| Error::LinkExecutable {
-            to: link.to_path_buf(),
-            err,
-        })
+        replace_symlink(executable, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
         let launcher = windows_python_launcher(executable, false)?;
 
-        uv_fs::write_atomic_sync(link, &*launcher).map_err(|err| Error::LinkExecutable {
-            to: link.to_path_buf(),
-            err,
-        })
+        uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }
