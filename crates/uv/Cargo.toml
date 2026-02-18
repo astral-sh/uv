@@ -131,7 +131,6 @@ uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
-backon = { workspace = true }
 base64 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
@@ -149,7 +148,6 @@ sha2 = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
-tokio-util = { workspace = true }
 whoami = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
