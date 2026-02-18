@@ -51,7 +51,7 @@ PACKSE = TOOL_ROOT / "packse-scenarios"
 REQUIREMENTS = TOOL_ROOT / "pylock.toml"
 PROJECT_ROOT = TOOL_ROOT.parent.parent
 TESTS = PROJECT_ROOT / "crates" / "uv" / "tests" / "it"
-TESTS_COMMON_MOD_RS =  PROJECT_ROOT / "crates" / "uv-test" / "src" / "lib.rs"
+TESTS_COMMON_MOD_RS = PROJECT_ROOT / "crates" / "uv-test" / "src" / "lib.rs"
 
 try:
     import packse

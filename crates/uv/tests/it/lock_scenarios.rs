@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.58/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.59/scenarios>
 //!
 #![cfg(all(feature = "test-python", feature = "test-pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -5343,73 +5343,6 @@ fn virtual_package_extra_priorities() -> Result<()> {
         .arg(packse_index_url())
         .assert()
         .success();
-
-    Ok(())
-}
-
-/// A package is first used under a marker that is a subset of the required environments that it fulfills, and then under a marker that is a subset it doesn't fulfill.
-///
-/// `a` has a wheel only supports Windows, and the required platforms are Linux and Windows. The first time we encounter `a`, it's used with a Windows-only marker, so it doesn't violate. Afterwards, we select `b`, and while it doesn't change the version for `a`, it requires it universally. Now the resolution needs to fail, as `a` is now missing the Linux wheel.
-///
-/// See <https://github.com/astral-sh/uv/pull/16824#discussion_r2556176057>
-///
-/// ```text
-/// markers-change-after-selection
-/// ├── environment
-/// │   └── python3.12
-/// ├── root
-/// │   ├── requires a; sys_platform == "win32"
-/// │   │   └── satisfied by a-1.0.0
-/// │   └── requires b
-/// │       └── satisfied by b-1.0.0
-/// ├── a
-/// │   └── a-1.0.0
-/// └── b
-///     └── b-1.0.0
-///         └── requires a; sys_platform == "linux"
-///             └── satisfied by a-1.0.0
-/// ```
-#[test]
-fn markers_change_after_selection() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-
-    // In addition to the standard filters, swap out package names for shorter messages
-    let mut filters = context.filters();
-    filters.push((r"markers-change-after-selection-", "package-"));
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        dependencies = [
-          '''markers-change-after-selection-a; sys_platform == "win32"''',
-          '''markers-change-after-selection-b''',
-        ]
-        requires-python = ">=3.12"
-        [tool.uv]
-        required-environments = [
-          '''sys_platform == "linux"''',
-          '''sys_platform == "win32"''',
-        ]
-        "###,
-    )?;
-
-    let mut cmd = context.lock();
-    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: sys_platform == 'linux'):
-      ╰─▶ Because only package-a{sys_platform == 'win32'}==1.0.0 is available and package-a==1.0.0 has no Linux-compatible wheels, we can conclude that all versions of package-a{sys_platform == 'win32'} cannot be used.
-          And because your project depends on package-a{sys_platform == 'win32'}, we can conclude that your project's requirements are unsatisfiable.
-    "
-    );
 
     Ok(())
 }

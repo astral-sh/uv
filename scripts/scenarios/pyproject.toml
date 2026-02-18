@@ -1,5 +1,5 @@
 [dependency-groups]
 packse = [
   "chevron-blue",
-  "packse>=0.3.58"
+  "packse>=0.3.59"
 ]
