@@ -1181,6 +1181,12 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Format(FormatArgs),
+    /// Audit the project's lockfile for known vulnerabilities and unmaintained dependencies.
+    #[command(
+        after_help = "Use `uv help audit` for more details.",
+        after_long_help = ""
+    )]
+    Audit(AuditArgs),
 }
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
@@ -5112,6 +5118,161 @@ pub struct FormatArgs {
     /// (e.g., `--version ">=0.8.0"`) or `--version latest`.
     #[arg(long, hide = true)]
     pub show_version: bool,
+}
+
+#[derive(Args)]
+pub struct AuditArgs {
+    /// Perform a platform-independent audit of the dependencies.
+    ///
+    /// Audits resolved package versions for all Python versions and platforms, rather than filtering
+    /// to those that are relevant for the current environment.
+    ///
+    /// Multiple versions may be audited for each package.
+    #[arg(long)]
+    pub universal: bool,
+
+    /// Include optional dependencies from the specified extra name.
+    ///
+    /// May be provided more than once.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(
+        long,
+        conflicts_with = "all_extras",
+        conflicts_with = "only_group",
+        value_delimiter = ',',
+        value_parser = extra_name_with_clap_error,
+        value_hint = ValueHint::Other,
+    )]
+    pub extra: Option<Vec<ExtraName>>,
+
+    /// Include all optional dependencies.
+    ///
+    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
+    pub all_extras: bool,
+
+    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub no_extra: Vec<ExtraName>,
+
+    #[arg(long, overrides_with("all_extras"), hide = true)]
+    pub no_all_extras: bool,
+
+    /// Include the development dependency group [env: UV_DEV=]
+    ///
+    /// Development dependencies are defined via `dependency-groups.dev` or
+    /// `tool.uv.dev-dependencies` in a `pyproject.toml`.
+    ///
+    /// This option is an alias for `--group dev`.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, overrides_with("no_dev"), hide = true, value_parser = clap::builder::BoolishValueParser::new())]
+    pub dev: bool,
+
+    /// Disable the development dependency group [env: UV_NO_DEV=]
+    ///
+    /// This option is an alias of `--no-group dev`.
+    /// See `--no-default-groups` to disable all default groups instead.
+    ///
+    /// This option is only available when running in a project.
+    #[arg(long, overrides_with("dev"), value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_dev: bool,
+
+    /// Include dependencies from the specified dependency group.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"], value_hint = ValueHint::Other)]
+    pub group: Vec<GroupName>,
+
+    /// Disable the specified dependency group.
+    ///
+    /// This option always takes precedence over default groups,
+    /// `--all-groups`, and `--group`.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, env = EnvVars::UV_NO_GROUP, value_delimiter = ' ', value_hint = ValueHint::Other)]
+    pub no_group: Vec<GroupName>,
+
+    /// Ignore the default dependency groups.
+    ///
+    /// uv includes the groups defined in `tool.uv.default-groups` by default.
+    /// This disables that option, however, specific groups can still be included with `--group`.
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_default_groups: bool,
+
+    /// Only include dependencies from the specified dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// May be provided multiple times. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "dev", "all_groups"], value_hint = ValueHint::Other)]
+    pub only_group: Vec<GroupName>,
+
+    /// Include dependencies from all dependency groups.
+    ///
+    /// `--no-group` can be used to exclude specific groups.
+    #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
+    pub all_groups: bool,
+
+    /// Only include the development dependency group.
+    ///
+    /// The project and its dependencies will be omitted.
+    ///
+    /// This option is an alias for `--only-group dev`. Implies `--no-default-groups`.
+    #[arg(long, conflicts_with_all = ["group", "all_groups", "no_dev"])]
+    pub only_dev: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged [env: UV_LOCKED=]
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
+    /// uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
+
+    /// Audit the requirements without locking the project [env: UV_FROZEN=]
+    ///
+    /// If the lockfile is missing, uv will exit with an error.
+    #[arg(long, conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub resolver: ResolverArgs,
+
+    /// Audit the specified PEP 723 Python script, rather than the current
+    /// project.
+    ///
+    /// The specified script must be locked, i.e. with `uv lock --script <script>`
+    /// before it can be audited.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub script: Option<PathBuf>,
+
+    /// The Python version to use when auditing.
+    ///
+    /// For example, pass `--python-version 3.10` to display the dependencies that would be included
+    /// when installing on Python 3.10.
+    ///
+    /// Defaults to the version of the discovered Python interpreter.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_version: Option<PythonVersion>,
+
+    /// The platform to use when auditing.
+    ///
+    /// For example, pass `--platform windows` to display the dependencies that would be included
+    /// when installing on Windows.
+    ///
+    /// Represented as a "target triple", a string that describes the target platform in terms of
+    /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
+    /// `aarch64-apple-darwin`.
+    #[arg(long, conflicts_with = "universal")]
+    pub python_platform: Option<TargetTriple>,
 }
 
 #[derive(Args)]
