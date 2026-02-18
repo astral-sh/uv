@@ -12,7 +12,7 @@ use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    AddArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
+    AddArgs, AuditArgs, AuthLoginArgs, AuthLogoutArgs, AuthTokenArgs, ColorChoice, ExternalCommand,
     GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe, PipCheckArgs, PipCompileArgs, PipFreezeArgs,
     PipInstallArgs, PipListArgs, PipShowArgs, PipSyncArgs, PipTreeArgs, PipUninstallArgs,
     PythonFindArgs, PythonInstallArgs, PythonListArgs, PythonListFormat, PythonPinArgs,
@@ -2456,6 +2456,98 @@ impl FormatSettings {
             exclude_newer: exclude_newer.map(|v| v.timestamp()),
             no_project,
             show_version,
+        }
+    }
+}
+
+/// The resolved settings to use for an `audit` invocation.
+#[derive(Debug, Clone)]
+pub(crate) struct AuditSettings {
+    pub(crate) universal: bool,
+    pub(crate) extras: ExtrasSpecification,
+    pub(crate) groups: DependencyGroups,
+    pub(crate) lock_check: LockCheck,
+    pub(crate) frozen: Option<FrozenSource>,
+    pub(crate) python_version: Option<PythonVersion>,
+    pub(crate) python_platform: Option<TargetTriple>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) settings: ResolverSettings,
+}
+
+impl AuditSettings {
+    /// Resolve the [`AuditSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(
+        args: AuditArgs,
+        filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
+        let AuditArgs {
+            universal,
+            extra,
+            all_extras,
+            no_extra,
+            no_all_extras,
+            dev,
+            no_dev,
+            group,
+            no_group,
+            no_default_groups,
+            only_group,
+            all_groups,
+            only_dev,
+            script: _,
+            python_version,
+            python_platform,
+            locked,
+            frozen,
+            build,
+            resolver,
+        } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        let dev = dev || environment.dev.value == Some(true);
+        let no_dev = no_dev || environment.no_dev.value == Some(true);
+
+        // Resolve flags from CLI and environment variables.
+        let locked = resolve_flag(locked, "locked", environment.locked);
+        let frozen = resolve_flag(frozen, "frozen", environment.frozen);
+
+        // Check for conflicts between locked and frozen.
+        check_conflicts(locked, frozen);
+
+        Self {
+            universal,
+            extras: ExtrasSpecification::from_args(
+                extra.unwrap_or_default(),
+                no_extra,
+                // TODO(ww): support no_default_extras?
+                false,
+                // TODO(ww): support only_extra?
+                vec![],
+                flag(all_extras, no_all_extras, "all-extras").unwrap_or_default(),
+            ),
+            groups: DependencyGroups::from_args(
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
+            ),
+            lock_check: resolve_lock_check(locked),
+            frozen: resolve_frozen(frozen),
+            python_version,
+            python_platform,
+            install_mirrors: environment
+                .install_mirrors
+                .combine(filesystem_install_mirrors),
+            settings: ResolverSettings::combine(resolver_options(resolver, build), filesystem),
         }
     }
 }
