@@ -37,7 +37,7 @@ pub(crate) enum InstallTarget<'lock> {
         workspace: &'lock Workspace,
         lock: &'lock Lock,
     },
-    /// An entire workspace with a (legacy) non-project root.
+    /// An entire workspace with a non-project root.
     NonProjectWorkspace {
         workspace: &'lock Workspace,
         lock: &'lock Lock,

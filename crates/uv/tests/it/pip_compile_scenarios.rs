@@ -5,6 +5,7 @@
 //!
 #![cfg(all(feature = "test-python", unix))]
 
+use std::env;
 use std::process::Command;
 
 use anyhow::Result;

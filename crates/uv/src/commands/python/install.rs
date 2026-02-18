@@ -1021,7 +1021,7 @@ fn create_bin_links(
                     .or_default()
                     .insert(target.clone());
             }
-            Err(uv_python::managed::Error::LinkExecutable { from: _, to, err })
+            Err(uv_python::managed::Error::LinkExecutable(err))
                 if err.kind() == ErrorKind::AlreadyExists =>
             {
                 debug!(
@@ -1059,7 +1059,7 @@ fn create_bin_links(
                                 if upgrade {
                                     warn_user!(
                                         "Executable already exists at `{}` but is not managed by uv; use `uv python install {}.{}{} --force` to replace it",
-                                        to.simplified_display(),
+                                        target.simplified_display(),
                                         installation.key().major(),
                                         installation.key().minor(),
                                         installation.key().variant().display_suffix()
@@ -1070,7 +1070,7 @@ fn create_bin_links(
                                         installation.key().clone(),
                                         anyhow::anyhow!(
                                             "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            to.simplified_display()
+                                            target.simplified_display()
                                         ),
                                     ));
                                 }
@@ -1133,7 +1133,7 @@ fn create_bin_links(
                                 debug!(
                                     "Executable already exists for `{}` at `{}`. Use `--force` to replace it",
                                     existing.key(),
-                                    to.simplified_display()
+                                    target.simplified_display()
                                 );
                                 continue;
                             }
@@ -1142,13 +1142,13 @@ fn create_bin_links(
                 }
 
                 // Replace the existing link
-                if let Err(err) = fs_err::remove_file(&to) {
+                if let Err(err) = fs_err::remove_file(&target) {
                     errors.push((
                         InstallErrorKind::Bin,
                         installation.key().clone(),
                         anyhow::anyhow!(
                             "Executable already exists at `{}` but could not be removed: {err}",
-                            to.simplified_display()
+                            target.simplified_display()
                         ),
                     ));
                     continue;

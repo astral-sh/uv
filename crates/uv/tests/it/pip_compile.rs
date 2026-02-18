@@ -3429,16 +3429,16 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r#"
+        .arg("2022-04-04T26:00:00+00"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())

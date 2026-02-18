@@ -51,7 +51,7 @@ jobs:
             crates/uv-python/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
             crates/uv-python/src/sysconfig/generated_mappings.rs
-            crates/uv/tests/it/common/mod.rs
+            crates/uv-test/src/lib.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."

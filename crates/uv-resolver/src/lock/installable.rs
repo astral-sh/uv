@@ -249,7 +249,7 @@ pub trait Installable<'lock> {
         }
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
-        // dependencies in (legacy) non-project workspace roots).
+        // dependencies in non-project workspace roots).
         for (group, dependency) in self
             .lock()
             .dependency_groups()

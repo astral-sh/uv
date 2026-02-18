@@ -1257,7 +1257,7 @@ impl TestContext {
         command.arg("format");
         self.add_shared_options(&mut command, false);
         // Override to a more recent date for ruff version resolution
-        command.env(EnvVars::UV_EXCLUDE_NEWER, "2025-01-01T00:00:00Z");
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
         command
     }
 

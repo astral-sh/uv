@@ -694,7 +694,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             for ver in (16..=*api_level).rev() {
                 platform_tags.push(PlatformTag::Android {
                     api_level: ver,
-                    abi: AndroidAbi::from_arch(arch).map_err(PlatformError::ArchDetectionError)?,
+                    abi: AndroidAbi::from_arch(arch)?,
                 });
             }
 
@@ -716,8 +716,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         ) => {
             // Source: https://github.com/pypa/packaging/blob/e9b9d09ebc5992ecad1799da22ee5faefb9cc7cb/src/packaging/tags.py#L484
             let mut platform_tags = vec![];
-            let multiarch = IosMultiarch::from_arch(arch, *simulator)
-                .map_err(PlatformError::ArchDetectionError)?;
+            let multiarch = IosMultiarch::from_arch(arch, *simulator)?;
 
             // Consider any iOS major.minor version from the version requested, down to
             // 12.0. 12.0 is the first iOS version that is known to have enough features
@@ -940,13 +939,13 @@ impl FromStr for AndroidAbi {
 
 impl AndroidAbi {
     /// Determine the appropriate Android arch.
-    pub fn from_arch(arch: Arch) -> Result<Self, String> {
+    pub fn from_arch(arch: Arch) -> Result<Self, PlatformError> {
         match arch {
             Arch::Aarch64 => Ok(Self::Arm64V8a),
             Arch::Armv7L => Ok(Self::ArmeabiV7a),
             Arch::X86 => Ok(Self::X86),
             Arch::X86_64 => Ok(Self::X86_64),
-            _ => Err(format!("Invalid Android arch format: {arch}")),
+            _ => Err(PlatformError::InvalidAndroidArch(arch)),
         }
     }
 
@@ -961,6 +960,9 @@ impl AndroidAbi {
     }
 }
 
+/// iOS architecture and whether it is a simulator or a real device.
+///
+/// Not to be confused with the Linux mulitarch concept.
 #[derive(
     Debug,
     Copy,
@@ -1003,17 +1005,17 @@ impl FromStr for IosMultiarch {
 
 impl IosMultiarch {
     /// Determine the appropriate multiarch for a iOS version.
-    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, String> {
+    pub fn from_arch(arch: Arch, simulator: bool) -> Result<Self, PlatformError> {
         if simulator {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Simulator),
                 Arch::X86_64 => Ok(Self::X86_64Simulator),
-                _ => Err(format!("Invalid iOS simulator arch: {arch}")),
+                _ => Err(PlatformError::InvalidIosSimulatorArch(arch)),
             }
         } else {
             match arch {
                 Arch::Aarch64 => Ok(Self::Arm64Device),
-                _ => Err(format!("Invalid iOS device arch: {arch}")),
+                _ => Err(PlatformError::InvalidIosDeviceArch(arch)),
             }
         }
     }

@@ -1104,9 +1104,9 @@ fn check() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync development dependencies in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
+fn sync_non_project_dev_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1185,9 +1185,9 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 #[test]
-fn sync_legacy_non_project_frozen() -> Result<()> {
+fn sync_non_project_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1253,9 +1253,9 @@ fn sync_legacy_non_project_frozen() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync dependency groups in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_group() -> Result<()> {
+fn sync_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1371,11 +1371,11 @@ fn sync_legacy_non_project_group() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 ///
 /// Modify the `pyproject.toml` after locking.
 #[test]
-fn sync_legacy_non_project_frozen_modification() -> Result<()> {
+fn sync_non_project_frozen_modification() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4661,9 +4661,9 @@ fn sync_group_member() -> Result<()> {
     Ok(())
 }
 
-/// Sync with `--only-group`, where the group includes a legacy non-`[project]` workspace member.
+/// Sync with `--only-group`, where the group includes a non-`[project]` workspace member.
 #[test]
-fn sync_group_legacy_non_project_member() -> Result<()> {
+fn sync_group_non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Create a workspace.
@@ -7203,7 +7203,7 @@ fn sync_empty_virtual_environment() -> Result<()> {
 
 /// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
 #[test]
-fn sync_legacy_non_project_warning() -> Result<()> {
+fn sync_virtual_env_warning() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
