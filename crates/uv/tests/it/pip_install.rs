@@ -215,13 +215,12 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    let mut filters = context.filters();
-    filters.push((
+    let context = context.with_filter((
         "expected one of `required-version`, `native-tls`, .*",
         "expected one of `required-version`, `native-tls`, [...]",
     ));
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("pyproject.toml"), @r#"
     success: true
@@ -311,21 +310,25 @@ fn invalid_uv_toml_option_disallowed_command_line() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn cache_uv_toml_credentials() -> Result<()> {
+#[tokio::test]
+async fn cache_uv_toml_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(indoc! {r#"
+    uv_toml.write_str(&format!(
+        indoc::indoc! {r#"
     [pip]
-    extra-index-url = ["https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/"]
-    "#})?;
+    extra-index-url = ["{}"]
+    "#},
+        proxy.authenticated_url("public", "heron", "/basic-auth/simple/")
+    ))?;
 
     // Provide an extra index with the same username and URL as in `uv.toml` but
     // no password.
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("iniconfig")
         .arg("--extra-index-url")
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple/"), @"
+        .arg(proxy.username_url("public", "/basic-auth/simple/")), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2201,14 +2204,12 @@ fn update_ref_git_public_https() {
 #[test]
 #[cfg(feature = "test-git")]
 fn install_git_public_https_missing_branch_or_tag() {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
-
-    let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"));
-    filters.push(("exit status", "exit code"));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter(("`.*/git(.exe)? fetch .*`", "`git fetch [...]`"))
+        .with_filter(("exit status", "exit code"));
 
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@2.0.0"), @"
     success: false
@@ -2289,20 +2290,17 @@ async fn install_git_public_rate_limited_by_github_rest_api_429_response() {
 #[test]
 #[cfg(feature = "test-git")]
 fn install_git_public_https_missing_commit() {
-    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
-
-    let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
-    filters.push(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"));
-    filters.push(("exit status", "exit code"));
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION)
+        .with_filter(("`.*/git(.exe)? rev-parse .*`", "`git rev-parse [...]`"))
+        .with_filter(("exit status", "exit code"))
+        // There are flakes on Windows where this irrelevant error is appended
+        .with_filter((
+            "fatal: unable to write response end packet: Broken pipe\n",
+            "",
+        ));
 
-    // There are flakes on Windows where this irrelevant error is appended
-    filters.push((
-        "fatal: unable to write response end packet: Broken pipe\n",
-        "",
-    ));
-
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         // 2.0.0 does not exist
         .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@79a935a7a1a0ad6d0bdf72dce0e16cb0a24a1b3b")
         , @"
@@ -2532,16 +2530,16 @@ fn install_git_private_https_pat_not_authorized() {
     // A revoked token
     let token = "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";
 
-    let mut filters = context.filters();
     // TODO(john): We need this filter because we are displaying the token when
     // an underlying process error message is being displayed. We should actually
     // mask it.
-    filters.push((token, "***"));
-    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = context
+        .with_filter((token, "***"))
+        .with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg(format!("uv-private-pypackage @ git+https://git:{token}@github.com/astral-test/uv-private-pypackage"))
         , @"
     success: false
@@ -5707,14 +5705,16 @@ requires-python = ">=3.13"
 }
 
 /// Install a package from an index that requires authentication
-#[test]
-fn install_package_basic_auth_from_url() {
+#[tokio::test]
+async fn install_package_basic_auth_from_url() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+    let index_url = proxy.authenticated_url("public", "heron", "/basic-auth/simple");
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(index_url)
         .arg("--strict"), @"
     success: true
     exit_code: 0
@@ -5734,16 +5734,17 @@ fn install_package_basic_auth_from_url() {
 }
 
 /// Install a package from an index that requires authentication
-#[test]
-fn install_package_basic_auth_from_netrc_default() -> Result<()> {
+#[tokio::test]
+async fn install_package_basic_auth_from_netrc_default() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let netrc = context.temp_dir.child(".netrc");
     netrc.write_str("default login public password heron")?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @"
     success: true
@@ -5766,16 +5767,20 @@ fn install_package_basic_auth_from_netrc_default() -> Result<()> {
 }
 
 /// Install a package from an index that requires authentication
-#[test]
-fn install_package_basic_auth_from_netrc() -> Result<()> {
+#[tokio::test]
+async fn install_package_basic_auth_from_netrc() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let netrc = context.temp_dir.child(".netrc");
-    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.url("/basic-auth/simple"))
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
         .arg("--strict"), @"
     success: true
@@ -5799,21 +5804,23 @@ fn install_package_basic_auth_from_netrc() -> Result<()> {
 
 /// Install a package from an index that requires authentication
 /// Define the `--index-url` in the requirements file
-#[test]
-fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result<()> {
+#[tokio::test]
+async fn install_package_basic_auth_from_netrc_index_in_requirements() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
     let netrc = context.temp_dir.child(".netrc");
-    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+    netrc.write_str(&format!(
+        "machine {} login public password heron",
+        proxy.host()
+    ))?;
 
     let requirements = context.temp_dir.child("requirements.txt");
-    requirements.write_str(
-        r"
-anyio
---index-url https://pypi-proxy.fly.dev/basic-auth/simple
-    ",
-    )?;
+    requirements.write_str(&format!(
+        "\nanyio\n--index-url {}/basic-auth/simple\n    ",
+        proxy.uri()
+    ))?;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .env(EnvVars::NETRC, netrc.to_str().unwrap())
@@ -5838,14 +5845,15 @@ anyio
 }
 
 /// Install a package from an index that provides relative links
-#[test]
-fn install_index_with_relative_links() {
+#[tokio::test]
+async fn install_index_with_relative_links() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://pypi-proxy.fly.dev/relative/simple")
+        .arg(proxy.url("/relative/simple"))
         .arg("--strict"), @"
     success: true
     exit_code: 0
@@ -5865,9 +5873,10 @@ fn install_index_with_relative_links() {
 }
 
 /// Install a package from an index that requires authentication from the keyring.
-#[test]
-fn install_package_basic_auth_from_keyring() {
+#[tokio::test]
+async fn install_package_basic_auth_from_keyring() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     context
@@ -5882,22 +5891,22 @@ fn install_package_basic_auth_from_keyring() {
         .assert()
         .success();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -5912,9 +5921,10 @@ fn install_package_basic_auth_from_keyring() {
 
 /// Install a package from an index that requires authentication
 /// but the keyring has the wrong password
-#[test]
-fn install_package_basic_auth_from_keyring_wrong_password() {
+#[tokio::test]
+async fn install_package_basic_auth_from_keyring_wrong_password() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     context
@@ -5929,35 +5939,36 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .assert()
         .success();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "foobar"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
 
 /// Install a package from an index that requires authentication
 /// but the keyring has the wrong username
-#[test]
-fn install_package_basic_auth_from_keyring_wrong_username() {
+#[tokio::test]
+async fn install_package_basic_auth_from_keyring_wrong_username() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Install our keyring plugin
     context
@@ -5972,39 +5983,41 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .assert()
         .success();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("--strict")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"other": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+          hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
 
 /// Install a package from an index that provides relative links and requires authentication
-#[test]
-fn install_index_with_relative_links_authenticated() {
+#[tokio::test]
+async fn install_index_with_relative_links_authenticated() {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
         .arg("--index-url")
-        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/relative/simple")
+        .arg(proxy.authenticated_url("public", "heron", "/basic-auth/relative/simple"))
         .arg("--strict"), @"
     success: true
     exit_code: 0

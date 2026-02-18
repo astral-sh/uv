@@ -3,6 +3,54 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.4
+
+Released on 2026-02-17.
+
+### Enhancements
+
+- Remove duplicate references to the affected paths when showing `uv python` errors ([#18008](https://github.com/astral-sh/uv/pull/18008))
+- Skip discovery of workspace members that contain only git-ignored files, including in sub-directories ([#18051](https://github.com/astral-sh/uv/pull/18051))
+
+### Bug fixes
+
+- Don't panic when initialising a package at the filesystem root (e.g. `uv init / --name foo`) ([#17983](https://github.com/astral-sh/uv/pull/17983))
+- Fix permissions on `wheel` and `sdist` files produced by the `uv_build` build backend ([#18020](https://github.com/astral-sh/uv/pull/18020))
+- Revert locked file change to fix locked files on NFS mounts ([#18071](https://github.com/astral-sh/uv/pull/18071))
+
+## 0.10.3
+
+Released on 2026-02-16.
+
+### Python
+
+- Add CPython 3.15.0a6
+
+### Enhancements
+
+- Don't open file locks for writing ([#17956](https://github.com/astral-sh/uv/pull/17956))
+- Make Windows trampoline error messages consistent with uv proper ([#17969](https://github.com/astral-sh/uv/pull/17969))
+- Log which preview features are enabled ([#17968](https://github.com/astral-sh/uv/pull/17968))
+
+### Preview features
+
+- Add support for ruff version constraints and `exclude-newer` in `uv format` ([#17651](https://github.com/astral-sh/uv/pull/17651))
+- Fix script path handling when `target-workspace-discovery` is enabled ([#17965](https://github.com/astral-sh/uv/pull/17965))
+- Use version constraints to select the default ruff version used by `uv format` ([#17977](https://github.com/astral-sh/uv/pull/17977))
+
+### Bug fixes
+
+- Avoid matching managed Python versions by prefixes, e.g. don't match CPython 3.10 when `cpython-3.1` is specified ([#17972](https://github.com/astral-sh/uv/pull/17972))
+- Fix handling of `--allow-existing` with minor version links on Windows ([#17978](https://github.com/astral-sh/uv/pull/17978))
+- Fix panic when encountering unmanaged workspace members ([#17974](https://github.com/astral-sh/uv/pull/17974))
+- Improve accuracy of request timing ([#18007](https://github.com/astral-sh/uv/pull/18007))
+- Reject `u64::MAX` in version segments to prevent overflow ([#17985](https://github.com/astral-sh/uv/pull/17985))
+
+### Documentation
+
+- Reference Debian Trixie instead of Bookworm ([#17991](https://github.com/astral-sh/uv/pull/17991))
+
+
 ## 0.10.2
 
 Released on 2026-02-10.

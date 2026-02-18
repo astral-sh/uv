@@ -1416,14 +1416,14 @@ impl SimpleDetailMetadata {
         for file in files {
             let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
-                warn!("Skipping file for {package_name}: {}", file.filename);
+                debug!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
-                    warn!("Skipping file for {package_name}: {err}");
+                    debug!("Skipping file for {package_name}: {err}");
                     continue;
                 }
             };
@@ -1470,13 +1470,13 @@ impl SimpleDetailMetadata {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
-                    warn!("Skipping file for {package_name}: {err}");
+                    debug!("Skipping file for {package_name}: {err}");
                     continue;
                 }
             };
             let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
-                warn!("Skipping file for {package_name}: {}", file.filename);
+                debug!("Skipping file for {package_name}: {}", file.filename);
                 continue;
             };
             match version_map.entry(filename.version().clone()) {

@@ -9,17 +9,17 @@ use uv_test::{uv_snapshot, venv_bin_path};
 #[test]
 fn tool_run_args() {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
-    let mut filters = context.filters();
-    filters.push((
-        r"Usage: uv tool run \[OPTIONS\] (?s).*",
-        "[UV TOOL RUN HELP]",
-    ));
-    filters.push((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
+    let context = context
+        .with_filter((
+            r"Usage: uv(\.exe)? tool run \[OPTIONS\] (?s).*",
+            "[UV TOOL RUN HELP]",
+        ))
+        .with_filter((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
     // We treat arguments before the command as uv tool run arguments
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--help")
         .arg("pytest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -33,7 +33,7 @@ fn tool_run_args() {
     ");
 
     // We don't treat arguments after the command as uv tool run arguments
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("pytest")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -45,7 +45,7 @@ fn tool_run_args() {
     ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--")
         .arg("pytest")
         .arg("--version")
@@ -309,12 +309,12 @@ fn tool_run_warn_executable_not_in_from() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    let mut filters = context.filters();
-    filters.push(("\\+ uvloop(.+)\n ", ""));
-    // Strip off the `fastapi` command output.
-    filters.push(("(?s)fastapi` instead.*", "fastapi` instead."));
+    let context = context
+        .with_filter(("\\+ uvloop(.+)\n ", ""))
+        // Strip off the `fastapi` command output.
+        .with_filter(("(?s)fastapi` instead.*", "fastapi` instead."));
 
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
@@ -1113,14 +1113,14 @@ fn tool_run_git_lfs() {
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
     // In addition, we can get different error codes depending on where the failure occurs,
     // although we know the error code cannot be 0.
-    let mut filters = context.filters();
-    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
-    filters.push((
-        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
-    ));
+    let context = context
+        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
+        .with_filter((
+            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+        ));
 
-    uv_snapshot!(filters, context.tool_run()
+    uv_snapshot!(context.filters(), context.tool_run()
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
         .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1")
@@ -1143,7 +1143,7 @@ fn tool_run_git_lfs() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
@@ -1171,7 +1171,7 @@ fn tool_run_git_lfs() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
@@ -3595,8 +3595,8 @@ fn tool_run_windows_dotted_package_name() -> anyhow::Result<()> {
 }
 
 /// Regression test for <https://github.com/astral-sh/uv/issues/17436>
-#[test]
-fn tool_run_latest_keyring_auth() {
+#[tokio::test]
+async fn tool_run_latest_keyring_auth() {
     let keyring_context = uv_test::test_context!("3.12");
 
     // Install our keyring plugin
@@ -3612,6 +3612,8 @@ fn tool_run_latest_keyring_auth() {
         .assert()
         .success();
 
+    let proxy = crate::pypi_proxy::start().await;
+
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts();
@@ -3625,21 +3627,21 @@ fn tool_run_latest_keyring_auth() {
     // Test that the keyring is consulted during the @latest version lookup.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--index")
-        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.username_url("public", "/basic-auth/simple"))
         .arg("--keyring-provider")
         .arg("subprocess")
         .arg("executable-application@latest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, format!(r#"{{"{host}": {{"public": "heron"}}}}"#, host = proxy.host_port()))
         .env(EnvVars::PATH, path), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Keyring request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]/basic-auth/simple
+    Keyring request for public@[LOCALHOST]
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]

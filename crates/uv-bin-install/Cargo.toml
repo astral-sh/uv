@@ -1,6 +1,6 @@
 [package]
 name = "uv-bin-install"
-version = "0.0.22"
+version = "0.0.24"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -26,9 +26,12 @@ uv-redacted = { workspace = true }
 
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+jiff = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

@@ -339,6 +339,38 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         &environment,
     );
 
+    // Set the global flags.
+    uv_flags::init(EnvironmentFlags::from(&environment))
+        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
+
+    // Configure the `tracing` crate, which controls internal logging.
+    #[cfg(feature = "tracing-durations-export")]
+    let (durations_layer, _duration_guard) =
+        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
+    #[cfg(not(feature = "tracing-durations-export"))]
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
+    logging::setup_logging(
+        match globals.verbose {
+            0 => logging::Level::Off,
+            1 => logging::Level::DebugUv,
+            2 => logging::Level::TraceUv,
+            3.. => logging::Level::TraceAll,
+        },
+        durations_layer,
+        globals.color,
+        environment.log_context.unwrap_or_default(),
+    )?;
+
+    debug!("uv {}", uv_cli::version::uv_self_version());
+    if globals.preview.all_enabled() {
+        debug!("All preview features are enabled");
+    } else if globals.preview.any_enabled() {
+        debug!(
+            "The following preview features are enabled: {}",
+            globals.preview
+        );
+    }
+
     // Adjust open file limits on Unix if the preview feature is enabled.
     #[cfg(unix)]
     if globals.preview.is_enabled(PreviewFeature::AdjustUlimit) {
@@ -352,10 +384,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Resolve the cache settings.
     let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
-
-    // Set the global flags.
-    uv_flags::init(EnvironmentFlags::from(&environment))
-        .map_err(|()| anyhow::anyhow!("Flags are already initialized"))?;
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
@@ -396,24 +424,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
     }
 
-    // Configure the `tracing` crate, which controls internal logging.
-    #[cfg(feature = "tracing-durations-export")]
-    let (durations_layer, _duration_guard) =
-        logging::setup_durations(environment.tracing_durations_file.as_ref())?;
-    #[cfg(not(feature = "tracing-durations-export"))]
-    let durations_layer = None::<tracing_subscriber::layer::Identity>;
-    logging::setup_logging(
-        match globals.verbose {
-            0 => logging::Level::Off,
-            1 => logging::Level::DebugUv,
-            2 => logging::Level::TraceUv,
-            3.. => logging::Level::TraceAll,
-        },
-        durations_layer,
-        globals.color,
-        environment.log_context.unwrap_or_default(),
-    )?;
-
     // Configure the `Printer`, which controls user-facing output in the CLI.
     let printer = if globals.quiet == 1 {
         Printer::Quiet
@@ -453,8 +463,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
     uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::Relaxed);
-
-    debug!("uv {}", uv_cli::version::uv_self_version());
 
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -2521,6 +2529,8 @@ async fn run_project(
                 args.diff,
                 args.extra_args,
                 args.version,
+                args.exclude_newer,
+                args.show_version,
                 client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
                 printer,

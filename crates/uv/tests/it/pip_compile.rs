@@ -3431,16 +3431,16 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r#"
+        .arg("2022-04-04T26:00:00+00"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: parsed hour is not valid: parameter 'hour' with value 26 is not in the required range of 0..=23
+    error: invalid value '2022-04-04T26:00:00+00' for '--exclude-newer <EXCLUDE_NEWER>': `2022-04-04T26:00:00+00` could not be parsed as a valid date: failed to parse hour in time: failed to parse two digit integer as hour: parameter 'hour' is not in the required range of 0..=23
 
     For more information, try '--help'.
-    "#
+    "
     );
 
     Ok(())
@@ -13234,8 +13234,7 @@ fn git_source_refs() -> Result<()> {
 fn git_source_missing_tag() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let mut filters = context.filters();
-    filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = context.with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -13250,7 +13249,7 @@ fn git_source_missing_tag() -> Result<()> {
         uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage", tag = "missing" }
     "#})?;
 
-    uv_snapshot!(filters, context.pip_compile()
+    uv_snapshot!(context.filters(), context.pip_compile()
         .arg("pyproject.toml"), @"
     success: false
     exit_code: 1
@@ -17831,14 +17830,14 @@ fn omit_python_patch_universal() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn credentials_from_subdirectory() -> Result<()> {
+#[tokio::test]
+async fn credentials_from_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
 
     // Create a local dependency in a subdirectory.
     let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
         [project]
         name = "foo"
         version = "1.0.0"
@@ -17849,14 +17848,15 @@ fn credentials_from_subdirectory() -> Result<()> {
         build-backend = "hatchling.build"
 
         [tool.uv.sources]
-        iniconfig = { index = "internal" }
+        iniconfig = {{ index = "internal" }}
 
         [[tool.uv.index]]
         name = "internal"
-        url = "https://pypi-proxy.fly.dev/basic-auth/simple/"
+        url = "{}/basic-auth/simple/"
         explicit = true
         "#,
-    )?;
+        proxy.uri(),
+    })?;
     context
         .temp_dir
         .child("foo")

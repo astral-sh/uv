@@ -32,13 +32,13 @@ permissions: {}
 jobs:
   sdist:
     name: sdist
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -46,7 +46,7 @@ jobs:
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           command: sdist
@@ -67,7 +67,7 @@ jobs:
 
       # uv-build
       - name: "Build sdist uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           command: sdist
@@ -91,7 +91,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -100,7 +100,7 @@ jobs:
 
       # uv
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: x86_64
@@ -131,7 +131,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - x86_64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: x86_64
@@ -150,7 +150,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
@@ -159,7 +159,7 @@ jobs:
 
       # uv
       - name: "Build wheels - aarch64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: aarch64
@@ -197,7 +197,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - aarch64"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: aarch64
@@ -230,7 +230,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
@@ -239,7 +239,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -278,7 +278,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -309,7 +309,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -318,7 +318,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.target }}
@@ -385,7 +385,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.target }}
@@ -405,7 +405,7 @@ jobs:
 
   linux-arm:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 30
     strategy:
       matrix:
@@ -431,7 +431,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -439,7 +439,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -492,7 +492,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -538,7 +538,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -546,7 +546,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -600,7 +600,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -633,7 +633,7 @@ jobs:
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         platform:
@@ -647,7 +647,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -655,7 +655,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -713,7 +713,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -750,7 +750,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -758,7 +758,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -812,7 +812,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -845,7 +845,7 @@ jobs:
 
   musllinux:
     name: ${{ matrix.target }}
-    runs-on: depot-ubuntu-22.04-4
+    runs-on: depot-ubuntu-24.04-4
     strategy:
       matrix:
         target:
@@ -856,7 +856,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -865,7 +865,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.target }}
@@ -873,19 +873,17 @@ jobs:
           args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Test wheel"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
-            .venv/bin/${MODULE_NAME} --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall;
+            .venv/bin/${MODULE_NAME} --help;
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
-            # .venv/bin/python -m ${MODULE_NAME} --help
-            .venv/bin/uvx --help
+            # .venv/bin/python -m ${MODULE_NAME} --help;
+            .venv/bin/uvx --help;
+          "
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -914,7 +912,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.target }}
@@ -922,17 +920,16 @@ jobs:
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Test wheel uv-build"
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
-        with:
-          image: alpine:3.12
-          options: -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME
-          run: |
-            apk add python3
-            python3 -m venv .venv
-            .venv/bin/pip install --upgrade pip
-            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            .venv/bin/${MODULE_NAME}-build --help
-            .venv/bin/python -m ${MODULE_NAME}_build --help
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/io -w /io --env MODULE_NAME --env PACKAGE_NAME alpine:3.12 sh -c "
+            apk add python3 py3-pip;
+            python3 -m venv .venv;
+            .venv/bin/pip install --upgrade pip;
+            .venv/bin/pip install ${PACKAGE_NAME}-build --no-index --find-links crates/uv-build/dist --force-reinstall;
+            .venv/bin/${MODULE_NAME}-build --help;
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${MODULE_NAME}_build --help;
+          "
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -941,7 +938,7 @@ jobs:
 
   musllinux-cross:
     name: ${{ matrix.platform.target }}
-    runs-on: depot-ubuntu-22.04-8
+    runs-on: depot-ubuntu-24.04-8
     strategy:
       matrix:
         platform:
@@ -957,7 +954,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -965,7 +962,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -1039,7 +1036,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels"
-        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
+        uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -1086,3 +1083,31 @@ jobs:
         with:
           name: wheels_uv_build-${{ matrix.platform.target }}
           path: crates/uv-build/dist
+
+  check-wheels:
+    name: "Check wheel contents"
+    runs-on: ubuntu-slim
+    needs:
+      - macos-x86_64
+      - macos-aarch64
+      - windows
+      - linux
+      - linux-arm
+      - linux-s390x
+      - linux-powerpc
+      - linux-riscv64
+      - musllinux
+      - musllinux-cross
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: wheels_*-*
+          path: wheels
+          merge-multiple: true
+      - name: "Check wheel contents"
+        run: uv run scripts/check_uv_wheel_contents.py wheels/*

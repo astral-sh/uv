@@ -6,6 +6,7 @@ use uv_preview::Preview;
 use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 use anyhow::{Context, Result, bail};
+use tracing::debug;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -57,6 +58,12 @@ fn main() -> Result<()> {
     } else {
         Preview::default()
     };
+    if preview.all_enabled() {
+        debug!("All preview features are enabled");
+    } else if preview.any_enabled() {
+        debug!("The following preview features are enabled: {preview}");
+    }
+
     match command.as_str() {
         "build-sdist" => {
             let sdist_directory = PathBuf::from(args.next().context("Missing sdist directory")?);

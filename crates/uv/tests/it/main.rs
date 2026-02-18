@@ -152,6 +152,7 @@ mod version;
 mod workflow;
 
 mod extract;
+mod pypi_proxy;
 mod workspace;
 mod workspace_dir;
 mod workspace_list;

@@ -17,6 +17,7 @@ env:
 jobs:
   benchmarks-walltime-build:
     name: "walltime build"
+    # codspeed-macro doesn't support Ubuntu 24.04 yet
     runs-on: depot-ubuntu-22.04-arm-4
     if: ${{ github.repository == 'astral-sh/uv' }}
     timeout-minutes: 20
@@ -87,7 +88,7 @@ jobs:
         run: ./target/debug/uv venv --cache-dir .cache
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@fa0c9b1770f933c1bc025c83a9b42946b102f4e6 # v4.10.4
+        uses: CodSpeedHQ/action@4deb3275dd364fb96fb074c953133d29ec96f80f # v4.10.6
         with:
           run: cargo codspeed run
           mode: walltime
@@ -128,7 +129,7 @@ jobs:
         run: cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@fa0c9b1770f933c1bc025c83a9b42946b102f4e6 # v4.10.4
+        uses: CodSpeedHQ/action@4deb3275dd364fb96fb074c953133d29ec96f80f # v4.10.6
         with:
           run: cargo codspeed run
           mode: simulation

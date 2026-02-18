@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@803947b9bd8e9f986429fa0c5a41c367cd732b41 # v7.2.1
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           version: "latest"
           enable-cache: true
@@ -51,7 +51,7 @@ jobs:
             crates/uv-python/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
             crates/uv-python/src/sysconfig/generated_mappings.rs
-            crates/uv/tests/it/common/mod.rs
+            crates/uv-test/src/lib.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."

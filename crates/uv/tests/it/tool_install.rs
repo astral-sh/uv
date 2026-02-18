@@ -568,10 +568,9 @@ fn tool_install_suggest_other_packages_with_executable() {
         .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
-    let mut filters = context.filters();
-    filters.push(("\\+ uvloop(.+)\n ", ""));
+    let context = context.with_filter(("\\+ uvloop(.+)\n ", ""));
 
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("fastapi==0.111.0")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
@@ -2150,14 +2149,14 @@ fn tool_install_git_lfs() {
     // calls to `git` and `git_metadata` functions which don't have guaranteed execution order.
     // In addition, we can get different error codes depending on where the failure occurs,
     // although we know the error code cannot be 0.
-    let mut filters = context.filters();
-    filters.push((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"));
-    filters.push((
-        "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
-        "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
-    ));
+    let context = context
+        .with_filter((r"exit_code: -?[1-9]\d*", "exit_code: [ERROR_CODE]"))
+        .with_filter((
+            "(?s)(----- stderr -----).*?The source distribution `[^`]+` is missing Git LFS artifacts.*",
+            "$1\n[PREFIX]The source distribution `[DISTRIBUTION]` is missing Git LFS artifacts",
+        ));
 
-    uv_snapshot!(filters, context.tool_install()
+    uv_snapshot!(context.filters(), context.tool_install()
         .arg("--reinstall")
         .arg("--lfs")
         .arg("test-lfs-repo @ git+https://github.com/astral-sh/test-lfs-repo@54e5eebd3c6851b1353fc7b1e5b4eca11e27581c")
@@ -2196,7 +2195,7 @@ fn tool_install_git_lfs() {
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
@@ -2215,7 +2214,7 @@ fn tool_install_git_lfs() {
     #[cfg(windows)]
     uv_snapshot!(context.filters(), Command::new("test-lfs-repo-assets").env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
     success: false
-    exit_code: 1
+    exit_code: [ERROR_CODE]
     ----- stdout -----
 
     ----- stderr -----
@@ -4176,8 +4175,9 @@ fn tool_install_mismatched_name() {
 }
 
 /// When installing from an authenticated index, the credentials should be omitted from the receipt.
-#[test]
-fn tool_install_credentials() {
+#[tokio::test]
+async fn tool_install_credentials() {
+    let proxy = crate::pypi_proxy::start().await;
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
@@ -4189,7 +4189,7 @@ fn tool_install_credentials() {
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("executable-application")
          .arg("--index")
-        .arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple")
+        .arg(proxy.authenticated_url("public", "heron", "/basic-auth/simple"))
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -4249,15 +4249,16 @@ fn tool_install_credentials() {
         ]
 
         [tool.options]
-        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
+        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = false, format = "simple", authenticate = "auto" }]
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
 }
 
 /// When installing from an authenticated index, the credentials should be omitted from the receipt.
-#[test]
-fn tool_install_default_credentials() -> Result<()> {
+#[tokio::test]
+async fn tool_install_default_credentials() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
         .with_filtered_counts()
@@ -4267,12 +4268,15 @@ fn tool_install_default_credentials() -> Result<()> {
 
     // Write a `uv.toml` with a default index that has credentials.
     let uv_toml = context.temp_dir.child("uv.toml");
-    uv_toml.write_str(indoc::indoc! {r#"
+    uv_toml.write_str(&format!(
+        indoc::indoc! {r#"
         [[index]]
-        url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
+        url = "{}"
         default = true
         authenticate = "always"
-    "#})?;
+    "#},
+        proxy.authenticated_url("public", "heron", "/basic-auth/simple")
+    ))?;
 
     // Install `executable-application`
     uv_snapshot!(context.filters(), context.tool_install()
@@ -4337,7 +4341,7 @@ fn tool_install_default_credentials() -> Result<()> {
         ]
 
         [tool.options]
-        index = [{ url = "https://pypi-proxy.fly.dev/basic-auth/simple", explicit = false, default = true, format = "simple", authenticate = "always" }]
+        index = [{ url = "http://[LOCALHOST]/basic-auth/simple", explicit = false, default = true, format = "simple", authenticate = "always" }]
         exclude-newer = "2025-01-18T00:00:00Z"
         "#);
     });
@@ -4354,8 +4358,8 @@ fn tool_install_default_credentials() -> Result<()> {
 
     ----- stderr -----
     error: Failed to upgrade executable-application
-      Caused by: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/`
-      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/executable-application/
+      Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
+      Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
 
     // Attempt to upgrade.

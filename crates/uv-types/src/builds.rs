@@ -88,7 +88,7 @@ impl<T> BuildArena<T> {
     }
 }
 
-/// A resolved build dependency with its marker (an edge from the resolution root).
+/// A resolved build dependency, representing an edge from the resolution root.
 #[derive(Debug, Clone)]
 pub struct ResolvedBuildDependency {
     /// The resolved distribution.
@@ -131,35 +131,53 @@ pub struct BuildResolutionGraph {
     pub packages: Vec<BuildDependencyPackage>,
 }
 
-/// Map of (package name, optional version) to their build resolution graphs.
-type BuildResolutionGraphMap = BTreeMap<(PackageName, Option<Version>), BuildResolutionGraph>;
+/// A key identifying a package by name and optional version, used to index
+/// build dependency resolutions and preferences.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PackageVersionKey {
+    /// The package name.
+    pub name: PackageName,
+    /// The package version, if known.
+    pub version: Option<Version>,
+}
 
-/// Locked build dependency resolutions, indexed by (package name, optional version).
+impl PackageVersionKey {
+    /// Create a new key from a package name and optional version.
+    pub fn new(name: PackageName, version: Option<Version>) -> Self {
+        Self { name, version }
+    }
+}
+
+/// Map of package version keys to their build resolution graphs.
+type BuildResolutionGraphMap = BTreeMap<PackageVersionKey, BuildResolutionGraph>;
+
+/// Locked build dependency resolutions, indexed by package version key.
 #[derive(Debug, Default, Clone)]
-pub struct LockedBuildResolutions(BTreeMap<(PackageName, Option<Version>), Resolution>);
+pub struct LockedBuildResolutions(BTreeMap<PackageVersionKey, Resolution>);
 
 impl LockedBuildResolutions {
-    /// Create locked build resolutions from a map keyed by `(name, optional version)`.
-    pub fn new(map: BTreeMap<(PackageName, Option<Version>), Resolution>) -> Self {
+    /// Create locked build resolutions from a map keyed by [`PackageVersionKey`].
+    pub fn new(map: BTreeMap<PackageVersionKey, Resolution>) -> Self {
         Self(map)
     }
 
     /// Get the pre-built resolution for a given package name and version.
     pub fn get(&self, package: &PackageName, version: Option<&Version>) -> Option<&Resolution> {
-        self.0.get(&(package.clone(), version.cloned()))
+        let key = PackageVersionKey::new(package.clone(), version.cloned());
+        self.0.get(&key)
     }
 }
 
 /// A list of `(name, version)` pairs representing preferred build dependency versions.
 type BuildDependencyVersions = Vec<(PackageName, Version)>;
 
-/// Build dependency version preferences, indexed by (package name, optional version).
+/// Build dependency version preferences, indexed by package version key.
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(BTreeMap<(PackageName, Option<Version>), BuildDependencyVersions>);
+pub struct BuildPreferences(BTreeMap<PackageVersionKey, BuildDependencyVersions>);
 
 impl BuildPreferences {
-    /// Create build preferences from a map keyed by `(name, optional version)`.
-    pub fn new(map: BTreeMap<(PackageName, Option<Version>), BuildDependencyVersions>) -> Self {
+    /// Create build preferences from a map keyed by [`PackageVersionKey`].
+    pub fn new(map: BTreeMap<PackageVersionKey, BuildDependencyVersions>) -> Self {
         Self(map)
     }
 
@@ -169,9 +187,8 @@ impl BuildPreferences {
         package: &PackageName,
         version: Option<&Version>,
     ) -> Option<&[(PackageName, Version)]> {
-        self.0
-            .get(&(package.clone(), version.cloned()))
-            .map(Vec::as_slice)
+        let key = PackageVersionKey::new(package.clone(), version.cloned());
+        self.0.get(&key).map(Vec::as_slice)
     }
 }
 
@@ -187,7 +204,8 @@ impl BuildResolutions {
         version: Option<Version>,
         graph: BuildResolutionGraph,
     ) {
-        self.0.lock().unwrap().insert((package, version), graph);
+        let key = PackageVersionKey::new(package, version);
+        self.0.lock().unwrap().insert(key, graph);
     }
 
     /// Get a snapshot of the current build resolutions.

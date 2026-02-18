@@ -158,7 +158,7 @@ impl<'lock> ExportableRequirements<'lock> {
         }
 
         // Add requirements that are exclusive to the workspace root (e.g., dependency groups in
-        // (legacy) non-project workspace roots).
+        // non-project workspace roots).
         let root_requirements = target
             .lock()
             .requirements()

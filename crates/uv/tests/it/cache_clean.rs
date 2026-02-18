@@ -29,9 +29,7 @@ fn clean_all() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Clearing cache at: [CACHE_DIR]/
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     Removed [N] files ([SIZE])
     ");
 
@@ -60,9 +58,7 @@ async fn clean_force() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Clearing cache at: [CACHE_DIR]/
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     Removed [N] files ([SIZE])
     ");
 
@@ -140,10 +136,8 @@ fn clean_package_pypi() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.
@@ -160,10 +154,8 @@ fn clean_package_pypi() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Pruning cache at: [CACHE_DIR]/
     No unused entries found
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     Ok(())
@@ -219,10 +211,8 @@ fn clean_package_index() -> Result<()> {
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     DEBUG Removing dangling cache entry: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     ");
 
     // Assert that the `.rkyv` file is removed for `iniconfig`.

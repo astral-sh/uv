@@ -154,7 +154,7 @@ impl<'a> BuildDispatch<'a> {
             build_options,
             hasher,
             exclude_newer,
-            source_build_context: SourceBuildContext::default(),
+            source_build_context: SourceBuildContext::new(concurrency.builds),
             build_extra_env_vars: FxHashMap::default(),
             sources,
             workspace_cache,
@@ -586,7 +586,6 @@ impl BuildContext for BuildDispatch<'_> {
             build_kind,
             environment_variables,
             build_output,
-            self.concurrency.builds,
             self.client.credentials_cache(),
         )
         .boxed_local()

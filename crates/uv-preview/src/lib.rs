@@ -37,7 +37,8 @@ pub enum PreviewFeature {
     AdjustUlimit = 1 << 22,
     SpecialCondaEnvNames = 1 << 23,
     RelocatableEnvsDefault = 1 << 24,
-    LockBuildDependencies = 1 << 25,
+    PublishRequireNormalized = 1 << 25,
+    LockBuildDependencies = 1 << 26,
 }
 
 impl PreviewFeature {
@@ -69,6 +70,7 @@ impl PreviewFeature {
             Self::AdjustUlimit => "adjust-ulimit",
             Self::SpecialCondaEnvNames => "special-conda-env-names",
             Self::RelocatableEnvsDefault => "relocatable-envs-default",
+            Self::PublishRequireNormalized => "publish-require-normalized",
             Self::LockBuildDependencies => "lock-build-dependencies",
         }
     }
@@ -114,6 +116,7 @@ impl FromStr for PreviewFeature {
             "adjust-ulimit" => Self::AdjustUlimit,
             "special-conda-env-names" => Self::SpecialCondaEnvNames,
             "relocatable-envs-default" => Self::RelocatableEnvsDefault,
+            "publish-require-normalized" => Self::PublishRequireNormalized,
             "lock-build-dependencies" => Self::LockBuildDependencies,
             _ => return Err(PreviewFeatureParseError),
         })
@@ -157,9 +160,19 @@ impl Preview {
         Self::new(preview_features)
     }
 
-    /// Check if a single feature is enabled
+    /// Check if a single feature is enabled.
     pub fn is_enabled(&self, flag: PreviewFeature) -> bool {
         self.flags.contains(flag)
+    }
+
+    /// Check if all preview feature rae enabled.
+    pub fn all_enabled(&self) -> bool {
+        self.flags.is_all()
+    }
+
+    /// Check if any preview feature is enabled.
+    pub fn any_enabled(&self) -> bool {
+        !self.flags.is_empty()
     }
 }
 
@@ -345,6 +358,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::RelocatableEnvsDefault.as_str(),
             "relocatable-envs-default"
+        );
+        assert_eq!(
+            PreviewFeature::PublishRequireNormalized.as_str(),
+            "publish-require-normalized"
         );
         assert_eq!(
             PreviewFeature::LockBuildDependencies.as_str(),

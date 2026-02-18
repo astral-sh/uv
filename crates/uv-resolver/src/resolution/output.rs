@@ -606,9 +606,8 @@ impl ResolverOutput {
     /// and all packages with their direct dependency edges.
     ///
     /// This preserves the dependency graph structure so that transitive build
-    /// dependencies can be walked at sync time with proper marker evaluation,
-    /// consistent with how [`Lock::all_build_resolutions`] handles regular
-    /// dependencies.
+    /// dependencies can be walked at sync time via
+    /// [`Lock::all_build_resolutions`] with proper marker evaluation.
     pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
         let mut roots = Vec::new();
         let mut packages = Vec::new();

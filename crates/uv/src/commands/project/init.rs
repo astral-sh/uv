@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use owo_colors::OwoColorize;
 use toml_edit::{InlineTable, Value};
 use tracing::{debug, trace, warn};
@@ -311,7 +311,18 @@ async fn init_project(
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
     let workspace = {
-        let parent = path.parent().expect("Project path has no parent");
+        let parent = match path.parent() {
+            Some(parent) => parent,
+            None => {
+                if path.is_dir() {
+                    // Support creating a project in the filesystem root (`/` on Unix).
+                    path
+                } else {
+                    // Not sure how we'd end up here, but we need to handle the case.
+                    bail!("Project directory has no parent directory");
+                }
+            }
+        };
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
