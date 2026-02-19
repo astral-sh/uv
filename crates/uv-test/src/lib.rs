@@ -166,6 +166,11 @@ pub struct TestContext {
 
     #[allow(dead_code)]
     _root: tempfile::TempDir,
+
+    /// Extra temporary directories whose lifetimes are tied to this context (e.g., directories
+    /// on alternate filesystems created by `with_cache_on_reflink_fs` and friends).
+    #[allow(dead_code)]
+    _extra_tempdirs: Vec<tempfile::TempDir>,
 }
 
 impl TestContext {
@@ -684,6 +689,79 @@ impl TestContext {
         self
     }
 
+    /// Move the cache directory to a reflink-capable filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set.
+    #[must_use]
+    pub fn with_cache_on_reflink_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+        Some(self.with_cache_on_fs(&dir))
+    }
+
+    /// Move the cache directory to a non-reflink filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set.
+    #[must_use]
+    pub fn with_cache_on_tmp_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+        Some(self.with_cache_on_fs(&dir))
+    }
+
+    /// Move the working directory (and venv) to a reflink-capable filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set. The virtual environment
+    /// is **not** created; use `context.venv().assert().success()` after this.
+    #[must_use]
+    pub fn with_working_dir_on_reflink_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+        Some(self.with_working_dir_on_fs(&dir))
+    }
+
+    /// Move the working directory (and venv) to a non-reflink filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set. The virtual environment
+    /// is **not** created; use `context.venv().assert().success()` after this.
+    #[must_use]
+    pub fn with_working_dir_on_tmp_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+        Some(self.with_working_dir_on_fs(&dir))
+    }
+
+    fn with_cache_on_fs(mut self, dir: &str) -> Self {
+        fs_err::create_dir_all(dir).expect("Failed to create filesystem directory");
+        let tmp = tempfile::TempDir::new_in(dir).expect("Failed to create tempdir");
+        self.cache_dir = ChildPath::new(tmp.path()).child("cache");
+        fs_err::create_dir_all(&self.cache_dir).expect("Failed to create cache directory");
+        self.filters.extend(
+            Self::path_patterns(&self.cache_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
+        );
+        self._extra_tempdirs.push(tmp);
+        self
+    }
+
+    fn with_working_dir_on_fs(mut self, dir: &str) -> Self {
+        fs_err::create_dir_all(dir).expect("Failed to create filesystem directory");
+        let tmp = tempfile::TempDir::new_in(dir).expect("Failed to create tempdir");
+        let canonical = tmp.path().canonicalize().expect("Failed to canonicalize");
+        self.temp_dir = ChildPath::new(tmp.path()).child("temp");
+        fs_err::create_dir_all(&self.temp_dir).expect("Failed to create working directory");
+        self.venv = ChildPath::new(canonical.join(".venv"));
+        self.filters.extend(
+            Self::path_patterns(&self.temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+        );
+        self.filters.extend(
+            Self::path_patterns(&self.venv)
+                .into_iter()
+                .map(|pattern| (pattern, "[VENV]/".to_string())),
+        );
+        self._extra_tempdirs.push(tmp);
+        self
+    }
+
     /// Default to the canonicalized path to the temp directory. We need to do this because on
     /// macOS (and Windows on GitHub Actions) the standard temp dir is a symlink. (On macOS, the
     /// temporary directory is, like `/var/...`, which resolves to `/private/var/...`.)
@@ -693,9 +771,7 @@ impl TestContext {
     /// returns resolved symlink). This breaks some snapshot tests, since we _don't_ want to
     /// resolve symlinks for user-provided paths.
     pub fn test_bucket_dir() -> PathBuf {
-        env::var(EnvVars::UV_INTERNAL__TEST_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| std::env::temp_dir())
+        std::env::temp_dir()
             .simple_canonicalize()
             .expect("failed to canonicalize temp dir")
             .join("uv")
@@ -982,6 +1058,7 @@ impl TestContext {
             filters,
             extra_env: vec![],
             _root: root,
+            _extra_tempdirs: vec![],
         }
     }
 
