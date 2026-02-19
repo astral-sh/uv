@@ -843,17 +843,27 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    /// Create a temporary directory, respecting `UV_INTERNAL__TEST_DIR` if set.
-    ///
-    /// This allows tests to run on a filesystem that supports reflink (e.g., btrfs)
-    /// instead of the default `/tmp` which may be tmpfs (no reflink support).
+    /// Create a temporary directory on the default filesystem.
     fn test_tempdir() -> TempDir {
-        if let Ok(dir) = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_DIR) {
-            fs_err::create_dir_all(&dir).unwrap();
-            TempDir::new_in(dir).unwrap()
-        } else {
-            TempDir::new().unwrap()
-        }
+        TempDir::new().unwrap()
+    }
+
+    /// Create a temporary directory on a reflink-capable filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set.
+    fn reflink_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
+    }
+
+    /// Create a temporary directory on a filesystem that does **not** support reflink.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set.
+    fn tmp_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
     }
 
     /// Create a test directory structure with some files.
@@ -971,34 +981,22 @@ mod tests {
         supported
     }
 
-    /// Returns `true` if `UV_INTERNAL__TEST_EXPECT_REFLINK` is set.
-    ///
-    /// When set, tests that would normally skip on filesystems without reflink
-    /// support will instead panic, ensuring CI catches misconfigured test environments.
-    fn expect_reflink_support() -> bool {
-        std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_EXPECT_REFLINK).is_ok()
-    }
-
     #[test]
-    fn test_reflink_file_when_supported() {
-        let tmp_dir = test_tempdir();
-
-        if !reflink_supported(tmp_dir.path()) {
-            assert!(
-                !expect_reflink_support(),
-                "reflink not supported on this filesystem but UV_INTERNAL__TEST_EXPECT_REFLINK is set; \
-                 set UV_INTERNAL__TEST_DIR to a reflink-capable filesystem"
-            );
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_reflink_file_on_reflink_fs() {
+        let Some(tmp_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
             return;
-        }
+        };
 
-        // Create source file
+        assert!(
+            reflink_supported(tmp_dir.path()),
+            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+        );
+
         let src = tmp_dir.path().join("src.txt");
         let dst = tmp_dir.path().join("dst.txt");
         fs_err::write(&src, "reflink content").unwrap();
 
-        // Reflink should succeed
         reflink_copy::reflink(&src, &dst).unwrap();
 
         assert_eq!(fs_err::read_to_string(&dst).unwrap(), "reflink content");
@@ -1010,26 +1008,25 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_dir_reflink_when_supported() {
-        let src_dir = test_tempdir();
-        let dst_dir = test_tempdir();
-
-        if !reflink_supported(src_dir.path()) {
-            assert!(
-                !expect_reflink_support(),
-                "reflink not supported on this filesystem but UV_INTERNAL__TEST_EXPECT_REFLINK is set; \
-                 set UV_INTERNAL__TEST_DIR to a reflink-capable filesystem"
-            );
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_clone_dir_reflink_on_reflink_fs() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
             return;
-        }
+        };
+        let Some(dst_dir) = reflink_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+        );
 
         create_test_tree(src_dir.path());
 
         let options = LinkOptions::new(LinkMode::Clone);
         let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
 
-        // On supported filesystems, clone should succeed
         assert_eq!(result, LinkMode::Clone);
         verify_test_tree(dst_dir.path());
 
@@ -1042,19 +1039,19 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_merge_when_supported() {
-        let src_dir = test_tempdir();
-        let dst_dir = test_tempdir();
-
-        if !reflink_supported(src_dir.path()) {
-            assert!(
-                !expect_reflink_support(),
-                "reflink not supported on this filesystem but UV_INTERNAL__TEST_EXPECT_REFLINK is set; \
-                 set UV_INTERNAL__TEST_DIR to a reflink-capable filesystem"
-            );
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_clone_merge_on_reflink_fs() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
             return;
-        }
+        };
+        let Some(dst_dir) = reflink_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+        );
 
         create_test_tree(src_dir.path());
 
@@ -1079,6 +1076,238 @@ mod tests {
             fs_err::read_to_string(dst_dir.path().join("extra.txt")).unwrap(),
             "extra"
         );
+    }
+
+    #[test]
+    fn test_reflink_fails_on_tmp_fs() {
+        let Some(tmp_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        assert!(
+            !reflink_supported(tmp_dir.path()),
+            "UV_INTERNAL__TEST_TMP_FS points to a filesystem that supports reflink"
+        );
+    }
+
+    #[test]
+    fn test_clone_fallback_on_tmp_fs() {
+        let Some(src_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            !reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_TMP_FS points to a filesystem that supports reflink"
+        );
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback to Hardlink or Copy on non-reflink fs, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone from a reflink-capable filesystem to a tmpfs (cross-device).
+    ///
+    /// Reflink cannot work across filesystems, so the clone mode must fall back.
+    #[test]
+    fn test_clone_cross_device_reflink_to_tmp() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Reflink across devices must fall back
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback to Hardlink or Copy for cross-device clone, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone from a tmpfs to a reflink-capable filesystem (cross-device).
+    #[test]
+    fn test_clone_cross_device_tmp_to_reflink() {
+        let Some(src_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+        let Some(dst_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Reflink across devices must fall back
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback to Hardlink or Copy for cross-device clone, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Hardlink across filesystems must fall back to copy.
+    #[test]
+    fn test_hardlink_cross_device_reflink_to_tmp() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Hardlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Hardlink across devices must fall back to copy
+        assert_eq!(
+            result,
+            LinkMode::Copy,
+            "Expected fallback to Copy for cross-device hardlink, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Hardlink across filesystems (opposite direction).
+    #[test]
+    fn test_hardlink_cross_device_tmp_to_reflink() {
+        let Some(src_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+        let Some(dst_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Hardlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Hardlink across devices must fall back to copy
+        assert_eq!(
+            result,
+            LinkMode::Copy,
+            "Expected fallback to Copy for cross-device hardlink, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone merge across filesystems (src on reflink fs, dst on tmpfs).
+    #[test]
+    fn test_clone_merge_cross_device_reflink_to_tmp() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing content
+        fs_err::create_dir_all(dst_dir.path()).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old content").unwrap();
+        fs_err::write(dst_dir.path().join("extra.txt"), "extra").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Cross-device: must fall back
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback for cross-device clone merge, got {result:?}"
+        );
+
+        // Source files should overwrite destination
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+        // Extra file should remain
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("extra.txt")).unwrap(),
+            "extra"
+        );
+    }
+
+    /// Copy mode works across filesystems (sanity check).
+    #[test]
+    fn test_copy_cross_device() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Copy);
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Symlink across filesystems should work (symlinks can span devices).
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_cross_device() {
+        let Some(src_dir) = reflink_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+            return;
+        };
+        let Some(dst_dir) = tmp_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+            return;
+        };
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Symlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Symlinks work across devices
+        assert!(
+            result == LinkMode::Symlink || result == LinkMode::Copy,
+            "Expected Symlink or Copy, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
     }
 
     #[test]
@@ -1636,29 +1865,6 @@ mod tests {
                 "content1"
             );
         }
-    }
-
-    #[test]
-    fn test_clone_fallback_when_reflink_unsupported() {
-        let src_dir = test_tempdir();
-        let dst_dir = test_tempdir();
-
-        if reflink_supported(src_dir.path()) {
-            eprintln!("Skipping test: reflink is supported on this filesystem");
-            return;
-        }
-
-        create_test_tree(src_dir.path());
-
-        let options = LinkOptions::new(LinkMode::Clone);
-        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
-
-        // When reflink is not supported, should fall back to hardlink or copy
-        assert!(
-            result == LinkMode::Hardlink || result == LinkMode::Copy,
-            "Expected fallback to Hardlink or Copy, got {result:?}"
-        );
-        verify_test_tree(dst_dir.path());
     }
 
     #[test]
