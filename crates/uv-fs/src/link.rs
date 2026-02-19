@@ -77,9 +77,7 @@ where
 {
     match options.mode {
         LinkMode::Clone => clone_dir(src, dst, options),
-        LinkMode::Copy => copy_dir(src, dst, options),
-        LinkMode::Hardlink => hardlink_dir(src, dst, options),
-        LinkMode::Symlink => symlink_dir(src, dst, options),
+        mode => walk_and_link(src, dst, mode, options),
     }
 }
 
@@ -213,18 +211,64 @@ impl<'a, F> LinkOptions<'a, F> {
     }
 }
 
-/// Tracks the state of linking attempts to handle fallback gracefully.
+/// Whether the current linking strategy has been confirmed to work.
 ///
-/// Hard linking / reflinking might not be supported but we can't detect this ahead of time,
-/// so we'll try the operation on the first file - if this succeeds we'll know later
-/// errors are not due to lack of OS/filesystem support. If it fails, we'll switch
-/// to copying for the rest of the operation.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-enum Attempt {
-    #[default]
+/// Some linking strategies (reflink, hardlink, symlink) might not be supported on a given
+/// filesystem, but we can't always detect this ahead of time. We try the operation on the
+/// first file — if it succeeds, we know later errors are real failures. If it fails, we
+/// switch to the next fallback strategy for the rest of the operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinkAttempt {
+    /// The strategy has not yet been attempted on any file.
     Initial,
+    /// The strategy succeeded for at least one file; continue using it.
     Subsequent,
-    UseCopyFallback,
+}
+
+/// Tracks the active linking strategy and whether it has been confirmed to work.
+///
+/// When the strategy's [`LinkAttempt`] is [`Initial`](LinkAttempt::Initial) and the first
+/// file operation fails, [`next_mode`](Self::next_mode) transitions to the next fallback.
+/// When the attempt is [`Subsequent`](LinkAttempt::Subsequent) and a file fails, it is
+/// either a hard error (the strategy was confirmed to work, so this is a real failure) or,
+/// for reflink, a transition to the next fallback.
+#[derive(Debug, Clone, Copy)]
+struct LinkState {
+    /// The linking strategy currently in use.
+    mode: LinkMode,
+    /// Whether the strategy has been confirmed to work.
+    attempt: LinkAttempt,
+}
+
+impl LinkState {
+    /// Create a new state with the given mode, not yet confirmed to work.
+    fn new(mode: LinkMode) -> Self {
+        Self {
+            mode,
+            attempt: LinkAttempt::Initial,
+        }
+    }
+
+    /// Mark the current strategy as confirmed working on this filesystem.
+    fn mode_working(self) -> Self {
+        Self {
+            attempt: LinkAttempt::Subsequent,
+            ..self
+        }
+    }
+
+    /// Transition to the next fallback strategy in the chain.
+    ///
+    /// - `Clone` → `Hardlink`
+    /// - `Hardlink` → `Copy`
+    /// - `Symlink` → `Copy`
+    /// - `Copy` → `Copy` (terminal)
+    fn next_mode(self) -> Self {
+        Self::new(match self.mode {
+            LinkMode::Clone => LinkMode::Hardlink,
+            LinkMode::Hardlink | LinkMode::Symlink | LinkMode::Copy => LinkMode::Copy,
+        })
+    }
 }
 
 /// Error type for copy operations.
@@ -269,9 +313,8 @@ pub enum LinkError {
 /// Clone a directory tree using copy-on-write.
 ///
 /// On macOS with APFS, tries to clone the entire directory in a single syscall.
-///
-/// On all platforms, attempts to reflink individual files. If reflinking is not supported,
-/// falls back to hard linking, then copying.
+/// On all platforms, falls through to [`walk_and_link`] for per-file linking with
+/// automatic fallback.
 fn clone_dir<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
@@ -292,23 +335,23 @@ where
         }
     }
 
-    // Try per-file reflinking, with fallback to hardlink then copy
-    reflink_dir(src, dst, options)
+    walk_and_link(src, dst, LinkMode::Clone, options)
 }
 
-/// Reflink individual files in a directory tree.
+/// Walk a directory tree and link each file using the given starting [`LinkMode`].
 ///
-/// Attempts to reflink each file. If reflinking fails (e.g., unsupported filesystem),
-/// falls back to hard linking, then copying.
-fn reflink_dir<F>(
+/// The [`LinkState`] tracks the active strategy and automatically falls back via
+/// [`LinkState::next_mode`] as needed.
+fn walk_and_link<F>(
     src: &Path,
     dst: &Path,
+    mode: LinkMode,
     options: &LinkOptions<'_, F>,
 ) -> Result<LinkMode, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
-    let mut attempt = Attempt::Initial;
+    let mut state = LinkState::new(mode);
 
     for entry in WalkDir::new(src) {
         let entry = entry.map_err(|err| LinkError::WalkDir {
@@ -328,92 +371,117 @@ where
             continue;
         }
 
-        match attempt {
-            Attempt::Initial => {
-                match reflink_copy::reflink(path, &target) {
-                    Ok(()) => {
-                        attempt = Attempt::Subsequent;
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                        if options.on_existing_directory == OnExistingDirectory::Merge {
-                            // File exists, overwrite atomically via temp file
-                            let parent = target.parent().unwrap();
-                            let tempdir = tempfile::tempdir_in(parent)?;
-                            let tempfile = tempdir.path().join(target.file_name().unwrap());
-                            if reflink_copy::reflink(path, &tempfile).is_ok() {
-                                fs_err::rename(&tempfile, &target)?;
-                                attempt = Attempt::Subsequent;
-                            } else {
-                                // Reflink to temp failed, fallback to hardlink
-                                debug!(
-                                    "Failed to reflink `{}` to temp location, falling back to hardlink",
-                                    path.display()
-                                );
-                                return hardlink_dir(src, dst, options);
-                            }
-                        } else {
-                            return Err(LinkError::Reflink {
-                                from: path.to_path_buf(),
-                                to: target,
-                                err,
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        debug!(
-                            "Failed to reflink `{}` to `{}`: {}, falling back to hardlink",
-                            path.display(),
-                            target.display(),
-                            err
-                        );
-                        // Fallback to hardlinking (hardlink_dir handles AlreadyExists for
-                        // files we already reflinked when in Merge mode)
-                        return hardlink_dir(src, dst, options);
-                    }
-                }
-            }
-            Attempt::Subsequent => match reflink_copy::reflink(path, &target) {
-                Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                    if options.on_existing_directory == OnExistingDirectory::Merge {
-                        let parent = target.parent().unwrap();
-                        let tempdir = tempfile::tempdir_in(parent)?;
-                        let tempfile = tempdir.path().join(target.file_name().unwrap());
-                        reflink_copy::reflink(path, &tempfile).map_err(|err| {
-                            LinkError::Reflink {
-                                from: path.to_path_buf(),
-                                to: tempfile.clone(),
-                                err,
-                            }
-                        })?;
-                        fs_err::rename(&tempfile, &target)?;
-                    } else {
-                        return Err(LinkError::Reflink {
-                            from: path.to_path_buf(),
-                            to: target,
-                            err,
-                        });
-                    }
-                }
-                Err(err) => {
-                    return Err(LinkError::Reflink {
-                        from: path.to_path_buf(),
-                        to: target,
-                        err,
-                    });
-                }
-            },
-            Attempt::UseCopyFallback => {
-                // We've fallen back to hardlinking; this is handled by returning
-                // early to hardlink_dir, so this branch should not be reached.
-                unreachable!(
-                    "reflink_dir should return to hardlink_dir before reaching UseCopyFallback"
-                );
-            }
-        }
+        state = link_file(path, &target, state, options)?;
     }
 
-    Ok(LinkMode::Clone)
+    Ok(state.mode)
+}
+
+/// Dispatch a single file to the appropriate linking strategy based on the current state.
+///
+/// Returns the (possibly updated) state for the next file. When a strategy fails, it
+/// transitions to [`LinkState::next_mode`] and re-dispatches through this function so the
+/// fallback chain is followed automatically.
+fn link_file<F>(
+    path: &Path,
+    target: &Path,
+    state: LinkState,
+    options: &LinkOptions<'_, F>,
+) -> Result<LinkState, LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    match state.mode {
+        LinkMode::Clone => reflink_file_with_fallback(path, target, state, options),
+        LinkMode::Hardlink => hardlink_file_with_fallback(path, target, state, options),
+        LinkMode::Symlink => symlink_file_with_fallback(path, target, state, options),
+        LinkMode::Copy => {
+            if options.on_existing_directory == OnExistingDirectory::Merge {
+                atomic_copy_overwrite(path, target, options)?;
+            } else {
+                copy_file(path, target, options)?;
+            }
+            Ok(state)
+        }
+    }
+}
+
+/// Attempt to reflink a single file, falling back via [`link_file`] on failure.
+fn reflink_file_with_fallback<F>(
+    path: &Path,
+    target: &Path,
+    state: LinkState,
+    options: &LinkOptions<'_, F>,
+) -> Result<LinkState, LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    match state.attempt {
+        LinkAttempt::Initial => match reflink_copy::reflink(path, target) {
+            Ok(()) => Ok(state.mode_working()),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                if options.on_existing_directory == OnExistingDirectory::Merge {
+                    // File exists, overwrite atomically via temp file
+                    let parent = target.parent().unwrap();
+                    let tempdir = tempfile::tempdir_in(parent)?;
+                    let tempfile = tempdir.path().join(target.file_name().unwrap());
+                    if reflink_copy::reflink(path, &tempfile).is_ok() {
+                        fs_err::rename(&tempfile, target)?;
+                        Ok(state.mode_working())
+                    } else {
+                        debug!(
+                            "Failed to reflink `{}` to temp location, falling back",
+                            path.display()
+                        );
+                        link_file(path, target, state.next_mode(), options)
+                    }
+                } else {
+                    Err(LinkError::Reflink {
+                        from: path.to_path_buf(),
+                        to: target.to_path_buf(),
+                        err,
+                    })
+                }
+            }
+            Err(err) => {
+                debug!(
+                    "Failed to reflink `{}` to `{}`: {}, falling back",
+                    path.display(),
+                    target.display(),
+                    err
+                );
+                link_file(path, target, state.next_mode(), options)
+            }
+        },
+        LinkAttempt::Subsequent => match reflink_copy::reflink(path, target) {
+            Ok(()) => Ok(state),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                if options.on_existing_directory == OnExistingDirectory::Merge {
+                    let parent = target.parent().unwrap();
+                    let tempdir = tempfile::tempdir_in(parent)?;
+                    let tempfile = tempdir.path().join(target.file_name().unwrap());
+                    reflink_copy::reflink(path, &tempfile).map_err(|err| LinkError::Reflink {
+                        from: path.to_path_buf(),
+                        to: tempfile.clone(),
+                        err,
+                    })?;
+                    fs_err::rename(&tempfile, target)?;
+                    Ok(state)
+                } else {
+                    Err(LinkError::Reflink {
+                        from: path.to_path_buf(),
+                        to: target.to_path_buf(),
+                        err,
+                    })
+                }
+            }
+            Err(err) => Err(LinkError::Reflink {
+                from: path.to_path_buf(),
+                to: target.to_path_buf(),
+                err,
+            }),
+        },
+    }
 }
 
 /// Try to clone a directory, handling `merge_directories` option.
@@ -510,111 +578,139 @@ where
     Ok(())
 }
 
-/// Hard link or copy a directory tree from `src` to `dst`.
+/// Attempt to hard link a single file, falling back via [`link_file`] on failure.
 ///
-/// Tries hard linking first for efficiency, falling back to copying if hard links
-/// are not supported (e.g., cross-filesystem operations).
-fn hardlink_dir<F>(
-    src: &Path,
-    dst: &Path,
+/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
+/// to avoid mutating the source through a hard link.
+fn hardlink_file_with_fallback<F>(
+    path: &Path,
+    target: &Path,
+    state: LinkState,
     options: &LinkOptions<'_, F>,
-) -> Result<LinkMode, LinkError>
+) -> Result<LinkState, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
-    let mut attempt = Attempt::Initial;
+    if (options.needs_mutable_copy)(path) {
+        copy_file(path, target, options)?;
+        return Ok(state);
+    }
 
-    for entry in WalkDir::new(src) {
-        let entry = entry.map_err(|err| LinkError::WalkDir {
-            path: src.to_path_buf(),
+    match state.attempt {
+        LinkAttempt::Initial => {
+            if let Err(err) = try_hardlink_file(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_hardlink_overwrite(path, target, state, options)
+                } else {
+                    debug!(
+                        "Failed to hard link `{}` to `{}`: {}; falling back to copy",
+                        path.display(),
+                        target.display(),
+                        err
+                    );
+                    warn_user_once!(
+                        "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
+                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                    );
+                    link_file(path, target, state.next_mode(), options)
+                }
+            } else {
+                Ok(state.mode_working())
+            }
+        }
+        LinkAttempt::Subsequent => {
+            if let Err(err) = try_hardlink_file(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_hardlink_overwrite(path, target, state, options)
+                } else {
+                    Err(LinkError::Io(err))
+                }
+            } else {
+                Ok(state)
+            }
+        }
+    }
+}
+
+/// Attempt to symlink a single file, falling back via [`link_file`] on failure.
+///
+/// Files matching the [`LinkOptions::needs_mutable_copy`] predicate are always copied
+/// to avoid mutating the source through a symlink.
+fn symlink_file_with_fallback<F>(
+    path: &Path,
+    target: &Path,
+    state: LinkState,
+    options: &LinkOptions<'_, F>,
+) -> Result<LinkState, LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    if (options.needs_mutable_copy)(path) {
+        copy_file(path, target, options)?;
+        return Ok(state);
+    }
+
+    match state.attempt {
+        LinkAttempt::Initial => {
+            if let Err(err) = create_symlink(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_symlink_overwrite(path, target, state, options)
+                } else {
+                    debug!(
+                        "Failed to symlink `{}` to `{}`: {}; falling back to copy",
+                        path.display(),
+                        target.display(),
+                        err
+                    );
+                    warn_user_once!(
+                        "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
+                        If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
+                        If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                    );
+                    link_file(path, target, state.next_mode(), options)
+                }
+            } else {
+                Ok(state.mode_working())
+            }
+        }
+        LinkAttempt::Subsequent => {
+            if let Err(err) = create_symlink(path, target) {
+                if err.kind() == io::ErrorKind::AlreadyExists
+                    && options.on_existing_directory == OnExistingDirectory::Merge
+                {
+                    atomic_symlink_overwrite(path, target, state, options)
+                } else {
+                    Err(LinkError::Symlink {
+                        from: path.to_path_buf(),
+                        to: target.to_path_buf(),
+                        err,
+                    })
+                }
+            } else {
+                Ok(state)
+            }
+        }
+    }
+}
+
+/// Copy a single file, using synchronized copying if [`CopyLocks`] are configured.
+fn copy_file<F>(path: &Path, target: &Path, options: &LinkOptions<'_, F>) -> Result<(), LinkError>
+where
+    F: Fn(&Path) -> bool,
+{
+    options
+        .copy_file(path, target)
+        .map_err(|err| LinkError::Copy {
+            to: target.to_path_buf(),
             err,
-        })?;
-
-        let path = entry.path();
-        let relative = path.strip_prefix(src).expect("walkdir starts with root");
-        let target = dst.join(relative);
-
-        if entry.file_type().is_dir() {
-            fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {
-                path: target.clone(),
-                err,
-            })?;
-            continue;
-        }
-
-        if (options.needs_mutable_copy)(path) {
-            options
-                .copy_file(path, &target)
-                .map_err(|err| LinkError::Copy {
-                    to: target.clone(),
-                    err,
-                })?;
-            continue;
-        }
-
-        match attempt {
-            Attempt::Initial => {
-                if let Err(err) = try_hardlink_file(path, &target) {
-                    if err.kind() == io::ErrorKind::AlreadyExists
-                        && options.on_existing_directory == OnExistingDirectory::Merge
-                    {
-                        // File exists, try atomic overwrite
-                        atomic_hardlink_overwrite(path, &target, &mut attempt, options)?;
-                    } else {
-                        debug!(
-                            "Failed to hard link `{}` to `{}`: {}; falling back to copy",
-                            path.display(),
-                            target.display(),
-                            err
-                        );
-                        attempt = Attempt::UseCopyFallback;
-                        options
-                            .copy_file(path, &target)
-                            .map_err(|err| LinkError::Copy {
-                                to: target.clone(),
-                                err,
-                            })?;
-                        warn_user_once!(
-                            "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                            If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
-                            If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-                        );
-                    }
-                } else {
-                    attempt = Attempt::Subsequent;
-                }
-            }
-            Attempt::Subsequent => {
-                if let Err(err) = try_hardlink_file(path, &target) {
-                    if err.kind() == io::ErrorKind::AlreadyExists
-                        && options.on_existing_directory == OnExistingDirectory::Merge
-                    {
-                        atomic_hardlink_overwrite(path, &target, &mut attempt, options)?;
-                    } else {
-                        return Err(LinkError::Io(err));
-                    }
-                }
-            }
-            Attempt::UseCopyFallback => {
-                if options.on_existing_directory == OnExistingDirectory::Merge {
-                    atomic_copy_overwrite(path, &target, options)?;
-                } else {
-                    options
-                        .copy_file(path, &target)
-                        .map_err(|err| LinkError::Copy {
-                            to: target.clone(),
-                            err,
-                        })?;
-                }
-            }
-        }
-    }
-
-    if attempt == Attempt::UseCopyFallback {
-        Ok(LinkMode::Copy)
-    } else {
-        Ok(LinkMode::Hardlink)
-    }
+        })
 }
 
 /// Try to create a hard link, returning the `io::Error` on failure.
@@ -626,9 +722,9 @@ fn try_hardlink_file(src: &Path, dst: &Path) -> io::Result<()> {
 fn atomic_hardlink_overwrite<F>(
     src: &Path,
     dst: &Path,
-    attempt: &mut Attempt,
+    state: LinkState,
     options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
+) -> Result<LinkState, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -640,21 +736,21 @@ where
 
     if fs_err::hard_link(src, &tempfile).is_ok() {
         fs_err::rename(&tempfile, dst)?;
+        Ok(state.mode_working())
     } else {
-        // Hard link to temp failed, fallback to copy
         debug!(
             "Failed to hardlink `{}` to temp location, falling back to copy",
             src.display()
         );
-        *attempt = Attempt::UseCopyFallback;
-        atomic_copy_overwrite(src, dst, options)?;
         warn_user_once!(
             "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         \
             If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         \
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
+        let state = state.next_mode();
+        atomic_copy_overwrite(src, dst, options)?;
+        Ok(state)
     }
-    Ok(())
 }
 
 /// Atomically overwrite an existing file with a copy.
@@ -682,163 +778,13 @@ where
     Ok(())
 }
 
-/// Copy a directory tree from `src` to `dst`.
-///
-/// Always copies files (no linking). Supports synchronized copying and
-/// directory merging via options.
-fn copy_dir<F>(src: &Path, dst: &Path, options: &LinkOptions<'_, F>) -> Result<LinkMode, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    for entry in WalkDir::new(src) {
-        let entry = entry.map_err(|err| LinkError::WalkDir {
-            path: src.to_path_buf(),
-            err,
-        })?;
-
-        let path = entry.path();
-        let relative = path.strip_prefix(src).expect("walkdir starts with root");
-        let target = dst.join(relative);
-
-        if entry.file_type().is_dir() {
-            fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {
-                path: target.clone(),
-                err,
-            })?;
-            continue;
-        }
-
-        if options.on_existing_directory == OnExistingDirectory::Merge {
-            atomic_copy_overwrite(path, &target, options)?;
-        } else {
-            options
-                .copy_file(path, &target)
-                .map_err(|err| LinkError::Copy {
-                    to: target.clone(),
-                    err,
-                })?;
-        }
-    }
-
-    Ok(LinkMode::Copy)
-}
-
-/// Symbolically link a directory tree from `src` to `dst`.
-///
-/// Tries creating symlinks first, falling back to copying if symlinks are not supported.
-fn symlink_dir<F>(
-    src: &Path,
-    dst: &Path,
-    options: &LinkOptions<'_, F>,
-) -> Result<LinkMode, LinkError>
-where
-    F: Fn(&Path) -> bool,
-{
-    let mut attempt = Attempt::Initial;
-
-    for entry in WalkDir::new(src) {
-        let entry = entry.map_err(|err| LinkError::WalkDir {
-            path: src.to_path_buf(),
-            err,
-        })?;
-
-        let path = entry.path();
-        let relative = path.strip_prefix(src).expect("walkdir starts with root");
-        let target = dst.join(relative);
-
-        if entry.file_type().is_dir() {
-            fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {
-                path: target.clone(),
-                err,
-            })?;
-            continue;
-        }
-
-        if (options.needs_mutable_copy)(path) {
-            options
-                .copy_file(path, &target)
-                .map_err(|err| LinkError::Copy {
-                    to: target.clone(),
-                    err,
-                })?;
-            continue;
-        }
-
-        match attempt {
-            Attempt::Initial => {
-                if let Err(err) = create_symlink(path, &target) {
-                    if err.kind() == io::ErrorKind::AlreadyExists
-                        && options.on_existing_directory == OnExistingDirectory::Merge
-                    {
-                        atomic_symlink_overwrite(path, &target, &mut attempt, options)?;
-                    } else {
-                        debug!(
-                            "Failed to symlink `{}` to `{}`: {}; falling back to copy",
-                            path.display(),
-                            target.display(),
-                            err
-                        );
-                        attempt = Attempt::UseCopyFallback;
-                        options
-                            .copy_file(path, &target)
-                            .map_err(|err| LinkError::Copy {
-                                to: target.clone(),
-                                err,
-                            })?;
-                        warn_user_once!(
-                            "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
-                            If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
-                            If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
-                        );
-                    }
-                } else {
-                    attempt = Attempt::Subsequent;
-                }
-            }
-            Attempt::Subsequent => {
-                if let Err(err) = create_symlink(path, &target) {
-                    if err.kind() == io::ErrorKind::AlreadyExists
-                        && options.on_existing_directory == OnExistingDirectory::Merge
-                    {
-                        atomic_symlink_overwrite(path, &target, &mut attempt, options)?;
-                    } else {
-                        return Err(LinkError::Symlink {
-                            from: path.to_path_buf(),
-                            to: target,
-                            err,
-                        });
-                    }
-                }
-            }
-            Attempt::UseCopyFallback => {
-                if options.on_existing_directory == OnExistingDirectory::Merge {
-                    atomic_copy_overwrite(path, &target, options)?;
-                } else {
-                    options
-                        .copy_file(path, &target)
-                        .map_err(|err| LinkError::Copy {
-                            to: target.clone(),
-                            err,
-                        })?;
-                }
-            }
-        }
-    }
-
-    if attempt == Attempt::UseCopyFallback {
-        Ok(LinkMode::Copy)
-    } else {
-        Ok(LinkMode::Symlink)
-    }
-}
-
 /// Atomically overwrite an existing file with a symlink.
 fn atomic_symlink_overwrite<F>(
     src: &Path,
     dst: &Path,
-    attempt: &mut Attempt,
+    state: LinkState,
     options: &LinkOptions<'_, F>,
-) -> Result<(), LinkError>
+) -> Result<LinkState, LinkError>
 where
     F: Fn(&Path) -> bool,
 {
@@ -850,21 +796,21 @@ where
 
     if create_symlink(src, &tempfile).is_ok() {
         fs_err::rename(&tempfile, dst)?;
+        Ok(state.mode_working())
     } else {
-        // Symlink to temp failed, fallback to copy
         debug!(
             "Failed to symlink `{}` to temp location, falling back to copy",
             src.display()
         );
-        *attempt = Attempt::UseCopyFallback;
-        atomic_copy_overwrite(src, dst, options)?;
         warn_user_once!(
             "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         \
             If the cache and target directories are on different filesystems, symlinking may not be supported.\n         \
             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
         );
+        let state = state.next_mode();
+        atomic_copy_overwrite(src, dst, options)?;
+        Ok(state)
     }
-    Ok(())
 }
 
 /// Create a symbolic link.
