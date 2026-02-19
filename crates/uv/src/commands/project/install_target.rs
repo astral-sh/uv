@@ -96,7 +96,7 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
             Self::Project { name, .. } => Some(name),
             Self::Projects { .. } => None,
             Self::Workspace { lock, .. } => {
-                // If the workspace contains a single member at the root, it may be omitted from
+                // If the workspace contains a single member at the root, it will be omitted from
                 // the list of workspace members encoded in the lockfile. In that case, identify
                 // the root project by its source so that install options (e.g.,
                 // `--no-emit-workspace`) can filter it correctly.

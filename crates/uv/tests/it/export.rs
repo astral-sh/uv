@@ -2288,8 +2288,6 @@ fn requirements_txt_no_emit_workspace_all_packages() -> Result<()> {
         "#,
     )?;
 
-    context.lock().assert().success();
-
     // `--no-emit-workspace --all-packages` on a single-member workspace should not emit `-e .`.
     uv_snapshot!(context.filters(), context.export().arg("--no-emit-workspace").arg("--all-packages"), @r"
     success: true
