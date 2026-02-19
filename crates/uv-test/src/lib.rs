@@ -762,10 +762,7 @@ impl TestContext {
 
         // The workspace root directory is not available without walking up the tree
         // https://github.com/rust-lang/cargo/issues/3946
-        let cargo_manifest_dir = env::var(EnvVars::CARGO_MANIFEST_DIR)
-            .unwrap_or_else(|_| env!("CARGO_MANIFEST_DIR").to_string());
-
-        let workspace_root = Path::new(&cargo_manifest_dir)
+        let workspace_root = Path::new(&env::var(EnvVars::CARGO_MANIFEST_DIR).unwrap())
             .parent()
             .expect("CARGO_MANIFEST_DIR should be nested in workspace")
             .parent()
