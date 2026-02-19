@@ -256,7 +256,11 @@ jobs:
       - name: "Install cargo extensions"
         shell: bash
         run: scripts/install-cargo-extensions.sh
-
+      - name: "Install NASM"
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
+        run: |
+          choco install nasm -y
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@04ac600d27cdf7a9a280dadf7147097c42b757ad # v1.50.1
@@ -266,6 +270,7 @@ jobs:
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.cmd
+          AWS_LC_SYS_NO_PREFIX: "1"
       - name: "Test wheel"
         shell: bash
         run: |
