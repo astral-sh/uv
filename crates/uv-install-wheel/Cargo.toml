@@ -39,14 +39,12 @@ itertools = { workspace = true }
 mailparse = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }
-reflink-copy = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
@@ -54,6 +52,10 @@ walkdir = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 same-file = { workspace = true }
 self-replace = { workspace = true }
+
+[features]
+clap = ["dep:clap", "uv-fs/clap"]
+schemars = ["dep:schemars", "uv-fs/schemars"]
 
 [dev-dependencies]
 anyhow = { workspace = true }
