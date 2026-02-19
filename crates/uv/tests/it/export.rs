@@ -2283,8 +2283,8 @@ fn requirements_txt_no_emit_workspace_all_packages() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.8.22,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
