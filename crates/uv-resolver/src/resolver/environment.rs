@@ -197,17 +197,22 @@ impl ResolverEnvironment {
                 if exclude.contains(&group) {
                     return false;
                 }
-                // When a project-level conflict item is excluded, all of
-                // the project's extras and groups should be excluded too,
-                // unless they are explicitly included. This is because
-                // extras/groups transitively depend on the base package,
-                // so leaving them in a fork that excludes the project
-                // would pull the project's dependencies back in.
-                if !matches!(group.kind(), ConflictKindRef::Project) {
+                // When a project-level conflict item is excluded, the
+                // project's extras should be excluded too (unless they
+                // are explicitly included). This is because extras
+                // transitively depend on the base package, so leaving
+                // them in a fork that excludes the project would pull
+                // the project's dependencies back in.
+                //
+                // Groups, on the other hand, do NOT depend on the base
+                // package — they are independent dependency sets — so
+                // they can safely remain active even when the project
+                // itself is excluded.
+                if matches!(group.kind(), ConflictKindRef::Extra(_)) {
                     if exclude.contains(&ConflictItemRef::from(group.package())) {
-                        // But if this specific extra/group is explicitly
+                        // But if this specific extra is explicitly
                         // included (e.g., in a conflict between a project
-                        // and one of its own groups), respect the inclusion.
+                        // and one of its own extras), respect the inclusion.
                         return include.contains(&group);
                     }
                 }

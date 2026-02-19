@@ -15431,6 +15431,73 @@ fn project_level_conflict_with_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "pkg-a" },
+            { package = "pkg-b", extra = "extra1" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "pkg-a",
+            "pkg-b",
+            "workspace-root",
+        ]
+
+        [[package]]
+        name = "pkg-a"
+        version = "0.1.0"
+        source = { editable = "pkg-a" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+
+        [[package]]
+        name = "pkg-b"
+        version = "0.1.0"
+        source = { editable = "pkg-b" }
+
+        [package.optional-dependencies]
+        extra1 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" }]
+        provides-extras = ["extra1"]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
         );
     });
 
@@ -15548,6 +15615,119 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "pkg-a" },
+            { package = "pkg-b", extra = "extra1" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "pkg-a",
+            "pkg-b",
+            "workspace-root",
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.4"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/8b/e1/43beb3d38dba6cb420cefa297822eac205a277ab43e5ba5d5c46faf96438/idna-3.4.tar.gz", hash = "sha256:814f528e8dead7d329833b91c5faa87d60bf71824cd12a7530b5526063d02cb4", size = 183077, upload-time = "2022-09-14T00:24:27.719Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/fc/34/3030de6f1370931b9dbb4dad48f6ab1015ab1d32447850b9fc94e60097be/idna-3.4-py3-none-any.whl", hash = "sha256:90b77e79eaa3eba6de819a0c442c0b4ceefc341a7a2ab77d7562bf49f425c5c2", size = 61538, upload-time = "2022-09-14T00:24:23.22Z" },
+        ]
+
+        [[package]]
+        name = "pkg-a"
+        version = "0.1.0"
+        source = { editable = "pkg-a" }
+        dependencies = [
+            { name = "pkg-b", extra = ["safe"], marker = "extra == 'project-5-pkg-a'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+        ]
+
+        [package.optional-dependencies]
+        all = [
+            { name = "idna", marker = "extra == 'project-5-pkg-a'" },
+            { name = "sniffio", marker = "extra == 'project-5-pkg-a'" },
+        ]
+        bar = [
+            { name = "sniffio", marker = "extra == 'project-5-pkg-a'" },
+        ]
+        foo = [
+            { name = "idna", marker = "extra == 'project-5-pkg-a'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "idna", marker = "extra == 'foo'", specifier = "==3.4" },
+            { name = "pkg-a", extras = ["bar"], marker = "extra == 'all'" },
+            { name = "pkg-a", extras = ["foo"], marker = "extra == 'all'" },
+            { name = "pkg-b", extras = ["safe"], editable = "pkg-b" },
+            { name = "sniffio", marker = "extra == 'bar'", specifier = "==1.3.0" },
+            { name = "sortedcontainers", specifier = "==2.3.0" },
+        ]
+        provides-extras = ["all", "foo", "bar"]
+
+        [[package]]
+        name = "pkg-b"
+        version = "0.1.0"
+        source = { editable = "pkg-b" }
+
+        [package.optional-dependencies]
+        extra1 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        safe = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-5-pkg-b-extra1' or extra != 'project-5-pkg-a'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" },
+            { name = "sortedcontainers", marker = "extra == 'safe'" },
+        ]
+        provides-extras = ["safe", "extra1"]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/cd/50/d49c388cae4ec10e8109b1b833fd265511840706808576df3ada99ecb0ac/sniffio-1.3.0.tar.gz", hash = "sha256:e60305c5e5d314f5389259b7f22aaa33d8f7dee49763119234af3755c55b9101", size = 17103, upload-time = "2022-09-01T12:31:36.968Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl", hash = "sha256:eecefdce1e5bbfb7ad2eeaabf7c1eeb404d7757c379bd1f7e5cce9d8bf425384", size = 10165, upload-time = "2022-09-01T12:31:34.186Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
         );
     });
 
@@ -15560,6 +15740,195 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
     ----- stderr -----
     warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
     Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that a project-level conflict correctly handles groups on the
+/// excluded package. Groups do NOT depend on the base package (unlike
+/// extras), so a group on pkg-a should remain active even when pkg-a
+/// itself is excluded by a project-level conflict.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/18015>
+#[test]
+fn project_level_conflict_with_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace-root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["pkg-a", "pkg-b"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { package = "pkg-a" },
+                { package = "pkg-b", extra = "extra1" },
+            ],
+        ]
+        "#,
+    )?;
+
+    let pkg_a_pyproject_toml = context.temp_dir.child("pkg-a").child("pyproject.toml");
+    pkg_a_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["sortedcontainers==2.3.0"]
+
+        [dependency-groups]
+        dev = ["sniffio==1.3.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let pkg_b_pyproject_toml = context.temp_dir.child("pkg-b").child("pyproject.toml");
+    pkg_b_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "pkg-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.4.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Resolution should succeed. The project-level conflict between pkg-a
+    // and pkg-b[extra1] properly forks. The dev group on pkg-a should NOT
+    // be excluded by the project-level conflict since groups don't depend
+    // on the base package.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 6 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "pkg-a" },
+            { package = "pkg-b", extra = "extra1" },
+        ]]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "pkg-a",
+            "pkg-b",
+            "workspace-root",
+        ]
+
+        [[package]]
+        name = "pkg-a"
+        version = "0.1.0"
+        source = { editable = "pkg-a" }
+        dependencies = [
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+        ]
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "sniffio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", specifier = "==2.3.0" }]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "sniffio", specifier = "==1.3.0" }]
+
+        [[package]]
+        name = "pkg-b"
+        version = "0.1.0"
+        source = { editable = "pkg-b" }
+
+        [package.optional-dependencies]
+        extra1 = [
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "sortedcontainers", marker = "extra == 'extra1'", specifier = "==2.4.0" }]
+        provides-extras = ["extra1"]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/cd/50/d49c388cae4ec10e8109b1b833fd265511840706808576df3ada99ecb0ac/sniffio-1.3.0.tar.gz", hash = "sha256:e60305c5e5d314f5389259b7f22aaa33d8f7dee49763119234af3755c55b9101", size = 17103, upload-time = "2022-09-01T12:31:36.968Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl", hash = "sha256:eecefdce1e5bbfb7ad2eeaabf7c1eeb404d7757c379bd1f7e5cce9d8bf425384", size = 10165, upload-time = "2022-09-01T12:31:34.186Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/14/10/6a9481890bae97da9edd6e737c9c3dec6aea3fc2fa53b0934037b35c89ea/sortedcontainers-2.3.0.tar.gz", hash = "sha256:59cc937650cf60d677c16775597c89a960658a09cf7c1a668f86e1e4464b10a1", size = 30509, upload-time = "2020-11-09T00:03:52.258Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/20/4d/a7046ae1a1a4cc4e9bbed194c387086f06b25038be596543d026946330c9/sortedcontainers-2.3.0-py2.py3-none-any.whl", hash = "sha256:37257a32add0a3ee490bb170b599e93095eed89a55da91fa9f48753ea12fd73f", size = 29479, upload-time = "2020-11-09T00:03:50.723Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "workspace-root"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#
+        );
+    });
+
+    // Re-run with `--locked`.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Declaring conflicts for packages (`package = ...`) is experimental and may change without warning. Pass `--preview-features package-conflicts` to disable this warning.
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())
