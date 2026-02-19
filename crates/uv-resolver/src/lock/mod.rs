@@ -6085,7 +6085,7 @@ fn simplified_universal_markers(
 /// For example, a package included under `sys_platform == 'win32'` does not need Linux
 /// wheels.
 ///
-/// Returns `false` if the wheel is definitely unreachable, and `true` if it may be reachable,
+/// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
 /// including if the wheel tag isn't recognized.
 pub(crate) fn is_wheel_unreachable(
     filename: &WheelFilename,

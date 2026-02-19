@@ -284,9 +284,9 @@ impl ResolverEnvironment {
     /// When a group is excluded from a resolver environment,
     /// `ResolverEnvironment::included_by_group` will return false. The idea
     /// is that a dependency with a corresponding group should be excluded by
-    /// forks in the resolver with this environment. (Include rules have no
-    /// effect in `included_by_group` since, for the purposes of conflicts
-    /// during resolution, we only care about what *isn't* allowed.)
+    /// forks in the resolver with this environment. (Include rules also
+    /// affect `included_by_group`: when a project-level exclusion exists,
+    /// an explicit inclusion for a specific extra overrides it.)
     ///
     /// If calling this routine results in the same conflict item being both
     /// included and excluded, then this returns `None` (since it would
