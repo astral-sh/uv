@@ -343,6 +343,8 @@ jobs:
       - docker-plan
       - docker-publish-base
       - docker-publish-extra
+    permissions:
+      attestations: write # for GHCR attestations
     if: ${{ needs.docker-plan.outputs.push == 'true' }}
     steps:
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
