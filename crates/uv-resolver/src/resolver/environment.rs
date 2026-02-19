@@ -208,10 +208,7 @@ impl ResolverEnvironment {
                         // But if this specific extra/group is explicitly
                         // included (e.g., in a conflict between a project
                         // and one of its own groups), respect the inclusion.
-                        if include.contains(&group) {
-                            return true;
-                        }
-                        return false;
+                        return include.contains(&group);
                     }
                 }
                 true
