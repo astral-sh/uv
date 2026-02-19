@@ -6175,6 +6175,8 @@ fn run_target_workspace_discovery() -> Result<()> {
         [build-system]
         requires = ["setuptools>=42"]
         build-backend = "setuptools.build_meta"
+
+        [tool.uv.workspace]
         "#
     })?;
 
@@ -6198,6 +6200,11 @@ fn run_target_workspace_discovery() -> Result<()> {
         import iniconfig
     ModuleNotFoundError: No module named 'iniconfig'
     "#);
+
+    // Write invalid configuration files to the cwd to verify that the
+    // target-workspace-discovery feature skips parsing them.
+    context.temp_dir.child("uv.toml").write_str("bad")?;
+    context.temp_dir.child("pyproject.toml").write_str("bad")?;
 
     // With the preview feature, the workspace is discovered from the target's directory.
     uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("target-workspace-discovery").arg("project/script.py").env_remove(EnvVars::VIRTUAL_ENV), @"
