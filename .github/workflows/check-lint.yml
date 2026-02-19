@@ -28,7 +28,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
-          version: "0.10.1"
+          version: "0.10.2"
       - run: uvx ruff check .
 
   ty:
@@ -41,7 +41,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
-          version: "0.10.1"
+          version: "0.10.2"
       - run: |
           uvx ty check python/uv
           uvx \
@@ -75,7 +75,7 @@ jobs:
       - name: "Install uv"
         uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
-          version: "0.10.1"
+          version: "0.10.2"
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
@@ -162,4 +162,4 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: crate-ci/typos@06d010dfe4c84fdab1a25ea02b57b3585018ba80 # v1.42.3
+      - uses: crate-ci/typos@78bc6fb2c0d734235d57a2d6b9de923cc325ebdd # v1.43.4

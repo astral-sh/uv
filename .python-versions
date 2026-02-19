@@ -15,8 +15,6 @@
 3.10.16
 3.9.21
 3.8.20
-# The following are required for packse scenarios
-3.9.20
 # The following is needed for `==3.13` request tests
 3.13.0
 # A pre-release version required for testing

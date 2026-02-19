@@ -668,26 +668,19 @@ mod tests {
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
-    // Test that we don't include the password in debug messages.
+    /// Passwords should be redacted in debug output.
     #[test]
-    fn test_password_obfuscation() {
+    fn test_password_redaction() {
         let credentials =
             Credentials::basic(Some(String::from("user")), Some(String::from("password")));
-        let debugged = format!("{credentials:?}");
-        assert_eq!(
-            debugged,
-            "Basic { username: Username(Some(\"user\")), password: Some(****) }"
-        );
+        insta::assert_compact_debug_snapshot!(credentials, @r#"Basic { username: Username(Some("user")), password: Some(****) }"#);
     }
 
+    /// Bearer credentials should be redacted in debug output.
     #[test]
-    fn test_bearer_token_obfuscation() {
+    fn test_bearer_token_redaction() {
         let token = "super_secret_token";
         let credentials = Credentials::bearer(token.into());
-        let debugged = format!("{credentials:?}");
-        assert!(
-            !debugged.contains(token),
-            "Token should be obfuscated in Debug impl: {debugged}"
-        );
+        insta::assert_compact_debug_snapshot!(credentials, @"Bearer { token: **** }");
     }
 }

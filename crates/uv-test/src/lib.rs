@@ -36,7 +36,7 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.53";
+pub const PACKSE_VERSION: &str = "0.3.59";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
@@ -1288,7 +1288,7 @@ impl TestContext {
         command.arg("format");
         self.add_shared_options(&mut command, false);
         // Override to a more recent date for ruff version resolution
-        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-03-01T00:00:00Z");
+        command.env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z");
         command
     }
 

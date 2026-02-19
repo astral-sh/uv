@@ -1148,7 +1148,8 @@ pub enum ProjectCommand {
     Lock(LockArgs),
     /// Export the project's lockfile to an alternate format.
     ///
-    /// At present, both `requirements.txt` and `pylock.toml` (PEP 751) formats are supported.
+    /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
+    /// formats are supported.
     ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
     /// provided.
@@ -3531,7 +3532,7 @@ pub struct RunArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -3869,7 +3870,7 @@ pub struct SyncArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -4684,7 +4685,7 @@ pub struct TreeArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.
@@ -4769,7 +4770,6 @@ pub struct TreeArgs {
 
 #[derive(Args)]
 pub struct ExportArgs {
-    #[expect(clippy::doc_markdown)]
     /// The format to which `uv.lock` should be exported.
     ///
     /// Supports `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output formats.
@@ -4861,7 +4861,7 @@ pub struct ExportArgs {
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
-    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS)]
+    #[arg(long, env = EnvVars::UV_NO_DEFAULT_GROUPS, value_parser = clap::builder::BoolishValueParser::new())]
     pub no_default_groups: bool,
 
     /// Only include dependencies from the specified dependency group.

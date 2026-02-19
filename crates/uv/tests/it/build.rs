@@ -1757,10 +1757,9 @@ fn build_list_files_errors() -> Result<()> {
 
     let built_by_uv = current_dir()?.join("../../test/packages/built-by-uv");
 
-    let mut filters = context.filters();
+    let context = context.with_filter(("--link-mode <LINK_MODE> ", ""));
     // In CI, we run with link mode settings.
-    filters.push(("--link-mode <LINK_MODE> ", ""));
-    uv_snapshot!(filters, context.build()
+    uv_snapshot!(context.filters(), context.build()
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
@@ -1780,10 +1779,9 @@ fn build_list_files_errors() -> Result<()> {
 
     // Not a uv build backend package, we can't list it.
     let anyio_local = current_dir()?.join("../../test/packages/anyio_local");
-    let mut filters = context.filters();
     // Windows normalization
-    filters.push(("/crates/uv/../../", "/"));
-    uv_snapshot!(filters, context.build()
+    let context = context.with_filter(("/crates/uv/../../", "/"));
+    uv_snapshot!(context.filters(), context.build()
         .arg(&anyio_local)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output2"))

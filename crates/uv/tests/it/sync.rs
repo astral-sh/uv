@@ -1104,9 +1104,9 @@ fn check() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync development dependencies in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
+fn sync_non_project_dev_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1185,9 +1185,9 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 #[test]
-fn sync_legacy_non_project_frozen() -> Result<()> {
+fn sync_non_project_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1253,9 +1253,9 @@ fn sync_legacy_non_project_frozen() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root.
+/// Sync dependency groups in a non-project workspace root.
 #[test]
-fn sync_legacy_non_project_group() -> Result<()> {
+fn sync_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1371,11 +1371,11 @@ fn sync_legacy_non_project_group() -> Result<()> {
     Ok(())
 }
 
-/// Sync development dependencies in a (legacy) non-project workspace root with `--frozen`.
+/// Sync development dependencies in a non-project workspace root with `--frozen`.
 ///
 /// Modify the `pyproject.toml` after locking.
 #[test]
-fn sync_legacy_non_project_frozen_modification() -> Result<()> {
+fn sync_non_project_frozen_modification() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -4661,9 +4661,9 @@ fn sync_group_member() -> Result<()> {
     Ok(())
 }
 
-/// Sync with `--only-group`, where the group includes a legacy non-`[project]` workspace member.
+/// Sync with `--only-group`, where the group includes a non-`[project]` workspace member.
 #[test]
-fn sync_group_legacy_non_project_member() -> Result<()> {
+fn sync_group_non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     // Create a workspace.
@@ -7203,7 +7203,7 @@ fn sync_empty_virtual_environment() -> Result<()> {
 
 /// Test for warnings when `VIRTUAL_ENV` is set but will not be respected.
 #[test]
-fn sync_legacy_non_project_warning() -> Result<()> {
+fn sync_virtual_env_warning() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -12616,17 +12616,17 @@ fn sync_required_environment_hint() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    let mut filters = context.filters();
-    filters.push((
-        r"You're on [^ ]+ \(`.*`\)",
-        "You're on [PLATFORM] (`[TAG]`)",
-    ));
-    filters.push((
-        r"sys_platform == '[^']+' and platform_machine == '[^']+'",
-        "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
-    ));
+    let context = context
+        .with_filter((
+            r"You're on [^ ]+ \(`.*`\)",
+            "You're on [PLATFORM] (`[TAG]`)",
+        ))
+        .with_filter((
+            r"sys_platform == '[^']+' and platform_machine == '[^']+'",
+            "sys_platform == '[PLATFORM]' and platform_machine == '[MACHINE]'",
+        ));
 
-    uv_snapshot!(filters, context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
+    uv_snapshot!(context.filters(), context.sync().env_remove(EnvVars::UV_EXCLUDE_NEWER), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -12726,7 +12726,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -12810,7 +12810,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]

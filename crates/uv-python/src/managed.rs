@@ -54,49 +54,20 @@ pub enum Error {
     ExtractError(#[from] uv_extract::Error),
     #[error(transparent)]
     SysconfigError(#[from] sysconfig::Error),
-    #[error("Failed to copy to: {0}", to.user_display())]
-    CopyError {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
     #[error("Missing expected Python executable at {}", _0.user_display())]
     MissingExecutable(PathBuf),
     #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
     MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
-    #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
-    CanonicalizeExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python executable link at {} from {}", to.user_display(), from.user_display())]
-    LinkExecutable {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create Python minor version link directory at {} from {}", to.user_display(), from.user_display())]
-    PythonMinorVersionLinkDirectory {
-        from: PathBuf,
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to create directory for Python executable link at {}", to.user_display())]
-    ExecutableDirectory {
-        to: PathBuf,
-        #[source]
-        err: io::Error,
-    },
-    #[error("Failed to read Python installation directory: {0}", dir.user_display())]
-    ReadError {
-        dir: PathBuf,
-        #[source]
-        err: io::Error,
-    },
+    #[error("Failed to create canonical Python executable")]
+    CanonicalizeExecutable(#[source] io::Error),
+    #[error("Failed to create Python executable link")]
+    LinkExecutable(#[source] io::Error),
+    #[error("Failed to create Python minor version link directory")]
+    PythonMinorVersionLinkDirectory(#[source] io::Error),
+    #[error("Failed to create directory for Python executable link")]
+    ExecutableDirectory(#[source] io::Error),
+    #[error("Failed to read Python installation directory")]
+    ReadError(#[source] io::Error),
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
@@ -241,18 +212,12 @@ impl ManagedPythonInstallations {
                         Err(err) => Some(Err(err)),
                     })
                     .collect::<Result<_, io::Error>>()
-                    .map_err(|err| Error::ReadError {
-                        dir: self.root.clone(),
-                        err,
-                    })?;
+                    .map_err(Error::ReadError)?;
                 directories
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => vec![],
             Err(err) => {
-                return Err(Error::ReadError {
-                    dir: self.root.clone(),
-                    err,
-                });
+                return Err(Error::ReadError(err));
             }
         };
         let scratch = self.scratch();
@@ -573,11 +538,7 @@ impl ManagedPythonInstallation {
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
-                    return Err(Error::CanonicalizeExecutable {
-                        from: executable,
-                        to: python,
-                        err,
-                    });
+                    return Err(Error::CanonicalizeExecutable(err));
                 }
             }
         }
@@ -862,11 +823,7 @@ impl PythonMinorVersionLink {
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
-                return Err(Error::PythonMinorVersionLinkDirectory {
-                    from: self.symlink_directory.clone(),
-                    to: self.target_directory.clone(),
-                    err,
-                });
+                return Err(Error::PythonMinorVersionLinkDirectory(err));
             }
         }
         Ok(())
@@ -957,10 +914,7 @@ fn executable_path_from_base(
 /// If the file already exists at the link path, an error will be returned.
 pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
@@ -969,11 +923,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Err(Error::MissingExecutable(executable.to_path_buf()))
             }
-            Err(err) => Err(Error::LinkExecutable {
-                from: executable.to_path_buf(),
-                to: link.to_path_buf(),
-                err,
-            }),
+            Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
@@ -987,11 +937,7 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
         {
             std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
-                .map_err(|err| Error::LinkExecutable {
-                    from: executable.to_path_buf(),
-                    to: link.to_path_buf(),
-                    err,
-                })
+                .map_err(Error::LinkExecutable)
         }
     } else {
         unimplemented!("Only Windows and Unix are supported.")
@@ -1005,27 +951,16 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
 /// See [`create_link_to_executable`] for a variant that errors if the link already exists.
 pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), Error> {
     let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
-        to: link_parent.to_path_buf(),
-        err,
-    })?;
+    fs_err::create_dir_all(link_parent).map_err(Error::ExecutableDirectory)?;
 
     if cfg!(unix) {
-        replace_symlink(executable, link).map_err(|err| Error::LinkExecutable {
-            from: executable.to_path_buf(),
-            to: link.to_path_buf(),
-            err,
-        })
+        replace_symlink(executable, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
         use uv_trampoline_builder::windows_python_launcher;
 
         let launcher = windows_python_launcher(executable, false)?;
 
-        uv_fs::write_atomic_sync(link, &*launcher).map_err(|err| Error::LinkExecutable {
-            from: executable.to_path_buf(),
-            to: link.to_path_buf(),
-            err,
-        })
+        uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }
