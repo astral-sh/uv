@@ -844,20 +844,29 @@ mod tests {
         TempDir::new().unwrap()
     }
 
-    /// Create a temporary directory on a reflink-capable filesystem.
+    /// Create a temporary directory on a copy-on-write filesystem.
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set.
-    fn reflink_tempdir() -> Option<TempDir> {
-        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+    /// Returns `None` if `UV_INTERNAL__TEST_COW_FS` is not set.
+    fn cow_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_COW_FS).ok()?;
         fs_err::create_dir_all(&dir).unwrap();
         Some(TempDir::new_in(dir).unwrap())
     }
 
-    /// Create a temporary directory on a filesystem that does **not** support reflink.
+    /// Create a temporary directory on a filesystem without copy-on-write support.
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set.
-    fn tmp_tempdir() -> Option<TempDir> {
-        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+    /// Returns `None` if `UV_INTERNAL__TEST_NOCOW_FS` is not set.
+    fn nocow_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
+    }
+
+    /// Create a temporary directory on an alternative filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_ALT_FS` is not set.
+    fn alt_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS).ok()?;
         fs_err::create_dir_all(&dir).unwrap();
         Some(TempDir::new_in(dir).unwrap())
     }
@@ -979,14 +988,14 @@ mod tests {
 
     #[test]
     fn test_reflink_file_on_reflink_fs() {
-        let Some(tmp_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(tmp_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
 
         assert!(
             reflink_supported(tmp_dir.path()),
-            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
         );
 
         let src = tmp_dir.path().join("src.txt");
@@ -1005,17 +1014,17 @@ mod tests {
 
     #[test]
     fn test_clone_dir_reflink_on_reflink_fs() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = reflink_tempdir() else {
+        let Some(dst_dir) = cow_tempdir() else {
             unreachable!();
         };
 
         assert!(
             reflink_supported(src_dir.path()),
-            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
         );
 
         create_test_tree(src_dir.path());
@@ -1036,17 +1045,17 @@ mod tests {
 
     #[test]
     fn test_clone_merge_on_reflink_fs() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = reflink_tempdir() else {
+        let Some(dst_dir) = cow_tempdir() else {
             unreachable!();
         };
 
         assert!(
             reflink_supported(src_dir.path()),
-            "UV_INTERNAL__TEST_REFLINK_FS points to a filesystem that does not support reflink"
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
         );
 
         create_test_tree(src_dir.path());
@@ -1076,30 +1085,30 @@ mod tests {
 
     #[test]
     fn test_reflink_fails_on_tmp_fs() {
-        let Some(tmp_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(tmp_dir) = nocow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_NOCOW_FS not set");
             return;
         };
 
         assert!(
             !reflink_supported(tmp_dir.path()),
-            "UV_INTERNAL__TEST_TMP_FS points to a filesystem that supports reflink"
+            "UV_INTERNAL__TEST_NOCOW_FS points to a filesystem that supports reflink"
         );
     }
 
     #[test]
     fn test_clone_fallback_on_tmp_fs() {
-        let Some(src_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(src_dir) = nocow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_NOCOW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
+        let Some(dst_dir) = nocow_tempdir() else {
             unreachable!();
         };
 
         assert!(
             !reflink_supported(src_dir.path()),
-            "UV_INTERNAL__TEST_TMP_FS points to a filesystem that supports reflink"
+            "UV_INTERNAL__TEST_NOCOW_FS points to a filesystem that supports reflink"
         );
 
         create_test_tree(src_dir.path());
@@ -1114,17 +1123,17 @@ mod tests {
         verify_test_tree(dst_dir.path());
     }
 
-    /// Clone from a reflink-capable filesystem to a tmpfs (cross-device).
+    /// Clone from a copy-on-write filesystem to an alternative filesystem (cross-device).
     ///
     /// Reflink cannot work across filesystems, so the clone mode must fall back.
     #[test]
     fn test_clone_cross_device_reflink_to_tmp() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(dst_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
 
@@ -1141,15 +1150,15 @@ mod tests {
         verify_test_tree(dst_dir.path());
     }
 
-    /// Clone from a tmpfs to a reflink-capable filesystem (cross-device).
+    /// Clone from an alternative filesystem to a copy-on-write filesystem (cross-device).
     #[test]
     fn test_clone_cross_device_tmp_to_reflink() {
-        let Some(src_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
-        let Some(dst_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(dst_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
 
@@ -1169,12 +1178,12 @@ mod tests {
     /// Hardlink across filesystems must fall back to copy.
     #[test]
     fn test_hardlink_cross_device_reflink_to_tmp() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(dst_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
 
@@ -1195,12 +1204,12 @@ mod tests {
     /// Hardlink across filesystems (opposite direction).
     #[test]
     fn test_hardlink_cross_device_tmp_to_reflink() {
-        let Some(src_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
-        let Some(dst_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(dst_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
 
@@ -1218,15 +1227,15 @@ mod tests {
         verify_test_tree(dst_dir.path());
     }
 
-    /// Clone merge across filesystems (src on reflink fs, dst on tmpfs).
+    /// Clone merge across filesystems (src on copy-on-write fs, dst on alt fs).
     #[test]
     fn test_clone_merge_cross_device_reflink_to_tmp() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(dst_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
 
@@ -1262,12 +1271,12 @@ mod tests {
     /// Copy mode works across filesystems (sanity check).
     #[test]
     fn test_copy_cross_device() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(dst_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
 
@@ -1284,12 +1293,12 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_symlink_cross_device() {
-        let Some(src_dir) = reflink_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_REFLINK_FS not set");
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
         };
-        let Some(dst_dir) = tmp_tempdir() else {
-            eprintln!("Skipping: UV_INTERNAL__TEST_TMP_FS not set");
+        let Some(dst_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
             return;
         };
 

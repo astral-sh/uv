@@ -168,7 +168,7 @@ pub struct TestContext {
     _root: tempfile::TempDir,
 
     /// Extra temporary directories whose lifetimes are tied to this context (e.g., directories
-    /// on alternate filesystems created by `with_cache_on_reflink_fs` and friends).
+    /// on alternate filesystems created by [`Self::with_cache_on_cow_fs`] and friends).
     #[allow(dead_code)]
     _extra_tempdirs: Vec<tempfile::TempDir>,
 }
@@ -689,41 +689,47 @@ impl TestContext {
         self
     }
 
-    /// Move the cache directory to a reflink-capable filesystem.
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set.
+    /// See the environment variable for details about the expectations.
     #[must_use]
-    pub fn with_cache_on_reflink_fs(self) -> Option<Self> {
-        let dir = env::var(EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+    pub fn with_cache_on_cow_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok()?;
         Some(self.with_cache_on_fs(&dir))
     }
 
-    /// Move the cache directory to a non-reflink filesystem.
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set.
+    /// See the environment variable for details about the expectations.
     #[must_use]
-    pub fn with_cache_on_tmp_fs(self) -> Option<Self> {
-        let dir = env::var(EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+    pub fn with_cache_on_alt_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok()?;
         Some(self.with_cache_on_fs(&dir))
     }
 
-    /// Move the working directory (and venv) to a reflink-capable filesystem.
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_REFLINK_FS` is not set. The virtual environment
-    /// is **not** created; use `context.venv().assert().success()` after this.
+    /// Returns `None` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
     #[must_use]
-    pub fn with_working_dir_on_reflink_fs(self) -> Option<Self> {
-        let dir = env::var(EnvVars::UV_INTERNAL__TEST_REFLINK_FS).ok()?;
+    pub fn with_working_dir_on_cow_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok()?;
         Some(self.with_working_dir_on_fs(&dir))
     }
 
-    /// Move the working directory (and venv) to a non-reflink filesystem.
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
     ///
-    /// Returns `None` if `UV_INTERNAL__TEST_TMP_FS` is not set. The virtual environment
-    /// is **not** created; use `context.venv().assert().success()` after this.
+    /// Returns `None` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
     #[must_use]
-    pub fn with_working_dir_on_tmp_fs(self) -> Option<Self> {
-        let dir = env::var(EnvVars::UV_INTERNAL__TEST_TMP_FS).ok()?;
+    pub fn with_working_dir_on_alt_fs(self) -> Option<Self> {
+        let dir = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok()?;
         Some(self.with_working_dir_on_fs(&dir))
     }
 
