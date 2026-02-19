@@ -250,9 +250,10 @@ async fn cache_timeout() {
 #[test]
 #[cfg(windows)]
 fn clean_trailing_dot_filename() -> Result<()> {
-    use std::path::Path;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
 
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
 
     // Create a file with a trailing dot (Windows-incompatible name).
     // We need to use the extended-length path prefix to create it.
@@ -262,32 +263,32 @@ fn clean_trailing_dot_filename() -> Result<()> {
 
     // Create a file with trailing dot using extended path.
     let file_with_dot = test_subdir.join("logging.");
-    let extended_path = format!(r"\\?\{}", file_with_dot.display());
+    let mut extended_path = OsString::from(r"\\?\");
+    extended_path.push(file_with_dot.as_os_str());
+    let extended_path = PathBuf::from(extended_path);
     fs_err::write(&extended_path, "test content")?;
 
     // Verify the file exists (using extended path to read).
     assert!(
-        Path::new(&extended_path).exists(),
+        extended_path.exists(),
         "Test file with trailing dot should exist"
     );
 
     // Run `cache clean`; this should succeed even with the special filename.
-    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @r"
+    uv_snapshot!(context.filters(), context.clean().arg("--verbose"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
-    DEBUG Acquired exclusive lock for `[CACHE_DIR]/`
     Clearing cache at: [CACHE_DIR]/
-    DEBUG Released lock at `[CACHE_DIR]/.lock`
     Removed [N] files ([SIZE])
     ");
 
     // Verify the file is removed.
     assert!(
-        !Path::new(&extended_path).exists(),
+        !extended_path.exists(),
         "File with trailing dot should be removed after cache clean"
     );
 
