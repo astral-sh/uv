@@ -209,7 +209,7 @@ reqwest = { version = "=0.13.1", default-features = false, features = [
   "stream",
   "system-proxy",
   "rustls",
-  "native-tls",
+  "native-tls-vendored",
   "socks",
   "multipart",
   "http2",
