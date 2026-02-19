@@ -346,8 +346,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 ```
 
-Changing the default [`UV_LINK_MODE`](../../reference/settings.md#link-mode) silences warnings about
-not being able to use hard links since the cache and sync target are on separate file systems.
+Changing the [`UV_LINK_MODE`](../../reference/settings.md#link-mode) silences warnings about
+not being able to link files since the cache and sync target are on separate file systems.
 
 If you're not mounting the cache, image size can be reduced by using the `--no-cache` flag or
 setting `UV_NO_CACHE`.

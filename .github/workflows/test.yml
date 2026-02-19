@@ -85,8 +85,9 @@ jobs:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          UV_INTERNAL__TEST_REFLINK_FS: /btrfs
-          UV_INTERNAL__TEST_TMP_FS: /tmpfs
+          UV_INTERNAL__TEST_COW_FS: /btrfs
+          UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
+          UV_INTERNAL__TEST_ALT_FS: /tmpfs
         run: |
           cargo nextest run \
             --cargo-profile fast-build \
@@ -138,9 +139,10 @@ jobs:
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
           # macOS tmpdir is on APFS which supports reflink
-          UV_INTERNAL__TEST_REFLINK_FS: ${{ runner.temp }}
-          # HFS+ RAM disk does not support reflink
-          UV_INTERNAL__TEST_TMP_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
+          # HFS+ RAM disk does not support copy-on-write and is on a different device
+          UV_INTERNAL__TEST_NOCOW_FS: ${{ env.HFS_MOUNT }}
+          UV_INTERNAL__TEST_ALT_FS: ${{ env.HFS_MOUNT }}
         run: |
           cargo nextest run \
             --cargo-profile fast-build \

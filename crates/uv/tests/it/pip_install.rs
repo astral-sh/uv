@@ -14200,59 +14200,53 @@ fn warn_on_lzma_wheel() {
     );
 }
 
-/// Install a package with the cache on a reflink-capable filesystem and the venv on a
-/// non-reflink filesystem. This exercises the cross-device fallback path for clone mode.
+/// Install a package with the cache on a different filesystem than the venv.
+/// This exercises the cross-device fallback path.
 ///
-/// Requires `UV_INTERNAL__TEST_REFLINK_FS` and `UV_INTERNAL__TEST_TMP_FS`.
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
 #[test]
-fn install_cross_device_cache_reflink_venv_tmp() {
-    let Some(context) = uv_test::test_context!("3.12")
-        .with_cache_on_reflink_fs()
-        .and_then(TestContext::with_working_dir_on_tmp_fs)
-        .map(TestContext::with_filtered_link_mode_warning)
-    else {
-        return;
+fn install_cross_device() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
     };
     context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg("--link-mode")
-        .arg("clone")
         .arg("iniconfig"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
     );
+
+    Ok(())
 }
 
-/// Install a package with the cache on a non-reflink filesystem and the venv on a
-/// reflink-capable filesystem. This exercises the cross-device fallback path in the
-/// opposite direction.
+/// Install a package with both cache and venv on a copy-on-write filesystem.
 ///
-/// Requires `UV_INTERNAL__TEST_REFLINK_FS` and `UV_INTERNAL__TEST_TMP_FS`.
+/// Requires `UV_INTERNAL__TEST_COW_FS`.
 #[test]
-fn install_cross_device_cache_tmp_venv_reflink() {
-    let Some(context) = uv_test::test_context!("3.12")
-        .with_cache_on_tmp_fs()
-        .and_then(TestContext::with_working_dir_on_reflink_fs)
-        .map(TestContext::with_filtered_link_mode_warning)
-    else {
-        return;
+fn install_copy_on_write_fs() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_cow_fs()? else {
+        return Ok(());
+    };
+    let Some(context) = context.with_working_dir_on_cow_fs()? else {
+        return Ok(());
     };
     context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg("--link-mode")
-        .arg("clone")
         .arg("iniconfig"), @r"
     success: true
     exit_code: 0
@@ -14265,26 +14259,25 @@ fn install_cross_device_cache_tmp_venv_reflink() {
      + iniconfig==2.0.0
     "
     );
+
+    Ok(())
 }
 
-/// Install a package with both cache and venv on a reflink-capable filesystem.
-/// Clone mode should succeed without fallback.
+/// Install a package with both cache and venv on a filesystem without copy-on-write support.
 ///
-/// Requires `UV_INTERNAL__TEST_REFLINK_FS`.
+/// Requires `UV_INTERNAL__TEST_NOCOW_FS`.
 #[test]
-fn install_same_device_reflink() {
-    let Some(context) = uv_test::test_context!("3.12")
-        .with_cache_on_reflink_fs()
-        .and_then(TestContext::with_working_dir_on_reflink_fs)
-    else {
-        return;
+fn install_no_copy_on_write_fs() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_nocow_fs()? else {
+        return Ok(());
+    };
+    let Some(context) = context.with_working_dir_on_nocow_fs()? else {
+        return Ok(());
     };
     context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
-        .arg("--link-mode")
-        .arg("clone")
         .arg("iniconfig"), @r"
     success: true
     exit_code: 0
@@ -14297,36 +14290,6 @@ fn install_same_device_reflink() {
      + iniconfig==2.0.0
     "
     );
-}
 
-/// Install with hardlink mode across filesystems — must fall back to copy.
-///
-/// Requires `UV_INTERNAL__TEST_REFLINK_FS` and `UV_INTERNAL__TEST_TMP_FS`.
-#[test]
-fn install_cross_device_hardlink() {
-    let Some(context) = uv_test::test_context!("3.12")
-        .with_cache_on_reflink_fs()
-        .and_then(TestContext::with_working_dir_on_tmp_fs)
-        .map(TestContext::with_filtered_link_mode_warning)
-    else {
-        return;
-    };
-    context.venv().assert().success();
-
-    uv_snapshot!(context.filters(), context
-        .pip_install()
-        .arg("--link-mode")
-        .arg("hardlink")
-        .arg("iniconfig"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    "
-    );
+    Ok(())
 }
