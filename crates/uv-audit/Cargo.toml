@@ -13,6 +13,9 @@ license.workspace = true
 doctest = false
 
 
+[lints]
+workspace = true
+
 [dependencies]
 uv-pep440 = { workspace = true }
 uv-normalize = { workspace = true }
@@ -21,11 +24,13 @@ uv-small-str = { workspace = true }
 
 async-trait = { workspace = true }
 indexmap = { workspace = true }
+jiff = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
-[lints]
-workspace = true
+[dev-dependencies]
+insta = { workspace = true }
+tokio = { workspace = true }

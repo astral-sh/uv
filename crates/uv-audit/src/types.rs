@@ -1,5 +1,6 @@
 //! Types for interacting with dependency audits.
 
+use jiff::Timestamp;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_small_str::SmallString;
@@ -11,6 +12,23 @@ pub struct Dependency<'a> {
     version: &'a Version,
 }
 
+impl<'a> Dependency<'a> {
+    /// Create a new dependency with the given name and version.
+    pub fn new(name: &'a PackageName, version: &'a Version) -> Self {
+        Self { name, version }
+    }
+
+    /// Get the package name.
+    pub fn name(&self) -> &PackageName {
+        self.name
+    }
+
+    /// Get the version.
+    pub fn version(&self) -> &Version {
+        self.version
+    }
+}
+
 /// An opaque identifier for a vulnerability. These are conventionally
 /// formatted as `SRC-XXXX-YYYY`, where `SRC` is an identifier for the vulnerability source,
 /// `XXXX` is typically a year or other "bucket" identifier, and `YYYY` is a unique identifier
@@ -18,7 +36,14 @@ pub struct Dependency<'a> {
 ///
 /// No assumptions should be made about the format of these identifiers.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VulnerabilityID(SmallString);
+pub struct VulnerabilityID(pub(crate) SmallString);
+
+impl VulnerabilityID {
+    /// Create a new vulnerability ID from a string.
+    pub(crate) fn new(id: impl Into<SmallString>) -> Self {
+        Self(id.into())
+    }
+}
 
 /// Represents an "adverse" project status, i.e. a status that indicates that
 /// a downstream user of the project should review their use of the project
@@ -29,25 +54,39 @@ pub struct VulnerabilityID(SmallString);
 /// [PEP 792]: https://peps.python.org/pep-0792/
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AdverseStatus {
+    /// The project is archived, meaning it is read-only and no longer maintained.
     Archived,
+    /// The project is considered generally unsafe for use, e.g. due to malware.
     Quarantined,
+    /// The project is considered obsolete, and may have been superseded by another project.
     Deprecated,
 }
 
 /// Represents a finding on a dependency.
+#[derive(Debug)]
 pub enum Finding<'a> {
     /// A vulnerability within a dependency.
     Vulnerability {
+        /// The dependency that is vulnerable.
         dependency: Dependency<'a>,
+        /// The unique identifier for the vulnerability.
         id: VulnerabilityID,
+        /// A short, human-readable description of the vulnerability.
         description: String,
+        /// Zero or more versions that fix the vulnerability.
         fix_versions: Vec<Version>,
+        /// Zero or more aliases for this vulnerability in other databases.
         aliases: Vec<VulnerabilityID>,
-        published: String,
+        /// The timestamp when this vulnerability was published, if available.
+        published: Option<Timestamp>,
+        /// The timestamp when this vulnerability was last modified, if available.
+        modified: Option<Timestamp>,
     },
     /// An adverse project status, such as an archived or deprecated project.
     ProjectStatus {
+        /// The dependency with the adverse status.
         dependency: Dependency<'a>,
+        /// The adverse status of the project.
         status: AdverseStatus,
     },
 }
