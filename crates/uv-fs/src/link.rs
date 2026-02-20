@@ -12,8 +12,9 @@ use walkdir::WalkDir;
 
 /// The method to use when linking.
 ///
-/// Defaults to [`Clone`](LinkMode::Clone) on macOS (since APFS supports copy-on-write), and
-/// [`Hardlink`](LinkMode::Hardlink) on other platforms.
+/// Defaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on
+/// APFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other
+/// platforms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
@@ -37,7 +38,11 @@ pub enum LinkMode {
 
 impl Default for LinkMode {
     fn default() -> Self {
-        if cfg!(any(target_os = "macos", target_os = "ios")) {
+        if cfg!(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "linux"
+        )) {
             Self::Clone
         } else {
             Self::Hardlink
@@ -839,6 +844,38 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    /// Create a temporary directory on the default filesystem.
+    fn test_tempdir() -> TempDir {
+        TempDir::new().unwrap()
+    }
+
+    /// Create a temporary directory on a copy-on-write filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_COW_FS` is not set.
+    fn cow_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_COW_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
+    }
+
+    /// Create a temporary directory on a filesystem without copy-on-write support.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_NOCOW_FS` is not set.
+    fn nocow_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
+    }
+
+    /// Create a temporary directory on an alternative filesystem.
+    ///
+    /// Returns `None` if `UV_INTERNAL__TEST_ALT_FS` is not set.
+    fn alt_tempdir() -> Option<TempDir> {
+        let dir = std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_ALT_FS).ok()?;
+        fs_err::create_dir_all(&dir).unwrap();
+        Some(TempDir::new_in(dir).unwrap())
+    }
+
     /// Create a test directory structure with some files.
     fn create_test_tree(root: &Path) {
         fs_err::create_dir_all(root.join("subdir")).unwrap();
@@ -868,8 +905,8 @@ mod tests {
 
     #[test]
     fn test_copy_dir_basic() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -882,8 +919,8 @@ mod tests {
 
     #[test]
     fn test_hardlink_dir_basic() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -907,8 +944,8 @@ mod tests {
     #[test]
     #[cfg(unix)] // Symlinks require special permissions on Windows
     fn test_symlink_dir_basic() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -927,8 +964,8 @@ mod tests {
 
     #[test]
     fn test_clone_dir_basic() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -955,20 +992,21 @@ mod tests {
     }
 
     #[test]
-    fn test_reflink_file_when_supported() {
-        let tmp_dir = TempDir::new().unwrap();
-
-        if !reflink_supported(tmp_dir.path()) {
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_reflink_file_on_reflink_fs() {
+        let Some(tmp_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
-        }
+        };
 
-        // Create source file
+        assert!(
+            reflink_supported(tmp_dir.path()),
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
+        );
+
         let src = tmp_dir.path().join("src.txt");
         let dst = tmp_dir.path().join("dst.txt");
         fs_err::write(&src, "reflink content").unwrap();
 
-        // Reflink should succeed
         reflink_copy::reflink(&src, &dst).unwrap();
 
         assert_eq!(fs_err::read_to_string(&dst).unwrap(), "reflink content");
@@ -980,21 +1018,25 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_dir_reflink_when_supported() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
-
-        if !reflink_supported(src_dir.path()) {
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_clone_dir_reflink_on_reflink_fs() {
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
-        }
+        };
+        let Some(dst_dir) = cow_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
+        );
 
         create_test_tree(src_dir.path());
 
         let options = LinkOptions::new(LinkMode::Clone);
         let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
 
-        // On supported filesystems, clone should succeed
         assert_eq!(result, LinkMode::Clone);
         verify_test_tree(dst_dir.path());
 
@@ -1007,14 +1049,19 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_merge_when_supported() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
-
-        if !reflink_supported(src_dir.path()) {
-            eprintln!("Skipping test: reflink not supported on this filesystem");
+    fn test_clone_merge_on_reflink_fs() {
+        let Some(src_dir) = cow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_COW_FS not set");
             return;
-        }
+        };
+        let Some(dst_dir) = cow_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_COW_FS points to a filesystem that does not support reflink"
+        );
 
         create_test_tree(src_dir.path());
 
@@ -1042,12 +1089,160 @@ mod tests {
     }
 
     #[test]
+    fn test_clone_fallback_on_nocow_fs() {
+        let Some(src_dir) = nocow_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_NOCOW_FS not set");
+            return;
+        };
+        let Some(dst_dir) = nocow_tempdir() else {
+            unreachable!();
+        };
+
+        assert!(
+            !reflink_supported(src_dir.path()),
+            "UV_INTERNAL__TEST_NOCOW_FS points to a filesystem that supports reflink"
+        );
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert!(
+            result == LinkMode::Hardlink || result == LinkMode::Copy,
+            "Expected fallback to Hardlink or Copy on non-reflink fs, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone across filesystems must fall back to copy.
+    #[test]
+    fn test_clone_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        // When linking across devices, we must fallback to copy
+        let options = LinkOptions::new(LinkMode::Clone);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+        assert_eq!(
+            result,
+            LinkMode::Copy,
+            "Expected fallback to Copy for cross-device clone, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Hardlink across filesystems must fall back to copy.
+    #[test]
+    fn test_hardlink_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        // When linking across devices, we must fallback to copy
+        let options = LinkOptions::new(LinkMode::Hardlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+        assert_eq!(
+            result,
+            LinkMode::Copy,
+            "Expected fallback to Copy for cross-device hardlink, got {result:?}"
+        );
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Clone merge across filesystems must fall back to copy.
+    #[test]
+    fn test_clone_merge_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        // Pre-create destination with existing content
+        fs_err::create_dir_all(dst_dir.path()).unwrap();
+        fs_err::write(dst_dir.path().join("file1.txt"), "old content").unwrap();
+        fs_err::write(dst_dir.path().join("extra.txt"), "extra").unwrap();
+
+        let options = LinkOptions::new(LinkMode::Clone)
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+
+        // When linking across devices, we must fallback to copy
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+        assert_eq!(
+            result,
+            LinkMode::Copy,
+            "Expected fallback to Copy for cross-device clone merge, got {result:?}"
+        );
+
+        // Source files should overwrite destination
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("file1.txt")).unwrap(),
+            "content1"
+        );
+        // Extra file should remain
+        assert_eq!(
+            fs_err::read_to_string(dst_dir.path().join("extra.txt")).unwrap(),
+            "extra"
+        );
+    }
+
+    /// Copy mode works across filesystems.
+    #[test]
+    fn test_copy_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Copy);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        assert_eq!(result, LinkMode::Copy);
+        verify_test_tree(dst_dir.path());
+    }
+
+    /// Symlink across filesystems should work (symlinks can span devices).
+    #[test]
+    #[cfg(unix)]
+    fn test_symlink_cross_device() {
+        let Some(src_dir) = alt_tempdir() else {
+            eprintln!("Skipping: UV_INTERNAL__TEST_ALT_FS not set");
+            return;
+        };
+        let dst_dir = test_tempdir();
+
+        create_test_tree(src_dir.path());
+
+        let options = LinkOptions::new(LinkMode::Symlink);
+        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
+
+        // Symlinks work across devices
+        assert_eq!(result, LinkMode::Symlink);
+        verify_test_tree(dst_dir.path());
+    }
+
+    #[test]
     fn test_reflink_fallback_to_hardlink() {
         // This test verifies the fallback behavior when reflink fails.
         // We can't easily force reflink to fail on a supporting filesystem,
         // so we just verify the clone path works and returns a valid mode.
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1064,8 +1259,8 @@ mod tests {
 
     #[test]
     fn test_merge_overwrites_existing_files() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create source
         create_test_tree(src_dir.path());
@@ -1093,8 +1288,8 @@ mod tests {
 
     #[test]
     fn test_fail_mode_errors_on_existing_hardlink() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1122,8 +1317,8 @@ mod tests {
 
     #[test]
     fn test_copy_mode_overwrites_in_fail_mode() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1145,8 +1340,8 @@ mod tests {
 
     #[test]
     fn test_mutable_copy_filter() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
         // Add a RECORD file that should be copied, not linked
@@ -1182,8 +1377,8 @@ mod tests {
 
     #[test]
     fn test_synchronized_copy() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1197,8 +1392,8 @@ mod tests {
 
     #[test]
     fn test_empty_directory() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create empty subdirectory
         fs_err::create_dir_all(src_dir.path().join("empty_subdir")).unwrap();
@@ -1211,8 +1406,8 @@ mod tests {
 
     #[test]
     fn test_nested_directories() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create deeply nested structure
         let deep_path = src_dir.path().join("a/b/c/d/e");
@@ -1230,8 +1425,8 @@ mod tests {
 
     #[test]
     fn test_hardlink_merge_with_existing() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1257,8 +1452,8 @@ mod tests {
         use std::sync::Arc;
         use std::thread;
 
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create a file to copy
         fs_err::write(src_dir.path().join("file.txt"), "content").unwrap();
@@ -1296,8 +1491,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_symlink_merge_with_existing() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1326,8 +1521,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_symlink_mutable_copy_filter() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
         fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
@@ -1352,8 +1547,8 @@ mod tests {
 
     #[test]
     fn test_source_not_found() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Don't create any files in src_dir, just use a non-existent path
         let nonexistent = src_dir.path().join("nonexistent");
@@ -1368,8 +1563,8 @@ mod tests {
     fn test_clone_mutable_copy_filter_ignored() {
         // The mutable_copy filter only applies to hardlink/symlink modes.
         // For clone/copy modes, all files are already mutable (copy-on-write or full copy).
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
         fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
@@ -1389,8 +1584,8 @@ mod tests {
     #[test]
     fn test_copy_mutable_copy_filter_ignored() {
         // For copy mode, all files are already mutable, so filter is ignored
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
         fs_err::write(src_dir.path().join("RECORD"), "record content").unwrap();
@@ -1408,8 +1603,8 @@ mod tests {
 
     #[test]
     fn test_special_characters_in_filenames() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create files with special characters (that are valid on most filesystems)
         fs_err::write(src_dir.path().join("file with spaces.txt"), "spaces").unwrap();
@@ -1436,8 +1631,8 @@ mod tests {
 
     #[test]
     fn test_hidden_files() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create hidden files (dotfiles)
         fs_err::write(src_dir.path().join(".hidden"), "hidden content").unwrap();
@@ -1466,8 +1661,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_macos_clone_directory_recursive() {
         // Test the macOS-specific directory cloning via clonefile
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1484,8 +1679,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_macos_clone_dir_merge_nested() {
         // Test the macOS clone_dir_merge with nested directory structure
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create nested structure in source
         fs_err::create_dir_all(src_dir.path().join("a/b/c")).unwrap();
@@ -1527,8 +1722,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn test_macos_clone_merge_overwrites_files() {
         // Test that clone merge properly overwrites existing files on macOS
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         fs_err::write(src_dir.path().join("file.txt"), "new content").unwrap();
 
@@ -1548,8 +1743,8 @@ mod tests {
 
     #[test]
     fn test_clone_fail_mode_on_existing() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1576,8 +1771,8 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_symlink_fail_mode_on_existing() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         create_test_tree(src_dir.path());
 
@@ -1599,34 +1794,11 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_fallback_when_reflink_unsupported() {
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
-
-        if reflink_supported(src_dir.path()) {
-            eprintln!("Skipping test: reflink is supported on this filesystem");
-            return;
-        }
-
-        create_test_tree(src_dir.path());
-
-        let options = LinkOptions::new(LinkMode::Clone);
-        let result = link_dir(src_dir.path(), dst_dir.path(), &options).unwrap();
-
-        // When reflink is not supported, should fall back to hardlink or copy
-        assert!(
-            result == LinkMode::Hardlink || result == LinkMode::Copy,
-            "Expected fallback to Hardlink or Copy, got {result:?}"
-        );
-        verify_test_tree(dst_dir.path());
-    }
-
-    #[test]
     #[cfg(windows)]
     fn test_windows_symlink_file_vs_dir() {
         // Test that Windows correctly uses symlink_file for files and symlink_dir for directories
-        let src_dir = TempDir::new().unwrap();
-        let dst_dir = TempDir::new().unwrap();
+        let src_dir = test_tempdir();
+        let dst_dir = test_tempdir();
 
         // Create a file and a directory
         fs_err::write(src_dir.path().join("file.txt"), "content").unwrap();

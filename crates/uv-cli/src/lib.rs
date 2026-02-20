@@ -3236,7 +3236,7 @@ pub struct VenvArgs {
     ///
     /// This option is only used for installing seed packages.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -5908,7 +5908,7 @@ pub struct ToolUpgradeArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -6963,7 +6963,7 @@ pub struct InstallerArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -7203,7 +7203,7 @@ pub struct ResolverArgs {
     ///
     /// This option is only used when building source distributions.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -7442,7 +7442,7 @@ pub struct ResolverInstallerArgs {
 
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between

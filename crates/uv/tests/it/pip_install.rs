@@ -14199,3 +14199,157 @@ fn warn_on_lzma_wheel() {
     "
     );
 }
+
+/// Install a package with the cache on a different filesystem than the venv.
+/// This exercises the cross-device fallback path.
+///
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+fn install_cross_device() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
+    };
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+             If the cache and target directories are on different filesystems, hardlinking may not be supported.
+             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package across filesystems with `--link-mode copy`.
+/// The warning should not appear since copy mode is explicitly requested.
+///
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+fn install_cross_device_explicit_copy() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
+    };
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--link-mode")
+        .arg("copy")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package across filesystems with `--link-mode symlink`.
+/// Symlinks work across devices so no fallback warning should appear.
+///
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+#[cfg(unix)]
+fn install_cross_device_symlink() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
+        return Ok(());
+    };
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("--link-mode")
+        .arg("symlink")
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package with both cache and venv on a copy-on-write filesystem.
+///
+/// Requires `UV_INTERNAL__TEST_COW_FS`.
+#[test]
+fn install_copy_on_write_fs() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_cow_fs()? else {
+        return Ok(());
+    };
+    let Some(context) = context.with_working_dir_on_cow_fs()? else {
+        return Ok(());
+    };
+    context.venv().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Install a package with both cache and venv on a filesystem without copy-on-write support.
+///
+/// Requires `UV_INTERNAL__TEST_NOCOW_FS`.
+#[test]
+fn install_no_copy_on_write_fs() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_nocow_fs()? else {
+        return Ok(());
+    };
+    let Some(context) = context.with_working_dir_on_nocow_fs()? else {
+        return Ok(());
+    };
+    context.venv().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg("iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
