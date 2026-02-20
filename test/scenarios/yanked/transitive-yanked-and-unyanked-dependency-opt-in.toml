@@ -1,0 +1,25 @@
+name = "transitive-yanked-and-unyanked-dependency-opt-in"
+description = "A transitive dependency has both a yanked and an unyanked version, but can only be satisfied by a yanked. The user includes an opt-in to the yanked version of the transitive dependency."
+
+[root]
+requires = ["a", "b", "c==2.0.0"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user explicitly selected the yanked version of `c`, it can be installed."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "2.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c==2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=1.0.0,<=3.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0"]
+yanked = true

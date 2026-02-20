@@ -1,0 +1,11 @@
+name = "only-wheels"
+description = "No source distributions are available, only wheels."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+sdist = false

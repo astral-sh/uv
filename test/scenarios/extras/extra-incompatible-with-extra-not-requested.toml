@@ -1,0 +1,21 @@
+name = "extra-incompatible-with-extra-not-requested"
+description = "One of two incompatible optional dependencies are requested for the package."
+
+[root]
+requires = ["a[extra_c]"]
+
+[expected]
+satisfiable = true
+explanation = "Because the user does not request both extras, it is okay that one is incompatible with the other."
+
+[expected.packages]
+a = "1.0.0"
+b = "2.0.0"
+
+[packages.b.versions."1.0.0"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.a.versions."1.0.0".extras]
+extra_b = ["b==1.0.0"]
+extra_c = ["b==2.0.0"]

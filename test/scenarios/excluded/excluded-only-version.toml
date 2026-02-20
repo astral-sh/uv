@@ -1,0 +1,11 @@
+name = "excluded-only-version"
+description = "Only one version of the requested package is available, but the user has banned that version."
+
+[root]
+requires = ["a!=1.0.0"]
+
+[expected]
+satisfiable = false
+explanation = "Only `a==1.0.0` is available but the user excluded it."
+
+[packages.a.versions."1.0.0"]
