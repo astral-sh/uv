@@ -325,14 +325,15 @@ impl Lock {
             }
 
             // If there are multiple distributions for the same package, include the markers of all
-            // forks that included the current distribution.
+            // forks that included the current distribution, normalized to match the TOML roundtrip.
             let fork_markers = if duplicates.contains(dist.name()) {
-                resolution
+                let markers: Vec<_> = resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
-                    .collect()
+                    .collect();
+                normalized_fork_markers(&markers, &requires_python)
             } else {
                 vec![]
             };
@@ -433,6 +434,7 @@ impl Lock {
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
+        let fork_markers = normalized_fork_markers(&resolution.fork_markers, &requires_python);
         let lock = Self::new(
             VERSION,
             REVISION,
@@ -443,7 +445,7 @@ impl Lock {
             Conflicts::empty(),
             vec![],
             vec![],
-            resolution.fork_markers.clone(),
+            fork_markers,
         )?;
         Ok(lock)
     }
@@ -6077,6 +6079,60 @@ fn simplified_universal_markers(
     markers
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
+        .collect()
+}
+
+/// Normalize fork markers through the same simplify/complexify roundtrip that TOML
+/// serialization + deserialization would apply, ensuring in-memory representations
+/// match what would survive a lockfile roundtrip.
+///
+/// This is necessary because `UniversalMarker` stores both a combined marker (with
+/// conflict extras) and a PEP 508-only marker (without extras). When serialized to
+/// TOML via [`simplified_universal_markers`], the conflict extras may be stripped
+/// (when the PEP 508 markers don't overlap). On deserialization, the markers come
+/// back without the conflict info, causing structural inequality even though the
+/// lockfile content would be identical.
+fn normalized_fork_markers(
+    markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> Vec<UniversalMarker> {
+    // Replicate the serialization logic from `simplified_universal_markers` to determine
+    // whether the PEP 508-only or combined form would be written to TOML.
+    let mut pep508_only = vec![];
+    let mut seen = FxHashSet::default();
+    for marker in markers {
+        let simplified =
+            SimplifiedMarkerTree::new(requires_python, marker.pep508()).as_simplified_marker_tree();
+        if seen.insert(simplified) {
+            pep508_only.push(simplified);
+        }
+    }
+    let any_overlap = pep508_only
+        .iter()
+        .tuple_combinations()
+        .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
+
+    // Apply the same simplify → filter → complexify pipeline that serialization +
+    // deserialization would apply.
+    let simplified: Vec<_> = if !any_overlap {
+        pep508_only
+    } else {
+        markers
+            .iter()
+            .map(|marker| {
+                SimplifiedMarkerTree::new(requires_python, marker.combined())
+                    .as_simplified_marker_tree()
+            })
+            .collect()
+    };
+    simplified
+        .into_iter()
+        // Filter out always-true markers (same as try_to_string().is_some() in serialization).
+        .filter(|marker| !marker.is_true())
+        .map(|simplified| {
+            let complexified = requires_python.complexify_markers(simplified);
+            UniversalMarker::from_combined(complexified)
+        })
         .collect()
 }
 

@@ -23670,6 +23670,68 @@ fn lock_dry_run_noop() -> Result<()> {
     Ok(())
 }
 
+/// Regression test: `--upgrade --dry-run` should not report false lockfile
+/// changes when the lockfile is already up-to-date. This tests with conflicting
+/// extras which produce fork markers containing conflict info that may not
+/// survive the simplify/complexify round-trip through TOML serialization.
+#[test]
+fn lock_dry_run_noop_with_conflicts() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        conflicts = [
+            [
+              { extra = "extra1" },
+              { extra = "extra2" },
+            ],
+        ]
+
+        [project.optional-dependencies]
+        extra1 = ["sortedcontainers==2.3.0"]
+        extra2 = ["sortedcontainers==2.4.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No lockfile changes detected
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--dry-run").arg("-U"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No lockfile changes detected
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn lock_group_include() -> Result<()> {
     let context = uv_test::test_context!("3.12");
