@@ -30,6 +30,11 @@ exploration of new features, we will almost always close these pull requests imm
 new feature to uv creates a long-term maintenance burden and requires strong consensus from the uv
 team before it is appropriate to begin work on an implementation.
 
+Do not use LLMs such as Claude Code or ChatGPT for communication. LLMs are notoriously unreliable
+and make up smart sounding but ultimately wrong claims. Instead, phrase issue and pull request
+comments in your own words. It's not important to sound perfect, but that we can follow what problem
+you're trying to solve and why the pull request uses a correct approach.
+
 ## Setup
 
 [Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
