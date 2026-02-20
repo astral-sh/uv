@@ -1008,3 +1008,58 @@ fn test_tool_upgrade_additional_entrypoints() {
     Upgraded tool environment for `babel` to Python 3.12
     ");
 }
+
+/// Upgrade a tool with an excluded dependency
+#[test]
+fn tool_upgrade_excludes() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let excludes_txt = context.temp_dir.child("excludes.txt");
+    excludes_txt.write_str("pytz").unwrap();
+
+    // Install `babel` from Test PyPI, to get an outdated version.
+    // An outdated version of pytz won't be installed as it has been excluded.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel==2.6.0")
+        .arg("--excludes")
+        .arg("excludes.txt")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+    Installed 1 executable: pybabel
+    ");
+
+    // Attempt to upgrade `babel`; nothing will be upgraded as babel is pinned
+    // and pytz has been excluded
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+
+    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    ");
+}

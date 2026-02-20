@@ -397,6 +397,9 @@ pub(crate) async fn install(
     )
     .await?;
 
+    // Get resolved excludes
+    let excludes = spec.excludes.clone();
+
     // Resolve the build constraints.
     let build_constraints: Vec<Requirement> =
         operations::read_constraints(build_constraints, &client_builder)
@@ -754,6 +757,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         printer,
     )?;
