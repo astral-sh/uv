@@ -239,7 +239,9 @@ jobs:
 
       - name: Install NASM
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
-        uses: ilammy/setup-nasm@f8a04b16b473b135a1d29f38f39301e64d679ab4 # v1.5.2
+        run: |
+          choco install nasm
+          set PATH="C:\Program Files\NASM;%PATH%""
 
       - name: Verify NASM
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
