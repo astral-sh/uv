@@ -4514,6 +4514,60 @@ fn tool_install_with_executables_from_no_entrypoints() {
     ");
 }
 
+/// Test installing a tool where the root package has no executables, but `--with-executables-from`
+/// provides them.
+#[test]
+fn tool_install_with_executables_from_root_no_entrypoints() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Copy test packages to temp directory (depends_on_cli has a path dependency on simple_cli).
+    let simple_cli = context.temp_dir.child("src").child("simple_cli");
+    let depends_on_cli = context.temp_dir.child("src").child("depends_on_cli");
+    copy_dir_all(
+        context.workspace_root.join("test/packages/simple_cli"),
+        &simple_cli,
+    )?;
+    copy_dir_all(
+        context.workspace_root.join("test/packages/depends_on_cli"),
+        &depends_on_cli,
+    )?;
+
+    // Install `depends-on-cli` (which has no executables) with executables from `simple-cli`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("simple-cli")
+        .arg("./src/depends_on_cli")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + depends-on-cli==0.1.0 (from file://[TEMP_DIR]/src/depends_on_cli)
+     + simple-cli==0.1.0 (from file://[TEMP_DIR]/src/simple_cli)
+    Installed 1 executable from `simple-cli`: simple-cli
+    ");
+
+    // Verify the tool was installed correctly.
+    tool_dir
+        .child("depends-on-cli")
+        .assert(predicate::path::is_dir());
+    bin_dir
+        .child(format!("simple-cli{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::exists());
+
+    Ok(())
+}
+
 #[test]
 fn tool_install_find_links() {
     let context = uv_test::test_context!("3.13").with_filtered_exe_suffix();
