@@ -1468,6 +1468,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
+        // If the distribution doesn't have any wheels for the current environment, mark it as
+        // unavailable. For example, if the user is solving for `sys_platform == 'darwin'` and the
+        // package only has Windows wheels, the package should be marked as unavailable.
+        if !env.included_by_marker(dist.implied_markers()) {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                    IncompatibleWheel::MissingPlatform(
+                        env.fork_markers().unwrap_or(MarkerTree::TRUE),
+                    ),
+                )),
+            )));
+        }
+
         // If the user explicitly marked a platform as required, ensure it has coverage.
         for marker in self.options.required_environments.iter().copied() {
             // If the platform is part of the current environment...
