@@ -320,7 +320,7 @@ mod tests {
         let finding = findings
             .iter()
             .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.0.as_ref() == "GHSA-r6ph-v2qm-q3c2",
+                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-r6ph-v2qm-q3c2",
                 Finding::ProjectStatus { .. } => false,
             })
             .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability");
@@ -388,7 +388,7 @@ mod tests {
         let cryptography_finding = cryptography_findings
             .iter()
             .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.0.as_ref() == "GHSA-r6ph-v2qm-q3c2",
+                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-r6ph-v2qm-q3c2",
                 Finding::ProjectStatus { .. } => false,
             })
             .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability for cryptography");
@@ -434,7 +434,7 @@ mod tests {
         let requests_finding = requests_findings
             .iter()
             .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.0.as_ref() == "GHSA-9hjg-9r4m-mvj7",
+                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-9hjg-9r4m-mvj7",
                 Finding::ProjectStatus { .. } => false,
             })
             .expect("Expected to find GHSA-9hjg-9r4m-mvj7 vulnerability for requests");
