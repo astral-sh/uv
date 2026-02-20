@@ -405,40 +405,11 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         .with_filtered_exe_suffix()
         .with_filtered_counts()
         .with_filtered_system_tmp()
+        .with_filtered_pip_output()
         .with_filter(user_scheme_bin_filter())
         // Target installs always use "bin" on all platforms. On Windows,
         // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
         .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()))
-        // pip temp directories with random suffixes
-        .with_filter((r"pip-build-env-[a-z0-9_]+", "pip-build-env-[HASH]"))
-        .with_filter((
-            r"pip-modern-metadata-[a-z0-9_]+",
-            "pip-modern-metadata-[HASH]",
-        ))
-        .with_filter((r"pip-wheel-[a-z0-9_]+", "pip-wheel-[HASH]"))
-        .with_filter((
-            r"pip-ephem-wheel-cache-[a-z0-9_]+",
-            "pip-ephem-wheel-cache-[HASH]",
-        ))
-        .with_filter((r"\.tmp-[a-z0-9_]+", ".tmp-[HASH]"))
-        // Download speeds and progress bars
-        .with_filter((
-            r"[━-]+\s*[\d.]+/[\d.]+ [kKMG]B [\d.]+ [kKMG]B/s eta \d+:\d+:\d+",
-            "[PROGRESS]",
-        ))
-        .with_filter((r"[━-]{10,}", "[BAR]"))
-        // Wheel hashes
-        .with_filter((r"sha256=[a-f0-9]+", "sha256=[HASH]"))
-        // Stored-in-directory cache paths
-        .with_filter((r"Stored in directory: .+", "Stored in directory: [CACHE]"))
-        // Platform tags in bdist paths (e.g., macosx-11.0-arm64, linux-x86_64)
-        .with_filter((r"bdist\.[a-z0-9._-]+", "bdist.[PLATFORM]"))
-        // Normalize redundant `/./` (or `\.\`) path components that setuptools may emit on Windows
-        .with_filter((r"[\\/]\.[\\/]", "/"))
-        // Wheel size
-        .with_filter((r"size=\d+", "size=[SIZE]"))
-        // setuptools download size in parentheses
-        .with_filter((r"\(\d+ kB\)", "([SIZE] kB)"))
         // Vendor URL
         .with_filter((vendor_url_pattern, "[VENDOR_URL]".to_string()))
         // Normalize working directory references: on Unix pip prints `./`
