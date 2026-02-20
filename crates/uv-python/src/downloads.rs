@@ -23,6 +23,7 @@ use url::Url;
 use uv_client::{BaseClient, RetryState, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
+use uv_fs::link::{LinkError, LinkMode, LinkOptions, link_dir};
 use uv_fs::{Simplified, rename_with_retry};
 use uv_platform::{self as platform, Arch, Libc, Os, Platform};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -92,6 +93,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
+    #[error(transparent)]
+    LinkDir(#[from] LinkError),
     #[error("Failed to parse request part")]
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
@@ -1065,6 +1068,48 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
     Ok(buf)
 }
 
+/// Check if a file should be copied instead of hard-linked.
+///
+/// These files are modified after installation and must be copied to avoid
+/// corrupting the cache:
+/// - `_sysconfigdata_*.py` - patched by `ensure_sysconfig_patched()`
+/// - `*.pc` files in `pkgconfig/` directories - patched by sysconfig
+/// - `libpython*.dylib` on macOS - patched by `ensure_dylib_patched()`
+fn needs_mutable_copy(path: &Path) -> bool {
+    let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    let extension = path.extension().and_then(|e| e.to_str());
+
+    // _sysconfigdata_*.py files
+    if file_name.starts_with("_sysconfigdata_")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+    {
+        return true;
+    }
+
+    // *.pc files in pkgconfig directories
+    if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("pc")) {
+        if let Some(parent) = path.parent() {
+            if parent.file_name().and_then(|n| n.to_str()) == Some("pkgconfig") {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // libpython*.dylib on macOS
+    #[cfg(target_os = "macos")]
+    if file_name.starts_with("libpython")
+        && extension.is_some_and(|ext| ext.eq_ignore_ascii_case("dylib"))
+    {
+        return true;
+    }
+
+    false
+}
+
 impl ManagedPythonDownload {
     /// Return a display type that includes the build information.
     pub fn to_display_with_build(&self) -> ManagedPythonDownloadWithBuild<'_> {
@@ -1178,13 +1223,13 @@ impl ManagedPythonDownload {
         let ext = SourceDistExtension::from_path(&filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
 
-        let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
-
-        if let Some(python_builds_dir) =
+        // Track the unpacked cache path if caching is enabled
+        let (target_unpacked, temp_dir) = if let Some(python_builds_dir) =
             env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).filter(|s| !s.is_empty())
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
+
             let hash_prefix = match self.sha256.as_deref() {
                 Some(sha) => {
                     // Shorten the hash to avoid too-long-filename errors
@@ -1193,7 +1238,38 @@ impl ManagedPythonDownload {
                 None => "none",
             };
             let target_cache_file = python_builds_dir.join(format!("{hash_prefix}-{filename}"));
+            // Strip the archive extension for the unpacked directory name
+            let basename = filename
+                .strip_suffix(&format!(".{}", ext.name()))
+                .expect("filename was parsed with this extension");
+            let target_unpacked = python_builds_dir.join(format!("{hash_prefix}-{basename}"));
 
+            // Check if unpacked cache exists first - if so, hard link from it directly
+            if target_unpacked.is_dir() {
+                debug!(
+                    "Using unpacked cache at `{}`",
+                    target_unpacked.simplified_display()
+                );
+
+                // Remove the target if it already exists.
+                if path.is_dir() {
+                    debug!("Removing existing directory: {}", path.user_display());
+                    fs_err::tokio::remove_dir_all(&path).await?;
+                }
+
+                // Link from unpacked cache to installation directory
+                let options = LinkOptions::new(LinkMode::default())
+                    .with_mutable_copy_filter(needs_mutable_copy);
+                link_dir(&target_unpacked, &path, &options)?;
+
+                return Ok(DownloadResult::Fetched(path));
+            }
+
+            // Create temp dir in the cache directory to ensure same-filesystem renames
+            let temp_dir =
+                tempfile::tempdir_in(&python_builds_dir).map_err(Error::DownloadDirError)?;
+
+            // No unpacked cache - download and extract the archive
             // Download the archive to the cache, or return a reader if we have it in cache.
             // TODO(konsti): We should "tee" the write so we can do the download-to-cache and unpacking
             // in one step.
@@ -1247,7 +1323,11 @@ impl ManagedPythonDownload {
                 Direction::Extract,
             )
             .await?;
+
+            (Some(target_unpacked), temp_dir)
         } else {
+            let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
+
             // Avoid overlong log lines
             debug!("Downloading {url}");
             debug!(
@@ -1266,7 +1346,9 @@ impl ManagedPythonDownload {
                 Direction::Download,
             )
             .await?;
-        }
+
+            (None, temp_dir)
+        };
 
         // Extract the top-level directory.
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -1320,14 +1402,63 @@ impl ManagedPythonDownload {
             fs_err::tokio::remove_dir_all(&path).await?;
         }
 
-        // Persist it to the target.
-        debug!("Moving {} to {}", extracted.display(), path.user_display());
-        rename_with_retry(extracted, &path)
-            .await
-            .map_err(|err| Error::CopyError {
-                to: path.clone(),
-                err,
-            })?;
+        // If caching is enabled, save to unpacked cache and hard link to target
+        if let Some(target_unpacked) = target_unpacked {
+            // Move extracted files to unpacked cache using atomic rename
+            debug!(
+                "Saving to unpacked cache at `{}`",
+                target_unpacked.simplified_display()
+            );
+
+            // Use a temporary name for atomic creation
+            let temp_unpacked =
+                target_unpacked.with_added_extension(format!("tmp.{}", std::process::id()));
+
+            // Move extracted to temp cache location
+            rename_with_retry(&extracted, &temp_unpacked)
+                .await
+                .map_err(|err| Error::CopyError {
+                    to: temp_unpacked.clone(),
+                    err,
+                })?;
+
+            // Atomic rename to final cache location
+            match fs_err::rename(&temp_unpacked, &target_unpacked) {
+                Ok(()) => {
+                    debug!(
+                        "Created unpacked cache at `{}`",
+                        target_unpacked.simplified_display()
+                    );
+                }
+                Err(err)
+                    if err.kind() == io::ErrorKind::AlreadyExists
+                        || err.kind() == io::ErrorKind::DirectoryNotEmpty =>
+                {
+                    // Another process won the race - use theirs and clean up ours
+                    debug!("Unpacked cache already exists (concurrent creation)");
+                    let _ = fs_err::remove_dir_all(&temp_unpacked);
+                }
+                Err(err) => {
+                    // Clean up temp directory on error
+                    let _ = fs_err::remove_dir_all(&temp_unpacked);
+                    return Err(err.into());
+                }
+            }
+
+            // Link from unpacked cache to installation directory
+            let options =
+                LinkOptions::new(LinkMode::default()).with_mutable_copy_filter(needs_mutable_copy);
+            link_dir(&target_unpacked, &path, &options)?;
+        } else {
+            // No caching - just move to target
+            debug!("Moving {} to {}", extracted.display(), path.user_display());
+            rename_with_retry(extracted, &path)
+                .await
+                .map_err(|err| Error::CopyError {
+                    to: path.clone(),
+                    err,
+                })?;
+        }
 
         Ok(DownloadResult::Fetched(path))
     }
