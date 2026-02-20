@@ -355,6 +355,7 @@ impl BuildContext for BuildDispatch<'_> {
                 self.build_options,
                 DistributionDatabase::new(self.client, self, self.concurrency.downloads)
                     .with_build_stack(build_stack),
+                self.concurrency.builds,
             );
 
             debug!(
