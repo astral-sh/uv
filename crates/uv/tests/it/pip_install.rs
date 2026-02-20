@@ -14213,7 +14213,7 @@ fn install_cross_device_cache_reflink_venv_tmp() -> anyhow::Result<()> {
         return Ok(());
     };
     let context = context.with_filtered_link_mode_warning();
-    context.venv().assert().success();
+    context.venv().arg("-vv").assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
@@ -14249,7 +14249,7 @@ fn install_cross_device_cache_tmp_venv_reflink() -> anyhow::Result<()> {
         return Ok(());
     };
     let context = context.with_filtered_link_mode_warning();
-    context.venv().assert().success();
+    context.venv().arg("-vv").assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
@@ -14283,7 +14283,7 @@ fn install_same_device_reflink() -> anyhow::Result<()> {
     let Some(context) = context.with_working_dir_on_cow_fs()? else {
         return Ok(());
     };
-    context.venv().assert().success();
+    context.venv().arg("-vv").assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
