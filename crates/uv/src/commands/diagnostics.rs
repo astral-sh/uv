@@ -5,6 +5,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
+use uv_configuration::TlsBackend;
 use uv_distribution_types::{
     DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
 };
@@ -34,18 +35,18 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
-    /// Whether native TLS is enabled.
-    pub(crate) native_tls: bool,
+    /// The TLS backend being used.
+    pub(crate) tls_backend: TlsBackend,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
+    /// Create an [`OperationDiagnostic`] with the given TLS backend setting.
     #[must_use]
-    pub(crate) fn native_tls(native_tls: bool) -> Self {
+    pub(crate) fn with_tls_backend(tls_backend: TlsBackend) -> Self {
         Self {
-            native_tls,
+            tls_backend,
             ..Default::default()
         }
     }
@@ -131,7 +132,7 @@ impl OperationDiagnostic {
                 }
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.native_tls && err.is_ssl() =>
+                if !self.tls_backend.is_native_tls() && err.is_ssl() =>
             {
                 native_tls_hint(err);
                 None
