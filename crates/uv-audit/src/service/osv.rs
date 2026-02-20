@@ -55,12 +55,18 @@ struct QueryBatchRequest {
 }
 
 /// Event in a vulnerability range.
+/// Per the OSV schema, each event object contains exactly one of these event types.
 #[derive(Debug, Clone, Deserialize)]
-struct Event {
-    introduced: Option<String>,
-    fixed: Option<String>,
-    last_affected: Option<String>,
-    limit: Option<String>,
+#[serde(rename_all = "snake_case")]
+enum Event {
+    /// A version that introduces the vulnerability.
+    Introduced(#[allow(dead_code)] String),
+    /// A version that fixes the vulnerability.
+    Fixed(String),
+    /// The last known affected version.
+    LastAffected(#[allow(dead_code)] String),
+    /// An upper limit on the range.
+    Limit(#[allow(dead_code)] String),
 }
 
 /// Version range for affected packages.
@@ -354,10 +360,10 @@ impl Osv {
                                         // TODO: Warn on a malformed version string rather than silently skipping it.
                                         // Alternatively, we could propagate the raw version string in the finding and
                                         // leave it to the callsite to process into PEP 440 versions.
-                                        event
-                                            .fixed
-                                            .as_ref()
-                                            .and_then(|fixed| Version::from_str(fixed).ok())
+                                        match event {
+                                            Event::Fixed(fixed) => Version::from_str(fixed).ok(),
+                                            _ => None,
+                                        }
                                     })
                                 })
                                 .flatten()
@@ -405,6 +411,7 @@ mod tests {
     use crate::types::Finding;
 
     use super::API_BASE;
+    use super::Event;
     use super::Osv;
 
     /// Ensures that the default OSV client is configured with our default OSV API base URL.
@@ -412,6 +419,23 @@ mod tests {
     fn test_osv_default() {
         let osv = Osv::default();
         assert_eq!(osv.base_url.as_str(), API_BASE);
+    }
+
+    #[test]
+    fn test_deserialize_events() {
+        let json = r#"[{ "introduced": "0" }, { "fixed": "46.0.5" }]"#;
+        let events: Vec<Event> = serde_json::from_str(json).expect("Failed to deserialize events");
+
+        insta::assert_debug_snapshot!(events, @r#"
+        [
+            Introduced(
+                "0",
+            ),
+            Fixed(
+                "46.0.5",
+            ),
+        ]
+        "#);
     }
 
     /// Ensure that we can query and receive a known vulnerability from the OSV API.
