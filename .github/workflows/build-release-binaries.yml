@@ -240,15 +240,8 @@ jobs:
       - name: Install NASM
         if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         run: |
-          choco install nasm
-          set PATH="C:\Program Files\NASM;%PATH%""
-
-      - name: Verify NASM
-        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
-        shell: powershell
-        run: |
-          where.exe nasm
-          nasm -v
+          choco install nasm -y
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       # uv
       - name: "Build wheels"
