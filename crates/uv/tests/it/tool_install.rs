@@ -1846,7 +1846,7 @@ fn tool_install_uninstallable() {
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Ensure the tool environment is not created.

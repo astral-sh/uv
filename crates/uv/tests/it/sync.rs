@@ -1943,7 +1943,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2020,7 +2020,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Write a test package that arbitrarily bans `anyio` at build time
@@ -2090,7 +2090,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
       help: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // But `anyio` is not provided to `bad_child` if scoped to `child`
@@ -2185,7 +2185,7 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2293,7 +2293,7 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -2484,7 +2484,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
@@ -2540,7 +2540,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -2638,7 +2638,7 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
       help: `child` was included because `project` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     Ok(())
@@ -5848,7 +5848,7 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Add extra build dependencies to the script
@@ -9748,7 +9748,7 @@ fn sync_derivation_chain() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -9813,7 +9813,7 @@ fn sync_derivation_chain_extra() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -9880,7 +9880,7 @@ fn sync_derivation_chain_group() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -13739,7 +13739,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -13807,7 +13807,7 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     uv_snapshot!(context.filters(), context.sync()
@@ -13971,7 +13971,7 @@ fn sync_extra_build_variables() -> Result<()> {
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Set the variable in TOML (to an incorrect value).
@@ -14006,7 +14006,7 @@ fn sync_extra_build_variables() -> Result<()> {
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Set the variable in TOML (to a correct value).

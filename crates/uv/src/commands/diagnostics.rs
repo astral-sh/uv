@@ -41,8 +41,8 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 /// installation.
 #[derive(Debug, Default)]
 pub(crate) struct OperationDiagnostic {
-    /// The hint to display to the user upon resolution failure.
-    pub(crate) hint: Option<String>,
+    /// A caller-provided hint to render after the error output.
+    hint: Option<String>,
     /// Whether native TLS is enabled.
     pub(crate) native_tls: bool,
     /// The context to display to the user upon resolution failure.
@@ -81,15 +81,9 @@ impl OperationDiagnostic {
     ///
     /// Returns `Some` if the error was not handled.
     pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
-        match err {
+        let result = match err {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                if let Some(context) = self.context {
-                    no_solution_context(&err, context);
-                } else if let Some(hint) = self.hint {
-                    no_solution_hint(&err, &hint);
-                } else {
-                    no_solution(&err);
-                }
+                no_solution(&err, self.context);
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
@@ -98,7 +92,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err, self.hint);
+                requested_dist_error(kind, dist, &chain, err);
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
@@ -107,17 +101,11 @@ impl OperationDiagnostic {
                 version,
                 chain,
             )) => {
-                dependencies_error(error, &name, &version, &chain, self.hint.clone());
+                dependencies_error(error, &name, &version, &chain);
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(
-                    kind,
-                    dist,
-                    &DerivationChain::default(),
-                    Arc::new(err),
-                    self.hint,
-                );
+                dist_error(kind, dist, &DerivationChain::default(), Arc::new(err));
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -126,7 +114,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(err), self.hint);
+                dist_error(kind, dist, &chain, Arc::new(err));
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -150,7 +138,16 @@ impl OperationDiagnostic {
                 None
             }
             err => Some(err),
+        };
+
+        // Render the caller-provided hint after the error output.
+        if result.is_none() {
+            if let Some(hint) = &self.hint {
+                render_hints(&[hint.as_str()]);
+            }
         }
+
+        result
     }
 }
 
@@ -162,7 +159,6 @@ pub(crate) fn dist_error(
     dist: Box<Dist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-    help: Option<String>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
@@ -176,25 +172,23 @@ pub(crate) fn dist_error(
         help: Option<String>,
     }
 
-    let help = help.or_else(|| {
-        SUGGESTIONS
-            .get(dist.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    dist.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(dist.name(), dist.version(), chain))
-                }
-            })
-    });
+    let help = SUGGESTIONS
+        .get(dist.name())
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                dist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(dist.name(), dist.version(), chain))
+            }
+        });
     let hints: Vec<String> = cause.hints().into_iter().map(Into::into).collect();
     let report = miette::Report::new(Diagnostic {
         kind,
@@ -214,7 +208,6 @@ pub(crate) fn requested_dist_error(
     dist: Box<RequestedDist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-    help: Option<String>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
@@ -228,25 +221,23 @@ pub(crate) fn requested_dist_error(
         help: Option<String>,
     }
 
-    let help = help.or_else(|| {
-        SUGGESTIONS
-            .get(dist.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    dist.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(dist.name(), dist.version(), chain))
-                }
-            })
-    });
+    let help = SUGGESTIONS
+        .get(dist.name())
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                dist.name().cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(dist.name(), dist.version(), chain))
+            }
+        });
     let hints: Vec<String> = cause.hints().into_iter().map(Into::into).collect();
     let report = miette::Report::new(Diagnostic {
         kind,
@@ -266,7 +257,6 @@ pub(crate) fn dependencies_error(
     name: &PackageName,
     version: &Version,
     chain: &DerivationChain,
-    help: Option<String>,
 ) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
@@ -280,25 +270,23 @@ pub(crate) fn dependencies_error(
         help: Option<String>,
     }
 
-    let help = help.or_else(|| {
-        SUGGESTIONS
-            .get(name)
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    name.cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(name, Some(version), chain))
-                }
-            })
-    });
+    let help = SUGGESTIONS
+        .get(name)
+        .map(|suggestion| {
+            format!(
+                "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
+                name.cyan(),
+                suggestion.cyan(),
+                suggestion.cyan(),
+            )
+        })
+        .or_else(|| {
+            if chain.is_empty() {
+                None
+            } else {
+                Some(format_chain(name, Some(version), chain))
+            }
+        });
     let hints: Vec<String> = error.hints().into_iter().map(Into::into).collect();
     let report = miette::Report::new(Diagnostic {
         name: name.clone(),
@@ -311,36 +299,18 @@ pub(crate) fn dependencies_error(
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
-pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError) {
-    let report = miette::Report::msg(err.report().to_string()).context(err.header());
+pub(crate) fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+    let header = if let Some(context) = context {
+        err.header().with_context(context)
+    } else {
+        err.header()
+    };
+    let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");
-    let hints = err.pubgrub_hints();
-    render_hints(hints);
+    render_hints(err.pubgrub_hints());
 }
 
-/// Render a [`uv_resolver::NoSolutionError`] with dedicated context.
-pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &'static str) {
-    let report =
-        miette::Report::msg(err.report().to_string()).context(err.header().with_context(context));
-    anstream::eprint!("{report:?}");
-    let hints = err.pubgrub_hints();
-    render_hints(hints);
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-pub(crate) fn no_solution_hint(err: &uv_resolver::NoSolutionError, help: &str) {
-    let report = miette::Report::msg(err.report().to_string()).context(err.header());
-    anstream::eprint!("{report:?}");
-
-    // Render the caller-provided help as the first hint, followed by resolver hints.
-    render_hints(&[help]);
-    let hints = err.pubgrub_hints();
-    render_hints(hints);
-}
-
-/// Render a [`uv_resolver::NoSolutionError`] with a help message.
+/// Render a TLS error with a hint to enable native TLS.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
 pub(crate) fn native_tls_hint(err: uv_client::Error) {

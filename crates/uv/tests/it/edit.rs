@@ -6841,9 +6841,9 @@ fn add_warn_index_url() -> Result<()> {
       ╰─▶ Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
 
     Ok(())
@@ -10065,7 +10065,10 @@ fn add_with_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+      help: `requests` (v1.2.0) was included because `project` (v0.1.0) depends on `requests==1.2`
+
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     ");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -10230,9 +10233,9 @@ async fn add_full_url_in_keyring() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
     Ok(())
@@ -10270,9 +10273,9 @@ async fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
     Ok(())
@@ -10360,9 +10363,9 @@ async fn add_empty_ignore_error_codes() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/) returned a 403 Forbidden error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
     Ok(())
@@ -10729,9 +10732,9 @@ async fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
@@ -10827,9 +10830,9 @@ async fn add_redirect_cross_origin() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
@@ -10960,9 +10963,9 @@ async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
 
-    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-
     hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 

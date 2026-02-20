@@ -26784,7 +26784,7 @@ fn lock_derivation_chain_prod() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref==0.1.2`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -26843,7 +26843,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref>=0.1`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -26904,7 +26904,7 @@ fn lock_derivation_chain_group() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -26976,7 +26976,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `child` (v0.1.0) which depends on `wsgiref>=0.1, <0.2`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())

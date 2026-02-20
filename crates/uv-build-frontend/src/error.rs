@@ -125,7 +125,7 @@ impl Hint for Error {
     fn hints(&self) -> Vec<Cow<'_, str>> {
         match self {
             Self::BuildBackend(_) => vec![Cow::Borrowed(
-                "This usually indicates a problem with the package or the build environment.",
+                "Build failures usually indicate a problem with the package or the build environment.",
             )],
             Self::MissingHeader(err) => vec![Cow::Owned(err.cause.to_string())],
             Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),

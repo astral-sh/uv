@@ -14883,7 +14883,7 @@ fn compile_derivation_chain() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#
     );
 

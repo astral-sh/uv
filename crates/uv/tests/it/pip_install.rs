@@ -433,7 +433,7 @@ dependencies = ["flask==1.0.x"]
 
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "##
     );
 
@@ -9384,7 +9384,7 @@ fn sklearn() {
       help: `sklearn` is often confused for `scikit-learn` Did you mean to install `scikit-learn` instead?
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "
     );
 }
@@ -9442,7 +9442,7 @@ fn resolve_derivation_chain() -> Result<()> {
       help: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#
     );
 
@@ -13018,7 +13018,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     // Now constrain the `anyio` build dependency to match the runtime
@@ -13087,7 +13087,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
       help: `child` was included because `parent` (v0.1.0) depends on `child`
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
