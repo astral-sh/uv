@@ -25,7 +25,6 @@ uv-small-str = { workspace = true }
 async-trait = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
-reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
