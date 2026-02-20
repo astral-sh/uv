@@ -392,6 +392,8 @@ impl SourceBuild {
                 source_build_context.clone(),
                 &pep517_backend,
                 extra_build_dependencies,
+                package_name.as_ref(),
+                package_version.as_ref(),
                 build_stack,
             )
             .await?;
@@ -519,6 +521,8 @@ impl SourceBuild {
         source_build_context: SourceBuildContext,
         pep517_backend: &Pep517Backend,
         extra_build_dependencies: Vec<Requirement>,
+        package_name: Option<&PackageName>,
+        package_version: Option<&Version>,
         build_stack: &BuildStack,
     ) -> Result<Resolution, Error> {
         Ok(
@@ -530,7 +534,12 @@ impl SourceBuild {
                     resolved_requirements.clone()
                 } else {
                     let resolved_requirements = build_context
-                        .resolve(&DEFAULT_BACKEND.requirements, build_stack)
+                        .resolve(
+                            &DEFAULT_BACKEND.requirements,
+                            package_name,
+                            package_version,
+                            build_stack,
+                        )
                         .await
                         .map_err(|err| {
                             Error::RequirementsResolve("`setup.py` build", err.into())
@@ -555,7 +564,7 @@ impl SourceBuild {
                     )
                 };
                 build_context
-                    .resolve(&requirements, build_stack)
+                    .resolve(&requirements, package_name, package_version, build_stack)
                     .await
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
@@ -1084,7 +1093,7 @@ async fn create_pep517_build_environment(
             .chain(extra_requires)
             .collect();
         let resolution = build_context
-            .resolve(&requirements, build_stack)
+            .resolve(&requirements, package_name, package_version, build_stack)
             .await
             .map_err(|err| {
                 Error::RequirementsResolve("`build-system.requires`", AnyErrorBuild::from(err))
