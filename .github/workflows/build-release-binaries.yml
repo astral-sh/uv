@@ -558,6 +558,8 @@ jobs:
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
+        env:
+          CFLAGS_s390x_unknown_linux_gnu: -march=z10
         with:
           maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
