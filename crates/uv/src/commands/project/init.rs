@@ -287,6 +287,7 @@ async fn init_script(
 async fn init_project(
     path: &Path,
     name: &PackageName,
+    // TODO(konsti): Remove when stabilizing.
     package: bool,
     project_kind: InitProjectKind,
     bare: bool,
@@ -734,33 +735,30 @@ pub(crate) enum InitKind {
     Script,
 }
 
-impl Default for InitKind {
-    fn default() -> Self {
-        Self::Project(InitProjectKind::default())
-    }
-}
-
 /// The kind of Python project to initialize (either an application or a library).
 #[derive(Debug, Copy, Clone, Default)]
 pub(crate) enum InitProjectKind {
-    /// Initialize a Python application.
+    /// A python package with a `main.py`.
     #[default]
+    ApplicationWithLibrary,
+    /// A flat application with a `main.py`.
     Application,
-    /// Initialize a Python library.
+    /// A python package, no entrypoint.
     Library,
-}
-
-impl InitKind {
-    /// Returns `true` if the project should be packaged by default.
-    pub(crate) fn packaged_by_default(self) -> bool {
-        matches!(self, Self::Project(InitProjectKind::Library))
-    }
+    /// Initialize only a `pyproject.toml`
+    Bare,
+    // TODO(konsti): Remove when stabilizing.
+    /// Initialize a Python application.
+    ApplicationOld,
+    // TODO(konsti): Remove when stabilizing.
+    /// Initialize a Python library.
+    LibraryOld,
 }
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
     #[expect(clippy::fn_params_excessive_bools)]
-    fn init(
+    fn init_old(
         self,
         name: &PackageName,
         path: &Path,
@@ -775,7 +773,7 @@ impl InitProjectKind {
         package: bool,
     ) -> Result<()> {
         match self {
-            Self::Application => Self::init_application(
+            Self::ApplicationOld => Self::init_application_old(
                 name,
                 path,
                 requires_python,
@@ -788,7 +786,7 @@ impl InitProjectKind {
                 no_readme,
                 package,
             ),
-            Self::Library => Self::init_library(
+            Self::LibraryOld => Self::init_library_old(
                 name,
                 path,
                 requires_python,
@@ -801,12 +799,13 @@ impl InitProjectKind {
                 no_readme,
                 package,
             ),
+            _ => unreachable!(),
         }
     }
 
     /// Initialize a Python application at the target path.
     #[expect(clippy::fn_params_excessive_bools)]
-    fn init_application(
+    fn init_application_old(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
@@ -889,7 +888,7 @@ impl InitProjectKind {
 
     /// Initialize a library project at the target path.
     #[expect(clippy::fn_params_excessive_bools)]
-    fn init_library(
+    fn init_library_old(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
@@ -937,6 +936,149 @@ impl InitProjectKind {
             generate_package_scripts(name, path, build_backend, true)?;
         }
 
+        Ok(())
+    }
+
+    fn is_packaged(self) -> bool {
+        match self {
+            Self::ApplicationWithLibrary => true,
+            Self::Application => false,
+            Self::Library => false,
+            Self::Bare => false,
+            Self::ApplicationOld | Self::LibraryOld => unreachable!(),
+        }
+    }
+
+    /// Initialize this project kind at the target path.
+    #[expect(clippy::fn_params_excessive_bools)]
+    fn init(
+        self,
+        name: &PackageName,
+        path: &Path,
+        requires_python: &RequiresPython,
+        description: Option<&str>,
+        no_description: bool,
+        bare: bool,
+        vcs: Option<VersionControlSystem>,
+        build_backend: Option<ProjectBuildBackend>,
+        author_from: Option<AuthorFrom>,
+        no_readme: bool,
+        package: bool,
+    ) -> Result<()> {
+        // TODO(konsti): Remove when stabilizing.
+        if matches!(self, Self::ApplicationOld | Self::LibraryOld) {
+            return self.init_old(
+                name,
+                path,
+                requires_python,
+                description,
+                no_description,
+                bare,
+                vcs,
+                build_backend,
+                author_from,
+                no_readme,
+                package,
+            );
+        }
+
+        fs_err::create_dir_all(path)?;
+
+        // Initialize the version control system first so that Git configuration can properly
+        // read conditional includes that depend on the repository path.
+        init_vcs(path, vcs)?;
+
+        // Do no fill in `authors` for non-packaged applications unless explicitly requested.
+        let author_from = author_from.unwrap_or_else(|| {
+            if self.is_packaged() {
+                AuthorFrom::default()
+            } else {
+                AuthorFrom::None
+            }
+        });
+        let author = get_author_info(path, author_from);
+
+        // Create the `pyproject.toml`
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            description,
+            no_description,
+            no_readme || bare,
+        );
+
+        match self {
+            // Create only the most barebones `pyproject.toml`, no build system.
+            Self::Bare => {}
+            Self::ApplicationWithLibrary => {
+                // Since it'll be packaged, we can add a `[project.scripts]` entry
+                pyproject.push('\n');
+                pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
+
+                // Add a build system
+                let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
+                pyproject.push('\n');
+                pyproject.push_str(&pyproject_build_system(name, build_backend));
+                pyproject_build_backend_prerequisites(name, path, build_backend)?;
+
+                // Generate `src` files (lib-style `hello()` since `main.py` calls into the package)
+                generate_package_scripts(name, path, build_backend, true)?;
+
+                // For packages applications, create an entrypoint that can be run with `uv run main.py`
+                // and pulls in the logic implemented in the package.
+                let main_contents = indoc::formatdoc! {r#"
+                    from {module_name} import hello
+
+
+                    def main():
+                        print(hello())
+
+
+                    if __name__ == "__main__":
+                        main()
+                    "#,
+                    module_name = name.as_dist_info_name()
+                };
+
+                // Create `main.py` if it doesn't exist
+                // (This isn't intended to be a particularly special or magical filename, just nice)
+                // TODO(zanieb): Only create `main.py` if there are no other Python files?
+                let main_py = path.join("main.py");
+                if !main_py.try_exists()? && !bare {
+                    fs_err::write(path.join("main.py"), main_contents)?;
+                }
+            }
+            Self::Application => {
+                let main_contents = indoc::formatdoc! {r#"
+                    def main():
+                        print("Hello from {name}!")
+
+
+                    if __name__ == "__main__":
+                        main()
+                "#};
+
+                // Create `main.py` if it doesn't exist
+                // (This isn't intended to be a particularly special or magical filename, just nice)
+                // TODO(zanieb): Only create `main.py` if there are no other Python files?
+                let main_py = path.join("main.py");
+                if !main_py.try_exists()? && !bare {
+                    fs_err::write(path.join("main.py"), main_contents)?;
+                }
+            }
+            Self::Library => {
+                let build_backend = build_backend.unwrap_or(ProjectBuildBackend::Uv);
+                pyproject.push('\n');
+                pyproject.push_str(&pyproject_build_system(name, build_backend));
+                pyproject_build_backend_prerequisites(name, path, build_backend)?;
+
+                // Generate `src` files
+                generate_package_scripts(name, path, build_backend, true)?;
+            }
+            _ => unreachable!(),
+        }
+        fs_err::write(path.join("pyproject.toml"), pyproject)?;
         Ok(())
     }
 }
@@ -1161,7 +1303,6 @@ fn generate_package_scripts(
     let pkg_dir = src_dir.join(&*module_name);
     fs_err::create_dir_all(&pkg_dir)?;
 
-    // Python script for pure-python packaged apps or libs
     let pure_python_script = if is_lib {
         indoc::formatdoc! {r#"
         def hello() -> str:
