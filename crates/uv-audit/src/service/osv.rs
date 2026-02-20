@@ -1,8 +1,13 @@
 //! Types and interfaces for interacting with [OSV] as a vulnerability service.
 //!
+//! Note: OSV supports a batched query API, but with significant limitations
+//! that make it unsuitable for our purpose (namely, it doesn't include
+//! anything except vulnerability IDs and last-modified information). As
+//! a result, our current OSV backend only implements and uses the
+//! single-query API.
+//!
 //! [OSV]: https://osv.dev/
 
-use indexmap::IndexMap;
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -48,12 +53,6 @@ struct QueryRequest {
     page_token: Option<String>,
 }
 
-/// Batch query request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct QueryBatchRequest {
-    queries: Vec<QueryRequest>,
-}
-
 /// Event in a vulnerability range.
 /// Per the OSV schema, each event object contains exactly one of these event types.
 #[derive(Debug, Clone, Deserialize)]
@@ -93,11 +92,13 @@ struct Affected {
 struct Vulnerability {
     id: String,
     modified: Timestamp,
+    // Note: While the OSV spec says schema_version is required for versions >= 1.0.0,
+    // some older records in the database don't have it, so we make it optional.
     // TODO: We could validate that this is 1.x, but the value of doing
     // so is probably limited given that we're strictly checking the shape
     // of the response anyways.
     #[allow(dead_code)]
-    schema_version: String,
+    schema_version: Option<String>,
     summary: Option<String>,
     details: Option<String>,
     published: Option<Timestamp>,
@@ -111,20 +112,6 @@ struct QueryResponse {
     #[serde(default)]
     vulns: Vec<Vulnerability>,
     next_page_token: Option<String>,
-}
-
-/// Individual result in a batch query response.
-#[derive(Debug, Clone, Deserialize)]
-struct BatchResult {
-    #[serde(default)]
-    vulns: Vec<Vulnerability>,
-    next_page_token: Option<String>,
-}
-
-/// Response from a batch query.
-#[derive(Debug, Clone, Deserialize)]
-struct QueryBatchResponse {
-    results: Vec<BatchResult>,
 }
 
 /// Represents [OSV](https://osv.dev/), an open-source vulnerability database.
@@ -198,130 +185,6 @@ impl VulnerabilityService for Osv {
             .collect::<Vec<_>>();
 
         Ok(findings)
-    }
-
-    async fn query_batch<'a>(
-        &self,
-        dependencies: &[Dependency<'a>],
-    ) -> Result<IndexMap<Dependency<'a>, Vec<Finding<'a>>>, Self::Error> {
-        // Build initial batch request
-        let queries: Vec<QueryRequest> = dependencies
-            .iter()
-            .map(|dep| QueryRequest {
-                package: Package {
-                    name: dep.name().to_string(),
-                    ecosystem: "PyPI".to_string(),
-                },
-                version: dep.version().to_string(),
-                page_token: None,
-            })
-            .collect();
-
-        let batch_request = QueryBatchRequest { queries };
-
-        let url = self.base_url.join("v1/querybatch")?;
-        let response = self
-            .client
-            .post(url.as_ref())
-            .body(serde_json::to_string(&batch_request)?)
-            .header("Content-Type", "application/json")
-            .send()
-            .await?;
-
-        let response = response
-            .error_for_status()
-            .map_err(reqwest_middleware::Error::Reqwest)?;
-        let batch_response: QueryBatchResponse = serde_json::from_str(
-            &response
-                .text()
-                .await
-                .map_err(reqwest_middleware::Error::Reqwest)?,
-        )?;
-
-        // Initialize results with all vulnerabilities from first batch
-        let mut results: IndexMap<Dependency<'a>, Vec<Vulnerability>> = IndexMap::new();
-        let mut pending_tokens: Vec<(usize, String)> = Vec::new();
-
-        for (idx, (dependency, result)) in
-            dependencies.iter().zip(batch_response.results).enumerate()
-        {
-            results.insert(dependency.clone(), result.vulns);
-
-            // Track queries that need pagination
-            if let Some(token) = result.next_page_token {
-                pending_tokens.push((idx, token));
-            }
-        }
-
-        // Handle pagination for queries that have more results
-        while !pending_tokens.is_empty() {
-            let queries: Vec<QueryRequest> = pending_tokens
-                .iter()
-                .map(|(idx, token)| {
-                    let dep = &dependencies[*idx];
-                    QueryRequest {
-                        package: Package {
-                            name: dep.name().to_string(),
-                            ecosystem: "PyPI".to_string(),
-                        },
-                        version: dep.version().to_string(),
-                        page_token: Some(token.clone()),
-                    }
-                })
-                .collect();
-
-            let batch_request = QueryBatchRequest { queries };
-
-            let response = self
-                .client
-                .post(url.as_ref())
-                .body(serde_json::to_string(&batch_request)?)
-                .header("Content-Type", "application/json")
-                .send()
-                .await?;
-
-            let response = response
-                .error_for_status()
-                .map_err(reqwest_middleware::Error::Reqwest)?;
-            let batch_response: QueryBatchResponse = serde_json::from_str(
-                &response
-                    .text()
-                    .await
-                    .map_err(reqwest_middleware::Error::Reqwest)?,
-            )?;
-
-            // Update results and pending tokens
-            let mut new_pending_tokens: Vec<(usize, String)> = Vec::new();
-
-            for ((original_idx, _), result) in pending_tokens.iter().zip(batch_response.results) {
-                let dep = &dependencies[*original_idx];
-
-                // Append new vulnerabilities to existing ones
-                if let Some(vulns) = results.get_mut(dep) {
-                    vulns.extend(result.vulns);
-                }
-
-                // Check if we need another page for this query
-                if let Some(token) = result.next_page_token {
-                    new_pending_tokens.push((*original_idx, token));
-                }
-            }
-
-            pending_tokens = new_pending_tokens;
-        }
-
-        // Convert vulnerabilities to findings
-        let mut final_results = IndexMap::new();
-        for (dependency, vulns) in results {
-            let findings = vulns
-                .into_iter()
-                .map(|vuln| Self::vulnerability_to_finding(&dependency, vuln))
-                .collect::<Vec<_>>();
-
-            final_results.insert(dependency, findings);
-        }
-
-        Ok(final_results)
     }
 }
 
@@ -487,6 +350,120 @@ mod tests {
             ),
             modified: Some(
                 2026-02-11T15:58:46.005582Z,
+            ),
+        }
+        "#);
+    }
+
+    /// Ensure that we can query a batch of packages and receive known vulnerabilities.
+    #[tokio::test]
+    async fn test_query_batch() {
+        let osv = Osv::default();
+
+        // Set up two dependencies with known vulnerabilities
+        let cryptography_package = PackageName::from_str("cryptography").unwrap();
+        let cryptography_version = Version::from_str("46.0.4").unwrap();
+        let cryptography_dep = Dependency::new(&cryptography_package, &cryptography_version);
+
+        let requests_package = PackageName::from_str("requests").unwrap();
+        let requests_version = Version::from_str("2.32.3").unwrap();
+        let requests_dep = Dependency::new(&requests_package, &requests_version);
+
+        let dependencies = vec![cryptography_dep.clone(), requests_dep.clone()];
+
+        let results = osv.query_batch(&dependencies).await.unwrap();
+
+        // Verify we got results for both packages
+        assert_eq!(results.len(), 2, "Expected results for both packages");
+
+        // Check cryptography findings
+        let cryptography_findings = results
+            .get(&cryptography_dep)
+            .expect("Expected findings for cryptography");
+        assert!(
+            !cryptography_findings.is_empty(),
+            "Expected to find at least one vulnerability for cryptography"
+        );
+
+        let cryptography_finding = cryptography_findings
+            .iter()
+            .find(|finding| match finding {
+                Finding::Vulnerability { id, .. } => id.0.as_ref() == "GHSA-r6ph-v2qm-q3c2",
+                Finding::ProjectStatus { .. } => false,
+            })
+            .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability for cryptography");
+
+        insta::assert_debug_snapshot!(cryptography_finding, @r#"
+        Vulnerability {
+            dependency: Dependency {
+                name: PackageName(
+                    "cryptography",
+                ),
+                version: "46.0.4",
+            },
+            id: VulnerabilityID(
+                "GHSA-r6ph-v2qm-q3c2",
+            ),
+            description: "cryptography Vulnerable to a Subgroup Attack Due to Missing Subgroup Validation for SECT Curves",
+            fix_versions: [
+                "46.0.5",
+            ],
+            aliases: [
+                VulnerabilityID(
+                    "CVE-2026-26007",
+                ),
+            ],
+            published: Some(
+                2026-02-10T21:27:06Z,
+            ),
+            modified: Some(
+                2026-02-11T15:58:46.005582Z,
+            ),
+        }
+        "#);
+
+        // Check requests findings
+        let requests_findings = results
+            .get(&requests_dep)
+            .expect("Expected findings for requests");
+        assert!(
+            !requests_findings.is_empty(),
+            "Expected to find at least one vulnerability for requests"
+        );
+
+        let requests_finding = requests_findings
+            .iter()
+            .find(|finding| match finding {
+                Finding::Vulnerability { id, .. } => id.0.as_ref() == "GHSA-9hjg-9r4m-mvj7",
+                Finding::ProjectStatus { .. } => false,
+            })
+            .expect("Expected to find GHSA-9hjg-9r4m-mvj7 vulnerability for requests");
+
+        insta::assert_debug_snapshot!(requests_finding, @r#"
+        Vulnerability {
+            dependency: Dependency {
+                name: PackageName(
+                    "requests",
+                ),
+                version: "2.32.3",
+            },
+            id: VulnerabilityID(
+                "GHSA-9hjg-9r4m-mvj7",
+            ),
+            description: "Requests vulnerable to .netrc credentials leak via malicious URLs",
+            fix_versions: [
+                "2.32.4",
+            ],
+            aliases: [
+                VulnerabilityID(
+                    "CVE-2024-47081",
+                ),
+            ],
+            published: Some(
+                2025-06-09T19:06:08Z,
+            ),
+            modified: Some(
+                2026-02-04T03:44:00.676479Z,
             ),
         }
         "#);
