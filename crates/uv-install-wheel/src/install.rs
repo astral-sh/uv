@@ -144,6 +144,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             cache_info,
             build_info,
             installer,
+            filename,
             &mut record,
         )?;
     }

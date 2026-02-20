@@ -512,6 +512,7 @@ fn show_files() {
       requests-2.31.0.dist-info/REQUESTED
       requests-2.31.0.dist-info/WHEEL
       requests-2.31.0.dist-info/top_level.txt
+      requests-2.31.0.dist-info/uv_wheel.json
       requests/__init__.py
       requests/__version__.py
       requests/_internal_utils.py
