@@ -2357,3 +2357,215 @@ fn build_no_gitignore() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that `uv build` respects `[tool.uv.sources]` index pinning for extra-build-dependencies
+/// when the child is a workspace member.
+#[test]
+fn build_extra_build_dependencies_index_workspace_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    // Write a test package that arbitrarily requires `anyio` at build time.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio.
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // The parent declares `child` as a workspace member and pins `anyio` to the Test PyPI via
+    // sources. Since the child is a workspace member, workspace discovery from `child/` finds
+    // the parent root and applies the index pinning.
+    let parent = &context.temp_dir;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.workspace]
+        members = ["child"]
+
+        [tool.uv.sources]
+        child = { workspace = true }
+        anyio = { index = "test" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        name = "test"
+        explicit = true
+    "#})?;
+    parent.child("src/parent/__init__.py").touch()?;
+
+    // Building the child should use the Test PyPI index for anyio (3.5.x), not regular PyPI (4.x).
+    uv_snapshot!(&filters, context.build().arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Building source distribution...
+        Found expected `anyio` version 3.5.0
+        Found expected `anyio` version 3.5.0
+        Building wheel from source distribution...
+        Found expected `anyio` version 3.5.0
+        Found expected `anyio` version 3.5.0
+        Successfully built dist/child-0.1.0.tar.gz
+        Successfully built dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
+/// Test that `uv build` does NOT apply `[tool.uv.sources]` index pinning for
+/// extra-build-dependencies when the child is not a workspace member. The parent's source
+/// configuration should not leak into the child's build.
+#[test]
+fn build_extra_build_dependencies_index_non_member() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    // Write a test package that arbitrarily requires `anyio` at build time.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+
+        [build-system]
+        requires = ["hatchling", "anyio"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+
+    // Create a build backend that checks for a specific version of anyio.
+    child.child("build_backend.py").write_str(indoc! {r#"
+        import os
+        import sys
+        from hatchling.build import *
+
+        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        if not expected_version:
+            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            import anyio
+        except ModuleNotFoundError:
+            print("Missing `anyio` module", file=sys.stderr)
+            sys.exit(1)
+
+        from importlib.metadata import version
+        anyio_version = version("anyio")
+
+        if not anyio_version.startswith(expected_version):
+            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+    "#})?;
+    child.child("src/child/__init__.py").touch()?;
+
+    // The parent pins `anyio` to the Test PyPI via sources, but `child` is NOT a workspace
+    // member. The parent's source pinning should not apply to the child's build.
+    let parent = &context.temp_dir;
+    parent.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = ["child"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        child = { path = "child" }
+        anyio = { index = "test" }
+
+        [tool.uv.extra-build-dependencies]
+        child = ["anyio"]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
+        name = "test"
+        explicit = true
+    "#})?;
+    parent.child("src/parent/__init__.py").touch()?;
+
+    // Building the child should use regular PyPI for anyio (4.x), NOT the Test PyPI (3.5.x),
+    // because the child is not a workspace member and shouldn't inherit the parent's sources.
+    uv_snapshot!(&filters, context.build().arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4."), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Building source distribution...
+        Found expected `anyio` version 4.3.0
+        Found expected `anyio` version 4.3.0
+        Building wheel from source distribution...
+        Found expected `anyio` version 4.3.0
+        Found expected `anyio` version 4.3.0
+        Successfully built child/dist/child-0.1.0.tar.gz
+        Successfully built child/dist/child-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}

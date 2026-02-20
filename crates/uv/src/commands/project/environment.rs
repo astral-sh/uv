@@ -18,6 +18,7 @@ use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+use uv_workspace::Workspace;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
@@ -114,6 +115,7 @@ impl CachedEnvironment {
         interpreter: &Interpreter,
         python_platform: Option<&TargetTriple>,
         settings: &ResolverInstallerSettings,
+        workspace: Option<&Workspace>,
         client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
@@ -134,6 +136,7 @@ impl CachedEnvironment {
                 python_platform,
                 build_constraints.clone(),
                 &settings.resolver,
+                workspace,
                 client_builder,
                 state,
                 resolve,
@@ -199,6 +202,7 @@ impl CachedEnvironment {
             Modifications::Exact,
             build_constraints,
             settings.into(),
+            workspace,
             client_builder,
             state,
             install,
