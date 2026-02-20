@@ -1,0 +1,31 @@
+[package]
+name = "uv-audit"
+version = "0.1.0"
+description = "This is an internal component crate of uv"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+
+[dependencies]
+uv-pep440 = { workspace = true }
+uv-normalize = { workspace = true }
+uv-redacted = { workspace = true }
+uv-small-str = { workspace = true }
+
+async-trait = { workspace = true }
+indexmap = { workspace = true }
+reqwest = { workspace = true }
+reqwest-middleware = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
