@@ -1,5 +1,4 @@
 //! Find requested Python interpreters and query interpreters for information.
-use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -91,8 +90,8 @@ pub enum Error {
     #[error(transparent)]
     KeyError(#[from] installation::PythonInstallationKeyError),
 
-    #[error("{}{}", .0, if let Some(hint) = .1 { format!("\n\n{}{} {hint}", "hint".bold().cyan(), ":".bold()) } else { String::new() })]
-    MissingPython(PythonNotFound, Option<String>),
+    #[error("{}", .0)]
+    MissingPython(PythonNotFound, Option<Box<MissingPythonHint>>),
 
     #[error(transparent)]
     MissingEnvironment(#[from] environment::EnvironmentNotFound),
@@ -104,10 +103,88 @@ pub enum Error {
     RetryParsing(#[from] uv_client::RetryParsingError),
 }
 
-impl Error {
-    pub(crate) fn with_missing_python_hint(self, hint: String) -> Self {
+/// The reason a managed Python download could not be used.
+#[derive(Debug)]
+pub enum MissingPythonHint {
+    /// uv's embedded download metadata may be stale.
+    RequiresUpdate,
+    /// Downloads are set to `manual`.
+    DownloadsManual(PythonRequest),
+    /// Downloads are set to `never`.
+    DownloadsNever(PythonRequest),
+    /// Python preference is set to `only-system`.
+    PreferenceOnlySystem(PythonRequest),
+    /// uv is in offline mode.
+    Offline(PythonRequest),
+}
+
+impl MissingPythonHint {
+    fn for_request(request: &PythonRequest) -> String {
+        match request {
+            PythonRequest::Default | PythonRequest::Any => String::new(),
+            _ => format!(" for {request}"),
+        }
+    }
+}
+
+impl std::fmt::Display for MissingPythonHint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingPython(err, _) => Self::MissingPython(err, Some(hint)),
+            Self::RequiresUpdate => {
+                write!(
+                    f,
+                    "uv embeds available Python downloads and may require an update to install new versions. Consider retrying on a newer version of uv."
+                )
+            }
+            Self::DownloadsManual(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                    Self::for_request(request),
+                    request.to_canonical_string(),
+                )
+            }
+            Self::DownloadsNever(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but Python downloads are set to 'never'",
+                    Self::for_request(request),
+                )
+            }
+            Self::PreferenceOnlySystem(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but the Python preference is set to 'only system'",
+                    Self::for_request(request),
+                )
+            }
+            Self::Offline(request) => {
+                write!(
+                    f,
+                    "A managed Python download is available{}, but uv is set to offline mode",
+                    Self::for_request(request),
+                )
+            }
+        }
+    }
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::MissingPython(_, Some(hint)) => {
+                vec![std::borrow::Cow::Owned(hint.to_string())]
+            }
+            Self::Discovery(err) => err.hints(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+impl Error {
+    pub(crate) fn with_hint(self, hint: MissingPythonHint) -> Self {
+        match self {
+            Self::MissingPython(err, _) => Self::MissingPython(err, Some(Box::new(hint))),
             _ => self,
         }
     }

@@ -116,14 +116,11 @@ pub(crate) async fn run(
     // to provide guidance for that case.
     let recursion_depth = read_recursion_depth_from_environment_variable()?;
     if recursion_depth > max_recursion_depth {
-        bail!(
-            r"
-`uv run` was recursively invoked {recursion_depth} times which exceeds the limit of {max_recursion_depth}.
-
-hint: If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
-            "uv run".green(),
-            "--script".green(),
-        );
+        return Err(RecursionLimitError {
+            depth: recursion_depth,
+            max: max_recursion_depth,
+        }
+        .into());
     }
 
     // These cases seem quite complex because (in theory) they should change the "current package".
@@ -2030,4 +2027,22 @@ fn copy_entrypoint(
     trace!("Updated entrypoint at {}", target.user_display());
 
     Ok(())
+}
+
+/// `uv run` was invoked recursively too many times.
+#[derive(Debug, thiserror::Error)]
+#[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
+pub(crate) struct RecursionLimitError {
+    pub(crate) depth: u32,
+    pub(crate) max: u32,
+}
+
+impl uv_errors::Hint for RecursionLimitError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        vec![std::borrow::Cow::Owned(format!(
+            "If you are running a script with `{}` in the shebang, you may need to include the `{}` flag.",
+            "uv run".green(),
+            "--script".green(),
+        ))]
+    }
 }

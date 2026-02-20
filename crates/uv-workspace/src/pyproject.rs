@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use glob::Pattern;
-use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::de::{IntoDeserializer, SeqAccess};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -1602,8 +1601,7 @@ pub enum SourceError {
     Absolute(#[from] std::io::Error),
     #[error("Path contains invalid characters: `{}`", _0.display())]
     NonUtf8Path(PathBuf),
-    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold()
-    )]
+    #[error("Source markers must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{prefix} replace `{1}` with `{2}`.", prefix = uv_errors::HintPrefix)]
     OverlappingMarkers(String, String, String),
     #[error(
         "When multiple sources are provided, each source must include a platform marker (e.g., `marker = \"sys_platform == 'linux'\"`)"
@@ -1611,6 +1609,19 @@ pub enum SourceError {
     MissingMarkers,
     #[error("Must provide at least one source")]
     EmptySources,
+}
+
+impl uv_errors::Hint for SourceError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::OverlappingMarkers(_, rhs, replacement) => {
+                vec![std::borrow::Cow::Owned(format!(
+                    "replace `{rhs}` with `{replacement}`."
+                ))]
+            }
+            _ => Vec::new(),
+        }
+    }
 }
 
 impl Source {
@@ -1852,6 +1863,20 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+impl DependencyType {
+    /// Return the TOML table name(s) for this dependency type.
+    pub fn toml_table_name(&self) -> String {
+        match self {
+            Self::Production => "`project.dependencies`".to_string(),
+            Self::Dev => {
+                "`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`".to_string()
+            }
+            Self::Optional(extra) => format!("`project.optional-dependencies.{extra}`"),
+            Self::Group(group) => format!("`dependency-groups.{group}`"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

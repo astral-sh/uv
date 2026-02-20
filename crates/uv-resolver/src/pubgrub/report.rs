@@ -1039,7 +1039,7 @@ impl PubGrubReportFormatter<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum PubGrubHint {
+pub enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
@@ -1384,9 +1384,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::PrereleaseAvailable { package, version } => {
                 write!(
                     f,
-                    "{}{} Pre-releases are available for `{}` in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Pre-releases are available for `{}` in the requested range (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     package.cyan(),
                     version.cyan(),
                     "--prerelease=allow".green(),
@@ -1396,9 +1394,7 @@ impl std::fmt::Display for PubGrubHint {
                 let spec = format!("{package}>={version}");
                 write!(
                     f,
-                    "{}{} Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically. Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Only pre-releases of `{}` (e.g., {}) match these build requirements, and build environments can't enable pre-releases automatically. Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     package.cyan(),
                     version.cyan(),
                     spec.cyan(),
@@ -1407,9 +1403,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::PrereleaseRequested { name, range } => {
                 write!(
                     f,
-                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "`{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     name.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     "--prerelease=allow".green(),
@@ -1418,9 +1412,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::BuildPrereleaseRequested { name, range } => {
                 write!(
                     f,
-                    "{}{} `{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "`{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     name.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
@@ -1429,26 +1421,20 @@ impl std::fmt::Display for PubGrubHint {
             Self::NoIndex => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `{}`)",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `{}`)",
                     "--find-links <uri>".green(),
                 )
             }
             Self::Offline => {
                 write!(
                     f,
-                    "{}{} Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.",
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` could not be parsed.\n{}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Metadata for `{}` could not be parsed.\n{}",
                     package.cyan(),
                     textwrap::indent(reason.to_string().as_str(), "  ")
                 )
@@ -1456,9 +1442,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::InvalidPackageStructure { package, reason } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` was invalid\n{}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The structure of `{}` was invalid\n{}",
                     package.cyan(),
                     textwrap::indent(reason.to_string().as_str(), "  ")
                 )
@@ -1470,9 +1454,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` ({}) could not be parsed:\n{}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Metadata for `{}` ({}) could not be parsed:\n{}",
                     package.cyan(),
                     format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
@@ -1485,9 +1467,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The structure of `{}` ({}) was invalid:\n{}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The structure of `{}` ({}) was invalid:\n{}",
                     package.cyan(),
                     format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
@@ -1500,9 +1480,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} Metadata for `{}` ({}) was inconsistent:\n{}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Metadata for `{}` ({}) was inconsistent:\n{}",
                     package.cyan(),
                     format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
@@ -1517,9 +1495,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
                     requires_python.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
                         .cyan(),
@@ -1536,9 +1512,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
                     requires_python.cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
                         .cyan(),
@@ -1554,9 +1528,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
                     PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
                         .cyan(),
                     package_requires_python.cyan(),
@@ -1570,9 +1542,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} The source distribution for `{}` ({}) does not include static metadata. Generating metadata for this package requires Python {}, but Python {} is installed.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The source distribution for `{}` ({}) does not include static metadata. Generating metadata for this package requires Python {}, but Python {} is installed.",
                     package.cyan(),
                     format!("v{version}").cyan(),
                     requires_python.cyan(),
@@ -1596,9 +1566,7 @@ impl std::fmt::Display for PubGrubHint {
                 };
                 write!(
                     f,
-                    "{}{} The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The package `{}` depends on the package `{}` but the name is shadowed by {your_project}. Consider changing the name of {the_project}.",
                     package.cyan(),
                     dependency.cyan(),
                 )
@@ -1611,9 +1579,7 @@ impl std::fmt::Display for PubGrubHint {
                 };
                 write!(
                     f,
-                    "{}{} The {project} `{}` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `{}`, consider renaming the {project} `{}` to avoid creating a conflict.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "The {project} `{}` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `{}`, consider renaming the {project} `{}` to avoid creating a conflict.",
                     package.cyan(),
                     package.cyan(),
                     package.cyan(),
@@ -1627,9 +1593,7 @@ impl std::fmt::Display for PubGrubHint {
             } => {
                 write!(
                     f,
-                    "{}{} `{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "`{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     name.cyan(),
                     found_index.without_credentials().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
@@ -1640,9 +1604,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::UnauthorizedIndex { index } => {
                 write!(
                     f,
-                    "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     index.without_credentials().cyan(),
                     "401 Unauthorized".red(),
                 )
@@ -1650,9 +1612,7 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex { index } => {
                 write!(
                     f,
-                    "{}{} An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "An index URL ({}) returned a {} error. This could indicate lack of valid authentication credentials, or the package may not exist on this index.",
                     index.without_credentials().cyan(),
                     "403 Forbidden".red(),
                 )
@@ -1667,9 +1627,7 @@ impl std::fmt::Display for PubGrubHint {
                 };
                 write!(
                     f,
-                    "{}{} Wheels are required for `{}` because building from source is disabled {option}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Wheels are required for `{}` because building from source is disabled {option}",
                     package.cyan(),
                 )
             }
@@ -1683,9 +1641,7 @@ impl std::fmt::Display for PubGrubHint {
                 };
                 write!(
                     f,
-                    "{}{} A source distribution is required for `{}` because using pre-built wheels is disabled {option}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "A source distribution is required for `{}` because using pre-built wheels is disabled {option}",
                     package.cyan(),
                 )
             }
@@ -1704,9 +1660,7 @@ impl std::fmt::Display for PubGrubHint {
                     };
                     write!(
                         f,
-                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python implementation tag{s}: {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "You require {}, but we only found wheels for `{}` ({}) with the following Python implementation tag{s}: {}",
                         best,
                         package.cyan(),
                         format!("v{version}").cyan(),
@@ -1718,9 +1672,7 @@ impl std::fmt::Display for PubGrubHint {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     write!(
                         f,
-                        "{}{} Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "Wheels are available for `{}` ({}) with the following Python implementation tag{s}: {}",
                         package.cyan(),
                         format!("v{version}").cyan(),
                         tags.iter()
@@ -1744,9 +1696,7 @@ impl std::fmt::Display for PubGrubHint {
                     };
                     write!(
                         f,
-                        "{}{} You require {}, but we only found wheels for `{}` ({}) with the following Python ABI tag{s}: {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "You require {}, but we only found wheels for `{}` ({}) with the following Python ABI tag{s}: {}",
                         best,
                         package.cyan(),
                         format!("v{version}").cyan(),
@@ -1758,9 +1708,7 @@ impl std::fmt::Display for PubGrubHint {
                     let s = if tags.len() == 1 { "" } else { "s" };
                     write!(
                         f,
-                        "{}{} Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
-                        "hint".bold().cyan(),
-                        ":".bold(),
+                        "Wheels are available for `{}` ({}) with the following Python ABI tag{s}: {}",
                         package.cyan(),
                         format!("v{version}").cyan(),
                         tags.iter()
@@ -1777,9 +1725,7 @@ impl std::fmt::Display for PubGrubHint {
                 let s = if tags.len() == 1 { "" } else { "s" };
                 write!(
                     f,
-                    "{}{} Wheels are available for `{}` ({}) on the following platform{s}: {}",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "Wheels are available for `{}` ({}) on the following platform{s}: {}",
                     package.cyan(),
                     format!("v{version}").cyan(),
                     tags.iter()
@@ -1790,22 +1736,18 @@ impl std::fmt::Display for PubGrubHint {
             Self::DisjointPythonVersion { python_version } => {
                 write!(
                     f,
-                    "{}{} While the active Python version is {}, \
+                    "While the active Python version is {}, \
                     the resolution failed for other Python versions supported by your \
                     project. Consider limiting your project's supported Python versions \
                     using `requires-python`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
                     python_version.cyan(),
                 )
             }
             Self::DisjointEnvironment => {
                 write!(
                     f,
-                    "{}{} The resolution failed for an environment that is not the current one, \
+                    "The resolution failed for an environment that is not the current one, \
                     consider limiting the environments with `tool.uv.environments`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
                 )
             }
         }
