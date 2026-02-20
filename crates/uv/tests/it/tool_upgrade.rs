@@ -5,6 +5,97 @@ use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
 
+// Upgrade a tool after the managed Python it was installed with has been
+// upgraded and then fully uninstalled.
+//
+// See: https://github.com/astral-sh/uv/pull/17913
+#[test]
+#[cfg(feature = "test-python-managed")]
+fn tool_upgrade_after_python_upgrade() {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_counts()
+        .with_filtered_latest_python_versions();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install a managed Python.
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.17"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.17 in [TIME]
+     + cpython-3.10.17-[PLATFORM] (python3.10)
+    ");
+
+    // Install a tool using that managed Python.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .arg("--python").arg("3.10")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.6.0
+     + pytz==2018.5
+    Installed 1 executable: pybabel
+    ");
+
+    // Upgrade Python 3.10 to the latest patch.
+    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.[LATEST] in [TIME]
+     + cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
+    ");
+
+    // Uninstall Python 3.10 entirely.
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.10"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.10
+    Uninstalled 2 versions in [TIME]
+     - cpython-3.10.17-[PLATFORM]
+     - cpython-3.10.[LATEST]-[PLATFORM] (python3.10)
+    ");
+
+    // The tool receipt is still valid, but upgrading reports "not installed".
+    assert!(tool_dir.join("babel").join("uv-receipt.toml").exists());
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade babel
+      Caused by: `babel` is not installed; run `uv tool install babel` to install
+    ");
+}
+
 #[test]
 fn tool_upgrade_empty() {
     let context = uv_test::test_context!("3.12")
