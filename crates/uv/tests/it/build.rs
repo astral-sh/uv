@@ -498,7 +498,7 @@ fn build_fail() -> Result<()> {
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     "#);
 
     Ok(())
@@ -830,7 +830,7 @@ fn build_all_with_failure() -> Result<()> {
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
 
-    hint: This usually indicates a problem with the package or the build environment.Successfully built dist/project-0.1.0.tar.gz
+    hint: Build failures usually indicate a problem with the package or the build environment.Successfully built dist/project-0.1.0.tar.gz
     Successfully built dist/project-0.1.0-py3-none-any.whl
     ");
 
@@ -1717,7 +1717,7 @@ fn build_hide_build_output_on_failure() -> Result<()> {
       ╰─▶ Call to `setuptools.build_meta.build_sdist` failed (exit status: 1)
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     Ok(())
@@ -2564,7 +2564,7 @@ fn force_pep517() -> Result<()> {
       ╰─▶ Call to `uv_build.build_sdist` failed (exit status: 1)
 
 
-    hint: This usually indicates a problem with the package or the build environment.
+    hint: Build failures usually indicate a problem with the package or the build environment.
     ");
 
     Ok(())
