@@ -697,7 +697,7 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
             return Ok(None);
         };
-        self.with_cache_on_fs(&dir).map(Some)
+        self.with_cache_on_fs(&dir, "COW_FS").map(Some)
     }
 
     /// Use a cache directory on the filesystem specified by
@@ -708,7 +708,7 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
             return Ok(None);
         };
-        self.with_cache_on_fs(&dir).map(Some)
+        self.with_cache_on_fs(&dir, "ALT_FS").map(Some)
     }
 
     /// Use a cache directory on the filesystem specified by
@@ -719,7 +719,7 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
             return Ok(None);
         };
-        self.with_cache_on_fs(&dir).map(Some)
+        self.with_cache_on_fs(&dir, "NOCOW_FS").map(Some)
     }
 
     /// Use a working directory on the filesystem specified by
@@ -732,7 +732,7 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
             return Ok(None);
         };
-        self.with_working_dir_on_fs(&dir).map(Some)
+        self.with_working_dir_on_fs(&dir, "COW_FS").map(Some)
     }
 
     /// Use a working directory on the filesystem specified by
@@ -745,7 +745,7 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
             return Ok(None);
         };
-        self.with_working_dir_on_fs(&dir).map(Some)
+        self.with_working_dir_on_fs(&dir, "ALT_FS").map(Some)
     }
 
     /// Use a working directory on the filesystem specified by
@@ -758,39 +758,41 @@ impl TestContext {
         let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
             return Ok(None);
         };
-        self.with_working_dir_on_fs(&dir).map(Some)
+        self.with_working_dir_on_fs(&dir, "NOCOW_FS").map(Some)
     }
 
-    fn with_cache_on_fs(mut self, dir: &str) -> anyhow::Result<Self> {
+    fn with_cache_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
         fs_err::create_dir_all(dir)?;
         let tmp = tempfile::TempDir::new_in(dir)?;
         self.cache_dir = ChildPath::new(tmp.path()).child("cache");
         fs_err::create_dir_all(&self.cache_dir)?;
+        let replacement = format!("[{name}]/[CACHE_DIR]/");
         self.filters.extend(
             Self::path_patterns(&self.cache_dir)
                 .into_iter()
-                .map(|pattern| (pattern, "[CACHE_DIR]/".to_string())),
+                .map(|pattern| (pattern, replacement.clone())),
         );
         self._extra_tempdirs.push(tmp);
         Ok(self)
     }
 
-    fn with_working_dir_on_fs(mut self, dir: &str) -> anyhow::Result<Self> {
+    fn with_working_dir_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
         fs_err::create_dir_all(dir)?;
         let tmp = tempfile::TempDir::new_in(dir)?;
-        let canonical = tmp.path().canonicalize()?;
         self.temp_dir = ChildPath::new(tmp.path()).child("temp");
         fs_err::create_dir_all(&self.temp_dir)?;
-        self.venv = ChildPath::new(canonical.join(".venv"));
+        self.venv = ChildPath::new(tmp.path().canonicalize()?.join(".venv"));
+        let temp_replacement = format!("[{name}]/[TEMP_DIR]/");
         self.filters.extend(
             Self::path_patterns(&self.temp_dir)
                 .into_iter()
-                .map(|pattern| (pattern, "[TEMP_DIR]/".to_string())),
+                .map(|pattern| (pattern, temp_replacement.clone())),
         );
+        let venv_replacement = format!("[{name}]/[VENV]/");
         self.filters.extend(
             Self::path_patterns(&self.venv)
                 .into_iter()
-                .map(|pattern| (pattern, "[VENV]/".to_string())),
+                .map(|pattern| (pattern, venv_replacement.clone())),
         );
         self._extra_tempdirs.push(tmp);
         Ok(self)
