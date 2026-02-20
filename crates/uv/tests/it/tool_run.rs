@@ -2585,14 +2585,15 @@ fn run_with_env_file() -> anyhow::Result<()> {
         script = "foo.main:run"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
     // Create the `foo` module.
     let foo_project_src = foo_dir.child("src");
     let foo_module = foo_project_src.child("foo");
+    foo_module.child("__init__.py").touch()?;
     let foo_main_py = foo_module.child("main.py");
     foo_main_py.write_str(indoc! { r#"
         def run():
