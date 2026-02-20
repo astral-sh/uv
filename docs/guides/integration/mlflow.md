@@ -29,7 +29,7 @@ import mlflow
 # MLflow automatically detects uv.lock + pyproject.toml
 # and captures dependencies via `uv export`
 mlflow.pyfunc.log_model(
-    artifact_path="model",
+    name="model",
     python_model=my_model,
 )
 ```
@@ -42,41 +42,11 @@ pinned `requirements.txt` that exactly matches your lock file.
 In addition to exporting dependencies, MLflow logs your uv project files as artifacts for full
 reproducibility:
 
-- `uv.lock` — The complete lock file with all resolved dependencies
-- `pyproject.toml` — Your project configuration
-- `.python-version` — The Python version specification (if present)
+- `uv.lock` -- The complete lock file with all resolved dependencies
+- `pyproject.toml` -- Your project configuration
+- `.python-version` -- The Python version specification (if present)
 
 These artifacts enable anyone to recreate your exact environment using `uv sync --frozen`.
-
-## Configuring dependency groups
-
-MLflow supports uv's dependency groups and extras. You can pass them directly as parameters to
-`log_model` or `save_model`:
-
-```python
-mlflow.pyfunc.log_model(
-    artifact_path="model",
-    python_model=my_model,
-    uv_groups=["serving"],          # maps to uv's --group flag
-    uv_extras=["cuda", "optimization"],  # maps to uv's --extra flag
-)
-```
-
-Alternatively, you can set them via environment variables:
-
-```bash
-# Include specific dependency groups
-export MLFLOW_UV_GROUPS="dev,test"
-
-# Include only specific groups (exclude default dependencies)
-export MLFLOW_UV_ONLY_GROUPS="ml"
-
-# Include optional extras
-export MLFLOW_UV_EXTRAS="cuda,optimization"
-```
-
-These map directly to uv's `--group`, `--only-group`, and `--extra` flags. Parameters passed to
-`log_model`/`save_model` take precedence over environment variables.
 
 ## Environment restoration
 
@@ -131,7 +101,7 @@ parameter to point to the directory containing your `uv.lock` and `pyproject.tom
 
 ```python
 mlflow.pyfunc.log_model(
-    artifact_path="model",
+    name="model",
     python_model=my_model,
     uv_project_path="../my-subproject",  # Directory containing uv.lock + pyproject.toml
 )
@@ -196,8 +166,8 @@ train = [
 ]
 ```
 
-By default, MLflow only exports the core project dependencies from `[project].dependencies`. Custom
-groups like `train` are not included unless you explicitly set `MLFLOW_UV_GROUPS="train"`.
+By default, MLflow exports the core project dependencies from `[project].dependencies` and does not
+include dev or custom dependency groups.
 
 ## Troubleshooting
 
@@ -221,6 +191,6 @@ This shows exactly what MLflow will capture.
 Environment variables must be set before running your script:
 
 ```bash
-export MLFLOW_UV_GROUPS="serving"
+export MLFLOW_UV_AUTO_DETECT=false
 python train.py
 ```
