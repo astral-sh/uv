@@ -578,23 +578,11 @@ impl TestContext {
     /// forms and to normalize path separators across platforms.
     #[must_use]
     pub fn with_filtered_system_tmp(mut self) -> Self {
-        let patterns: Vec<_> = Self::path_patterns(std::env::temp_dir())
-            .into_iter()
-            .map(|pattern| (pattern, "[SYSTEM_TEMP_DIR]/".to_string()))
-            .collect();
-        // Insert right after `[TEMP_DIR]` filters so that:
-        //  - `[TEMP_DIR]` (more specific, child path) matches first
-        //  - `[SYSTEM_TEMP_DIR]` matches before less-specific built-in filters
-        //    like `[WORKSPACE]` (e.g., `D:\uv` would otherwise eat the prefix
-        //    of a system temp dir like `D:\uv-tmp`)
-        let insert_pos = self
-            .filters
-            .iter()
-            .rposition(|(_, replacement)| replacement == "[TEMP_DIR]/")
-            .map_or(0, |i| i + 1);
-        for (i, filter) in patterns.into_iter().enumerate() {
-            self.filters.insert(insert_pos + i, filter);
-        }
+        self.filters.extend(
+            Self::path_patterns(std::env::temp_dir())
+                .into_iter()
+                .map(|pattern| (pattern, "[SYSTEM_TEMP_DIR]/".to_string())),
+        );
         self
     }
 
