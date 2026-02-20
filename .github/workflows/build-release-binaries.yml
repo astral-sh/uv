@@ -238,12 +238,21 @@ jobs:
         run: python scripts/transform_readme.py --target pypi
 
       - name: Install NASM
-        run: choco install nasm
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
+        uses: ilammy/setup-nasm@v1
+
+      - name: Verify NASM
+        if: contains(matrix.platform.target, 'x86') || contains(matrix.platform.target, 'i686')
         shell: powershell
+        run: |
+          where.exe nasm
+          nasm -v
 
       # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
+        env:
+          AWS_LC_SYS_NO_PREFIX: "1"
         with:
           maturin-version: v1.11.5
           target: ${{ matrix.platform.target }}
@@ -558,6 +567,10 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update --compatibility pypi
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
+          before-script-linux: |
+            # Install the s390x cross target on x86_64
+            rustup target add ${{ matrix.platform.target }}
+            apt-get update && apt-get install -y gcc-s390x-linux-gnu binutils-s390x-linux-gnu
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
