@@ -5735,6 +5735,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-audit"
+version = "0.1.0"
+dependencies = [
+ "astral-reqwest-middleware",
+ "async-trait",
+ "indexmap",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-redacted",
+ "uv-small-str",
+]
+
+[[package]]
 name = "uv-auth"
 version = "0.0.24"
 dependencies = [
