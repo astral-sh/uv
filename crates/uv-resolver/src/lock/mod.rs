@@ -7076,7 +7076,219 @@ name = "a"
 version = "0.1.0"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: Some(
+                                "0.1.0",
+                            ),
+                            source: Registry(
+                                Url(
+                                    UrlString(
+                                        "https://pypi.org/simple",
+                                    ),
+                                ),
+                            ),
+                        },
+                        extra: {},
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
+                    },
+                ],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7102,7 +7314,219 @@ name = "a"
 source = { registry = "https://pypi.org/simple" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: Some(
+                                "0.1.0",
+                            ),
+                            source: Registry(
+                                Url(
+                                    UrlString(
+                                        "https://pypi.org/simple",
+                                    ),
+                                ),
+                            ),
+                        },
+                        extra: {},
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
+                    },
+                ],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7127,7 +7551,219 @@ sdist = { url = "https://example.com", hash = "sha256:37dd54208da7e1cd875388217d
 name = "a"
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: Some(
+                                "0.1.0",
+                            ),
+                            source: Registry(
+                                Url(
+                                    UrlString(
+                                        "https://pypi.org/simple",
+                                    ),
+                                ),
+                            ),
+                        },
+                        extra: {},
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
+                    },
+                ],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7252,7 +7888,246 @@ name = "a"
 source = { editable = "path/to/a" }
 "#;
         let result = toml::from_str::<Lock>(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: None,
+                    source: Editable(
+                        "path/to/a",
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "a",
+                    ),
+                    version: Some(
+                        "0.1.1",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "b",
+                    ),
+                    version: Some(
+                        "0.1.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://example.com",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: Some(
+                                Hash(
+                                    HashDigest {
+                                        algorithm: Sha256,
+                                        digest: "37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3",
+                                    },
+                                ),
+                            ),
+                            size: Some(
+                                0,
+                            ),
+                            upload_time: None,
+                        },
+                    },
+                ),
+                wheels: [],
+                fork_markers: [],
+                dependencies: [
+                    Dependency {
+                        package_id: PackageId {
+                            name: PackageName(
+                                "a",
+                            ),
+                            version: None,
+                            source: Editable(
+                                "path/to/a",
+                            ),
+                        },
+                        extra: {},
+                        simplified_marker: SimplifiedMarkerTree(
+                            true,
+                        ),
+                        complexified_marker: python_full_version >= '3.12',
+                    },
+                ],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: None,
+                source: Editable(
+                    "path/to/a",
+                ),
+            }: 0,
+            PackageId {
+                name: PackageName(
+                    "a",
+                ),
+                version: Some(
+                    "0.1.1",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 1,
+            PackageId {
+                name: PackageName(
+                    "b",
+                ),
+                version: Some(
+                    "0.1.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 2,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7268,7 +8143,139 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: None,
+                wheels: [
+                    Wheel {
+                        url: Url {
+                            url: UrlString(
+                                "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+                            ),
+                        },
+                        hash: None,
+                        size: None,
+                        upload_time: None,
+                        filename: WheelFilename {
+                            name: PackageName(
+                                "anyio",
+                            ),
+                            version: "4.3.0",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                        zstd: None,
+                    },
+                ],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7284,7 +8291,146 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Registry(
+                        Url(
+                            UrlString(
+                                "https://pypi.org/simple",
+                            ),
+                        ),
+                    ),
+                },
+                sdist: None,
+                wheels: [
+                    Wheel {
+                        url: Url {
+                            url: UrlString(
+                                "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+                            ),
+                        },
+                        hash: Some(
+                            Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
+                                },
+                            ),
+                        ),
+                        size: None,
+                        upload_time: None,
+                        filename: WheelFilename {
+                            name: PackageName(
+                                "anyio",
+                            ),
+                            version: "4.3.0",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                        zstd: None,
+                    },
+                ],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Registry(
+                    Url(
+                        UrlString(
+                            "https://pypi.org/simple",
+                        ),
+                    ),
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7300,7 +8446,138 @@ source = { path = "file:///foo/bar" }
 wheels = [{ url = "file:///foo/bar/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Path(
+                        "file:///foo/bar",
+                    ),
+                },
+                sdist: None,
+                wheels: [
+                    Wheel {
+                        url: Url {
+                            url: UrlString(
+                                "file:///foo/bar/anyio-4.3.0-py3-none-any.whl",
+                            ),
+                        },
+                        hash: Some(
+                            Hash(
+                                HashDigest {
+                                    algorithm: Sha256,
+                                    digest: "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8",
+                                },
+                            ),
+                        ),
+                        size: None,
+                        upload_time: None,
+                        filename: WheelFilename {
+                            name: PackageName(
+                                "anyio",
+                            ),
+                            version: "4.3.0",
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
+                        },
+                        zstd: None,
+                    },
+                ],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Path(
+                    "file:///foo/bar",
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7315,7 +8592,113 @@ version = "4.3.0"
 source = { url = "https://burntsushi.net" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Direct(
+                        UrlString(
+                            "https://burntsushi.net",
+                        ),
+                        DirectSource {
+                            subdirectory: None,
+                        },
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Direct(
+                    UrlString(
+                        "https://burntsushi.net",
+                    ),
+                    DirectSource {
+                        subdirectory: None,
+                    },
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7330,7 +8713,117 @@ version = "4.3.0"
 source = { url = "https://burntsushi.net", subdirectory = "wat/foo/bar" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Direct(
+                        UrlString(
+                            "https://burntsushi.net",
+                        ),
+                        DirectSource {
+                            subdirectory: Some(
+                                "wat/foo/bar",
+                            ),
+                        },
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Direct(
+                    UrlString(
+                        "https://burntsushi.net",
+                    ),
+                    DirectSource {
+                        subdirectory: Some(
+                            "wat/foo/bar",
+                        ),
+                    },
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7345,7 +8838,103 @@ version = "4.3.0"
 source = { directory = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Directory(
+                        "path/to/dir",
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Directory(
+                    "path/to/dir",
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 
     #[test]
@@ -7360,6 +8949,102 @@ version = "4.3.0"
 source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
-        insta::assert_debug_snapshot!(result);
+        insta::assert_debug_snapshot!(result, @r#"
+Ok(
+    Lock {
+        version: 1,
+        revision: 0,
+        fork_markers: [],
+        conflicts: Conflicts(
+            [],
+        ),
+        supported_environments: [],
+        required_environments: [],
+        requires_python: RequiresPython {
+            specifiers: VersionSpecifiers(
+                [
+                    VersionSpecifier {
+                        operator: GreaterThanEqual,
+                        version: "3.12",
+                    },
+                ],
+            ),
+            range: RequiresPythonRange(
+                LowerBound(
+                    Included(
+                        "3.12",
+                    ),
+                ),
+                UpperBound(
+                    Unbounded,
+                ),
+            ),
+        },
+        options: ResolverOptions {
+            resolution_mode: Highest,
+            prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
+            exclude_newer: ExcludeNewerWire {
+                exclude_newer: None,
+                exclude_newer_span: None,
+                exclude_newer_package: ExcludeNewerPackage(
+                    {},
+                ),
+            },
+        },
+        packages: [
+            Package {
+                id: PackageId {
+                    name: PackageName(
+                        "anyio",
+                    ),
+                    version: Some(
+                        "4.3.0",
+                    ),
+                    source: Editable(
+                        "path/to/dir",
+                    ),
+                },
+                sdist: None,
+                wheels: [],
+                fork_markers: [],
+                dependencies: [],
+                optional_dependencies: {},
+                dependency_groups: {},
+                build_dependencies: [],
+                metadata: PackageMetadata {
+                    requires_dist: {},
+                    provides_extra: [],
+                    dependency_groups: {},
+                    build_requires: {},
+                },
+            },
+        ],
+        by_id: {
+            PackageId {
+                name: PackageName(
+                    "anyio",
+                ),
+                version: Some(
+                    "4.3.0",
+                ),
+                source: Editable(
+                    "path/to/dir",
+                ),
+            }: 0,
+        },
+        manifest: ResolverManifest {
+            members: {},
+            requirements: {},
+            dependency_groups: {},
+            constraints: {},
+            overrides: {},
+            excludes: {},
+            build_constraints: {},
+            dependency_metadata: {},
+        },
+    },
+)
+"#);
     }
 }
