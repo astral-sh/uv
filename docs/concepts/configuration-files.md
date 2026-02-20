@@ -44,8 +44,9 @@ default = true
 
 uv will also discover `uv.toml` configuration files in the user- and system-level
 [configuration directories](../reference/storage.md#configuration-directories), e.g., user-level
-configuration in `~/.config/uv/uv.toml`, and system-level configuration at `/etc/uv/uv.toml` on
-macOS and Linux.
+configuration in `~/.config/uv/uv.toml` on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows,
+and system-level configuration at `/etc/uv/uv.toml` on macOS and Linux, or
+`%PROGRAMDATA%\uv\uv.toml` on Windows.
 
 !!! important
 

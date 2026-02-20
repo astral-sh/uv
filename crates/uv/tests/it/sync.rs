@@ -241,8 +241,8 @@ fn package() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -251,6 +251,12 @@ fn package() -> Result<()> {
 
     let init = src.child("__init__.py");
     init.touch()?;
+
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
     success: true
@@ -699,11 +705,11 @@ fn mixed_requires_python() -> Result<()> {
     let child = context.temp_dir.child("packages").child("bird-feeder");
     child.create_dir_all()?;
 
-    let src = context.temp_dir.child("src").child("bird_feeder");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("bird_feeder")
+        .child("__init__.py")
+        .touch()?;
 
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -714,8 +720,8 @@ fn mixed_requires_python() -> Result<()> {
         requires-python = ">=3.9"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -1766,13 +1772,19 @@ fn sync_build_isolation_extra() -> Result<()> {
         compile = ["source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz"]
 
         [build-system]
-        requires = ["setuptools >= 40.9.0"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         no-build-isolation-package = ["source-distribution"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should fail for the `compile` extra.
     uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("compile"), @r#"
@@ -4636,10 +4648,17 @@ fn sync_group_member() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -4695,10 +4714,17 @@ fn sync_group_non_project_member() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
         )?;
+    context
+        .temp_dir
+        .child("child")
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -4802,14 +4828,20 @@ fn sync_group_self() -> Result<()> {
         test = ["idna>=3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [dependency-groups]
         foo = ["project", "typing-extensions>=4"]
         bar = ["project[test]"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -5349,10 +5381,16 @@ fn read_metadata_statically_over_the_cache() -> Result<()> {
         dependencies = ["anyio>=4,<5"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     context.sync().assert().success();
     let lock1 = context.read("uv.lock");
@@ -5382,10 +5420,16 @@ fn no_install_project() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -5436,8 +5480,8 @@ fn no_install_workspace() -> Result<()> {
         dependencies = ["anyio==3.7.0", "child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -5446,6 +5490,12 @@ fn no_install_workspace() -> Result<()> {
         child = { workspace = true }
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Add a workspace member.
     let child = context.temp_dir.child("child");
@@ -5458,8 +5508,8 @@ fn no_install_workspace() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -5575,8 +5625,8 @@ fn no_install_local() -> Result<()> {
         dependencies = ["anyio==3.7.0", "local", "local-editable", "workspace-member"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         local = { path = "./local" }
@@ -5587,6 +5637,12 @@ fn no_install_local() -> Result<()> {
         members = ["workspace-member"]
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Add a local package, local editable package, and then a workspace member
     // as a dependency.
@@ -5659,10 +5715,16 @@ fn no_install_package() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Generate a lockfile.
     context.lock().assert().success();
@@ -5716,8 +5778,8 @@ fn no_install_project_no_build() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -6166,10 +6228,16 @@ fn convert_to_virtual() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -6361,10 +6429,16 @@ fn convert_to_package() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running `uv sync` should install the project itself.
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -7382,10 +7456,16 @@ fn sync_update_project() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("my_project")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @"
     success: true
@@ -8065,8 +8145,8 @@ fn transitive_dev() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         dev-dependencies = ["iniconfig>=1"]
@@ -8078,6 +8158,12 @@ fn transitive_dev() -> Result<()> {
 
     let init = src.child("__init__.py");
     init.touch()?;
+
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync().arg("--dev"), @"
     success: true
@@ -8113,8 +8199,8 @@ fn sync_no_editable() -> Result<()> {
         dependencies = ["child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.sources]
         child = { workspace = true }
@@ -8130,6 +8216,13 @@ fn sync_no_editable() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
+    context
+        .temp_dir
+        .child("src")
+        .child("root")
+        .child("__init__.py")
+        .touch()?;
+
     let child = context.temp_dir.child("child");
     fs_err::create_dir_all(&child)?;
 
@@ -8142,8 +8235,8 @@ fn sync_no_editable() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -8411,8 +8504,8 @@ fn build_system_requires_workspace() -> Result<()> {
         dependencies = ["typing-extensions>=3.10"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -8494,8 +8587,8 @@ fn build_system_requires_path() -> Result<()> {
         dependencies = ["typing-extensions>=3.10"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -9121,8 +9214,8 @@ fn sync_all() -> Result<()> {
         dependencies = ["anyio>3", "child"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -9149,8 +9242,8 @@ fn sync_all() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
     child
@@ -12726,7 +12819,7 @@ dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -12810,7 +12903,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]

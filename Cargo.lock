@@ -2559,9 +2559,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.27"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "lru-slab"
@@ -2571,9 +2571,9 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lzma-rust2"
-version = "0.15.7"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1670343e58806300d87950e3401e820b519b9384281bbabfb15e3636689ffd69"
+checksum = "d673a11333485e7d8b93d62a9a5b07b22daf5e8a8655a44c1bb18aa4bf3d1524"
 dependencies = [
  "crc",
  "sha2",
@@ -5409,6 +5409,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6351,6 +6357,7 @@ name = "uv-fs"
 version = "0.0.24"
 dependencies = [
  "backon",
+ "clap",
  "dunce",
  "either",
  "encoding_rs_io",
@@ -6358,6 +6365,8 @@ dependencies = [
  "junction",
  "path-slash",
  "percent-encoding",
+ "reflink-copy",
+ "rustc-hash",
  "rustix",
  "same-file",
  "schemars",
@@ -6367,6 +6376,8 @@ dependencies = [
  "tokio",
  "tracing",
  "uv-static",
+ "uv-warnings",
+ "walkdir",
  "windows",
 ]
 
@@ -6440,7 +6451,6 @@ dependencies = [
  "mailparse",
  "owo-colors",
  "pathdiff",
- "reflink-copy",
  "regex",
  "rustc-hash",
  "same-file",
@@ -6449,7 +6459,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tempfile",
  "thiserror 2.0.18",
  "tracing",
  "uv-distribution-filename",
@@ -8042,9 +8051,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "7.1.0"
+version = "8.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9013f1222db8a6d680f13a7ccdc60a781199cd09c2fa4eff58e728bb181757fc"
+checksum = "6e499faf5c6b97a0d086f4a8733de6d47aee2252b8127962439d8d4311a73f72"
 dependencies = [
  "bzip2 0.6.1",
  "crc32fast",
@@ -8052,6 +8061,7 @@ dependencies = [
  "indexmap",
  "lzma-rust2",
  "memchr",
+ "typed-path",
  "zopfli",
  "zstd",
 ]
@@ -8070,9 +8080,9 @@ checksum = "94f63c051f4fe3c1509da62131a678643c5b6fbdc9273b2b79d4378ebda003d2"
 
 [[package]]
 name = "zopfli"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edfc5ee405f504cd4984ecc6f14d02d55cfda60fa4b689434ef4102aae150cd7"
+checksum = "f05cd8797d63865425ff89b5c4a48804f35ba0ce8d125800027ad6017d2b5249"
 dependencies = [
  "bumpalo",
  "crc32fast",

@@ -103,7 +103,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -266,7 +266,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3W`
     Resolved 2 packages in [TIME]
     Updated idna v3.7 -> v3.6
     ");
@@ -290,7 +290,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -425,7 +425,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -789,7 +789,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -808,7 +808,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
+    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
     Resolved 3 packages in [TIME]
     ");
 
@@ -826,7 +826,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile due to removal of exclude newer span
     Resolved 3 packages in [TIME]
     ");
 
@@ -892,7 +892,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to addition of exclude newer span `P3W`
+    Resolving despite existing lockfile due to addition of exclude newer span `P3W`
     Resolved 3 packages in [TIME]
     Updated idna v3.7 -> v3.6
     Updated typing-extensions v4.11.0 -> v4.10.0
@@ -988,7 +988,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P30D`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P30D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -1002,7 +1002,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P30D` to `P1D`
+    Resolving despite existing lockfile due to change of exclude newer span from `P30D` to `P1D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -1016,7 +1016,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1D` to `P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -1030,7 +1030,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
+    Resolving despite existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -1131,7 +1131,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Ignoring existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile due to removal of exclude newer span
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
           And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.

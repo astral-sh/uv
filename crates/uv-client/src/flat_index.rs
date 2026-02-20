@@ -212,7 +212,7 @@ impl<'a> FlatIndexClient<'a> {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {}: {err}", &url);
+                                debug!("Skipping file in {}: {err}", &url);
                                 None
                             }
                         }

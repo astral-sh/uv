@@ -168,7 +168,7 @@ fn install(
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
     LazyLock::force(&RAYON_INITIALIZE);
-    let locks = uv_install_wheel::Locks::new(preview);
+    let state = uv_install_wheel::InstallState::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
             layout,
@@ -188,7 +188,7 @@ fn install(
             installer_name,
             installer_metadata,
             link_mode,
-            &locks,
+            &state,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
 
@@ -198,7 +198,7 @@ fn install(
 
         Ok::<(), Error>(())
     })?;
-    if let Err(err) = locks.warn_package_conflicts() {
+    if let Err(err) = state.warn_package_conflicts() {
         warn!("Checking for conflicts between packages failed: {err}");
     }
 

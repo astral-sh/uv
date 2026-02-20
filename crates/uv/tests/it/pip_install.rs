@@ -3419,9 +3419,13 @@ fn install_no_downgrade() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
     "#})?;
+    idna.child("src")
+        .child("idna")
+        .child("__init__.py")
+        .touch()?;
 
     // Install the local `idna`.
     uv_snapshot!(context.filters(), context.pip_install()

@@ -29,10 +29,16 @@ fn run_with_python_version() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -156,10 +162,16 @@ fn run_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // We treat arguments before the command as uv arguments
     uv_snapshot!(context.filters(), context.run().arg("--help").arg("python"), @"
@@ -210,10 +222,16 @@ fn run_no_args() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // Run without specifying any arguments.
     #[cfg(not(windows))]
@@ -278,10 +296,16 @@ fn run_pep723_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // If the script contains a PEP 723 tag, we should install its requirements.
     let test_script = context.temp_dir.child("main.py");
@@ -547,10 +571,16 @@ fn run_pythonw_script() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.pyw");
     test_script.write_str(indoc! { r"
@@ -1057,8 +1087,8 @@ fn run_managed_false() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [tool.uv]
         managed = false
@@ -1159,10 +1189,16 @@ fn run_with() -> Result<()> {
         dependencies = ["sniffio==1.3.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -1286,10 +1322,16 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
         requires-python = ">=3.8"
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
@@ -1339,8 +1381,8 @@ fn run_with_overlay_interpreter() -> Result<()> {
         dependencies = ["anyio"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
 
         [project.scripts]
         main = "foo:main"
@@ -2167,10 +2209,16 @@ fn run_locked() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--locked").arg("--").arg("python").arg("--version"), @"
@@ -2254,8 +2302,8 @@ fn run_locked() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -2331,10 +2379,16 @@ fn run_frozen() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.run().arg("--frozen").arg("--").arg("python").arg("--version"), @"
@@ -2358,8 +2412,8 @@ fn run_frozen() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
 
@@ -2396,10 +2450,16 @@ fn run_no_sync() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `--no-sync` should succeed error, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().arg("--no-sync").arg("--").arg("python").arg("--version"), @"
@@ -2455,10 +2515,16 @@ fn run_no_sync_env_var() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#,
     )?;
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
 
     // Running with `UV_NO_SYNC=1` should succeed, even if the lockfile isn't present.
     uv_snapshot!(context.filters(), context.run().env(EnvVars::UV_NO_SYNC, "1").arg("--").arg("python").arg("--version"), @"
@@ -2510,10 +2576,16 @@ fn run_empty_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2570,10 +2642,16 @@ fn run_requirements_txt() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2720,10 +2798,16 @@ fn run_requirements_txt_arguments() -> Result<()> {
         dependencies = ["typing_extensions"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -2774,8 +2858,8 @@ fn run_editable() -> Result<()> {
         dependencies = []
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -3006,10 +3090,16 @@ fn run_without_output() -> Result<()> {
         dependencies = ["anyio", "sniffio==1.3.1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r"
@@ -3490,10 +3580,16 @@ fn run_isolated_does_not_modify_lock() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -3593,10 +3689,16 @@ fn run_isolated_with_frozen() -> Result<()> {
         ]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    context
+        .temp_dir
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         import importlib.metadata
@@ -3776,8 +3878,8 @@ fn run_invalid_project_table() -> Result<()> {
         repository = 'https://github.com/octocat/octocat-python'
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
 
@@ -6173,10 +6275,15 @@ fn run_target_workspace_discovery() -> Result<()> {
         dependencies = ["iniconfig"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
         "#
     })?;
+    workspace
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
 
     // Create a script in the workspace that imports from the project.
     workspace.child("script.py").write_str(indoc! { r"
