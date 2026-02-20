@@ -36,12 +36,17 @@ impl<'a> Dependency<'a> {
 ///
 /// No assumptions should be made about the format of these identifiers.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VulnerabilityID(pub(crate) SmallString);
+pub struct VulnerabilityID(SmallString);
 
 impl VulnerabilityID {
     /// Create a new vulnerability ID from a string.
     pub(crate) fn new(id: impl Into<SmallString>) -> Self {
         Self(id.into())
+    }
+
+    /// Get the string representation of this vulnerability ID.
+    pub fn as_str(&self) -> &str {
+        self.0.as_ref()
     }
 }
 
