@@ -91,11 +91,12 @@ struct Affected {
 /// A full vulnerability record from OSV.
 #[derive(Debug, Clone, Deserialize)]
 struct Vulnerability {
-    /// Required: unique vulnerability identifier
     id: String,
-    /// Required: last modification timestamp (RFC3339)
     modified: Timestamp,
-    /// Required for schema versions >= 1.0.0
+    // TODO: We could validate that this is 1.x, but the value of doing
+    // so is probably limited given that we're strictly checking the shape
+    // of the response anyways.
+    #[allow(dead_code)]
     schema_version: String,
     summary: Option<String>,
     details: Option<String>,
