@@ -14218,11 +14218,11 @@ fn install_cross_device() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
          If the cache and target directories are on different filesystems, hardlinking may not be supported.
          If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "
