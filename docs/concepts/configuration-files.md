@@ -77,7 +77,7 @@ configuration files (e.g., user-level configuration will be ignored).
 
 See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
 
-## `.env`
+## Environment variable files
 
 `uv run` can load environment variables from dotenv files (e.g., `.env`, `.env.local`,
 `.env.development`), powered by the [`dotenvy`](https://github.com/allan2/dotenvy) crate.
