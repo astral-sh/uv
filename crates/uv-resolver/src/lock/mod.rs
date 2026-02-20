@@ -326,12 +326,19 @@ impl Lock {
 
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
+            //
+            // Normalize with a simplify/complexify round-trip through `requires-python` to
+            // match markers deserialized from the lockfile (which get complexified on read).
             let fork_markers = if duplicates.contains(dist.name()) {
                 resolution
                     .fork_markers
                     .iter()
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
-                    .copied()
+                    .map(|marker| {
+                        let simplified =
+                            SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                        UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+                    })
                     .collect()
             } else {
                 vec![]
@@ -433,6 +440,18 @@ impl Lock {
             fork_strategy: resolution.options.fork_strategy,
             exclude_newer: resolution.options.exclude_newer.clone().into(),
         };
+        // Normalize fork markers with a simplify/complexify round-trip through
+        // `requires-python`. This ensures markers from the resolver (which don't include
+        // `requires-python` bounds) match markers deserialized from the lockfile (which get
+        // complexified on read).
+        let fork_markers = resolution
+            .fork_markers
+            .iter()
+            .map(|marker| {
+                let simplified = SimplifiedMarkerTree::new(&requires_python, marker.combined());
+                UniversalMarker::from_combined(simplified.into_marker(&requires_python))
+            })
+            .collect();
         let lock = Self::new(
             VERSION,
             REVISION,
@@ -443,7 +462,7 @@ impl Lock {
             Conflicts::empty(),
             vec![],
             vec![],
-            resolution.fork_markers.clone(),
+            fork_markers,
         )?;
         Ok(lock)
     }
