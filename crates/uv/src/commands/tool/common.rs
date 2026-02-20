@@ -181,6 +181,7 @@ pub(crate) fn finalize_tool_install(
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
     build_constraints: Vec<Requirement>,
+    system_site_packages: bool,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let executable_directory = uv_tool::tool_executable_dir()?;
@@ -335,6 +336,7 @@ pub(crate) fn finalize_tool_install(
         constraints,
         overrides,
         build_constraints,
+        system_site_packages,
         python,
         installed_entrypoints,
         options.clone(),

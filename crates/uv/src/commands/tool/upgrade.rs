@@ -322,6 +322,8 @@ async fn upgrade_tool(
     let build_constraints =
         Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
 
+    let system_site_packages = *existing_tool_receipt.system_site_packages();
+
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_overrides(
         existing_tool_receipt.requirements().to_vec(),
@@ -360,7 +362,8 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        let environment =
+            installed_tools.create_environment(name, interpreter.clone(), system_site_packages)?;
 
         let environment = sync_environment(
             environment,
@@ -447,6 +450,7 @@ async fn upgrade_tool(
             existing_tool_receipt.constraints().to_vec(),
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
+            *existing_tool_receipt.system_site_packages(),
             printer,
         )?;
     }
