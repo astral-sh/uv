@@ -1,0 +1,143 @@
+---
+source: crates/uv-requirements-txt/src/lib.rs
+expression: actual
+---
+RequirementsTxt {
+    requirements: [],
+    constraints: [],
+    editables: [],
+    index_url: Some(
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "pypi.org",
+                    ),
+                ),
+                port: None,
+                path: "/simple/",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://pypi.org/simple/",
+            ),
+        },
+    ),
+    extra_index_urls: [
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "download.pytorch.org",
+                    ),
+                ),
+                port: None,
+                path: "/whl/cpu",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://download.pytorch.org/whl/cpu",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "example.com",
+                    ),
+                ),
+                port: None,
+                path: "/simple",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://example.com/simple",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "test.pypi.org",
+                    ),
+                ),
+                port: None,
+                path: "/simple/",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://test.pypi.org/simple/",
+            ),
+        },
+    ],
+    find_links: [
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "file",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: None,
+                port: None,
+                path: "/path/with%20spaces/packages",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "file:///path/with spaces/packages",
+            ),
+        },
+        VerbatimUrl {
+            url: DisplaySafeUrl {
+                scheme: "https",
+                cannot_be_a_base: false,
+                username: "",
+                password: None,
+                host: Some(
+                    Domain(
+                        "example.com",
+                    ),
+                ),
+                port: None,
+                path: "/simple",
+                query: None,
+                fragment: None,
+            },
+            given: Some(
+                "https://example.com/simple",
+            ),
+        },
+    ],
+    no_index: false,
+    no_binary: All,
+    only_binary: Packages(
+        [
+            PackageName(
+                "numpy",
+            ),
+            PackageName(
+                "scipy",
+            ),
+        ],
+    ),
+}
