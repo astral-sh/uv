@@ -14209,7 +14209,6 @@ fn install_cross_device() -> anyhow::Result<()> {
     let Some(context) = uv_test::test_context!("3.12").with_cache_on_alt_fs()? else {
         return Ok(());
     };
-    context.venv().assert().success();
 
     uv_snapshot!(context.filters(), context
         .pip_install()
