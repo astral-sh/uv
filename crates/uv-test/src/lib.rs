@@ -571,11 +571,6 @@ impl TestContext {
     }
 
     /// Add filters for the system temporary directory.
-    ///
-    /// pip creates temp directories in the system temp dir (not the test temp dir),
-    /// so the standard `[TEMP_DIR]` filter doesn't catch them. This method uses
-    /// [`Self::path_patterns`] to handle both canonicalized and non-canonicalized
-    /// forms and to normalize path separators across platforms.
     #[must_use]
     pub fn with_filtered_system_tmp(mut self) -> Self {
         self.filters.extend(
@@ -583,6 +578,57 @@ impl TestContext {
                 .into_iter()
                 .map(|pattern| (pattern, "[SYSTEM_TEMP_DIR]/".to_string())),
         );
+        self
+    }
+
+    /// Add filters for non-deterministic pip output (temp directories, progress bars,
+    /// hashes, sizes, platform tags, etc.).
+    #[must_use]
+    pub fn with_filtered_pip_output(mut self) -> Self {
+        self.filters.extend([
+            // pip temp directories with random suffixes
+            (
+                r"pip-build-env-[a-z0-9_]+".to_string(),
+                "pip-build-env-[HASH]".to_string(),
+            ),
+            (
+                r"pip-modern-metadata-[a-z0-9_]+".to_string(),
+                "pip-modern-metadata-[HASH]".to_string(),
+            ),
+            (
+                r"pip-wheel-[a-z0-9_]+".to_string(),
+                "pip-wheel-[HASH]".to_string(),
+            ),
+            (
+                r"pip-ephem-wheel-cache-[a-z0-9_]+".to_string(),
+                "pip-ephem-wheel-cache-[HASH]".to_string(),
+            ),
+            (r"\.tmp-[a-z0-9_]+".to_string(), ".tmp-[HASH]".to_string()),
+            // Download speeds and progress bars
+            (
+                r"[━-]+\s*[\d.]+/[\d.]+ [kKMG]B [\d.]+ [kKMG]B/s eta \d+:\d+:\d+".to_string(),
+                "[PROGRESS]".to_string(),
+            ),
+            (r"[━-]{10,}".to_string(), "[BAR]".to_string()),
+            // Wheel hashes
+            (r"sha256=[a-f0-9]+".to_string(), "sha256=[HASH]".to_string()),
+            // Stored-in-directory cache paths
+            (
+                r"Stored in directory: .+".to_string(),
+                "Stored in directory: [CACHE]".to_string(),
+            ),
+            // Platform tags in bdist paths (e.g., macosx-11.0-arm64, linux-x86_64)
+            (
+                r"bdist\.[a-z0-9._-]+".to_string(),
+                "bdist.[PLATFORM]".to_string(),
+            ),
+            // Normalize redundant `\.\` path components that setuptools may emit on Windows
+            (r"[\\/]\.[\\/]".to_string(), "/".to_string()),
+            // Wheel size
+            (r"size=\d+".to_string(), "size=[SIZE]".to_string()),
+            // setuptools download size in parentheses
+            (r"\(\d+ kB\)".to_string(), "([SIZE] kB)".to_string()),
+        ]);
         self
     }
 
