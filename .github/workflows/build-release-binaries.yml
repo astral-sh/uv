@@ -349,8 +349,11 @@ jobs:
                 if [[ ! -d "/usr/lib64" ]]; then
                     ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
                 else
-                    # Support cross-compiling from 64-bit to 32-bit
-                    yum install -y glibc-devel.i686 libstdc++-devel.i686
+                  # Support cross-compiling from 64-bit to 32-bit
+                  yum install -y glibc-devel.i686 libstdc++-devel.i686 libatomic.i686
+                  if [[ -f "/usr/lib/libatomic.so.1" && ! -f "/usr/lib/libatomic.so" ]]; then
+                    ln -s /usr/lib/libatomic.so.1 /usr/lib/libatomic.so
+                  fi
                 fi
             else
                 # If we're running on debian-based system.
