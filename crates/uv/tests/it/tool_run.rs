@@ -3650,3 +3650,40 @@ async fn tool_run_latest_keyring_auth() {
     Installed 1 executable: app
     ");
 }
+
+/// Run a tool using `--index <name>` to reference an index defined in user config.
+#[test]
+fn tool_run_index_by_name() {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+
+    let uv_dir = context.user_config_dir.child("uv");
+    uv_dir.create_dir_all().unwrap();
+    let user_config = uv_dir.child("uv.toml");
+    user_config
+        .write_str(indoc! {r#"
+            [[index]]
+            name = "proxy"
+            url = "https://pypi-proxy.fly.dev/simple"
+        "#})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--index")
+        .arg("proxy")
+        .arg("pytest")
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+}

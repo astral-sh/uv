@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
 use uv_dirs::{system_config_file, user_config_dir};
+use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
@@ -48,7 +49,7 @@ impl FilesystemOptions {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
                 validate_uv_toml(&file, &options)?;
-                Ok(Some(Self(options)))
+                Ok(Some(Self(options.with_origin(Origin::User))))
             }
             Err(Error::Io(err))
                 if matches!(
@@ -72,7 +73,7 @@ impl FilesystemOptions {
         tracing::debug!("Found system configuration in: `{}`", file.display());
         let options = read_file(&file)?;
         validate_uv_toml(&file, &options)?;
-        Ok(Some(Self(options)))
+        Ok(Some(Self(options.with_origin(Origin::System))))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
@@ -162,7 +163,7 @@ impl FilesystemOptions {
                 let options = options.relative_to(&std::path::absolute(dir)?)?;
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
-                return Ok(Some(Self(options)));
+                return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
