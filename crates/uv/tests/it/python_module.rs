@@ -433,6 +433,8 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         .with_filter((r"Stored in directory: .+", "Stored in directory: [CACHE]"))
         // Platform tags in bdist paths (e.g., macosx-11.0-arm64, linux-x86_64)
         .with_filter((r"bdist\.[a-z0-9._-]+", "bdist.[PLATFORM]"))
+        // Normalize redundant `/./` path components that setuptools may emit on Windows
+        .with_filter((r"/\./", "/"))
         // Wheel size
         .with_filter((r"size=\d+", "size=[SIZE]"))
         // setuptools download size in parentheses
