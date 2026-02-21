@@ -99,14 +99,14 @@ fn python_upgrade_without_version() {
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    // Should be a no-op when no versions have been installed
+    // Should suggest using `uv python install` when no versions are installed
     uv_snapshot!(context.filters(), context.python_upgrade(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    There are no installed versions to upgrade
+    No Python versions are installed. Use `uv python install` to install Python.
     ");
 
     // Install earlier patch versions for different minor versions
