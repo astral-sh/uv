@@ -131,13 +131,20 @@ pub(crate) async fn list(
         }
     }
 
+    let discovery_preference = match python_preference {
+        // For listing, include search-path entries that point to managed interpreters
+        // so `--managed-python` can display managed symlinks too.
+        PythonPreference::OnlyManaged => PythonPreference::Managed,
+        preference => preference,
+    };
+
     let installed =
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
                 Some(find_python_installations(
                 request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
-                python_preference,
+                discovery_preference,
                 cache,
                 preview,
             )
@@ -151,7 +158,14 @@ pub(crate) async fn list(
             .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
             .into_iter()
             // Drop any "missing" installations
-            .filter_map(Result::ok))
+            .filter_map(Result::ok)
+            .filter(|installation| {
+                if matches!(python_preference, PythonPreference::OnlyManaged) {
+                    installation.interpreter().is_managed()
+                } else {
+                    true
+                }
+            }))
             }
             PythonListKinds::Downloads => None,
         };
