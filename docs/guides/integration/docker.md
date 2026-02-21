@@ -336,7 +336,7 @@ ENV UV_COMPILE_BYTECODE=1
 
 ### Caching
 
-A [cache mount](https://docs.docker.com/build/guide/mounts/#add-a-cache-mount) can be used to
+A [cache mount](https://docs.docker.com/build/cache/optimize/#use-cache-mounts) can be used to
 improve performance across builds:
 
 ```dockerfile title="Dockerfile"
@@ -345,6 +345,10 @@ ENV UV_LINK_MODE=copy
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 ```
+
+This will reuse downloaded packages across builds on the same machine, reducing the time taken to
+install dependencies. The cache is only mounted for the duration of the `uv sync` command and is not
+included in the final image, minimising the image size.
 
 Changing the default [`UV_LINK_MODE`](../../reference/settings.md#link-mode) silences warnings about
 not being able to use hard links since the cache and sync target are on separate file systems.
