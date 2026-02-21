@@ -99,7 +99,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461
 
       - name: Check tag consistency
         if: ${{ needs.docker-plan.outputs.push == 'true' }}
@@ -206,7 +206,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
+      - uses: depot/setup-action@15c09a5f77a0840ad4bce955686522a257853461
 
       - name: Generate Dynamic Dockerfile Tags
         shell: bash
