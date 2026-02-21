@@ -966,6 +966,12 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Sync(Box<PipSyncArgs>),
+    /// Use pip index
+    #[command(
+        after_help = "Use `uv help pip index versions` for more details.",
+        after_long_help = ""
+    )]
+    IndexVersions(PipIndexVersionsArgs),
     /// Install packages into an environment.
     #[command(
         after_help = "Use `uv help pip install` for more details.",
@@ -2050,6 +2056,53 @@ pub struct PipSyncArgs {
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
+}
+
+#[derive(Args)]
+pub struct PipIndexVersionsArgs {
+    /// The package to query for
+    #[arg(required = true)]
+    pub package_name: PackageName, // TODO: Other options to follow in future
+
+    #[arg(long)]
+    pub prerelease: bool,
+
+    #[command(flatten)]
+    pub fetch: FetchArgs,
+
+    // Structured JSON output
+    #[arg(long)]
+    pub json: bool,
+
+    /// The Python interpreter that should be checked for the package.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+        value_hint = ValueHint::Other,
+    )]
+    pub python: Option<Maybe<String>>,
+
+    /// List packages in the system Python environment.
+    ///
+    /// Disables discovery of virtual environments.
+    ///
+    /// See `uv help python` for details on Python discovery.
+    #[arg(
+        long,
+        env = EnvVars::UV_SYSTEM_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("no_system")
+    )]
+    pub system: bool,
+
+    #[arg(long, overrides_with("system"), hide = true)]
+    pub no_system: bool,
 }
 
 #[derive(Args)]
