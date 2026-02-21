@@ -8,8 +8,8 @@ use uv_configuration::{
     RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, PackageConfigSettings,
-    PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExtraBuildVariables, FindLinksStrategy, Index, IndexUrl, IndexUrlError,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
@@ -393,6 +393,7 @@ pub struct ResolverOptions {
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
+    pub find_links_strategy: Option<FindLinksStrategy>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
@@ -425,6 +426,7 @@ pub struct ResolverInstallerOptions {
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
+    pub find_links_strategy: Option<FindLinksStrategy>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
@@ -459,6 +461,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             extra_index_url,
             no_index,
             find_links,
+            find_links_strategy,
             index_strategy,
             keyring_provider,
             resolution,
@@ -493,6 +496,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             extra_index_url,
             no_index,
             find_links,
+            find_links_strategy,
             index_strategy,
             keyring_provider,
             resolution,
@@ -677,6 +681,18 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub find_links: Option<Vec<PipFindLinks>>,
+    /// The strategy for ordering find-links (flat indexes) relative to regular indexes.
+    ///
+    /// By default, find-links are searched after regular indexes (`last`). Use `first` to search
+    /// find-links before regular indexes.
+    #[option(
+        default = "\"last\"",
+        value_type = "str",
+        example = r#"
+            find-links-strategy = "first"
+        "#
+    )]
+    pub find_links_strategy: Option<FindLinksStrategy>,
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
@@ -1250,6 +1266,18 @@ pub struct PipOptions {
         "#
     )]
     pub find_links: Option<Vec<PipFindLinks>>,
+    /// The strategy for ordering find-links (flat indexes) relative to regular indexes.
+    ///
+    /// By default, find-links are searched after regular indexes (`last`). Use `first` to search
+    /// find-links before regular indexes.
+    #[option(
+        default = "\"last\"",
+        value_type = "str",
+        example = r#"
+            find-links-strategy = "first"
+        "#
+    )]
+    pub find_links_strategy: Option<FindLinksStrategy>,
     /// The strategy to use when resolving against multiple index URLs.
     ///
     /// By default, uv will stop at the first index on which a given package is available, and
@@ -1946,6 +1974,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
             find_links: value.find_links,
+            find_links_strategy: value.find_links_strategy,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
@@ -2046,6 +2075,7 @@ pub struct ToolOptions {
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
     pub find_links: Option<Vec<PipFindLinks>>,
+    pub find_links_strategy: Option<FindLinksStrategy>,
     pub index_strategy: Option<IndexStrategy>,
     pub keyring_provider: Option<KeyringProviderType>,
     pub resolution: Option<ResolutionMode>,
@@ -2078,6 +2108,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
             find_links: value.find_links,
+            find_links_strategy: value.find_links_strategy,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
@@ -2112,6 +2143,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
             find_links: value.find_links,
+            find_links_strategy: value.find_links_strategy,
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             resolution: value.resolution,
@@ -2166,6 +2198,7 @@ pub struct OptionsWire {
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
     find_links: Option<Vec<PipFindLinks>>,
+    find_links_strategy: Option<FindLinksStrategy>,
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
     http_proxy: Option<ProxyUrl>,
@@ -2265,6 +2298,7 @@ impl From<OptionsWire> for Options {
             extra_index_url,
             no_index,
             find_links,
+            find_links_strategy,
             index_strategy,
             keyring_provider,
             http_proxy,
@@ -2345,6 +2379,7 @@ impl From<OptionsWire> for Options {
                 extra_index_url,
                 no_index,
                 find_links,
+                find_links_strategy,
                 index_strategy,
                 keyring_provider,
                 resolution,

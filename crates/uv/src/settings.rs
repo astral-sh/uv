@@ -37,8 +37,8 @@ use uv_configuration::{
     TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings, Requirement,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, FindLinksStrategy, Index,
+    IndexLocations, IndexUrl, PackageConfigSettings, Requirement,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -3512,6 +3512,7 @@ impl From<ResolverOptions> for ResolverSettings {
                 .map(Index::from)
                 .collect(),
             value.no_index.unwrap_or_default(),
+            value.find_links_strategy.unwrap_or_default(),
         );
         Self {
             index_locations,
@@ -3590,6 +3591,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 .map(Index::from)
                 .collect(),
             value.no_index.unwrap_or_default(),
+            value.find_links_strategy.unwrap_or_default(),
         );
         Self {
             resolver: ResolverSettings {
@@ -3721,6 +3723,7 @@ impl PipSettings {
             extra_index_url,
             no_index,
             find_links,
+            find_links_strategy,
             index_strategy,
             torch_backend,
             keyring_provider,
@@ -3781,6 +3784,7 @@ impl PipSettings {
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,
             find_links: top_level_find_links,
+            find_links_strategy: top_level_find_links_strategy,
             index_strategy: top_level_index_strategy,
             keyring_provider: top_level_keyring_provider,
             resolution: top_level_resolution,
@@ -3819,6 +3823,7 @@ impl PipSettings {
         let index_url = index_url.combine(top_level_index_url);
         let extra_index_url = extra_index_url.combine(top_level_extra_index_url);
         let find_links = find_links.combine(top_level_find_links);
+        let find_links_strategy = find_links_strategy.combine(top_level_find_links_strategy);
         let index_strategy = index_strategy.combine(top_level_index_strategy);
         let keyring_provider = keyring_provider.combine(top_level_keyring_provider);
         let resolution = resolution.combine(top_level_resolution);
@@ -3871,6 +3876,9 @@ impl PipSettings {
                     .map(Index::from)
                     .collect(),
                 args.no_index.combine(no_index).unwrap_or_default(),
+                args.find_links_strategy
+                    .combine(find_links_strategy)
+                    .unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
                 args.extra.combine(extra).unwrap_or_default(),
@@ -4162,6 +4170,7 @@ impl PublishSettings {
                     .collect(),
                 Vec::new(),
                 false,
+                FindLinksStrategy::default(),
             ),
         }
     }

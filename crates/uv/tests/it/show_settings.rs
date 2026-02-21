@@ -153,6 +153,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -359,6 +360,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -566,6 +568,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -805,6 +808,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -979,6 +983,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -1197,6 +1202,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -1463,6 +1469,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -1739,6 +1746,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -1970,6 +1978,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                     },
                 ],
                 no_index: true,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -2166,6 +2175,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -2422,6 +2432,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -2661,6 +2672,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -2856,6 +2868,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -3035,6 +3048,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -3214,6 +3228,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -3395,6 +3410,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -3594,6 +3610,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             extra_index_url: None,
             no_index: None,
             find_links: None,
+            find_links_strategy: None,
             index_strategy: None,
             keyring_provider: None,
             resolution: Some(
@@ -3649,6 +3666,7 @@ fn resolve_tool() -> anyhow::Result<()> {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -3790,6 +3808,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -4037,6 +4056,7 @@ fn resolve_both() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -4289,6 +4309,7 @@ fn resolve_both_special_fields() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -4620,6 +4641,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -4746,7 +4768,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `find-links-strategy`, `index-strategy`, `keyring-provider`, `http-proxy`, `https-proxy`, `no-proxy`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `config-settings-package`, `no-build-isolation`, `no-build-isolation-package`, `extra-build-dependencies`, `extra-build-variables`, `exclude-newer`, `exclude-newer-package`, `link-mode`, `compile-bytecode`, `no-sources`, `no-sources-package`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `torch-backend`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `add-bounds`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dependency-groups`, `dev-dependencies`, `build-backend`
     "
     );
 
@@ -4892,6 +4914,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -5074,6 +5097,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -5275,6 +5299,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -5537,6 +5562,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -5778,6 +5804,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -6025,6 +6052,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -6267,6 +6295,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -6516,6 +6545,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -6758,6 +6788,7 @@ fn index_priority() -> anyhow::Result<()> {
                 ],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -6944,6 +6975,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -7116,6 +7148,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -7286,6 +7319,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -7458,6 +7492,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -7628,6 +7663,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -7799,6 +7835,7 @@ fn verify_hashes() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -8034,6 +8071,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8152,6 +8190,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8297,6 +8336,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8418,6 +8458,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8539,6 +8580,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8659,6 +8701,7 @@ fn preview_features() {
                     indexes: [],
                     flat_index: [],
                     no_index: false,
+                    find_links_strategy: Merge,
                 },
                 index_strategy: FirstIndex,
                 keyring_provider: Disabled,
@@ -8776,6 +8819,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -8956,6 +9000,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -9159,6 +9204,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -9337,6 +9383,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -9509,6 +9556,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -9682,6 +9730,7 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -9935,6 +9984,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10058,6 +10108,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10204,6 +10255,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10325,6 +10377,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10436,6 +10489,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10548,6 +10602,7 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
@@ -10709,6 +10764,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {
@@ -10884,6 +10940,7 @@ fn build_isolation_override() -> anyhow::Result<()> {
                 indexes: [],
                 flat_index: [],
                 no_index: false,
+                find_links_strategy: Merge,
             },
             python: None,
             install_mirrors: PythonInstallMirrors {

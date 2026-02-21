@@ -22,7 +22,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    FindLinksStrategy, Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -260,6 +260,7 @@ impl BuildContext for BuildDispatch<'_> {
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
+            FindLinksStrategy::default(),
             &self.shared_state.index,
             self.hasher,
             self,

@@ -20,13 +20,14 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, Excludes, IndexStrategy, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
-    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef, implied_markers,
+    FindLinksStrategy, IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities,
+    IndexLocations, IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind,
+    RemoteSource, Requirement, ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    implied_markers,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -171,15 +172,26 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         conflicts: Conflicts,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
+        find_links_strategy: FindLinksStrategy,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
         build_context: &'a Context,
         installed_packages: InstalledPackages,
         database: DistributionDatabase<'a, Context>,
     ) -> Result<Self, ResolveError> {
+        if find_links_strategy != FindLinksStrategy::default()
+            && options.index_strategy == IndexStrategy::UnsafeBestMatch
+        {
+            warn_user_once!(
+                "`--find-links-strategy {find_links_strategy}` has no effect with `--index-strategy unsafe-best-match`, \
+                 which always merges versions across all sources"
+            );
+        }
+
         let provider = DefaultResolverProvider::new(
             database,
             flat_index,
+            find_links_strategy,
             tags,
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),

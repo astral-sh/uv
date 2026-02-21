@@ -6851,6 +6851,231 @@ fn already_installed_remote_url() {
     ");
 }
 
+/// With `--find-links-strategy first`, find-links is checked before regular indexes.
+/// If the package is found in find-links, regular indexes are not queried.
+#[test]
+fn find_links_strategy_first() {
+    let context = TestContext::new("3.12");
+
+    // `ok` only exists in find-links, not on PyPI. With `first`, find-links is checked
+    // before the index, so this resolves without ever querying PyPI.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("ok>=2")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("first"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy first`, packages not in find-links are resolved from the index.
+#[test]
+fn find_links_strategy_first_falls_back_to_index() {
+    let context = TestContext::new("3.12");
+
+    // `iniconfig` is not in find-links. The find-links VersionMap is prepended but empty
+    // for this package, so the resolver falls through to the PyPI VersionMap.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("iniconfig")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("first"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy first`, a package found in find-links is used exclusively,
+/// even when a different version exists on the index.
+#[test]
+fn find_links_strategy_first_prefers_find_links() {
+    let context = TestContext::new("3.12");
+
+    // `tqdm` exists on PyPI (real versions) and in find-links (v1000.0.0).
+    // With `first`, find-links is checked first and the index is never queried,
+    // so we get the find-links version.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("first"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy last`, regular indexes are searched first.
+/// Find-links is only used as a fallback if the package is not found in any index.
+#[test]
+fn find_links_strategy_last() {
+    let context = TestContext::new("3.12");
+
+    // `tqdm` exists on PyPI and in find-links (v1000.0.0). With `last`, the index is
+    // searched first and find-links is a separate, lower-priority fallback. Since PyPI
+    // has `tqdm`, the resolver picks the real PyPI version, not the find-links v1000.0.0.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("last"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.66.2
+    "
+    );
+}
+
+/// With `--find-links-strategy last`, packages only in find-links still resolve.
+#[test]
+fn find_links_strategy_last_fallback() {
+    let context = TestContext::new("3.12");
+
+    // `ok` only exists in find-links. With `last`, the index is searched first (no results),
+    // then find-links is used as a fallback.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("ok>=2")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("last"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==2.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy merge` (or the default), find-links distributions are merged
+/// into index responses, so they compete alongside index versions during resolution.
+#[test]
+fn find_links_strategy_merge() {
+    let context = TestContext::new("3.12");
+
+    // `tqdm` exists on PyPI and in find-links (v1000.0.0). With `merge` (the default),
+    // find-links versions are merged into the index response, and v1000.0.0 wins as the
+    // highest version.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("merge"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy last` and `--index-strategy unsafe-best-match`, versions from
+/// all sources (indexes and find-links) compete together. The find-links v1000.0.0 wins as
+/// the highest version, unlike `last` with the default `first-index` strategy where PyPI wins.
+#[test]
+fn find_links_strategy_last_unsafe_best_match() {
+    let context = TestContext::new("3.12");
+
+    // With `first-index` (default), `last` means PyPI is checked first and wins.
+    // But with `unsafe-best-match`, all version maps are merged and the highest
+    // version across all sources wins — so find-links v1000.0.0 is selected.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("last")
+        .arg("--index-strategy")
+        .arg("unsafe-best-match"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--find-links-strategy last` has no effect with `--index-strategy unsafe-best-match`, which always merges versions across all sources
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+}
+
+/// With `--find-links-strategy first` and `--index-strategy unsafe-best-match`, versions from
+/// all sources compete together. This is the same result as `first` with `first-index`, but
+/// for a different reason: `first-index` picks from the first map with any match (find-links),
+/// while `unsafe-best-match` picks the highest version across all maps (also find-links).
+#[test]
+fn find_links_strategy_first_unsafe_best_match() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links/"))
+        .arg("--find-links-strategy")
+        .arg("first")
+        .arg("--index-strategy")
+        .arg("unsafe-best-match"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--find-links-strategy first` has no effect with `--index-strategy unsafe-best-match`, which always merges versions across all sources
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+}
+
 /// Sync using `--find-links` with a local directory.
 #[test]
 fn find_links() {
