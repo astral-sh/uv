@@ -880,7 +880,7 @@ pub struct ResolverInstallerSchema {
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -888,7 +888,7 @@ pub struct ResolverInstallerSchema {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"
@@ -1747,7 +1747,7 @@ pub struct PipOptions {
     pub annotation_style: Option<AnnotationStyle>,
     /// The method to use when installing packages from the global cache.
     ///
-    /// Defaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and
+    /// Defaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on
     /// Windows.
     ///
     /// WARNING: The use of symlink link mode is discouraged, as they create tight coupling between
@@ -1755,7 +1755,7 @@ pub struct PipOptions {
     /// will break all installed packages by way of removing the underlying source files. Use
     /// symlinks with caution.
     #[option(
-        default = "\"clone\" (macOS) or \"hardlink\" (Linux, Windows)",
+        default = "\"clone\" (macOS, Linux) or \"hardlink\" (Windows)",
         value_type = "str",
         example = r#"
             link-mode = "copy"

@@ -166,6 +166,11 @@ pub struct TestContext {
 
     #[allow(dead_code)]
     _root: tempfile::TempDir,
+
+    /// Extra temporary directories whose lifetimes are tied to this context (e.g., directories
+    /// on alternate filesystems created by [`TestContext::with_cache_on_cow_fs`]).
+    #[allow(dead_code)]
+    _extra_tempdirs: Vec<tempfile::TempDir>,
 }
 
 impl TestContext {
@@ -684,6 +689,115 @@ impl TestContext {
         self
     }
 
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_cow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "COW_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "ALT_FS").map(Some)
+    }
+
+    /// Use a cache directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    pub fn with_cache_on_nocow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_cache_on_fs(&dir, "NOCOW_FS").map(Some)
+    }
+
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_COW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
+    pub fn with_working_dir_on_cow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_COW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_working_dir_on_fs(&dir, "COW_FS").map(Some)
+    }
+
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_ALT_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
+    pub fn with_working_dir_on_alt_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_ALT_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_working_dir_on_fs(&dir, "ALT_FS").map(Some)
+    }
+
+    /// Use a working directory on the filesystem specified by
+    /// [`EnvVars::UV_INTERNAL__TEST_NOCOW_FS`].
+    ///
+    /// Returns `Ok(None)` if the environment variable is not set.
+    ///
+    /// Note a virtual environment is not created automatically.
+    pub fn with_working_dir_on_nocow_fs(self) -> anyhow::Result<Option<Self>> {
+        let Some(dir) = env::var(EnvVars::UV_INTERNAL__TEST_NOCOW_FS).ok() else {
+            return Ok(None);
+        };
+        self.with_working_dir_on_fs(&dir, "NOCOW_FS").map(Some)
+    }
+
+    fn with_cache_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
+        fs_err::create_dir_all(dir)?;
+        let tmp = tempfile::TempDir::new_in(dir)?;
+        self.cache_dir = ChildPath::new(tmp.path()).child("cache");
+        fs_err::create_dir_all(&self.cache_dir)?;
+        let replacement = format!("[{name}]/[CACHE_DIR]/");
+        self.filters.extend(
+            Self::path_patterns(&self.cache_dir)
+                .into_iter()
+                .map(|pattern| (pattern, replacement.clone())),
+        );
+        self._extra_tempdirs.push(tmp);
+        Ok(self)
+    }
+
+    fn with_working_dir_on_fs(mut self, dir: &str, name: &str) -> anyhow::Result<Self> {
+        fs_err::create_dir_all(dir)?;
+        let tmp = tempfile::TempDir::new_in(dir)?;
+        self.temp_dir = ChildPath::new(tmp.path()).child("temp");
+        fs_err::create_dir_all(&self.temp_dir)?;
+        self.venv = ChildPath::new(tmp.path().canonicalize()?.join(".venv"));
+        let temp_replacement = format!("[{name}]/[TEMP_DIR]/");
+        self.filters.extend(
+            Self::path_patterns(&self.temp_dir)
+                .into_iter()
+                .map(|pattern| (pattern, temp_replacement.clone())),
+        );
+        let venv_replacement = format!("[{name}]/[VENV]/");
+        self.filters.extend(
+            Self::path_patterns(&self.venv)
+                .into_iter()
+                .map(|pattern| (pattern, venv_replacement.clone())),
+        );
+        self._extra_tempdirs.push(tmp);
+        Ok(self)
+    }
+
     /// Default to the canonicalized path to the temp directory. We need to do this because on
     /// macOS (and Windows on GitHub Actions) the standard temp dir is a symlink. (On macOS, the
     /// temporary directory is, like `/var/...`, which resolves to `/private/var/...`.)
@@ -980,6 +1094,7 @@ impl TestContext {
             filters,
             extra_env: vec![],
             _root: root,
+            _extra_tempdirs: vec![],
         }
     }
 
