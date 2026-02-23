@@ -65,11 +65,28 @@ enum Event {
     Limit(#[allow(dead_code)] String),
 }
 
+/// The type of a version range in an OSV vulnerability record.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+enum RangeType {
+    /// The versions in events are SemVer 2.0 versions.
+    Semver,
+    /// The versions in events are ecosystem-specific.
+    /// In our context, this means they're PEP 440 versions.
+    Ecosystem,
+    /// The versions in events are full-length Git SHAs.
+    Git,
+    /// Some other range type. We don't expect these in OSV v1 records,
+    /// but we include it for forward compatibility.
+    #[serde(other)]
+    Other,
+}
+
 /// Version range for affected packages.
 #[derive(Debug, Clone, Deserialize)]
 struct Range {
     #[serde(rename = "type")]
-    range_type: String,
+    range_type: RangeType,
     events: Vec<Event>,
 }
 
@@ -206,7 +223,7 @@ impl Osv {
                 affected_list.iter().find_map(|affected| {
                     affected.ranges.as_ref().and_then(|ranges| {
                         ranges.iter().find_map(|range| {
-                            (range.range_type == "ECOSYSTEM")
+                            (matches!(range.range_type, RangeType::Ecosystem))
                                 .then(|| {
                                     range.events.iter().find_map(|event| {
                                         // TODO: Warn on a malformed version string rather than silently skipping it.
@@ -259,6 +276,7 @@ mod tests {
     use uv_pep440::Version;
 
     use crate::service::VulnerabilityService;
+    use crate::service::osv::RangeType;
     use crate::types::Dependency;
     use crate::types::Finding;
 
@@ -288,6 +306,30 @@ mod tests {
             ),
         ]
         "#);
+    }
+
+    #[test]
+    fn test_deserialize_rangetype() {
+        let json = r#"[
+          "SEMVER",
+          "ECOSYSTEM",
+          "GIT",
+          "OTHER",
+          "UNKNOWN_TYPE"
+        ]"#;
+
+        let types: Vec<RangeType> =
+            serde_json::from_str(json).expect("Failed to deserialize range types");
+
+        insta::assert_debug_snapshot!(types, @"
+        [
+            Semver,
+            Ecosystem,
+            Git,
+            Other,
+            Other,
+        ]
+        ");
     }
 
     /// Ensure that we can query and receive a known vulnerability from the OSV API.
