@@ -24,8 +24,8 @@ const API_BASE: &str = "https://api.osv.dev/";
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// An error during an HTTP request, including middleware errors.
-    #[error("HTTP request failed: {0}")]
-    Request(#[from] reqwest_middleware::Error),
+    #[error(transparent)]
+    ReqwestMiddleware(#[from] reqwest_middleware::Error),
     /// An error when parsing the OSV API response.
     #[error("Invalid OSV API response: {0}")]
     Api(#[from] serde_json::Error),
