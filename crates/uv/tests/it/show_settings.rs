@@ -1,5 +1,8 @@
 use std::process::Command;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use assert_fs::prelude::*;
 use uv_static::EnvVars;
 
@@ -10986,6 +10989,114 @@ fn build_isolation_override() -> anyhow::Result<()> {
 
     ----- stderr -----
     "#);
+
+    Ok(())
+}
+
+/// Skip configuration in parent directory when permissions are denied.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+#[cfg(unix)]
+fn resolve_permission_denied() -> anyhow::Result<()> {
+    // RAII guard to ensure permissions are restored even if the test fails or panics.
+    struct PermissionGuard<'a> {
+        path: &'a std::path::Path,
+        should_restore: bool,
+    }
+
+    impl Drop for PermissionGuard<'_> {
+        fn drop(&mut self) {
+            if self.should_restore {
+                let _ = fs_err::set_permissions(self.path, std::fs::Permissions::from_mode(0o755));
+            }
+        }
+    }
+
+    let context = TestContext::new("3.12");
+
+    // Create a parent directory with a `uv.toml` file that sets a non-default resolution.
+    let parent = context.temp_dir.child("parent");
+    fs_err::create_dir(&parent)?;
+    let config = parent.child("uv.toml");
+    config.write_str(indoc::indoc! {r#"
+        [pip]
+        resolution = "lowest-direct"
+        index-url = "https://test.pypi.org/simple"
+    "#})?;
+
+    // Create a child directory to run the command from.
+    let child = parent.child("child");
+    fs_err::create_dir(&child)?;
+    let requirements_in = child.child("requirements.in");
+    requirements_in.write_str("anyio>3.0.0")?;
+
+    // Test 1: Normal permissions - should find and use parent config.
+    let result = context
+        .pip_compile()
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .current_dir(&child)
+        .output()?;
+    assert!(result.status.success());
+    let stdout = std::str::from_utf8(&result.stdout)?;
+    // Should contain the parent config's resolution.
+    assert!(stdout.contains("resolution: LowestDirect"));
+    assert!(stdout.contains("test.pypi.org"));
+
+    // Test 2: Permission denied - should gracefully skip parent config.
+    // Try to remove read permissions from the config file itself (more targeted approach)
+    let permission_denied_setup =
+        fs_err::set_permissions(config.path(), std::fs::Permissions::from_mode(0o000)).is_ok();
+
+    let _guard = PermissionGuard {
+        path: config.path(),
+        should_restore: permission_denied_setup,
+    };
+
+    let result = context
+        .pip_compile()
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .current_dir(&child)
+        .output()?;
+
+    assert!(result.status.success());
+    let stdout = std::str::from_utf8(&result.stdout)?;
+    let stderr = std::str::from_utf8(&result.stderr)?;
+
+    // Should use default resolution (not parent config) if permissions were denied.
+    if permission_denied_setup {
+        assert!(stdout.contains("resolution: Highest"));
+        assert!(!stdout.contains("test.pypi.org"));
+
+        // Should warn about permission denied (it's an error condition).
+        assert!(stderr.contains("Permission denied while reading workspace configuration"));
+        assert!(stderr.contains("continuing search"));
+    } else {
+        // If we couldn't set permissions, the test behaves like normal case
+        assert!(stdout.contains("resolution: LowestDirect"));
+        assert!(stdout.contains("test.pypi.org"));
+        assert!(!stderr.contains("Permission denied"));
+    }
+
+    // Test 3: UV_NO_CONFIG - should skip all config discovery silently.
+    let result = context
+        .pip_compile()
+        .arg("--show-settings")
+        .arg("requirements.in")
+        .arg("--no-config")
+        .current_dir(&child)
+        .output()?;
+
+    assert!(result.status.success());
+    let stdout = std::str::from_utf8(&result.stdout)?;
+    let stderr = std::str::from_utf8(&result.stderr)?;
+    assert!(stdout.contains("resolution: Highest"));
+    assert!(!stdout.contains("test.pypi.org"));
+    assert!(!stderr.contains("Permission denied")); // UV_NO_CONFIG is silent
 
     Ok(())
 }
