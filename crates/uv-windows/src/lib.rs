@@ -5,12 +5,14 @@
 
 #![cfg(windows)]
 
-mod ctrl_handler;
+mod ctrl_c;
 mod job;
 #[cfg(feature = "std")]
 mod spawn;
 
-pub use ctrl_handler::{CtrlHandlerError, install_ctrl_handler};
+#[cfg(feature = "std")]
+pub use ctrl_c::on_ctrl_c;
+pub use ctrl_c::{CtrlCError, ignore_ctrl_c};
 pub use job::{Job, JobError};
 #[cfg(feature = "std")]
 pub use spawn::spawn_child;

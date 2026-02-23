@@ -56,6 +56,7 @@ uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
+uv-sys = { workspace = true }
 uv-test = { workspace = true, optional = true }
 uv-tool = { workspace = true }
 uv-torch = { workspace = true }
@@ -74,7 +75,6 @@ axoupdater = { workspace = true, features = [
 ], optional = true }
 clap = { workspace = true, features = ["derive", "string", "wrap_help"] }
 console = { workspace = true }
-ctrlc = { workspace = true }
 diskus = { workspace = true }
 dotenvy = { workspace = true }
 dunce = { workspace = true }

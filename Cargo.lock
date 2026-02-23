@@ -571,15 +571,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block2"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
-dependencies = [
- "objc2",
-]
-
-[[package]]
 name = "boxcar"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -877,7 +868,7 @@ dependencies = [
  "getrandom 0.2.16",
  "glob",
  "libc",
- "nix 0.30.1",
+ "nix",
  "serde",
  "serde_json",
  "statrs",
@@ -1163,17 +1154,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ctrlc"
-version = "3.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
-dependencies = [
- "dispatch2",
- "nix 0.31.1",
- "windows-sys 0.61.0",
-]
-
-[[package]]
 name = "cyclonedx-bom"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1339,18 +1319,6 @@ checksum = "ec07379c016f78e7ddcd953663b9ed17928ff384928d34d824ed7e463bd3d908"
 dependencies = [
  "crossbeam-channel",
  "rayon",
-]
-
-[[package]]
-name = "dispatch2"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89a09f22a6c6069a18470eb92d2298acf25463f14256d24778e1230d789a2aec"
-dependencies = [
- "bitflags 2.11.0",
- "block2",
- "libc",
- "objc2",
 ]
 
 [[package]]
@@ -1994,7 +1962,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68df315d2857b2d8d2898be54a85e1d001bbbe0dbb5f8ef847b48dd3a23c4527"
 dependencies = [
  "cfg-if",
- "nix 0.30.1",
+ "nix",
  "widestring",
  "windows",
 ]
@@ -2833,18 +2801,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nix"
-version = "0.31.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
-dependencies = [
- "bitflags 2.11.0",
- "cfg-if",
- "cfg_aliases",
- "libc",
-]
-
-[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2974,21 +2930,6 @@ dependencies = [
  "hermit-abi",
  "libc",
 ]
-
-[[package]]
-name = "objc2"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7c2599ce0ec54857b29ce62166b0ed9b4f6f1a70ccc9a71165b6154caca8c05"
-dependencies = [
- "objc2-encode",
-]
-
-[[package]]
-name = "objc2-encode"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33"
 
 [[package]]
 name = "oid-registry"
@@ -5702,7 +5643,6 @@ dependencies = [
  "bytes",
  "clap",
  "console 0.16.2",
- "ctrlc",
  "diskus",
  "dotenvy",
  "dunce",
@@ -5722,7 +5662,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "miette",
- "nix 0.30.1",
+ "nix",
  "open",
  "owo-colors",
  "petgraph",
@@ -5792,6 +5732,7 @@ dependencies = [
  "uv-settings",
  "uv-shell",
  "uv-static",
+ "uv-sys",
  "uv-test",
  "uv-tool",
  "uv-torch",
@@ -7111,7 +7052,7 @@ version = "0.0.24"
 dependencies = [
  "anyhow",
  "fs-err",
- "nix 0.30.1",
+ "nix",
  "same-file",
  "temp-env",
  "tempfile",
@@ -7147,6 +7088,15 @@ version = "0.0.24"
 dependencies = [
  "thiserror 2.0.18",
  "uv-macros",
+]
+
+[[package]]
+name = "uv-sys"
+version = "0.0.24"
+dependencies = [
+ "nix",
+ "uv-unix",
+ "uv-windows",
 ]
 
 [[package]]
@@ -7270,7 +7220,7 @@ dependencies = [
 name = "uv-unix"
 version = "0.0.24"
 dependencies = [
- "nix 0.30.1",
+ "nix",
  "thiserror 2.0.18",
 ]
 
@@ -8143,7 +8093,7 @@ dependencies = [
  "futures-core",
  "futures-lite",
  "hex",
- "nix 0.30.1",
+ "nix",
  "ordered-stream",
  "serde",
  "serde_repr",

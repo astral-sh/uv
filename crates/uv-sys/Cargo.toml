@@ -1,0 +1,25 @@
+[package]
+name = "uv-sys"
+version = "0.0.24"
+description = "Platform-agnostic system interfaces for uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[target.'cfg(unix)'.dependencies]
+uv-unix = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+uv-windows = { workspace = true }
