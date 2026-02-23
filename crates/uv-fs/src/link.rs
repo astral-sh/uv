@@ -12,9 +12,9 @@ use walkdir::WalkDir;
 
 /// The method to use when linking.
 ///
-/// Defaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on
-/// APFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other
-/// platforms.
+/// Defaults to [`Clone`](LinkMode::Clone) on macOS, Linux, and Windows where copy-on-write
+/// filesystems are common (APFS, Btrfs/XFS, ReFS/Dev Drive), falling back through hardlink
+/// to copy as needed. Defaults to [`Hardlink`](LinkMode::Hardlink) on other platforms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(
@@ -41,7 +41,8 @@ impl Default for LinkMode {
         if cfg!(any(
             target_os = "macos",
             target_os = "ios",
-            target_os = "linux"
+            target_os = "linux",
+            target_os = "windows"
         )) {
             Self::Clone
         } else {
