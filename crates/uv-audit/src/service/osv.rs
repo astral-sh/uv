@@ -78,6 +78,9 @@ enum RangeType {
     Git,
     /// Some other range type. We don't expect these in OSV v1 records,
     /// but we include it for forward compatibility.
+    /// NOTE: In principle we could use `untagged` here and capture the unknown
+    /// type, but there's no value at the moment to doing this (since our processing
+    /// of OSV records is limited to just ECOSYSTEM ranges).
     #[serde(other)]
     Other,
 }
