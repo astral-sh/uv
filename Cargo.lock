@@ -5739,7 +5739,6 @@ name = "uv-audit"
 version = "0.1.0"
 dependencies = [
  "astral-reqwest-middleware",
- "async-trait",
  "insta",
  "jiff",
  "reqwest",

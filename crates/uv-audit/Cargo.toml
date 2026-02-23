@@ -22,7 +22,6 @@ uv-normalize = { workspace = true }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
-async-trait = { workspace = true }
 jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }

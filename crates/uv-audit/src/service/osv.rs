@@ -13,10 +13,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-use crate::{
-    service::VulnerabilityService,
-    types::{Dependency, Finding},
-};
+use crate::types::{Dependency, Finding};
 
 const API_BASE: &str = "https://api.osv.dev/";
 
@@ -146,11 +143,21 @@ impl Default for Osv {
     }
 }
 
-#[async_trait::async_trait]
-impl VulnerabilityService for Osv {
-    type Error = Error;
+impl Osv {
+    /// Create a new OSV client with the given HTTP client and optional base URL.
+    ///
+    /// If no base URL is provided, the client will default to the official OSV API endpoint.
+    pub fn new(client: ClientWithMiddleware, base_url: Option<DisplaySafeUrl>) -> Self {
+        Self {
+            base_url: base_url.unwrap_or_else(|| {
+                DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid")
+            }),
+            client,
+        }
+    }
 
-    async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Self::Error> {
+    /// Query OSV for vulnerabilities affecting the given dependency.
+    pub async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Error> {
         let mut all_vulnerabilities = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -196,20 +203,6 @@ impl VulnerabilityService for Osv {
             .collect::<Vec<_>>();
 
         Ok(findings)
-    }
-}
-
-impl Osv {
-    /// Create a new OSV client with the given HTTP client and optional base URL.
-    ///
-    /// If no base URL is provided, the client will default to the official OSV API endpoint.
-    pub fn new(client: ClientWithMiddleware, base_url: Option<DisplaySafeUrl>) -> Self {
-        Self {
-            base_url: base_url.unwrap_or_else(|| {
-                DisplaySafeUrl::parse(API_BASE).expect("impossible: embedded URL is invalid")
-            }),
-            client,
-        }
     }
 
     /// Convert an OSV Vulnerability record to a Finding.
@@ -268,7 +261,6 @@ mod tests {
     use wiremock::matchers::{body_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::service::VulnerabilityService;
     use crate::service::osv::RangeType;
     use crate::types::{Dependency, Finding};
 
@@ -492,129 +484,6 @@ mod tests {
             ),
             modified: Some(
                 2026-02-11T15:58:46.005582Z,
-            ),
-        }
-        "#);
-    }
-
-    /// Ensure that we can query a batch of packages and receive known vulnerabilities.
-    #[cfg(feature = "test-osv")]
-    #[tokio::test]
-    async fn test_query_batch() {
-        let osv = Osv::default();
-
-        // Set up two dependencies with known vulnerabilities
-        let cryptography_package = PackageName::from_str("cryptography").unwrap();
-        let cryptography_version = Version::from_str("46.0.4").unwrap();
-        let cryptography_dep = Dependency::new(cryptography_package, cryptography_version);
-
-        let requests_package = PackageName::from_str("requests").unwrap();
-        let requests_version = Version::from_str("2.32.3").unwrap();
-        let requests_dep = Dependency::new(requests_package, requests_version);
-
-        let dependencies = vec![cryptography_dep.clone(), requests_dep.clone()];
-
-        let results = osv.query_batch(&dependencies).await.unwrap();
-
-        // Verify we got results for both packages
-        assert_eq!(results.len(), 2, "Expected results for both packages");
-
-        // Check cryptography findings
-        let cryptography_findings: Vec<_> = results
-            .iter()
-            .filter(|finding| match finding {
-                Finding::ProjectStatus { .. } => false,
-                Finding::Vulnerability { dependency, .. } => dependency == &cryptography_dep,
-            })
-            .collect();
-        assert!(
-            !cryptography_findings.is_empty(),
-            "Expected to find at least one vulnerability for cryptography"
-        );
-
-        let cryptography_finding = cryptography_findings
-            .iter()
-            .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-r6ph-v2qm-q3c2",
-                Finding::ProjectStatus { .. } => false,
-            })
-            .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability for cryptography");
-
-        insta::assert_debug_snapshot!(cryptography_finding, @r#"
-        Vulnerability {
-            dependency: Dependency {
-                name: PackageName(
-                    "cryptography",
-                ),
-                version: "46.0.4",
-            },
-            id: VulnerabilityID(
-                "GHSA-r6ph-v2qm-q3c2",
-            ),
-            description: "cryptography Vulnerable to a Subgroup Attack Due to Missing Subgroup Validation for SECT Curves",
-            fix_versions: [
-                "46.0.5",
-            ],
-            aliases: [
-                VulnerabilityID(
-                    "CVE-2026-26007",
-                ),
-            ],
-            published: Some(
-                2026-02-10T21:27:06Z,
-            ),
-            modified: Some(
-                2026-02-11T15:58:46.005582Z,
-            ),
-        }
-        "#);
-
-        // Check requests findings
-        let requests_findings: Vec<_> = results
-            .iter()
-            .filter(|finding| match finding {
-                Finding::ProjectStatus { .. } => false,
-                Finding::Vulnerability { dependency, .. } => dependency == &requests_dep,
-            })
-            .collect();
-        assert!(
-            !requests_findings.is_empty(),
-            "Expected to find at least one vulnerability for requests"
-        );
-
-        let requests_finding = requests_findings
-            .iter()
-            .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-9hjg-9r4m-mvj7",
-                Finding::ProjectStatus { .. } => false,
-            })
-            .expect("Expected to find GHSA-9hjg-9r4m-mvj7 vulnerability for requests");
-
-        insta::assert_debug_snapshot!(requests_finding, @r#"
-        Vulnerability {
-            dependency: Dependency {
-                name: PackageName(
-                    "requests",
-                ),
-                version: "2.32.3",
-            },
-            id: VulnerabilityID(
-                "GHSA-9hjg-9r4m-mvj7",
-            ),
-            description: "Requests vulnerable to .netrc credentials leak via malicious URLs",
-            fix_versions: [
-                "2.32.4",
-            ],
-            aliases: [
-                VulnerabilityID(
-                    "CVE-2024-47081",
-                ),
-            ],
-            published: Some(
-                2025-06-09T19:06:08Z,
-            ),
-            modified: Some(
-                2026-02-04T03:44:00.676479Z,
             ),
         }
         "#);
