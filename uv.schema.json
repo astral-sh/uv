@@ -307,7 +307,7 @@
       ]
     },
     "link-mode": {
-      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+      "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
       "anyOf": [
         {
           "$ref": "#/definitions/LinkMode"
@@ -1051,7 +1051,7 @@
       ]
     },
     "LinkMode": {
-      "description": "The method to use when linking.\n\nDefaults to [`Clone`](LinkMode::Clone) on macOS (since APFS supports copy-on-write), and\n[`Hardlink`](LinkMode::Hardlink) on other platforms.",
+      "description": "The method to use when linking.\n\nDefaults to [`Clone`](LinkMode::Clone) on macOS and Linux (which support copy-on-write on\nAPFS and btrfs/xfs/bcachefs respectively), and [`Hardlink`](LinkMode::Hardlink) on other\nplatforms.",
       "oneOf": [
         {
           "description": "Clone (i.e., copy-on-write) packages from the source into the destination.",
@@ -1341,7 +1341,7 @@
           ]
         },
         "link-mode": {
-          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS, and `hardlink` on Linux and\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
+          "description": "The method to use when installing packages from the global cache.\n\nDefaults to `clone` (also known as Copy-on-Write) on macOS and Linux, and `hardlink` on\nWindows.\n\nWARNING: The use of symlink link mode is discouraged, as they create tight coupling between\nthe cache and the target environment. For example, clearing the cache (`uv cache clean`)\nwill break all installed packages by way of removing the underlying source files. Use\nsymlinks with caution.",
           "anyOf": [
             {
               "$ref": "#/definitions/LinkMode"
