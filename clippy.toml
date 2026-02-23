@@ -10,6 +10,7 @@ doc-valid-idents = [
   "XPU",
   "PowerShell",
   "CycloneDX",
+  "SemVer",
   "UV_DEV",
   "UV_FROZEN",
   "UV_ISOLATED",
@@ -28,7 +29,7 @@ doc-valid-idents = [
   "UV_SHOW_RESOLUTION",
   "UV_VENV_CLEAR",
   "UV_VENV_SEED",
-  ".." # Include the defaults
+  "..",                       # Include the defaults
 ]
 
 disallowed-types = [
