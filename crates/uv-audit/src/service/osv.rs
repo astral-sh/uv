@@ -400,9 +400,13 @@ mod tests {
         assert_eq!(results.len(), 2, "Expected results for both packages");
 
         // Check cryptography findings
-        let cryptography_findings = results
-            .get(&cryptography_dep)
-            .expect("Expected findings for cryptography");
+        let cryptography_findings: Vec<_> = results
+            .iter()
+            .filter(|finding| match finding {
+                Finding::ProjectStatus { .. } => false,
+                Finding::Vulnerability { dependency, .. } => dependency == &cryptography_dep,
+            })
+            .collect();
         assert!(
             !cryptography_findings.is_empty(),
             "Expected to find at least one vulnerability for cryptography"
@@ -446,9 +450,13 @@ mod tests {
         "#);
 
         // Check requests findings
-        let requests_findings = results
-            .get(&requests_dep)
-            .expect("Expected findings for requests");
+        let requests_findings: Vec<_> = results
+            .iter()
+            .filter(|finding| match finding {
+                Finding::ProjectStatus { .. } => false,
+                Finding::Vulnerability { dependency, .. } => dependency == &requests_dep,
+            })
+            .collect();
         assert!(
             !requests_findings.is_empty(),
             "Expected to find at least one vulnerability for requests"

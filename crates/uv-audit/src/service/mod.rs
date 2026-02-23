@@ -1,7 +1,6 @@
 //! Vulnerability services.
 
 use crate::types::{Dependency, Finding};
-use indexmap::IndexMap;
 
 pub mod osv;
 
@@ -18,17 +17,11 @@ pub trait VulnerabilityService {
     ///
     /// This is a blanket implementation; individual services can override this with a more efficient
     /// implementation if they support batch queries.
-    async fn query_batch(
-        &self,
-        dependencies: &[Dependency],
-    ) -> Result<IndexMap<Dependency, Vec<Finding>>, Self::Error> {
-        let mut results = IndexMap::new();
+    async fn query_batch(&self, dependencies: &[Dependency]) -> Result<Vec<Finding>, Self::Error> {
+        let mut results = vec![];
         for dependency in dependencies {
             let findings = self.query(dependency).await?;
-            results
-                .entry(dependency.clone())
-                .or_insert_with(Vec::new)
-                .extend(findings);
+            results.extend(findings);
         }
         Ok(results)
     }

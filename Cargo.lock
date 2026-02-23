@@ -5740,7 +5740,6 @@ version = "0.1.0"
 dependencies = [
  "astral-reqwest-middleware",
  "async-trait",
- "indexmap",
  "insta",
  "jiff",
  "reqwest",
