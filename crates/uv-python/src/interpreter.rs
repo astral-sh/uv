@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use nix::sys::utsname::uname;
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
@@ -1073,6 +1075,19 @@ impl InterpreterInfo {
         Ok(())
     }
 
+    #[cfg(unix)]
+    fn uname_machine() -> Option<String> {
+        match uname() {
+            Ok(uts) => uts.machine().to_str().map(str::to_string),
+            Err(_) => None,
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn uname_machine() -> Option<String> {
+        None
+    }
+
     /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
     ///
     /// Running a Python script is (relatively) expensive, and the markers won't change
@@ -1106,12 +1121,15 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
 
+        let uname_machine = Self::uname_machine();
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
             // Shard interpreter metadata by host architecture, operating system, and version, to
-            // invalidate the cache (e.g.) on OS upgrades.
+            // invalidate the cache (e.g.) on OS upgrades. Include `uname -m` so `setarch`
+            // (or similar) can influence marker environments.
             cache_digest(&(
                 ARCH,
+                uname_machine.as_deref().unwrap_or_default(),
                 sys_info::os_type().unwrap_or_default(),
                 sys_info::os_release().unwrap_or_default(),
             )),
