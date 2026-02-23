@@ -93,7 +93,7 @@ mod resolver {
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{
         ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-        IndexLocations, PackageConfigSettings, RequiresPython,
+        FindLinksStrategy, IndexLocations, PackageConfigSettings, RequiresPython,
     };
     use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
@@ -222,6 +222,7 @@ mod resolver {
             conflicts,
             Some(&TAGS),
             &flat_index,
+            FindLinksStrategy::default(),
             &index,
             &hashes,
             &build_context,

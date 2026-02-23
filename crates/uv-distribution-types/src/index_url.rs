@@ -248,6 +248,48 @@ impl Deref for IndexUrl {
     }
 }
 
+/// The strategy for ordering find-links (flat indexes) relative to regular indexes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum FindLinksStrategy {
+    /// Search find-links before regular indexes. If the package is found in find-links,
+    /// the regular indexes are not queried.
+    First,
+    /// Search find-links after regular indexes. If the package is found in a regular index,
+    /// find-links entries are not used.
+    Last,
+    /// Merge find-links distributions into every index response, so they compete alongside
+    /// index versions during resolution (default).
+    #[default]
+    Merge,
+}
+
+impl Display for FindLinksStrategy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::First => write!(f, "first"),
+            Self::Last => write!(f, "last"),
+            Self::Merge => write!(f, "merge"),
+        }
+    }
+}
+
+impl FromStr for FindLinksStrategy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "first" => Ok(Self::First),
+            "last" => Ok(Self::Last),
+            "merge" => Ok(Self::Merge),
+            _ => Err(format!(
+                "invalid find-links strategy: {s} (expected `first`, `last`, or `merge`)"
+            )),
+        }
+    }
+}
+
 /// The index locations to use for fetching packages. By default, uses the PyPI index.
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
@@ -258,15 +300,22 @@ pub struct IndexLocations {
     indexes: Vec<Index>,
     flat_index: Vec<Index>,
     no_index: bool,
+    find_links_strategy: FindLinksStrategy,
 }
 
 impl IndexLocations {
     /// Determine the index URLs to use for fetching packages.
-    pub fn new(indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
+    pub fn new(
+        indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        no_index: bool,
+        find_links_strategy: FindLinksStrategy,
+    ) -> Self {
         Self {
             indexes,
             flat_index,
             no_index,
+            find_links_strategy,
         }
     }
 
@@ -277,11 +326,28 @@ impl IndexLocations {
     ///
     /// If the current index location has an `index` set, it will be preserved.
     #[must_use]
-    pub fn combine(self, indexes: Vec<Index>, flat_index: Vec<Index>, no_index: bool) -> Self {
+    pub fn combine(
+        self,
+        indexes: Vec<Index>,
+        flat_index: Vec<Index>,
+        no_index: bool,
+        find_links_strategy: FindLinksStrategy,
+    ) -> Self {
         Self {
             indexes: self.indexes.into_iter().chain(indexes).collect(),
             flat_index: self.flat_index.into_iter().chain(flat_index).collect(),
             no_index: self.no_index || no_index,
+            // If either side specifies a non-default strategy, prefer it.
+            // If both sides specify non-default strategies, prefer `First` over `Last`.
+            find_links_strategy: match (self.find_links_strategy, find_links_strategy) {
+                (FindLinksStrategy::First, _) | (_, FindLinksStrategy::First) => {
+                    FindLinksStrategy::First
+                }
+                (FindLinksStrategy::Last, _) | (_, FindLinksStrategy::Last) => {
+                    FindLinksStrategy::Last
+                }
+                (FindLinksStrategy::Merge, FindLinksStrategy::Merge) => FindLinksStrategy::Merge,
+            },
         }
     }
 
@@ -374,6 +440,11 @@ impl<'a> IndexLocations {
         self.no_index
     }
 
+    /// Return the `--find-links-strategy` setting.
+    pub fn find_links_strategy(&self) -> FindLinksStrategy {
+        self.find_links_strategy
+    }
+
     /// Clone the index locations into a [`IndexUrls`] instance.
     pub fn index_urls(&'a self) -> IndexUrls {
         IndexUrls {
@@ -397,10 +468,15 @@ impl<'a> IndexLocations {
             let mut seen = FxHashSet::default();
             let mut default = false;
             for index in {
-                self.indexes
-                    .iter()
-                    .chain(self.flat_index.iter())
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
+                match self.find_links_strategy {
+                    FindLinksStrategy::First => {
+                        Either::Left(self.flat_index.iter().chain(self.indexes.iter()))
+                    }
+                    FindLinksStrategy::Last | FindLinksStrategy::Merge => {
+                        Either::Right(self.indexes.iter().chain(self.flat_index.iter()))
+                    }
+                }
+                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
             } {
                 if index.default {
                     if default {
@@ -809,7 +885,8 @@ mod tests {
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations =
+            IndexLocations::new(indexes, Vec::new(), false, FindLinksStrategy::default());
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
@@ -851,7 +928,8 @@ mod tests {
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations =
+            IndexLocations::new(indexes, Vec::new(), false, FindLinksStrategy::default());
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
@@ -893,7 +971,8 @@ mod tests {
         }];
 
         let index_urls = IndexUrls::from_indexes(indexes.clone());
-        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
+        let index_locations =
+            IndexLocations::new(indexes, Vec::new(), false, FindLinksStrategy::default());
 
         let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
 

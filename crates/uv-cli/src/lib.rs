@@ -18,8 +18,8 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{
-    ConfigSettingEntry, ConfigSettingPackageEntry, Index, IndexUrl, Origin, PipExtraIndex,
-    PipFindLinks, PipIndex,
+    ConfigSettingEntry, ConfigSettingPackageEntry, FindLinksStrategy, Index, IndexUrl, Origin,
+    PipExtraIndex, PipFindLinks, PipIndex,
 };
 use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
@@ -6750,6 +6750,15 @@ pub struct IndexArgs {
     /// provided via `--find-links`.
     #[arg(long, help_heading = "Index options")]
     pub no_index: bool,
+
+    /// The strategy for ordering find-links relative to regular indexes.
+    ///
+    /// By default, find-links distributions are merged into index responses (`merge`), so they
+    /// compete alongside index versions during resolution. Use `first` to search find-links
+    /// before regular indexes, or `last` to use find-links only as a fallback when a package
+    /// is not found in any index.
+    #[arg(long, help_heading = "Index options")]
+    pub find_links_strategy: Option<FindLinksStrategy>,
 }
 
 #[derive(Args)]

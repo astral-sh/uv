@@ -314,6 +314,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 extra_index_url,
                 no_index,
                 find_links,
+                find_links_strategy,
                 index_strategy,
                 keyring_provider,
                 resolution,
@@ -435,6 +436,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if find_links.is_some() {
         masked_fields.push("find-links");
+    }
+    if find_links_strategy.is_some() {
+        masked_fields.push("find-links-strategy");
     }
     if index_strategy.is_some() {
         masked_fields.push("index-strategy");
