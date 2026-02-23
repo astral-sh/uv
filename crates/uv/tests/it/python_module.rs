@@ -460,7 +460,7 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
     // Use `pip install` to trigger a real pip build environment.
     // The `-v` flag is required so pip surfaces subprocess stderr (where
     // `setup.py` prints `FOUND_UV=...`).
-    let output = context
+    let result = context
         .tool_run()
         .arg("pip")
         .arg("install")
@@ -472,28 +472,34 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         .arg("--find-links")
         .arg(wheel_dir.path())
         .assert()
-        .success()
-        .get_output()
-        .clone();
+        .success();
 
-    // Extract the FOUND_UV= lines from the combined output and apply filters
-    // so paths are platform-independent.
-    let found_uv_lines: String = String::from_utf8(output.stdout)
-        .unwrap()
+    // Extract the FOUND_UV= lines from stderr (where setup.py prints them).
+    let stderr = String::from_utf8(result.get_output().stderr.clone()).unwrap();
+    let found_uv_lines: String = stderr
         .lines()
-        .chain(String::from_utf8(output.stderr).unwrap().lines())
         .filter(|line| line.contains("FOUND_UV="))
         .map(|line| line.trim())
         .collect::<Vec<_>>()
         .join("\n");
 
-    let snapshot = uv_test::apply_filters(found_uv_lines, &context.filters());
+    assert!(
+        !found_uv_lines.is_empty(),
+        "expected FOUND_UV= in pip output, got:\n{stderr}"
+    );
 
-    insta::assert_snapshot!(snapshot, @"
-    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-    ");
+    let filters = context.filters();
+    let filters: Vec<_> = filters
+        .iter()
+        .map(|filter| (&*filter.0, &*filter.1))
+        .collect();
+    insta::with_settings!({filters => filters}, {
+        insta::assert_snapshot!(found_uv_lines, @"
+        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+        ");
+    });
 
     Ok(())
 }
