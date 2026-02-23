@@ -479,7 +479,7 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
     let found_uv_lines: String = stderr
         .lines()
         .filter(|line| line.contains("FOUND_UV="))
-        .map(|line| line.trim())
+        .map(str::trim)
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -488,18 +488,12 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         "expected FOUND_UV= in pip output, got:\n{stderr}"
     );
 
-    let filters = context.filters();
-    let filters: Vec<_> = filters
-        .iter()
-        .map(|filter| (&*filter.0, &*filter.1))
-        .collect();
-    insta::with_settings!({filters => filters}, {
-        insta::assert_snapshot!(found_uv_lines, @"
-        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-        FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-        ");
-    });
+    let snapshot = uv_test::apply_filters(found_uv_lines, context.filters());
+    insta::assert_snapshot!(snapshot, @"
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    ");
 
     Ok(())
 }
