@@ -1188,7 +1188,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' with value 1000000 is not in the required range of -19998..=19998
+    error: invalid value '1000000 years' for '--exclude-newer <EXCLUDE_NEWER>': `1000000 years` could not be parsed as a duration: failed to parse input in the "friendly" duration format: failed to set value for year unit on span: parameter 'years' is not in the required range of -19998..=19998
 
     For more information, try '--help'.
     "#);
