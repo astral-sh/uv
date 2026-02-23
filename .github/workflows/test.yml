@@ -115,10 +115,10 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - name: "Create HFS+ RAM disk (no reflink support)"
+      - name: "Create HFS+ disk image (no reflink support)"
         run: |
-          RAMDISK=$(hdiutil attach -nomount ram://524288 | xargs)
-          diskutil eraseDisk HFS+ NoReflink "$RAMDISK"
+          hdiutil create -size 256m -fs HFS+ -volname NoReflink /tmp/noreflink.dmg
+          hdiutil attach /tmp/noreflink.dmg
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
 
       - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
