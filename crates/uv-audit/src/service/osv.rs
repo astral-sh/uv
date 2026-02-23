@@ -254,6 +254,7 @@ impl Osv {
 mod tests {
     use std::str::FromStr;
 
+    use reqwest_middleware::ClientWithMiddleware;
     use serde_json::json;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
@@ -325,7 +326,7 @@ mod tests {
         // First request: no page token.
         Mock::given(method("POST"))
             .and(path("/v1/query"))
-            .and(body_json(&json!({
+            .and(body_json(json!({
                 "package": {
                     "name": "foobar",
                     "ecosystem": "PyPI",
@@ -348,7 +349,7 @@ mod tests {
         // Second request: with page token.
         Mock::given(method("POST"))
             .and(path("/v1/query"))
-            .and(body_json(&json!({
+            .and(body_json(json!({
                 "package": {
                     "name": "foobar",
                     "ecosystem": "PyPI",
@@ -369,7 +370,7 @@ mod tests {
             .await;
 
         let osv = Osv::new(
-            Default::default(),
+            ClientWithMiddleware::default(),
             Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
         );
 
