@@ -459,7 +459,7 @@ pub(crate) async fn add(
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
-                concurrency,
+                concurrency.clone(),
                 preview,
             );
 
@@ -467,7 +467,11 @@ pub(crate) async fn add(
                 NamedRequirementsResolver::new(
                     &hasher,
                     state.index(),
-                    DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        &client,
+                        &build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -750,7 +754,7 @@ pub(crate) async fn add(
         &settings,
         &client_builder,
         installer_metadata,
-        concurrency,
+        &concurrency,
         cache,
         printer,
         preview,
@@ -992,7 +996,7 @@ async fn lock_and_sync(
     settings: &ResolverInstallerSettings,
     client_builder: &BaseClientBuilder<'_>,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,

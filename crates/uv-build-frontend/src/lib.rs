@@ -223,11 +223,11 @@ pub struct SourceBuildContext {
 }
 
 impl SourceBuildContext {
-    /// Create a [`SourceBuildContext`] with the given concurrent build limit.
-    pub fn new(concurrent_builds: usize) -> Self {
+    /// Create a [`SourceBuildContext`] with the given shared concurrency semaphore.
+    pub fn new(concurrent_build_slots: Arc<Semaphore>) -> Self {
         Self {
             default_resolution: Arc::default(),
-            concurrent_build_slots: Arc::new(Semaphore::new(concurrent_builds)),
+            concurrent_build_slots,
         }
     }
 }

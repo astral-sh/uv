@@ -133,7 +133,7 @@ pub(crate) async fn upgrade(
             cache,
             &filesystem,
             installer_metadata,
-            concurrency,
+            &concurrency,
             preview,
         ))
         .await;
@@ -268,7 +268,7 @@ async fn upgrade_tool(
     cache: &Cache,
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     preview: Preview,
 ) -> Result<UpgradeReport> {
     // Ensure the tool is installed.

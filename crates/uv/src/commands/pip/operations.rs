@@ -128,7 +128,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     flat_index: &FlatIndex,
     index: &InMemoryIndex,
     build_dispatch: &BuildDispatch<'_>,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     options: Options,
     logger: Box<dyn ResolveLogger>,
     printer: Printer,
@@ -156,7 +156,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 NamedRequirementsResolver::new(
                     hasher,
                     index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        client,
+                        build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -170,7 +174,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 extras,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    concurrency.downloads_semaphore.clone(),
+                ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter())
@@ -278,7 +286,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 NamedRequirementsResolver::new(
                     hasher,
                     index,
-                    DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                    DistributionDatabase::new(
+                        client,
+                        build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
@@ -309,7 +321,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &overrides,
                 hasher,
                 index,
-                DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+                DistributionDatabase::new(
+                    client,
+                    build_dispatch,
+                    concurrency.downloads_semaphore.clone(),
+                ),
             )
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
@@ -357,7 +373,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             hasher,
             build_dispatch,
             installed_packages,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )?
         .with_reporter(Arc::new(reporter));
 
@@ -544,7 +564,7 @@ pub(crate) async fn install(
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
@@ -685,7 +705,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, &concurrency, cache, printer).await?;
+        compile_bytecode(venv, concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.
@@ -722,7 +742,7 @@ async fn execute_plan(
     tags: &Tags,
     client: &RegistryClient,
     in_flight: &InFlight,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     build_dispatch: &BuildDispatch<'_>,
     cache: &Cache,
     venv: &PythonEnvironment,
@@ -749,7 +769,11 @@ async fn execute_plan(
             tags,
             hasher,
             build_options,
-            DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
+            DistributionDatabase::new(
+                client,
+                build_dispatch,
+                concurrency.downloads_semaphore.clone(),
+            ),
         )
         .with_reporter(Arc::new(
             PrepareReporter::from(printer).with_length(remote.len() as u64),

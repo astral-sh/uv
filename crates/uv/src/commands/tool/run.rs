@@ -10,7 +10,6 @@ use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
-use tokio::sync::Semaphore;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, Refresh};
@@ -304,7 +303,7 @@ pub(crate) async fn run(
         python_preference,
         python_downloads,
         installer_metadata,
-        concurrency,
+        &concurrency,
         &cache,
         printer,
         preview,
@@ -736,7 +735,7 @@ async fn get_or_create_environment(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
@@ -929,7 +928,7 @@ async fn get_or_create_environment(
 
         // Initialize the capabilities.
         let capabilities = IndexCapabilities::default();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Initialize the client to fetch the latest version.
         let latest_client = LatestClient {
