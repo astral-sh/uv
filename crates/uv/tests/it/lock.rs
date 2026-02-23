@@ -19293,6 +19293,109 @@ fn lock_named_index_cli() -> Result<()> {
     Ok(())
 }
 
+/// If a named index is referenced in `tool.uv.sources` but only defined in `uv.toml`, we should
+/// provide a hint that the index was found in a configuration file.
+#[test]
+fn lock_named_index_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.2"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+        "#,
+    )?;
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        [[index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        explicit = true
+        "#,
+    )?;
+
+    // The index is defined in `uv.toml`, which should produce a hint.
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
+
+          hint: Index `pytorch` was found in a project-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
+/// If a named index is referenced in `tool.uv.sources` but only defined in a user-level `uv.toml`
+/// (e.g., `~/.config/uv/uv.toml`), we should provide a hint that the index was found in a
+/// configuration file.
+#[test]
+#[cfg_attr(
+    windows,
+    ignore = "Configuration tests are not yet supported on Windows"
+)]
+fn lock_named_index_user_config_file_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.2"]
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+        "#,
+    )?;
+
+    // Define the index in a user-level configuration file.
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv_config = xdg.child("uv");
+    let uv_toml = uv_config.child("uv.toml");
+    uv_toml.write_str(
+        r#"
+        [[index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        explicit = true
+        "#,
+    )?;
+
+    // The index is defined in a user-level `uv.toml`, which should produce a hint.
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ├─▶ Failed to parse entry: `jinja2`
+      ╰─▶ Package `jinja2` references an undeclared index: `pytorch`
+
+          hint: Index `pytorch` was found in a user-level `uv.toml`, but indexes referenced via `tool.uv.sources` must be defined in the project's `pyproject.toml`
+    ");
+
+    Ok(())
+}
+
 /// If a name is reused, within a single file, we should raise an error.
 #[test]
 fn lock_repeat_named_index() -> Result<()> {
