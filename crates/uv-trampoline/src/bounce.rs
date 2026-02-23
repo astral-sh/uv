@@ -13,9 +13,9 @@ use windows::Win32::{
     System::Environment::GetCommandLineA,
     System::LibraryLoader::{FindResourceW, LoadResource, LockResource, SizeofResource},
     System::Threading::{
-        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
-        PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, WaitForInputIdle,
-        WaitForSingleObject,
+        CREATE_SUSPENDED, CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE,
+        PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES,
+        STARTUPINFOA, WaitForInputIdle, WaitForSingleObject,
     },
     UI::WindowsAndMessaging::{
         CreateWindowExA, DestroyWindow, GetMessageA, HWND_MESSAGE, MSG, PEEK_MESSAGE_REMOVE_TYPE,
@@ -297,7 +297,16 @@ fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
     exit_with_status(1);
 }
 
-fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
+struct SpawnedChild {
+    process: HANDLE,
+    thread: HANDLE,
+}
+
+fn spawn_child(
+    si: &STARTUPINFOA,
+    child_cmdline: CString,
+    creation_flags: PROCESS_CREATION_FLAGS,
+) -> SpawnedChild {
     // See distlib/PC/launcher.c::run_child
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
@@ -318,7 +327,7 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
             None,
             None,
             true,
-            PROCESS_CREATION_FLAGS(0),
+            creation_flags,
             None,
             None,
             si,
@@ -328,13 +337,10 @@ fn spawn_child(si: &STARTUPINFOA, child_cmdline: CString) -> HANDLE {
     .unwrap_or_else(|_| {
         print_last_error_and_exit("uv trampoline failed to spawn Python child process");
     });
-    unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit(
-            "uv trampoline failed to close Python child process thread handle",
-        );
-    });
-    // Return handle to child process.
-    child_process_info.hProcess
+    SpawnedChild {
+        process: child_process_info.hProcess,
+        thread: child_process_info.hThread,
+    }
 }
 
 // Apparently, the Windows C runtime has a secret way to pass file descriptors into child
@@ -447,18 +453,31 @@ pub fn bounce(is_gui: bool) -> ! {
     let mut si = STARTUPINFOA::default();
     unsafe { GetStartupInfoA(&mut si) }
 
-    let child_handle = spawn_child(&si, child_cmdline);
+    // Spawn suspended so we can assign to our job object before the child runs.
+    // This avoids a race where a short-lived child can transition state before
+    // `AssignProcessToJobObject` is called.
+    let child = spawn_child(&si, child_cmdline, CREATE_SUSPENDED);
     let job = Job::new().unwrap_or_else(|e| {
         print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
-    // SAFETY: child_handle is a valid process handle returned by spawn_child.
-    if let Err(e) = unsafe { job.assign_process(child_handle) } {
+    // SAFETY: child.process is a valid process handle returned by spawn_child.
+    if let Err(e) = unsafe { job.assign_process(child.process) } {
         print_job_error_and_exit(
             "uv trampoline failed to assign child process to job object",
             e,
         );
     }
+
+    // SAFETY: child.thread is a valid thread handle returned by CreateProcessA.
+    if unsafe { ResumeThread(child.thread) } == u32::MAX {
+        print_last_error_and_exit("uv trampoline failed to resume child process thread");
+    }
+    unsafe { CloseHandle(child.thread) }.unwrap_or_else(|_| {
+        print_last_error_and_exit(
+            "uv trampoline failed to close Python child process thread handle",
+        );
+    });
 
     // (best effort) Close all the handles that we can
     close_handles(&si);
@@ -476,12 +495,12 @@ pub fn bounce(is_gui: bool) -> ! {
     }
 
     if is_gui {
-        clear_app_starting_state(child_handle);
+        clear_app_starting_state(child.process);
     }
 
-    let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
+    let _ = unsafe { WaitForSingleObject(child.process, INFINITE) };
     let mut exit_code = 0u32;
-    if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
+    if unsafe { GetExitCodeProcess(child.process, &mut exit_code) }.is_err() {
         print_last_error_and_exit("uv trampoline failed to get exit code of child process");
     }
     exit_with_status(exit_code);
