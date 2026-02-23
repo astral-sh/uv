@@ -13,11 +13,29 @@ use std::process::{Child, Command};
 
 use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
-    CREATE_NO_WINDOW, GetExitCodeProcess, INFINITE, WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, GetExitCodeProcess, INFINITE, WaitForSingleObject,
 };
 
 use crate::job::JobError;
 use crate::{Job, install_ctrl_handler};
+
+#[allow(unsafe_code)]
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtResumeProcess(processhandle: HANDLE) -> i32;
+}
+
+#[allow(unsafe_code)]
+fn resume_process(process: HANDLE) -> std::io::Result<()> {
+    // SAFETY: `process` is a valid process handle from `std::process::Child`.
+    let status = unsafe { NtResumeProcess(process) };
+    if status < 0 {
+        return Err(std::io::Error::other(format!(
+            "NtResumeProcess failed with status {status:#x}"
+        )));
+    }
+    Ok(())
+}
 
 /// A child process supervised by a [`Job`] object.
 ///
@@ -58,14 +76,28 @@ impl<'a> SupervisedChild<'a> {
 pub fn spawn_child(cmd: &mut Command, hide_console: bool) -> std::io::Result<Infallible> {
     cmd.stdin(std::process::Stdio::inherit());
 
+    // Spawn suspended so job assignment happens before child execution.
+    // This avoids post-spawn assignment races with short-lived children.
+    //
+    // We use `NtResumeProcess` later because `std::process::Child` does not
+    // expose the primary thread handle needed for `ResumeThread`.
+    let mut creation_flags = CREATE_SUSPENDED;
     if hide_console {
-        cmd.creation_flags(CREATE_NO_WINDOW.0);
+        creation_flags |= CREATE_NO_WINDOW;
     }
+    cmd.creation_flags(creation_flags.0);
 
-    let child = cmd.spawn()?;
+    let mut child = cmd.spawn()?;
 
-    let supervised =
-        SupervisedChild::new(&child).map_err(|e| std::io::Error::other(e.to_string()))?;
+    let supervised = match SupervisedChild::new(&child) {
+        Ok(supervised) => supervised,
+        Err(err) => {
+            let _ = child.kill();
+            return Err(std::io::Error::other(err.to_string()));
+        }
+    };
+
+    resume_process(supervised.raw_handle())?;
 
     // Ignore control-C/control-Break/logout/etc.; the same event will be delivered
     // to the child, so we let them decide whether to exit or not.
