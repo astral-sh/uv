@@ -397,7 +397,6 @@ fn find_uv_bin_user_bin() {
 #[test]
 fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
     let vendor_url = uv_test::build_vendor_links_url();
-    let vendor_url_pattern = regex::escape(&vendor_url);
 
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
@@ -405,19 +404,11 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         .with_filtered_exe_suffix()
         .with_filtered_counts()
         .with_filtered_system_tmp()
-        .with_filtered_pip_output()
         .with_filter(user_scheme_bin_filter())
         // Target installs always use "bin" on all platforms. On Windows,
         // `with_filtered_virtualenv_bin` only filters "Scripts", not "bin"
         .with_filter((r"[\\/]bin".to_string(), "/[BIN]".to_string()))
-        // Vendor URL
-        .with_filter((vendor_url_pattern, "[VENDOR_URL]".to_string()))
-        // Normalize working directory references: on Unix pip prints `./`
-        // for paths relative to CWD, on Windows it prints the absolute path
-        // (which the built-in [TEMP_DIR] filter already caught). Map both
-        // to `[PWD]/` so the snapshot is platform-independent.
-        .with_filter((r"\[TEMP_DIR\]/", "[PWD]/"))
-        .with_filter((r"\./", "[PWD]/"));
+        .with_filter((r"pip-build-env-[a-z0-9_]+", "pip-build-env-[HASH]"));
 
     // Build fake-uv into a wheel
     let wheel_dir = context.temp_dir.child("wheels");
@@ -467,13 +458,9 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
     })?;
 
     // Use `pip install` to trigger a real pip build environment.
-    // Use the packse vendor URL as the index so pip finds setuptools there
-    // but won't find the real `uv` package (only our fake-uv via --find-links).
-    //
     // The `-v` flag is required so pip surfaces subprocess stderr (where
-    // `setup.py` prints `FOUND_UV=...`). We pass `--no-progress` to suppress
-    // pip's download progress bars which are non-deterministic.
-    uv_snapshot!(context.filters(), context
+    // `setup.py` prints `FOUND_UV=...`).
+    let output = context
         .tool_run()
         .arg("pip")
         .arg("install")
@@ -483,106 +470,30 @@ fn find_uv_bin_pip_build_env() -> anyhow::Result<()> {
         .arg("--find-links")
         .arg(&vendor_url)
         .arg("--find-links")
-        .arg(wheel_dir.path()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Using pip 24.0 from [CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/pip (python 3.12)
-    Looking in links: https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/, [PWD]/wheels
-    Processing [PWD]/project
-      Installing build dependencies: started
-      Installing build dependencies: finished with status 'done'
-      Getting requirements to build wheel: started
-      Getting requirements to build wheel: finished with status 'done'
-      Installing backend dependencies: started
-      Installing backend dependencies: finished with status 'done'
-      Preparing metadata (pyproject.toml): started
-      Preparing metadata (pyproject.toml): finished with status 'done'
-    Building wheels for collected packages: project
-      Building wheel for project (pyproject.toml): started
-      Building wheel for project (pyproject.toml): finished with status 'done'
-      Created wheel for project: filename=project-0.1.0-py3-none-any.whl size=[SIZE] sha256=[HASH]
-      Stored in directory: [CACHE]
-    Successfully built project
-    Installing collected packages: project
-    Successfully installed project-0.1.0
+        .arg(wheel_dir.path())
+        .assert()
+        .success()
+        .get_output()
+        .clone();
 
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + pip==24.0
-      Running command pip subprocess to install build dependencies
-      Looking in links: https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/, [PWD]/wheels
-      Collecting setuptools
-        Downloading https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/setuptools-69.0.2-py3-none-any.whl ([SIZE] kB)
-           [PROGRESS]
-      Processing [PWD]/wheels/uv-0.1.0-py3-none-any.whl
-      Installing collected packages: uv, setuptools
-      Successfully installed setuptools-69.0.2 uv-0.1.0
-      Running command Getting requirements to build wheel
-      FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-      running egg_info
-      creating project.egg-info
-      writing project.egg-info/PKG-INFO
-      writing dependency_links to project.egg-info/dependency_links.txt
-      writing top-level names to project.egg-info/top_level.txt
-      writing manifest file 'project.egg-info/SOURCES.txt'
-      reading manifest file 'project.egg-info/SOURCES.txt'
-      writing manifest file 'project.egg-info/SOURCES.txt'
-      Running command pip subprocess to install backend dependencies
-      Looking in links: https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/, [PWD]/wheels
-      Collecting wheel
-        Downloading https://astral-sh.github.io/packse/PACKSE_VERSION/vendor/build/wheel-0.42.0-py3-none-any.whl ([SIZE] kB)
-           [PROGRESS]
-      Installing collected packages: wheel
-      Successfully installed wheel-0.42.0
-      Running command Preparing metadata (pyproject.toml)
-      FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-      running dist_info
-      creating [SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info
-      writing [SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/PKG-INFO
-      writing dependency_links to [SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/dependency_links.txt
-      writing top-level names to [SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/top_level.txt
-      writing manifest file '[SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/SOURCES.txt'
-      reading manifest file '[SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/SOURCES.txt'
-      writing manifest file '[SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project.egg-info/SOURCES.txt'
-      creating '[SYSTEM_TEMP_DIR]/pip-modern-metadata-[HASH]/project-0.1.0.dist-info'
-      Running command Building wheel for project (pyproject.toml)
-      FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
-      running bdist_wheel
-      running build
-      running build_py
-      creating build
-      creating build/lib
-      creating build/lib/project
-      copying project/__init__.py -> build/lib/project
-      running egg_info
-      writing project.egg-info/PKG-INFO
-      writing dependency_links to project.egg-info/dependency_links.txt
-      writing top-level names to project.egg-info/top_level.txt
-      reading manifest file 'project.egg-info/SOURCES.txt'
-      writing manifest file 'project.egg-info/SOURCES.txt'
-      installing to build/bdist.[PLATFORM]/wheel
-      running install
-      running install_lib
-      creating build/bdist.[PLATFORM]
-      creating build/bdist.[PLATFORM]/wheel
-      creating build/bdist.[PLATFORM]/wheel/project
-      copying build/lib/project/__init__.py -> build/bdist.[PLATFORM]/wheel/project
-      running install_egg_info
-      Copying project.egg-info to build/bdist.[PLATFORM]/wheel/project-0.1.0-py3.12.egg-info
-      running install_scripts
-      creating build/bdist.[PLATFORM]/wheel/project-0.1.0.dist-info/WHEEL
-      creating '[SYSTEM_TEMP_DIR]/pip-wheel-[HASH]/[TMP]/wheel' to it
-      adding 'project/__init__.py'
-      adding 'project-0.1.0.dist-info/METADATA'
-      adding 'project-0.1.0.dist-info/WHEEL'
-      adding 'project-0.1.0.dist-info/top_level.txt'
-      adding 'project-0.1.0.dist-info/RECORD'
-      removing build/bdist.[PLATFORM]/wheel
-    "
-    );
+    // Extract the FOUND_UV= lines from the combined output and apply filters
+    // so paths are platform-independent.
+    let found_uv_lines: String = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .chain(String::from_utf8(output.stderr).unwrap().lines())
+        .filter(|line| line.contains("FOUND_UV="))
+        .map(|line| line.trim())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let snapshot = uv_test::apply_filters(found_uv_lines, &context.filters());
+
+    insta::assert_snapshot!(snapshot, @"
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    FOUND_UV=[SYSTEM_TEMP_DIR]/pip-build-env-[HASH]/overlay/[BIN]/uv
+    ");
 
     Ok(())
 }
