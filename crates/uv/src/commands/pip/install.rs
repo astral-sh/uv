@@ -513,7 +513,7 @@ pub(crate) async fn pip_install(
                 let content = fs_err::tokio::read_to_string(&pylock).await?;
                 (install_path, content)
             };
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
+        let lock = uv_toml::from_str::<PylockToml>(&content).with_context(|| {
             format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
         })?;
 

@@ -1,0 +1,23 @@
+[package]
+name = "uv-toml"
+version = "0.0.24"
+description = "This is an internal component crate of uv"
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+toml-spanner = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }

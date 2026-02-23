@@ -944,7 +944,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1328,7 +1328,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -1512,7 +1512,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2374,7 +2374,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2444,7 +2444,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -2515,7 +2515,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "642883fdc81cf2da15ee8183fa1d2c7da452414dd41541a0f3e1428069345447"
 dependencies = [
  "scopeguard",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -2838,7 +2838,7 @@ version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.0",
  "cfg-if",
  "cfg_aliases",
  "libc",
@@ -3316,7 +3316,7 @@ version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.0",
  "crc32fast",
  "fdeflate",
  "flate2",
@@ -3571,7 +3571,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4142,7 +4142,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -4899,10 +4899,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0136791f7c95b1f6dd99f9cc786b91bb81c3800b639b3478e561ddb7be95e5f1"
 dependencies = [
  "fastrand",
- "getrandom 0.3.3",
+ "getrandom 0.4.1",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -5235,6 +5235,16 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow",
+]
+
+[[package]]
+name = "toml-spanner"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e19665136a83b1edf81cfaddd069003bb07f4eb014c2bda0204f5480d28e44"
+dependencies = [
+ "foldhash 0.2.0",
+ "serde",
 ]
 
 [[package]]
@@ -5793,6 +5803,7 @@ dependencies = [
  "uv-shell",
  "uv-static",
  "uv-test",
+ "uv-toml",
  "uv-tool",
  "uv-torch",
  "uv-trampoline-builder",
@@ -5850,6 +5861,7 @@ dependencies = [
  "uv-small-str",
  "uv-state",
  "uv-static",
+ "uv-toml",
  "uv-warnings",
  "wiremock",
 ]
@@ -5959,6 +5971,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
+ "uv-toml",
  "uv-version",
  "uv-warnings",
  "walkdir",
@@ -5996,6 +6009,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-static",
+ "uv-toml",
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
@@ -6042,6 +6056,7 @@ dependencies = [
  "toml",
  "tracing",
  "uv-fs",
+ "uv-toml",
  "walkdir",
 ]
 
@@ -6328,6 +6343,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-toml",
  "uv-types",
  "uv-workspace",
  "walkdir",
@@ -6839,6 +6855,7 @@ dependencies = [
  "uv-pep508",
  "uv-redacted",
  "uv-small-str",
+ "uv-toml",
 ]
 
 [[package]]
@@ -6946,6 +6963,7 @@ dependencies = [
  "uv-requirements-txt",
  "uv-resolver",
  "uv-scripts",
+ "uv-toml",
  "uv-types",
  "uv-warnings",
 ]
@@ -7041,6 +7059,7 @@ dependencies = [
  "uv-requirements-txt",
  "uv-small-str",
  "uv-static",
+ "uv-toml",
  "uv-torch",
  "uv-types",
  "uv-version",
@@ -7068,6 +7087,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-settings",
+ "uv-toml",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -7102,6 +7122,7 @@ dependencies = [
  "uv-redacted",
  "uv-resolver",
  "uv-static",
+ "uv-toml",
  "uv-torch",
  "uv-warnings",
  "uv-workspace",
@@ -7182,6 +7203,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "uv-toml"
+version = "0.0.24"
+dependencies = [
+ "serde",
+ "toml-spanner",
+]
+
+[[package]]
 name = "uv-tool"
 version = "0.0.24"
 dependencies = [
@@ -7206,6 +7235,7 @@ dependencies = [
  "uv-settings",
  "uv-state",
  "uv-static",
+ "uv-toml",
  "uv-virtualenv",
 ]
 
@@ -7357,6 +7387,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-toml",
  "uv-warnings",
 ]
 
@@ -7554,7 +7585,7 @@ version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.0",
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
@@ -7660,7 +7691,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7993,7 +8024,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d66ea20e9553b30172b5e831994e35fbde2d165325bec84fc43dbf6f4eb9cb2"
 dependencies = [
  "anyhow",
- "bitflags 2.10.0",
+ "bitflags 2.11.0",
  "indexmap",
  "log",
  "serde",

@@ -17,7 +17,7 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::de::{IntoDeserializer, SeqAccess};
+use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
@@ -39,9 +39,7 @@ use uv_redacted::DisplaySafeUrl;
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
     #[error(transparent)]
-    TomlSyntax(#[from] toml_edit::TomlError),
-    #[error(transparent)]
-    TomlSchema(#[from] toml_edit::de::Error),
+    Toml(#[from] uv_toml::Error),
     #[error(
         "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
     )]
@@ -124,10 +122,7 @@ pub struct PyProjectToml {
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     pub fn from_string(raw: String) -> Result<Self, PyprojectTomlError> {
-        let pyproject =
-            toml_edit::Document::from_str(&raw).map_err(PyprojectTomlError::TomlSyntax)?;
-        let pyproject = Self::deserialize(pyproject.into_deserializer())
-            .map_err(PyprojectTomlError::TomlSchema)?;
+        let pyproject = uv_toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
         Ok(Self { raw, ..pyproject })
     }
 

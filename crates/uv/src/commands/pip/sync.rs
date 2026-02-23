@@ -405,7 +405,7 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content).with_context(|| {
+        let lock = uv_toml::from_str::<PylockToml>(&content).with_context(|| {
             format!("Not a valid `pylock.toml` file: {}", pylock.user_display())
         })?;
 

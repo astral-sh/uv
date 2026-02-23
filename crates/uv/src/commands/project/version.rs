@@ -418,7 +418,9 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .with_pyproject_toml(
+            uv_toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?,
+        )?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)

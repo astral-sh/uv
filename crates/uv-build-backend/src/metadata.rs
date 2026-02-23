@@ -79,7 +79,7 @@ pub fn check_direct_build(source_tree: &Path, name: impl Display) -> bool {
         match fs_err::read_to_string(source_tree.join("pyproject.toml"))
             .map_err(|err| err.to_string())
             .and_then(|pyproject_toml| {
-                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
+                uv_toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
             }) {
             Ok(pyproject_toml) => pyproject_toml,
             Err(err) => {
@@ -161,7 +161,7 @@ impl PyProjectToml {
     pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
         let contents = fs_err::read_to_string(path)?;
         let pyproject_toml =
-            toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
+            uv_toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
         Ok(pyproject_toml)
     }
 

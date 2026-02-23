@@ -2125,10 +2125,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Parse the `pyproject.toml`.
         let pyproject_toml = match PyProjectToml::from_toml(&content) {
             Ok(metadata) => metadata,
-            Err(
-                uv_pypi_types::MetadataError::InvalidPyprojectTomlSyntax(..)
-                | uv_pypi_types::MetadataError::InvalidPyprojectTomlSchema(..),
-            ) => {
+            Err(uv_pypi_types::MetadataError::InvalidPyprojectToml(..)) => {
                 debug!("Failed to read `pyproject.toml` from GitHub API for: {url}");
                 return Ok(None);
             }
@@ -2892,7 +2889,7 @@ impl StaticMetadata {
 }
 
 /// Returns `true` if a `pyproject.toml` has `tool.uv.sources`.
-fn has_sources(content: &str) -> Result<bool, toml::de::Error> {
+fn has_sources(content: &str) -> Result<bool, uv_toml::Error> {
     #[derive(serde::Deserialize)]
     struct PyProjectToml {
         tool: Option<Tool>,
@@ -2908,7 +2905,7 @@ fn has_sources(content: &str) -> Result<bool, toml::de::Error> {
         sources: Option<ToolUvSources>,
     }
 
-    let PyProjectToml { tool } = toml::from_str(content)?;
+    let PyProjectToml { tool } = uv_toml::from_str(content)?;
     if let Some(tool) = tool {
         if let Some(uv) = tool.uv {
             if let Some(sources) = uv.sources {

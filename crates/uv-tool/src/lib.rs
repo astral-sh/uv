@@ -69,7 +69,7 @@ pub enum Error {
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
-    ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
+    ReceiptRead(PathBuf, #[source] Box<uv_toml::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]

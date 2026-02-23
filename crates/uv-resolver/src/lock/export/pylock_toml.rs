@@ -144,7 +144,7 @@ pub enum PylockTomlErrorKind {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Deserialize(#[from] toml::de::Error),
+    Deserialize(#[from] uv_toml::Error),
 }
 
 #[derive(Debug)]

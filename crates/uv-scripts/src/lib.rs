@@ -403,11 +403,11 @@ impl Pep723Metadata {
 }
 
 impl FromStr for Pep723Metadata {
-    type Err = toml::de::Error;
+    type Err = uv_toml::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        let metadata = toml::from_str(raw)?;
+        let metadata = uv_toml::from_str(raw)?;
         Ok(Self {
             raw: raw.to_string(),
             ..metadata
@@ -449,7 +449,7 @@ pub enum Pep723Error {
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),
     #[error(transparent)]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] uv_toml::Error),
     #[error("Invalid filename `{0}` supplied")]
     InvalidFilename(String),
 }

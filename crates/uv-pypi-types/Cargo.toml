@@ -24,6 +24,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["rkyv"] }
 uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
+uv-toml = { workspace = true }
 
 hashbrown = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }

@@ -17,8 +17,8 @@ pub struct ToolReceipt {
 
 impl ToolReceipt {
     /// Parse a [`ToolReceipt`] from a raw TOML string.
-    pub(crate) fn from_string(raw: String) -> Result<Self, toml::de::Error> {
-        let tool = toml::from_str(&raw)?;
+    pub(crate) fn from_string(raw: String) -> Result<Self, uv_toml::Error> {
+        let tool = uv_toml::from_str(&raw)?;
         Ok(Self { raw, ..tool })
     }
 

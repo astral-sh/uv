@@ -63,11 +63,7 @@ pub enum Error {
     #[error("{} does not appear to be a Python project, as neither `pyproject.toml` nor `setup.py` are present in the directory", _0.simplified_display())]
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
-    InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
-    #[error(
-        "`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty."
-    )]
-    InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
+    InvalidPyprojectToml(#[from] uv_toml::Error),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -102,8 +98,7 @@ impl IsBuildBackendError for Error {
             Self::Io(_)
             | Self::Lowering(_)
             | Self::InvalidSourceDist(_)
-            | Self::InvalidPyprojectTomlSyntax(_)
-            | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidPyprojectToml(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)

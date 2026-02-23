@@ -35,6 +35,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
+uv-toml = { workspace = true }
 uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 

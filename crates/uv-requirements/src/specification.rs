@@ -284,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&content)
+                let pyproject_toml = uv_toml::from_str::<PyProjectToml>(&content)
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {

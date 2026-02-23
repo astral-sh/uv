@@ -112,7 +112,7 @@ impl FilesystemOptions {
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options = toml::from_str::<Options>(&content)
+                let options = uv_toml::from_str::<Options>(&content)
                     .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
                     .relative_to(&std::path::absolute(dir)?)?;
 
@@ -121,7 +121,7 @@ impl FilesystemOptions {
                 let pyproject = dir.join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(pyproject)
                     .ok()
-                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
+                    .and_then(|content| uv_toml::from_str::<PyProjectToml>(&content).ok())
                 {
                     if let Some(options) = pyproject.tool.as_ref().and_then(|tool| tool.uv.as_ref())
                     {
@@ -142,7 +142,7 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
-                let pyproject: PyProjectToml = toml::from_str(&content)
+                let pyproject: PyProjectToml = uv_toml::from_str(&content)
                     .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
                 let Some(tool) = pyproject.tool else {
                     tracing::debug!(
@@ -191,7 +191,7 @@ impl From<Options> for FilesystemOptions {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options = toml::from_str::<Options>(&content)
+    let options = uv_toml::from_str::<Options>(&content)
         .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
     let options = if let Some(parent) = std::path::absolute(path)?.parent() {
         options.relative_to(parent)?
@@ -571,10 +571,10 @@ pub enum Error {
     Index(#[from] uv_distribution_types::IndexUrlError),
 
     #[error("Failed to parse: `{}`", _0.user_display())]
-    PyprojectToml(PathBuf, #[source] Box<toml::de::Error>),
+    PyprojectToml(PathBuf, #[source] Box<uv_toml::Error>),
 
     #[error("Failed to parse: `{}`", _0.user_display())]
-    UvToml(PathBuf, #[source] Box<toml::de::Error>),
+    UvToml(PathBuf, #[source] Box<uv_toml::Error>),
 
     #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
     )]

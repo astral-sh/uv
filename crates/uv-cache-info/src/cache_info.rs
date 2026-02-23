@@ -71,7 +71,7 @@ impl CacheInfo {
         // Read the cache keys.
         let cache_keys =
             if let Ok(contents) = fs_err::read_to_string(directory.join("pyproject.toml")) {
-                if let Ok(pyproject_toml) = toml::from_str::<PyProjectToml>(&contents) {
+                if let Ok(pyproject_toml) = uv_toml::from_str::<PyProjectToml>(&contents) {
                     pyproject_toml
                         .tool
                         .and_then(|tool| tool.uv)

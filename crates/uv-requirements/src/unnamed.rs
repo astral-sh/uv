@@ -168,7 +168,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 let project_path = parsed_directory_url.install_path.join("pyproject.toml");
                 if let Some(pyproject) = fs_err::read_to_string(project_path)
                     .ok()
-                    .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
+                    .and_then(|contents| uv_toml::from_str::<PyProjectToml>(&contents).ok())
                 {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {

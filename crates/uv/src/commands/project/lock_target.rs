@@ -290,7 +290,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) async fn read(self) -> Result<Option<Lock>, ProjectError> {
         match fs_err::tokio::read_to_string(self.lock_path()).await {
             Ok(encoded) => {
-                match toml::from_str::<Lock>(&encoded) {
+                match uv_toml::from_str::<Lock>(&encoded) {
                     Ok(lock) => {
                         // If the lockfile uses an unsupported version, raise an error.
                         if lock.version() != VERSION {
@@ -304,7 +304,7 @@ impl<'lock> LockTarget<'lock> {
                     Err(err) => {
                         // If we failed to parse the lockfile, determine whether it's a supported
                         // version.
-                        if let Ok(lock) = toml::from_str::<LockVersion>(&encoded) {
+                        if let Ok(lock) = uv_toml::from_str::<LockVersion>(&encoded) {
                             if lock.version() != VERSION {
                                 return Err(ProjectError::UnparsableLockVersion(
                                     VERSION,

@@ -76,7 +76,7 @@ pub enum TomlCredentialError {
     #[error(transparent)]
     LockedFile(#[from] LockedFileError),
     #[error("Failed to parse TOML credential file: {0}")]
-    ParseError(#[from] toml::de::Error),
+    ParseError(#[from] uv_toml::Error),
     #[error("Failed to serialize credentials to TOML")]
     SerializeError(#[from] toml::ser::Error),
     #[error(transparent)]
@@ -271,7 +271,7 @@ impl TextCredentialStore {
     /// Read credentials from a file.
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, TomlCredentialError> {
         let content = fs::read_to_string(path)?;
-        let credentials: TomlCredentials = toml::from_str(&content)?;
+        let credentials: TomlCredentials = uv_toml::from_str(&content)?;
 
         let credentials: FxHashMap<(Service, Username), Credentials> = credentials
             .credentials

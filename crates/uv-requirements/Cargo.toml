@@ -32,6 +32,7 @@ uv-redacted = { workspace = true }
 uv-requirements-txt = { workspace = true, features = ["http"] }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-scripts = { workspace = true }
+uv-toml = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 

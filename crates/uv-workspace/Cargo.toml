@@ -30,6 +30,7 @@ uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
+uv-toml = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true, optional = true }

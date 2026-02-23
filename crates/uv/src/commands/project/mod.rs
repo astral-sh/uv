@@ -155,7 +155,7 @@ pub(crate) enum ProjectError {
     #[error(
         "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
-    UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
+    UnparsableLockVersion(u32, u32, #[source] uv_toml::Error),
 
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
@@ -254,16 +254,16 @@ pub(crate) enum ProjectError {
     InvalidProjectEnvironmentDir(PathBuf, String),
 
     #[error("Failed to parse `uv.lock`")]
-    UvLockParse(#[source] toml::de::Error),
+    UvLockParse(#[source] uv_toml::Error),
 
     #[error("Failed to parse `pyproject.toml`")]
-    PyprojectTomlParse(#[source] toml::de::Error),
+    PyprojectTomlParse(#[source] uv_toml::Error),
 
     #[error("Failed to update `pyproject.toml`")]
     PyprojectTomlUpdate,
 
     #[error("Failed to parse PEP 723 script metadata")]
-    Pep723ScriptTomlParse(#[source] toml::de::Error),
+    Pep723ScriptTomlParse(#[source] uv_toml::Error),
 
     #[error("Failed to find `site-packages` directory for environment")]
     NoSitePackages,
