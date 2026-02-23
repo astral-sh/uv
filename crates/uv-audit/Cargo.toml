@@ -25,11 +25,11 @@ uv-small-str = { workspace = true }
 async-trait = { workspace = true }
 indexmap = { workspace = true }
 jiff = { workspace = true }
-reqwest-middleware = { workspace = true }
+reqwest-middleware = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }

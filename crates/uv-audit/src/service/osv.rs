@@ -26,9 +26,6 @@ pub enum Error {
     /// An error during an HTTP request, including middleware errors.
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
-    /// An error when parsing the OSV API response.
-    #[error("Invalid OSV API response: {0}")]
-    Api(#[from] serde_json::Error),
     /// An error when constructing the URL for an API request.
     #[error("Invalid API URL: {0}")]
     Url(#[from] DisplaySafeUrlError),
@@ -152,20 +149,17 @@ impl VulnerabilityService for Osv {
             let response = self
                 .client
                 .post(url.as_ref())
-                .body(serde_json::to_string(&request)?)
+                .json(&request)
                 .header("Content-Type", "application/json")
                 .send()
                 .await?;
 
-            let response = response
+            let query_response: QueryResponse = response
                 .error_for_status()
+                .map_err(reqwest_middleware::Error::Reqwest)?
+                .json()
+                .await
                 .map_err(reqwest_middleware::Error::Reqwest)?;
-            let query_response: QueryResponse = serde_json::from_str(
-                &response
-                    .text()
-                    .await
-                    .map_err(reqwest_middleware::Error::Reqwest)?,
-            )?;
 
             all_vulnerabilities.extend(query_response.vulns);
 
