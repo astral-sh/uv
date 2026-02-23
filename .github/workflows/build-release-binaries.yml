@@ -48,7 +48,7 @@ jobs:
       - name: "Build sdist"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           command: sdist
           args: --out dist
       - name: "Test sdist"
@@ -69,7 +69,7 @@ jobs:
       - name: "Build sdist uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Test sdist uv-build"
@@ -102,7 +102,7 @@ jobs:
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
       - name: "Upload wheels"
@@ -133,7 +133,7 @@ jobs:
       - name: "Build wheels uv-build - x86_64"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Upload wheels uv-build"
@@ -161,7 +161,7 @@ jobs:
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: aarch64
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
@@ -199,7 +199,7 @@ jobs:
       - name: "Build wheels uv-build - aarch64"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Test wheel - aarch64"
@@ -241,7 +241,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
       - name: "Test wheel"
@@ -280,7 +280,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
       - name: "Test wheel uv-build"
@@ -320,7 +320,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
@@ -387,7 +387,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.target }}
           manylinux: 2_17
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -441,7 +441,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -494,7 +494,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -548,7 +548,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -602,7 +602,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -657,7 +657,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -715,7 +715,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -760,7 +760,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -814,7 +814,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: ${{ matrix.platform.maturin_docker_options }}
@@ -867,7 +867,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           args: --release --locked --out dist --features self-update --compatibility pypi
@@ -914,7 +914,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -964,7 +964,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
@@ -1038,7 +1038,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@b1bd829e37fef14c63f19162034228a2f3dc1021 # v1.50.0
         with:
-          maturin-version: v1.11.5
+          maturin-version: v1.12.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
