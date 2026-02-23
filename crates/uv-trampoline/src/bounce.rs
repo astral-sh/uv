@@ -454,10 +454,21 @@ pub fn bounce(is_gui: bool) -> ! {
 
     // SAFETY: child_handle is a valid process handle returned by spawn_child.
     if let Err(e) = unsafe { job.assign_process(child_handle) } {
-        print_job_error_and_exit(
-            "uv trampoline failed to assign child process to job object",
-            e,
-        );
+        if e.is_access_denied() {
+            // Expected in some environments and races: ACCESS_DENIED can occur if
+            // the child is already in a non-nestable parent job (e.g., CI/scheduler),
+            // or if the child transitions state before post-spawn assignment.
+            // Continue without our own job; the child is still managed by the parent.
+            warn!(
+                "Failed to assign child to job object (access denied), \
+                 continuing without dedicated child job supervision"
+            );
+        } else {
+            print_job_error_and_exit(
+                "uv trampoline failed to assign child process to job object",
+                e,
+            );
+        }
     }
 
     // (best effort) Close all the handles that we can

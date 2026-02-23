@@ -30,6 +30,9 @@ pub enum JobError {
     Assign(i32),
 }
 
+/// The HRESULT code for `ERROR_ACCESS_DENIED` (0x80070005).
+const E_ACCESSDENIED: i32 = -2_147_024_891;
+
 impl JobError {
     /// Returns the Windows error code associated with this error.
     #[must_use]
@@ -48,6 +51,21 @@ impl JobError {
             Self::Set(_) => "failed to set job object information",
             Self::Assign(_) => "failed to assign process to job object",
         }
+    }
+
+    /// Returns `true` if this is an `Assign` error caused by `ERROR_ACCESS_DENIED`.
+    ///
+    /// In practice this can happen in two expected scenarios:
+    /// - The child is already in a parent-managed job object that does not allow
+    ///   nesting (for example, certain CI or scheduler environments).
+    /// - A timing race where the child transitions state before the post-spawn
+    ///   `AssignProcessToJobObject` call (most visible with very short-lived commands).
+    ///
+    /// Both cases are safe to treat as non-fatal in callers that can continue
+    /// without owning a dedicated job object.
+    #[must_use]
+    pub const fn is_access_denied(&self) -> bool {
+        matches!(self, Self::Assign(code) if *code == E_ACCESSDENIED)
     }
 }
 
@@ -156,5 +174,87 @@ impl Drop for Job {
         // SAFETY: self.handle is valid and we're done using it.
         // Ignoring the result is fine - there's nothing we can do if close fails.
         let _ = unsafe { CloseHandle(self.handle) };
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests {
+    use std::os::windows::io::{AsHandle, AsRawHandle};
+    use std::process::Command;
+
+    use windows::Win32::Foundation::HANDLE;
+
+    use super::*;
+
+    /// Creates a "restrictive" job that does NOT set `JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK`
+    /// or `JOB_OBJECT_LIMIT_BREAKAWAY_OK`, preventing processes from being assigned to
+    /// nested child jobs.
+    #[allow(unsafe_code)]
+    fn create_restrictive_job() -> Job {
+        // SAFETY: Creating an unnamed job object with default security.
+        let handle =
+            unsafe { CreateJobObjectW(None, None) }.expect("failed to create restrictive job");
+        let job = Job { handle };
+
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        let info_size = u32::try_from(size_of_val(&info)).expect("job info size fits in u32");
+
+        // Only set KILL_ON_JOB_CLOSE — deliberately omit SILENT_BREAKAWAY_OK
+        // and BREAKAWAY_OK so the job does not permit nesting.
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        // SAFETY: Valid job handle, correct info class, properly sized buffer.
+        unsafe {
+            SetInformationJobObject(
+                job.handle,
+                JobObjectExtendedLimitInformation,
+                (&raw const info).cast::<core::ffi::c_void>(),
+                info_size,
+            )
+        }
+        .expect("failed to set restrictive job limits");
+
+        job
+    }
+
+    /// Demonstrates one expected `E_ACCESSDENIED` path from
+    /// `AssignProcessToJobObject`.
+    ///
+    /// If a process is already in a restrictive job that does not permit
+    /// nesting, assigning it to a second job fails with `ERROR_ACCESS_DENIED`.
+    #[test]
+    #[allow(unsafe_code)]
+    fn assign_to_second_job_can_fail_with_access_denied() {
+        // Create a restrictive job (no breakaway, no nesting).
+        let restrictive_job = create_restrictive_job();
+
+        // Spawn a child process that will live long enough for us to manipulate.
+        let child = Command::new("cmd.exe")
+            .args(["/C", "timeout /T 30 /NOBREAK >NUL"])
+            .spawn()
+            .expect("failed to spawn child process");
+
+        let child_handle = HANDLE(child.as_handle().as_raw_handle());
+
+        // Assign the child to the restrictive job.
+        // SAFETY: child_handle is a valid process handle from the spawn above.
+        unsafe { restrictive_job.assign_process(child_handle) }
+            .expect("failed to assign child to restrictive job");
+
+        // Now create a second job and try to assign the same child.
+        // This should fail with E_ACCESSDENIED because the restrictive job
+        // doesn't permit nesting.
+        let second_job = Job::new().expect("failed to create second job");
+        // SAFETY: child_handle is still a valid process handle.
+        let result = unsafe { second_job.assign_process(child_handle) };
+
+        let err = result.expect_err(
+            "assigning to a second job should fail when the first job doesn't permit nesting",
+        );
+        assert!(
+            err.is_access_denied(),
+            "expected ACCESS_DENIED error, got: {err} (code: {})",
+            err.code()
+        );
     }
 }
