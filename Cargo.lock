@@ -61,7 +61,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43d5b281e737544384e969a5ccad3f1cdd24b48086a0fc1b2a5262a26b8f4f4a"
 dependencies = [
  "anstyle",
- "anstyle-parse",
+ "anstyle-parse 0.2.7",
+ "anstyle-query",
+ "anstyle-wincon",
+ "colorchoice",
+ "is_terminal_polyfill",
+ "utf8parse",
+]
+
+[[package]]
+name = "anstream"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d"
+dependencies = [
+ "anstyle",
+ "anstyle-parse 1.0.0",
  "anstyle-query",
  "anstyle-wincon",
  "colorchoice",
@@ -80,6 +95,15 @@ name = "anstyle-parse"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7644824f0aa2c7b9384579234ef10eb7efb6a0deb83f9630a49594dd9c15c2"
+dependencies = [
+ "utf8parse",
+]
+
+[[package]]
+name = "anstyle-parse"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e"
 dependencies = [
  "utf8parse",
 ]
@@ -786,7 +810,7 @@ version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b12c8b680195a62a8364d16b8447b01b6c2c8f9aaf68bee653be34d4245e238"
 dependencies = [
- "anstream",
+ "anstream 0.6.21",
  "anstyle",
  "clap_lex",
  "strsim",
@@ -1458,7 +1482,7 @@ version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
 dependencies = [
- "anstream",
+ "anstream 0.6.21",
  "anstyle",
  "env_filter",
  "jiff",
@@ -5612,7 +5636,7 @@ dependencies = [
 name = "uv"
 version = "0.10.4"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "arrayvec",
  "assert_cmd",
@@ -5834,7 +5858,7 @@ dependencies = [
 name = "uv-build"
 version = "0.10.4"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "tracing",
  "tracing-subscriber",
@@ -5892,7 +5916,7 @@ dependencies = [
 name = "uv-build-frontend"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "fs-err",
  "indoc",
  "insta",
@@ -5984,7 +6008,7 @@ dependencies = [
 name = "uv-cli"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "clap",
  "clap_complete_command",
@@ -6119,7 +6143,7 @@ dependencies = [
 name = "uv-dev"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "clap",
  "fs-err",
@@ -6422,7 +6446,7 @@ dependencies = [
 name = "uv-globfilter"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "fs-err",
  "globset",
  "insta",
@@ -6478,7 +6502,7 @@ dependencies = [
 name = "uv-installer"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "async-channel",
  "fs-err",
@@ -6694,7 +6718,7 @@ name = "uv-publish"
 version = "0.0.24"
 dependencies = [
  "ambient-id",
- "anstream",
+ "anstream 1.0.0",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
  "astral-tokio-tar",
@@ -7228,7 +7252,7 @@ dependencies = [
 name = "uv-warnings"
 version = "0.0.24"
 dependencies = [
- "anstream",
+ "anstream 1.0.0",
  "anyhow",
  "indoc",
  "insta",
