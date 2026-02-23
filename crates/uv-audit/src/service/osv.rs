@@ -221,29 +221,18 @@ impl Osv {
         // Extract fix versions from affected ranges
         let fix_versions = vuln
             .affected
-            .as_ref()
-            .and_then(|affected_list| {
-                affected_list.iter().find_map(|affected| {
-                    affected.ranges.as_ref().and_then(|ranges| {
-                        ranges.iter().find_map(|range| {
-                            (matches!(range.range_type, RangeType::Ecosystem))
-                                .then(|| {
-                                    range.events.iter().find_map(|event| {
-                                        // TODO: Warn on a malformed version string rather than silently skipping it.
-                                        // Alternatively, we could propagate the raw version string in the finding and
-                                        // leave it to the callsite to process into PEP 440 versions.
-                                        match event {
-                                            Event::Fixed(fixed) => Version::from_str(fixed).ok(),
-                                            _ => None,
-                                        }
-                                    })
-                                })
-                                .flatten()
-                        })
-                    })
-                })
+            .iter()
+            .flatten()
+            .flat_map(|affected| affected.ranges.iter().flatten())
+            .filter(|range| matches!(range.range_type, RangeType::Ecosystem))
+            .flat_map(|range| &range.events)
+            .filter_map(|event| match event {
+                // TODO: Warn on a malformed version string rather than silently skipping it.
+                // Alternatively, we could propagate the raw version string in the finding and
+                // leave it to the callsite to process into PEP 440 versions.
+                Event::Fixed(fixed) => Version::from_str(fixed).ok(),
+                _ => None,
             })
-            .into_iter()
             .collect();
 
         // Extract aliases
@@ -280,8 +269,7 @@ mod tests {
 
     use crate::service::VulnerabilityService;
     use crate::service::osv::RangeType;
-    use crate::types::Dependency;
-    use crate::types::Finding;
+    use crate::types::{Dependency, Finding};
 
     use super::API_BASE;
     use super::Event;
@@ -336,6 +324,7 @@ mod tests {
     }
 
     /// Ensure that we can query and receive a known vulnerability from the OSV API.
+    #[cfg(feature = "test-osv")]
     #[tokio::test]
     async fn test_query() {
         let osv = Osv::default();
@@ -389,6 +378,7 @@ mod tests {
     }
 
     /// Ensure that we can query a batch of packages and receive known vulnerabilities.
+    #[cfg(feature = "test-osv")]
     #[tokio::test]
     async fn test_query_batch() {
         let osv = Osv::default();

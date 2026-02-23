@@ -33,3 +33,9 @@ thiserror = { workspace = true }
 insta = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+
+[features]
+default = ["test-osv"]
+
+# Introduces a testing dependency on osv.dev.
+test-osv = []
