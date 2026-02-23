@@ -7,25 +7,25 @@ use uv_small_str::SmallString;
 
 /// Represents a resolved dependency, with a normalized name and PEP 440 version.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Dependency<'a> {
-    name: &'a PackageName,
-    version: &'a Version,
+pub struct Dependency {
+    name: PackageName,
+    version: Version,
 }
 
-impl<'a> Dependency<'a> {
+impl Dependency {
     /// Create a new dependency with the given name and version.
-    pub fn new(name: &'a PackageName, version: &'a Version) -> Self {
+    pub fn new(name: PackageName, version: Version) -> Self {
         Self { name, version }
     }
 
     /// Get the package name.
     pub fn name(&self) -> &PackageName {
-        self.name
+        &self.name
     }
 
     /// Get the version.
     pub fn version(&self) -> &Version {
-        self.version
+        &self.version
     }
 }
 
@@ -69,11 +69,11 @@ pub enum AdverseStatus {
 
 /// Represents a finding on a dependency.
 #[derive(Debug)]
-pub enum Finding<'a> {
+pub enum Finding {
     /// A vulnerability within a dependency.
     Vulnerability {
         /// The dependency that is vulnerable.
-        dependency: Dependency<'a>,
+        dependency: Dependency,
         /// The unique identifier for the vulnerability.
         id: VulnerabilityID,
         /// A short, human-readable description of the vulnerability.
@@ -90,7 +90,7 @@ pub enum Finding<'a> {
     /// An adverse project status, such as an archived or deprecated project.
     ProjectStatus {
         /// The dependency with the adverse status.
-        dependency: Dependency<'a>,
+        dependency: Dependency,
         /// The adverse status of the project.
         status: AdverseStatus,
     },

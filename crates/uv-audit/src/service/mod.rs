@@ -12,17 +12,16 @@ pub trait VulnerabilityService {
     type Error;
 
     /// Query the service for a single dependency, returning any findings.
-    async fn query<'a>(&self, dependency: &Dependency<'a>)
-    -> Result<Vec<Finding<'a>>, Self::Error>;
+    async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Self::Error>;
 
     /// Query the service for a batch of dependencies, returning any findings.
     ///
     /// This is a blanket implementation; individual services can override this with a more efficient
     /// implementation if they support batch queries.
-    async fn query_batch<'a>(
+    async fn query_batch(
         &self,
-        dependencies: &[Dependency<'a>],
-    ) -> Result<IndexMap<Dependency<'a>, Vec<Finding<'a>>>, Self::Error> {
+        dependencies: &[Dependency],
+    ) -> Result<IndexMap<Dependency, Vec<Finding>>, Self::Error> {
         let mut results = IndexMap::new();
         for dependency in dependencies {
             let findings = self.query(dependency).await?;

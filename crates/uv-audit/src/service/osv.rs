@@ -133,10 +133,7 @@ impl Default for Osv {
 impl VulnerabilityService for Osv {
     type Error = Error;
 
-    async fn query<'a>(
-        &self,
-        dependency: &Dependency<'a>,
-    ) -> Result<Vec<Finding<'a>>, Self::Error> {
+    async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Self::Error> {
         let mut all_vulnerabilities = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -202,10 +199,7 @@ impl Osv {
     }
 
     /// Convert an OSV Vulnerability record to a Finding.
-    fn vulnerability_to_finding<'a>(
-        dependency: &Dependency<'a>,
-        vuln: Vulnerability,
-    ) -> Finding<'a> {
+    fn vulnerability_to_finding(dependency: &Dependency, vuln: Vulnerability) -> Finding {
         use crate::types::VulnerabilityID;
         use std::str::FromStr;
         use uv_pep440::Version;
@@ -308,7 +302,7 @@ mod tests {
         let osv = Osv::default();
         let package = PackageName::from_str("cryptography").unwrap();
         let version = Version::from_str("46.0.4").unwrap();
-        let dependency = Dependency::new(&package, &version);
+        let dependency = Dependency::new(package, version);
 
         let findings = osv.query(&dependency).await.unwrap();
         assert!(
@@ -363,11 +357,11 @@ mod tests {
         // Set up two dependencies with known vulnerabilities
         let cryptography_package = PackageName::from_str("cryptography").unwrap();
         let cryptography_version = Version::from_str("46.0.4").unwrap();
-        let cryptography_dep = Dependency::new(&cryptography_package, &cryptography_version);
+        let cryptography_dep = Dependency::new(cryptography_package, cryptography_version);
 
         let requests_package = PackageName::from_str("requests").unwrap();
         let requests_version = Version::from_str("2.32.3").unwrap();
-        let requests_dep = Dependency::new(&requests_package, &requests_version);
+        let requests_dep = Dependency::new(requests_package, requests_version);
 
         let dependencies = vec![cryptography_dep.clone(), requests_dep.clone()];
 
