@@ -7,7 +7,7 @@
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal", "build:skip-release"],
+  labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,

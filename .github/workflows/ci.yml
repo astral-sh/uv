@@ -48,6 +48,7 @@ jobs:
           HAS_MACOS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') }}
           HAS_PUBLISH_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:publish') }}
           HAS_BUILD_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip') }}
+          HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
           HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -60,6 +61,7 @@ jobs:
           [[ "$HAS_MACOS_LABEL" == "true" ]] && has_macos_label=1
           [[ "$HAS_PUBLISH_LABEL" == "true" ]] && has_publish_label=1
           [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
+          [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
           [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
           [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
 
@@ -106,7 +108,7 @@ jobs:
           [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
           [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed ]] && test_system=1
           [[ $has_macos_label || $has_extended_label || $on_main_branch ]] && test_macos=1
-          [[ ! $has_skip_label && $docker_build_changed ]] && build_docker=1
+          [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && $docker_build_changed ]] && build_docker=1
 
           # Output (convert 1/empty to true/false for GHA)
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
