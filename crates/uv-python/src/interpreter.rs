@@ -1077,10 +1077,9 @@ impl InterpreterInfo {
 
     #[cfg(unix)]
     fn uname_machine() -> Option<String> {
-        match uname() {
-            Ok(uts) => uts.machine().to_str().map(str::to_string),
-            Err(_) => None,
-        }
+        uname()
+            .ok()
+            .and_then(|uts| uts.machine().to_str().map(str::to_string))
     }
 
     #[cfg(not(unix))]
