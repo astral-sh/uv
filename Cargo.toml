@@ -79,7 +79,7 @@ uv-windows = { version = "0.0.24", path = "crates/uv-windows" }
 uv-workspace = { version = "0.0.24", path = "crates/uv-workspace" }
 
 ambient-id = { version = "0.0.10", default-features = false, features = ["astral-reqwest-middleware"] }
-anstream = { version = "0.6.15" }
+anstream = { version = "1.0.0" }
 anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 arrayvec = { version = "0.7.6" }
