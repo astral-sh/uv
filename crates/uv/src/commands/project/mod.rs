@@ -235,7 +235,9 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support optional dependencies, but extra `{0}` was specified")]
     MissingExtraScript(ExtraName),
 
-    #[error("Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`.\n\n{hint}{colon} replace `{1}` with `{2}`.", hint = "hint".bold().cyan(), colon = ":".bold())]
+    #[error(
+        "Supported environments must be disjoint, but the following markers overlap: `{0}` and `{1}`"
+    )]
     OverlappingMarkers(String, String, String),
 
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
@@ -339,6 +341,22 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+}
+
+impl uv_errors::Hint for ProjectError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        match self {
+            Self::OverlappingMarkers(_, rhs, replacement) => {
+                vec![std::borrow::Cow::Owned(format!(
+                    "replace `{rhs}` with `{replacement}`."
+                ))]
+            }
+            Self::Lock(err) => err.hints(),
+            Self::Python(err) => err.hints(),
+            Self::Operation(err) => err.hints(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -5620,7 +5620,7 @@ fn detect_infinite_recursion() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5.
+    error: `uv run` was recursively invoked 6 times which exceeds the limit of 5
 
     hint: If you are running a script with `uv run` in the shebang, you may need to include the `--script` flag.
     ");

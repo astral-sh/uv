@@ -6,7 +6,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_python::PythonRequest;
 
-mod common;
+pub(crate) mod common;
 pub(crate) mod dir;
 pub(crate) mod install;
 pub(crate) mod list;

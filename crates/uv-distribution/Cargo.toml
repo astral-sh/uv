@@ -23,6 +23,7 @@ uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-errors = { workspace = true }
 uv-extract = { workspace = true }
 uv-flags = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }

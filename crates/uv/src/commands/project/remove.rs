@@ -126,10 +126,12 @@ pub(crate) async fn remove(
             DependencyType::Production => {
                 let deps = toml.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    show_other_dependency_type_hint(printer, &package, &toml)?;
-                    anyhow::bail!(
-                        "The dependency `{package}` could not be found in `project.dependencies`"
-                    )
+                    return Err(DependencyNotFoundError {
+                        package: package.clone(),
+                        dependency_type: dependency_type.clone(),
+                        found_in: toml.find_dependency(&package, None),
+                    }
+                    .into());
                 }
             }
             DependencyType::Dev => {
@@ -137,19 +139,23 @@ pub(crate) async fn remove(
                 let group_deps =
                     toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                 if dev_deps.is_empty() && group_deps.is_empty() {
-                    show_other_dependency_type_hint(printer, &package, &toml)?;
-                    anyhow::bail!(
-                        "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
-                    );
+                    return Err(DependencyNotFoundError {
+                        package: package.clone(),
+                        dependency_type: dependency_type.clone(),
+                        found_in: toml.find_dependency(&package, None),
+                    }
+                    .into());
                 }
             }
             DependencyType::Optional(ref extra) => {
                 let deps = toml.remove_optional_dependency(&package, extra)?;
                 if deps.is_empty() {
-                    show_other_dependency_type_hint(printer, &package, &toml)?;
-                    anyhow::bail!(
-                        "The dependency `{package}` could not be found in `project.optional-dependencies.{extra}`"
-                    );
+                    return Err(DependencyNotFoundError {
+                        package: package.clone(),
+                        dependency_type: dependency_type.clone(),
+                        found_in: toml.find_dependency(&package, None),
+                    }
+                    .into());
                 }
             }
             DependencyType::Group(ref group) => {
@@ -158,18 +164,22 @@ pub(crate) async fn remove(
                     let group_deps =
                         toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                     if dev_deps.is_empty() && group_deps.is_empty() {
-                        show_other_dependency_type_hint(printer, &package, &toml)?;
-                        anyhow::bail!(
-                            "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
-                        );
+                        return Err(DependencyNotFoundError {
+                            package: package.clone(),
+                            dependency_type: dependency_type.clone(),
+                            found_in: toml.find_dependency(&package, None),
+                        }
+                        .into());
                     }
                 } else {
                     let deps = toml.remove_dependency_group_requirement(&package, group)?;
                     if deps.is_empty() {
-                        show_other_dependency_type_hint(printer, &package, &toml)?;
-                        anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dependency-groups.{group}`"
-                        );
+                        return Err(DependencyNotFoundError {
+                            package: package.clone(),
+                            dependency_type: dependency_type.clone(),
+                            found_in: toml.find_dependency(&package, None),
+                        }
+                        .into());
                     }
                 }
             }
@@ -445,48 +455,48 @@ impl RemoveTarget {
     }
 }
 
-/// Show a hint if a dependency with the given name is present as any dependency type.
-///
-/// This is useful when a dependency of the user-specified type was not found, but it may be present
-/// elsewhere.
-fn show_other_dependency_type_hint(
-    printer: Printer,
-    name: &PackageName,
-    pyproject: &PyProjectTomlMut,
-) -> Result<()> {
-    // TODO(zanieb): Attach these hints to the error so they render _after_ in accordance our
-    // typical styling
-    for dep_ty in pyproject.find_dependency(name, None) {
-        match dep_ty {
-            DependencyType::Production => writeln!(
-                printer.stderr(),
-                "{}{} `{name}` is a production dependency",
-                "hint".bold().cyan(),
-                ":".bold(),
-            )?,
-            DependencyType::Dev => writeln!(
-                printer.stderr(),
-                "{}{} `{name}` is a development dependency (try: `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
-                format!("uv remove {name} --dev`").bold()
-            )?,
-            DependencyType::Optional(group) => writeln!(
-                printer.stderr(),
-                "{}{} `{name}` is an optional dependency (try: `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
-                format!("uv remove {name} --optional {group}").bold()
-            )?,
-            DependencyType::Group(group) => writeln!(
-                printer.stderr(),
-                "{}{} `{name}` is in the `{group}` group (try: `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
-                format!("uv remove {name} --group {group}").bold()
-            )?,
-        }
-    }
+/// A dependency was not found in the expected dependency type, but may exist elsewhere.
+#[derive(Debug, thiserror::Error)]
+#[error("The dependency `{package}` could not be found in {}", dependency_type.toml_table_name())]
+pub(crate) struct DependencyNotFoundError {
+    pub(crate) package: PackageName,
+    pub(crate) dependency_type: DependencyType,
+    /// Other dependency types where this package was found.
+    pub(crate) found_in: Vec<DependencyType>,
+}
 
-    Ok(())
+impl uv_errors::Hint for DependencyNotFoundError {
+    fn hints(&self) -> Vec<std::borrow::Cow<'_, str>> {
+        self.found_in
+            .iter()
+            .map(|dep_ty| {
+                std::borrow::Cow::Owned(match dep_ty {
+                    DependencyType::Production => {
+                        format!("`{}` is a production dependency", self.package)
+                    }
+                    DependencyType::Dev => {
+                        format!(
+                            "`{}` is a development dependency (try: `{}`)",
+                            self.package,
+                            format!("uv remove {} --dev", self.package).bold(),
+                        )
+                    }
+                    DependencyType::Optional(group) => {
+                        format!(
+                            "`{}` is an optional dependency (try: `{}`)",
+                            self.package,
+                            format!("uv remove {} --optional {group}", self.package).bold(),
+                        )
+                    }
+                    DependencyType::Group(group) => {
+                        format!(
+                            "`{}` is in the `{group}` group (try: `{}`)",
+                            self.package,
+                            format!("uv remove {} --group {group}", self.package).bold(),
+                        )
+                    }
+                })
+            })
+            .collect()
+    }
 }

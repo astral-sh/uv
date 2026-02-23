@@ -95,6 +95,18 @@ enum Error {
     VersionMismatch(Version, Version),
 }
 
+/// Collect hints from a build [`Error`] by inspecting its inner types.
+fn collect_build_hints(err: &Error) -> Vec<String> {
+    use uv_errors::Hint;
+    match err {
+        Error::BuildFrontend(err) => err.hints().into_iter().map(Into::into).collect(),
+        Error::BuildDispatch(err) => err.hints().into_iter().map(Into::into).collect(),
+        Error::Project(err) => err.hints().into_iter().map(Into::into).collect(),
+        Error::Operations(err) => err.hints().into_iter().map(Into::into).collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// Build source distributions and wheels.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
@@ -423,12 +435,16 @@ async fn build_impl(
                     None
                 };
 
+                let hints = collect_build_hints(&err);
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
                     help,
                 });
                 anstream::eprint!("{report:?}");
+                for hint in &hints {
+                    anstream::eprint!("\n\n{} {hint}", uv_errors::HintPrefix);
+                }
 
                 success = false;
             }

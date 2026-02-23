@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-build-backend = { workspace = true, features = ["schemars"] }
+uv-errors = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -37,7 +38,6 @@ fs-err = { workspace = true }
 glob = { workspace = true }
 ignore = { workspace = true }
 itertools = { workspace = true }
-owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
