@@ -30,7 +30,6 @@ uv-shell = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-warnings = { workspace = true }
 
-clap = { workspace = true, optional = true, features = ["derive"] }
 configparser = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
@@ -41,7 +40,6 @@ owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
-schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -54,8 +52,8 @@ same-file = { workspace = true }
 self-replace = { workspace = true }
 
 [features]
-clap = ["dep:clap", "uv-fs/clap"]
-schemars = ["dep:schemars", "uv-fs/schemars"]
+clap = ["uv-fs/clap"]
+schemars = ["uv-fs/schemars"]
 
 [dev-dependencies]
 anyhow = { workspace = true }
