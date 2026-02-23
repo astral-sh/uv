@@ -14,6 +14,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use tokio::sync::{Semaphore, SemaphorePermit};
+
 use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
@@ -63,6 +65,10 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
+    /// Limits the number of concurrent source distribution builds and metadata generation tasks.
+    /// These tasks can hold an advisory cache shard lock open and may open many additional file
+    /// descriptors while invoking build backends.
+    concurrency_limit: Arc<Semaphore>,
 }
 
 /// The name of the file that contains the revision ID for a remote distribution, encoded via `MsgPack`.
@@ -79,11 +85,12 @@ pub(crate) const SOURCE: &str = "src";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].
-    pub(crate) fn new(build_context: &'a T) -> Self {
+    pub(crate) fn new(build_context: &'a T, concurrency_limit: Arc<Semaphore>) -> Self {
         Self {
             build_context,
             build_stack: None,
             reporter: None,
+            concurrency_limit,
         }
     }
 
@@ -102,6 +109,40 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Self {
             reporter: Some(reporter),
             ..self
+        }
+    }
+
+    /// Acquire a permit from the concurrency limiter before acquiring a cache lock.
+    async fn acquire_concurrency_permit(&self) -> SemaphorePermit<'_> {
+        self.concurrency_limit
+            .acquire()
+            .await
+            .expect("concurrency semaphore should not be closed")
+    }
+
+    /// Read cached metadata if it exists and matches the expected source identity.
+    async fn read_matching_cached_metadata(
+        &self,
+        source: &BuildableSource<'_>,
+        metadata_entry: &CacheEntry,
+    ) -> Option<CachedMetadata> {
+        match CachedMetadata::read(metadata_entry).await {
+            Ok(Some(metadata)) => {
+                if metadata.matches(source.name(), source.version()) {
+                    debug!("Using cached metadata for: {source}");
+                    Some(metadata)
+                } else {
+                    debug!(
+                        "Cached metadata does not match expected name and version for: {source}"
+                    );
+                    None
+                }
+            }
+            Ok(None) => None,
+            Err(err) => {
+                debug!("Failed to deserialize cached metadata for: {source} ({err})");
+                None
+            }
         }
     }
 
@@ -457,8 +498,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
-
         // Fetch the revision for the source distribution.
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
@@ -475,6 +514,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
+        let lock_shard = cache_shard;
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
@@ -534,6 +574,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             }
         }
 
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
+        let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
+            .filter(|file| file.matches(source.name(), source.version()))
+        {
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                cache_info,
+                build_info,
+            ));
+        }
+
         let task = self
             .reporter
             .as_ref()
@@ -587,8 +645,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         hashes: HashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
-
         // Fetch the revision for the source distribution.
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
@@ -605,6 +661,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
+        let lock_shard = cache_shard;
         let cache_shard = cache_shard.shard(revision.id());
         let source_dist_entry = cache_shard.entry(SOURCE);
 
@@ -623,24 +680,18 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        match CachedMetadata::read(&metadata_entry).await {
-            Ok(Some(metadata)) => {
-                if metadata.matches(source.name(), source.version()) {
-                    debug!("Using cached metadata for: {source}");
-                    return Ok(ArchiveMetadata {
-                        metadata: Metadata::from_metadata23(metadata.into()),
-                        hashes: revision.into_hashes(),
-                    });
-                }
-                debug!("Cached metadata does not match expected name and version for: {source}");
-            }
-            Ok(None) => {}
-            Err(err) => {
-                debug!("Failed to deserialize cached metadata for: {source} ({err})");
-            }
+
+        if let Some(metadata) = self
+            .read_matching_cached_metadata(source, &metadata_entry)
+            .await
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata.into()),
+                hashes: revision.into_hashes(),
+            });
         }
 
-        // Otherwise, we need a wheel.
+        // Otherwise, we need a source distribution.
         let revision = if source_dist_entry.path().is_dir() {
             revision
         } else {
@@ -665,6 +716,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     subdirectory.to_path_buf(),
                 ));
             }
+        }
+
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
+        let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
+        if let Some(metadata) = self
+            .read_matching_cached_metadata(source, &metadata_entry)
+            .await
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata.into()),
+                hashes: revision.into_hashes(),
+            });
         }
 
         // Otherwise, we either need to build the metadata.
@@ -861,8 +927,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
-
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer {
             cache_info,
@@ -882,6 +946,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
+        let lock_shard = cache_shard;
         let cache_shard = cache_shard.shard(revision.id());
         let source_entry = cache_shard.entry(SOURCE);
 
@@ -917,6 +982,24 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
                 .await?
         };
+
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
+        let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
+        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+            .ok()
+            .flatten()
+            .filter(|file| file.matches(source.name(), source.version()))
+        {
+            return Ok(BuiltWheelMetadata::from_file(
+                file,
+                revision.into_hashes(),
+                cache_info,
+                build_info,
+            ));
+        }
 
         let task = self
             .reporter
@@ -966,8 +1049,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
-
         // Fetch the revision for the source distribution.
         let LocalRevisionPointer { revision, .. } = self
             .archive_revision(source, resource, cache_shard, hashes)
@@ -984,6 +1065,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
+        let lock_shard = cache_shard;
         let cache_shard = cache_shard.shard(revision.id());
         let source_entry = cache_shard.entry(SOURCE);
 
@@ -1001,21 +1083,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        match CachedMetadata::read(&metadata_entry).await {
-            Ok(Some(metadata)) => {
-                if metadata.matches(source.name(), source.version()) {
-                    debug!("Using cached metadata for: {source}");
-                    return Ok(ArchiveMetadata {
-                        metadata: Metadata::from_metadata23(metadata.into()),
-                        hashes: revision.into_hashes(),
-                    });
-                }
-                debug!("Cached metadata does not match expected name and version for: {source}");
-            }
-            Ok(None) => {}
-            Err(err) => {
-                debug!("Failed to deserialize cached metadata for: {source} ({err})");
-            }
+
+        if let Some(metadata) = self
+            .read_matching_cached_metadata(source, &metadata_entry)
+            .await
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata.into()),
+                hashes: revision.into_hashes(),
+            });
         }
 
         // Otherwise, we need a source distribution.
@@ -1025,6 +1101,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.heal_archive_revision(source, resource, &source_entry, revision, hashes)
                 .await?
         };
+
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
+        let _lock = lock_shard.lock().await.map_err(Error::CacheLock)?;
+
+        // Re-check the cache under lock to avoid duplicate builds across concurrent tasks.
+        if let Some(metadata) = self
+            .read_matching_cached_metadata(source, &metadata_entry)
+            .await
+        {
+            return Ok(ArchiveMetadata {
+                metadata: Metadata::from_metadata23(metadata.into()),
+                hashes: revision.into_hashes(),
+            });
+        }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
         if let Some(metadata) = self
@@ -1186,7 +1277,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        // Acquire the advisory lock.
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
@@ -1310,7 +1402,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             },
         );
 
-        // Acquire the advisory lock.
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // Fetch the revision for the source distribution.
@@ -1324,39 +1417,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         let metadata_entry = cache_shard.entry(METADATA);
-        match CachedMetadata::read(&metadata_entry).await {
-            Ok(Some(metadata)) => {
-                if metadata.matches(source.name(), source.version()) {
-                    debug!("Using cached metadata for: {source}");
-
-                    // If necessary, mark the metadata as dynamic.
-                    let metadata = if dynamic {
-                        ResolutionMetadata {
-                            dynamic: true,
-                            ..metadata.into()
-                        }
-                    } else {
-                        metadata.into()
-                    };
-                    return Ok(ArchiveMetadata::from(
-                        Metadata::from_workspace(
-                            metadata,
-                            resource.install_path.as_ref(),
-                            None,
-                            self.build_context.locations(),
-                            self.build_context.sources().clone(),
-                            self.build_context.workspace_cache(),
-                            credentials_cache,
-                        )
-                        .await?,
-                    ));
+        if let Some(metadata) = self
+            .read_matching_cached_metadata(source, &metadata_entry)
+            .await
+        {
+            // If necessary, mark the metadata as dynamic.
+            let metadata = if dynamic {
+                ResolutionMetadata {
+                    dynamic: true,
+                    ..metadata.into()
                 }
-                debug!("Cached metadata does not match expected name and version for: {source}");
-            }
-            Ok(None) => {}
-            Err(err) => {
-                debug!("Failed to deserialize cached metadata for: {source} ({err})");
-            }
+            } else {
+                metadata.into()
+            };
+            return Ok(ArchiveMetadata::from(
+                Metadata::from_workspace(
+                    metadata,
+                    resource.install_path.as_ref(),
+                    None,
+                    self.build_context.locations(),
+                    self.build_context.sources().clone(),
+                    self.build_context.workspace_cache(),
+                    credentials_cache,
+                )
+                .await?,
+            ));
         }
 
         // If the backend supports `prepare_metadata_for_build_wheel`, use it.
@@ -1615,7 +1700,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        // Acquire the advisory lock.
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         // We don't track any cache information for Git-based source distributions; they're assumed
@@ -1830,7 +1916,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         );
         let metadata_entry = cache_shard.entry(METADATA);
 
-        // Acquire the advisory lock.
+        // Acquire the concurrency permit and advisory lock.
+        let _permit = self.acquire_concurrency_permit().await;
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
 
         let path = if let Some(subdirectory) = resource.subdirectory {
@@ -1873,36 +1960,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            match CachedMetadata::read(&metadata_entry).await {
-                Ok(Some(metadata)) => {
-                    if metadata.matches(source.name(), source.version()) {
-                        debug!("Using cached metadata for: {source}");
-
-                        let git_member = GitWorkspaceMember {
-                            fetch_root: fetch.path(),
-                            git_source: resource,
-                        };
-                        return Ok(ArchiveMetadata::from(
-                            Metadata::from_workspace(
-                                metadata.into(),
-                                &path,
-                                Some(&git_member),
-                                self.build_context.locations(),
-                                self.build_context.sources().clone(),
-                                self.build_context.workspace_cache(),
-                                credentials_cache,
-                            )
-                            .await?,
-                        ));
-                    }
-                    debug!(
-                        "Cached metadata does not match expected name and version for: {source}"
-                    );
-                }
-                Ok(None) => {}
-                Err(err) => {
-                    debug!("Failed to deserialize cached metadata for: {source} ({err})");
-                }
+            if let Some(metadata) = self
+                .read_matching_cached_metadata(source, &metadata_entry)
+                .await
+            {
+                let git_member = GitWorkspaceMember {
+                    fetch_root: fetch.path(),
+                    git_source: resource,
+                };
+                return Ok(ArchiveMetadata::from(
+                    Metadata::from_workspace(
+                        metadata.into(),
+                        &path,
+                        Some(&git_member),
+                        self.build_context.locations(),
+                        self.build_context.sources().clone(),
+                        self.build_context.workspace_cache(),
+                        credentials_cache,
+                    )
+                    .await?,
+                ));
             }
         }
 

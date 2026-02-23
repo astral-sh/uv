@@ -471,6 +471,7 @@ pub(crate) async fn add(
                         &client,
                         &build_dispatch,
                         concurrency.downloads_semaphore.clone(),
+                        concurrency.builds_semaphore.clone(),
                     ),
                 )
                 .with_reporter(Arc::new(ResolverReporter::from(printer)))

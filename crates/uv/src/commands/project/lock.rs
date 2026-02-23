@@ -791,6 +791,7 @@ async fn do_lock(
         &client,
         &build_dispatch,
         concurrency.downloads_semaphore.clone(),
+        concurrency.builds_semaphore.clone(),
     );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
