@@ -243,10 +243,7 @@ impl Osv {
             .map(VulnerabilityID::new)
             .collect();
 
-        let description = vuln
-            .summary
-            .or(vuln.details)
-            .unwrap_or_else(|| format!("Vulnerability {}", vuln.id));
+        let description = vuln.summary.or(vuln.details).unwrap_or(vuln.id.clone());
 
         Finding::Vulnerability {
             dependency: dependency.clone(),
@@ -264,8 +261,12 @@ impl Osv {
 mod tests {
     use std::str::FromStr;
 
+    use serde_json::json;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_redacted::DisplaySafeUrl;
+    use wiremock::matchers::{body_json, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::service::VulnerabilityService;
     use crate::service::osv::RangeType;
@@ -321,6 +322,125 @@ mod tests {
             Other,
         ]
         ");
+    }
+
+    /// Ensure that we properly handle pagination in the OSV API, i.e. that we
+    /// make multiple requests if necessary and use the page token.
+    #[tokio::test]
+    async fn test_query_pagination() {
+        let server = MockServer::start().await;
+
+        // First request: no page token.
+        Mock::given(method("POST"))
+            .and(path("/v1/query"))
+            .and(body_json(&json!({
+                "package": {
+                    "name": "foobar",
+                    "ecosystem": "PyPI",
+                },
+                "version": "1.2.3",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "vulns": [
+                    {
+                        "id": "VULN-1",
+                        "modified": "2026-01-01T00:00:00Z",
+                        "published": "2026-01-01T00:00:00Z",
+                    }
+                ],
+                "next_page_token": "token"
+            })))
+            .mount(&server)
+            .await;
+
+        // Second request: with page token.
+        Mock::given(method("POST"))
+            .and(path("/v1/query"))
+            .and(body_json(&json!({
+                "package": {
+                    "name": "foobar",
+                    "ecosystem": "PyPI",
+                },
+                "version": "1.2.3",
+                "page_token": "token",
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "vulns": [
+                    {
+                        "id": "VULN-2",
+                        "modified": "2026-01-02T00:00:00Z",
+                        "published": "2026-01-02T00:00:00Z",
+                    }
+                ],
+            })))
+            .mount(&server)
+            .await;
+
+        let osv = Osv::new(
+            Default::default(),
+            Some(DisplaySafeUrl::parse(&server.uri()).unwrap()),
+        );
+
+        // Our findings should include vulnerabilities from both pages.
+        let findings = osv
+            .query(&Dependency::new(
+                PackageName::from_str("foobar").unwrap(),
+                Version::from_str("1.2.3").unwrap(),
+            ))
+            .await
+            .expect("Failed to query OSV");
+
+        insta::assert_debug_snapshot!(findings, @r#"
+        [
+            Vulnerability {
+                dependency: Dependency {
+                    name: PackageName(
+                        "foobar",
+                    ),
+                    version: "1.2.3",
+                },
+                id: VulnerabilityID(
+                    "VULN-1",
+                ),
+                description: "VULN-1",
+                fix_versions: [],
+                aliases: [],
+                published: Some(
+                    2026-01-01T00:00:00Z,
+                ),
+                modified: Some(
+                    2026-01-01T00:00:00Z,
+                ),
+            },
+            Vulnerability {
+                dependency: Dependency {
+                    name: PackageName(
+                        "foobar",
+                    ),
+                    version: "1.2.3",
+                },
+                id: VulnerabilityID(
+                    "VULN-2",
+                ),
+                description: "VULN-2",
+                fix_versions: [],
+                aliases: [],
+                published: Some(
+                    2026-01-02T00:00:00Z,
+                ),
+                modified: Some(
+                    2026-01-02T00:00:00Z,
+                ),
+            },
+        ]
+        "#);
+
+        // Ensure our mock server received both requests.
+        assert_eq!(
+            server.received_requests().await.unwrap().len(),
+            2,
+            "Expected to receive two requests"
+        );
     }
 
     /// Ensure that we can query and receive a known vulnerability from the OSV API.

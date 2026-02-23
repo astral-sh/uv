@@ -5751,6 +5751,7 @@ dependencies = [
  "uv-pep440",
  "uv-redacted",
  "uv-small-str",
+ "wiremock",
 ]
 
 [[package]]
