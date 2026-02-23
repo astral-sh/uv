@@ -28,7 +28,10 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = [
+  "rustls-tls",
+  "rustls-tls-native-roots",
+] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 wiremock = { workspace = true }
@@ -38,3 +41,9 @@ default = ["test-osv"]
 
 # Introduces a testing dependency on osv.dev.
 test-osv = []
+
+[package.metadata.cargo-shear]
+# NOTE: reqwest is a dependency of reqwest-middleware, but we don't use it directly.
+# However, we *do* need to explicitly declare it as a dev-dependency to ensure
+# the right TLS features are enabled. `cargo shear` can't see that, hence the ignore.
+ignored = ["reqwest"]

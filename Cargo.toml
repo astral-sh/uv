@@ -342,3 +342,6 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[workspace.metadata.cargo-shear]
+ignored = ["uv-audit"]
