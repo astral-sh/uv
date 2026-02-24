@@ -752,6 +752,44 @@ impl LatestVersionReporter {
 }
 
 #[derive(Debug)]
+pub(crate) struct AuditReporter {
+    progress: ProgressBar,
+}
+
+impl From<Printer> for AuditReporter {
+    fn from(printer: Printer) -> Self {
+        let progress = ProgressBar::with_draw_target(None, printer.target());
+        progress.set_style(
+            ProgressStyle::with_template("{bar:20} [{pos}/{len}] {wide_msg:.dim}").unwrap(),
+        );
+        progress.set_message("Auditing dependencies...");
+        Self { progress }
+    }
+}
+
+impl AuditReporter {
+    #[must_use]
+    pub(crate) fn with_length(self, length: u64) -> Self {
+        self.progress.set_length(length);
+        self
+    }
+
+    pub(crate) fn on_audit_progress(&self) {
+        self.progress.inc(1);
+    }
+
+    pub(crate) fn on_audit_package(&self, name: &PackageName, version: &Version) {
+        self.progress.set_message(format!("{name} v{version}"));
+        self.progress.inc(1);
+    }
+
+    pub(crate) fn on_audit_complete(&self) {
+        self.progress.set_message("");
+        self.progress.finish_and_clear();
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct CleaningDirectoryReporter {
     bar: ProgressBar,
 }
