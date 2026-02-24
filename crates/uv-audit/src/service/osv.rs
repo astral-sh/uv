@@ -230,7 +230,7 @@ impl Osv {
                 // Alternatively, we could propagate the raw version string in the finding and
                 // leave it to the callsite to process into PEP 440 versions.
                 Event::Fixed(fixed) => {
-                    if let Some(fixed) = Version::from_str(fixed).ok() {
+                    if let Ok(fixed) = Version::from_str(fixed) {
                         Some(fixed)
                     } else {
                         trace!(
