@@ -171,6 +171,16 @@
       packageNameTemplate: "rust-lang/rust",
       datasourceTemplate: "github-releases",
     },
+    {
+      customType: "regex",
+      managerFilePatterns: ["^\\.github/workflow/build-binaries\\.yml$"],
+      matchStrings: [
+        "maturin-version:\\s*['\"]?(?<currentValue>[\\w\\.\\-]+)['\"]?",
+      ],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
+    },
   ],
   vulnerabilityAlerts: {
     commitMessageSuffix: "",
