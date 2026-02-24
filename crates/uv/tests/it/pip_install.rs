@@ -10997,7 +10997,7 @@ fn pip_install_no_sources_package() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--no-sources-package")
         .arg("anyio")
-        .arg("."), @r###"
+        .arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -11011,7 +11011,7 @@ fn pip_install_no_sources_package() -> Result<()> {
      + iniconfig==2.0.0 (from git+https://github.com/pytest-dev/iniconfig@93f5930e668c0d1ddf4597e38dd0dea4e2665e7a)
      + project==0.1.0 (from file://[TEMP_DIR]/)
      + sniffio==1.3.1
-    "###);
+    ");
 
     Ok(())
 }
@@ -13019,7 +13019,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     "#})?;
 
     // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg(".").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13052,7 +13052,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     // The child should be rebuilt with anyio 3.7, without `--reinstall`
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -13071,7 +13071,7 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.pip_install().arg(".")
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @r"
+        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13905,7 +13905,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @r"
+    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14100,7 +14100,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14120,7 +14120,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -14140,7 +14140,7 @@ fn abi_compatibility_on_freethreaded_python() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python-platform").arg("linux")
-        .arg(wheel_path), @r"
+        .arg(wheel_path), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14161,7 +14161,7 @@ fn warn_on_bz2_wheel() {
         context.filters(),
         context.pip_install()
             .arg("futzed_bz2 @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_bz2-0.1.0-py3-none-any.whl"),
-        @r"
+        @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14184,7 +14184,7 @@ fn warn_on_lzma_wheel() {
         context.filters(),
         context.pip_install()
             .arg("futzed_lzma @ https://github.com/astral-sh/futzed-wheels/releases/download/v2026.02.09.2/futzed_lzma-0.1.0-py3-none-any.whl"),
-        @r"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
