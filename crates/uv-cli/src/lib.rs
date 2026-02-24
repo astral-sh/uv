@@ -5118,15 +5118,6 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct AuditArgs {
-    /// Perform a platform-independent audit of the dependencies.
-    ///
-    /// Audits resolved package versions for all Python versions and platforms, rather than filtering
-    /// to those that are relevant for the current environment.
-    ///
-    /// Multiple versions may be audited for each package.
-    #[arg(long)]
-    pub universal: bool,
-
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -5252,22 +5243,22 @@ pub struct AuditArgs {
 
     /// The Python version to use when auditing.
     ///
-    /// For example, pass `--python-version 3.10` to display the dependencies that would be included
+    /// For example, pass `--python-version 3.10` to audit the dependencies that would be included
     /// when installing on Python 3.10.
     ///
     /// Defaults to the version of the discovered Python interpreter.
-    #[arg(long, conflicts_with = "universal")]
+    #[arg(long)]
     pub python_version: Option<PythonVersion>,
 
     /// The platform to use when auditing.
     ///
-    /// For example, pass `--platform windows` to display the dependencies that would be included
+    /// For example, pass `--platform windows` to audit the dependencies that would be included
     /// when installing on Windows.
     ///
     /// Represented as a "target triple", a string that describes the target platform in terms of
     /// its CPU, vendor, and operating system name, like `x86_64-unknown-linux-gnu` or
     /// `aarch64-apple-darwin`.
-    #[arg(long, conflicts_with = "universal")]
+    #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 }
 

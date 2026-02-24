@@ -33,7 +33,6 @@ pub(crate) async fn audit(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     script: Option<Pep723Script>,
-    universal: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     install_mirrors: PythonInstallMirrors,
@@ -80,7 +79,10 @@ pub(crate) async fn audit(
     };
     let _extras = extras.with_defaults(default_extras);
 
-    // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
+    // Determine whether we're performing a universal audit.
+    let universal = python_version.is_none() && python_platform.is_none();
+
+    // Find an interpreter for the project, unless we're performing a frozen audit with a universal target.
     let interpreter = if frozen.is_some() && universal {
         None
     } else {

@@ -2463,7 +2463,6 @@ impl FormatSettings {
 /// The resolved settings to use for an `audit` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct AuditSettings {
-    pub(crate) universal: bool,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -2482,7 +2481,6 @@ impl AuditSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let AuditArgs {
-            universal,
             extra,
             all_extras,
             no_extra,
@@ -2520,7 +2518,6 @@ impl AuditSettings {
         check_conflicts(locked, frozen);
 
         Self {
-            universal,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
