@@ -5751,6 +5751,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uuid",
+ "uv-audit",
  "uv-auth",
  "uv-bin-install",
  "uv-build-backend",
