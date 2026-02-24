@@ -651,7 +651,7 @@ async fn build_package(
         if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
             return Err(Error::ListNonUv {
                 name: source.path().user_display().to_string(),
-                reason,
+                reason: reason.to_string(),
             });
         }
 
@@ -663,7 +663,7 @@ async fn build_package(
             Ok(()) => BuildAction::DirectBuild,
             Err(reason) => {
                 debug!(
-                    "Not using uv_build direct build for `{}` because {}",
+                    "Not using `uv_build` direct build for `{}` because {}",
                     source.path().user_display(),
                     reason
                 );
