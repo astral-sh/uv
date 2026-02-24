@@ -4597,6 +4597,50 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
     Ok(())
 }
 
+/// `--upgrade --dry-run` should not report changes when the lockfile is up-to-date with
+/// fork markers.
+///
+/// Regression test for: <https://github.com/astral-sh/uv/issues/16839>
+#[test]
+fn lock_upgrade_dry_run_multi_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "markupsafe<2 ; sys_platform != 'win32'",
+            "markupsafe==2.0.0 ; sys_platform == 'win32'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--dry-run"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No lockfile changes detected
+    ");
+
+    Ok(())
+}
+
 /// Respect the locked version in an existing lockfile.
 #[test]
 fn lock_preference() -> Result<()> {
