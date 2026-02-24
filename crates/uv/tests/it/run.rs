@@ -499,59 +499,111 @@ fn run_pep723_script() -> Result<()> {
 
 #[test]
 fn run_pep723_script_requires_python() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.9", "3.11"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
 
-    // If we have a `.python-version` that's incompatible with the script, we should error.
+    // If we have a `.python-version` that's incompatible with the script, we should use the
+    // script's `requires-python` for Python discovery instead.
     let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
-    python_version.write_str("3.9")?;
+    python_version.write_str("3.11")?;
 
-    // If the script contains a PEP 723 tag, we should install its requirements.
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import platform
+        print(platform.python_version())
+       "#
+    })?;
+
+    // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
+    // so uv should ignore it and discover a compatible Python (3.12) instead.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // Deleting the `.python-version` file should not change the behavior.
+    fs_err::remove_file(&python_version)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+/// When a `.python-version` is compatible with a script's `requires-python`, the `.python-version`
+/// should be used.
+#[test]
+fn run_pep723_script_requires_python_compatible() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.11")?;
+
     let test_script = context.temp_dir.child("main.py");
     test_script.write_str(indoc! { r#"
         # /// script
         # requires-python = ">=3.11"
-        # dependencies = [
-        #   "iniconfig",
-        # ]
         # ///
 
-        import iniconfig
-
-        x: str | int = "hello"
-        print(x)
+        import platform
+        print(platform.python_version())
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r#"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-    warning: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the script's Python requirement: `>=3.11`
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
-    Traceback (most recent call last):
-      File "[TEMP_DIR]/main.py", line 10, in <module>
-        x: str | int = "hello"
-    TypeError: unsupported operand type(s) for |: 'type' and 'type'
-    "#);
-
-    // Delete the `.python-version` file to allow the script to run.
-    fs_err::remove_file(&python_version)?;
-
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
+    // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
+    // so it should be used.
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    hello
+    3.11.[X]
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// When `.python-version` specifies an incompatible range, script `requires-python` should be used
+/// for discovery.
+#[test]
+fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str(">3.8,<3.12")?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import platform
+        print(platform.python_version())
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
     ");
 
     Ok(())
