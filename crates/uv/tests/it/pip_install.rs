@@ -3347,6 +3347,62 @@ fn install_executable_hardlink() {
     Command::new(executable).arg("--version").assert().success();
 }
 
+/// Install a package into a virtual environment using clone semantics, and ensure that the
+/// executable permissions are retained.
+///
+/// Requires `UV_INTERNAL__TEST_COW_FS`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/18181>
+#[test]
+fn install_executable_clone() -> anyhow::Result<()> {
+    let Some(context) = uv_test::test_context!("3.12").with_cache_on_cow_fs()? else {
+        return Ok(());
+    };
+    let Some(context) = context.with_working_dir_on_cow_fs()? else {
+        return Ok(());
+    };
+    context.venv().assert().success();
+
+    uv_snapshot!(context.filters(), context
+        .pip_install()
+        .arg(context.workspace_root.join("test/packages/executable_file"))
+        .arg("--link-mode")
+        .arg("clone"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-file==1.0.0 (from file://[WORKSPACE]/test/packages/executable_file)
+    "
+    );
+
+    // Verify that the executable file inside the package retained its execute
+    // permission after being cloned. On Linux, `ioctl_ficlone` only clones data
+    // blocks without preserving metadata, so permissions must be copied separately.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let script = context
+            .site_packages()
+            .join("executable_file")
+            .join("bin")
+            .join("run.sh");
+        let mode = fs_err::metadata(&script)?.permissions().mode();
+        assert!(
+            mode & 0o111 != 0,
+            "Expected executable permissions on {}, got {:o}",
+            script.display(),
+            mode
+        );
+    }
+
+    Ok(())
+}
+
 /// Install a package from the command line into a virtual environment, ignoring its dependencies.
 #[test]
 fn no_deps() {
