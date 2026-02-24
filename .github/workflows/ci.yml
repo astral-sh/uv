@@ -74,6 +74,7 @@ jobs:
             [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
             [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
             [[ "$file" == ".github/workflows/build-release-binaries.yml" ]] && release_workflow_changed=1
+            [[ "$file" == "scripts/check_uv_wheel_contents.py" ]] && release_build_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
             [[ "$file" == "uv.schema.json" ]] && schema_changed=1
             [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ || "$file" == "crates/uv/src/commands/publish.rs" ]] && publish_code_changed=1

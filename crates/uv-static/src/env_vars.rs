@@ -562,7 +562,7 @@ impl EnvVars {
     ///
     /// When populated, uv will run additional tests that require this functionality.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_COW_FS: &'static str = "UV_INTERNAL__TEST_COW_FS";
 
     /// Path to a directory on a filesystem that does **not** support copy-on-write.
@@ -570,7 +570,7 @@ impl EnvVars {
     /// When populated, uv will run additional tests that verify fallback behavior
     /// when copy-on-write is unavailable.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_NOCOW_FS: &'static str = "UV_INTERNAL__TEST_NOCOW_FS";
 
     /// Path to a directory on an alternative filesystem for testing.
@@ -579,7 +579,7 @@ impl EnvVars {
     ///
     /// When populated, uv will run additional tests that cover cross-filesystem linking.
     #[attr_hidden]
-    #[attr_added_in("next release")]
+    #[attr_added_in("0.10.5")]
     pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
 
     /// Used to force treating an interpreter as "managed" during tests.
