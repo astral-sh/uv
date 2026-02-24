@@ -8,12 +8,16 @@
 //!
 //! [OSV]: https://osv.dev/
 
+use std::str::FromStr as _;
+use tracing::trace;
+
 use jiff::Timestamp;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-use crate::types::{Dependency, Finding};
+use crate::types::{Dependency, Finding, VulnerabilityID};
 
 const API_BASE: &str = "https://api.osv.dev/";
 
@@ -25,7 +29,7 @@ pub enum Error {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
     /// An error when constructing the URL for an API request.
     #[error("Invalid API URL: {0}")]
-    Url(#[from] DisplaySafeUrlError),
+    Url(DisplaySafeUrl, #[source] DisplaySafeUrlError),
 }
 
 /// Package specification for OSV queries.
@@ -172,7 +176,13 @@ impl Osv {
                 page_token: page_token.clone(),
             };
 
-            let url = self.base_url.join("v1/query")?;
+            // TODO: Technically the error here is unreachable, since `base_url` is valid by construction
+            // and the path component is statically valid. We could perhaps just replace it with
+            // an `expect`.
+            let url = self
+                .base_url
+                .join("v1/query")
+                .map_err(|e| Error::Url(self.base_url.clone(), e))?;
             let response = self
                 .client
                 .post(url.as_ref())
@@ -207,10 +217,6 @@ impl Osv {
 
     /// Convert an OSV Vulnerability record to a Finding.
     fn vulnerability_to_finding(dependency: &Dependency, vuln: Vulnerability) -> Finding {
-        use crate::types::VulnerabilityID;
-        use std::str::FromStr;
-        use uv_pep440::Version;
-
         // Extract fix versions from affected ranges
         let fix_versions = vuln
             .affected
@@ -223,7 +229,16 @@ impl Osv {
                 // TODO: Warn on a malformed version string rather than silently skipping it.
                 // Alternatively, we could propagate the raw version string in the finding and
                 // leave it to the callsite to process into PEP 440 versions.
-                Event::Fixed(fixed) => Version::from_str(fixed).ok(),
+                Event::Fixed(fixed) => match Version::from_str(fixed).ok() {
+                    Some(fixed) => Some(fixed),
+                    None => {
+                        trace!(
+                            "Skipping invalid (non-PEP 440) version in OSV record {id}: {fixed}",
+                            id = vuln.id,
+                        );
+                        None
+                    }
+                },
                 _ => None,
             })
             .collect();

@@ -25,6 +25,7 @@ jiff = { workspace = true }
 reqwest-middleware = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
