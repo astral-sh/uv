@@ -6114,6 +6114,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "rcgen",
+ "regex",
  "reqwest",
  "rkyv",
  "rmp-serde",
