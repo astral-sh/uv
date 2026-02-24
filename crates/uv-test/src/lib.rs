@@ -2240,6 +2240,14 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
         }
     }
 
+    // Trim trailing whitespace.
+    // Many formatters trim trailing whitespace, while some commands output trailing whitespace.
+    let snapshot = if snapshot.lines().any(|line| line.trim_end() != line) {
+        snapshot.lines().map(str::trim_end).join("\n")
+    } else {
+        snapshot
+    };
+
     let status = output.status;
     (snapshot, output, status)
 }
