@@ -609,6 +609,39 @@ fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
     Ok(())
 }
 
+/// Explicit `--python` requests should take precedence over `.python-version` and script
+/// `requires-python`.
+#[test]
+fn run_pep723_script_requires_python_explicit_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let python_version = context.temp_dir.child(PYTHON_VERSION_FILENAME);
+    python_version.write_str("3.12")?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # ///
+
+        import platform
+        print(platform.python_version())
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--python").arg("3.11").arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11.[X]
+
+    ----- stderr -----
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the script's Python requirement: `>=3.12`
+    ");
+
+    Ok(())
+}
+
 /// Run a `.pyw` script. The script should be executed with `pythonw.exe`.
 #[test]
 fn run_pythonw_script() -> Result<()> {

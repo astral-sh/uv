@@ -1142,6 +1142,112 @@ pub(crate) enum PythonRequestSource {
     RequiresPython,
 }
 
+#[derive(Debug, Clone)]
+struct ResolvedPythonRequest {
+    source: PythonRequestSource,
+    python_request: Option<PythonRequest>,
+    script_requires_python: Option<RequiresPython>,
+    workspace_requires_python: Option<RequiresPython>,
+}
+
+impl ResolvedPythonRequest {
+    /// Resolve a Python request from the provided options.
+    ///
+    /// The resolution order is:
+    /// 1. Explicit request from the user (e.g., `--python 3.12`)
+    /// 2. `.python-version` file (filtered for compatibility)
+    /// 3. `requires-python` from script metadata
+    /// 4. `requires-python` from workspace `pyproject.toml`
+    async fn from_options(
+        explicit_request: Option<PythonRequest>,
+        workspace: Option<&Workspace>,
+        groups: &DependencyGroupsWithDefaults,
+        project_dir: &Path,
+        script_requires_python_specifiers: Option<&VersionSpecifiers>,
+        no_config: bool,
+    ) -> Result<Self, ProjectError> {
+        let script_requires_python =
+            script_requires_python_specifiers.map(RequiresPython::from_specifiers);
+
+        let workspace_requires_python = workspace
+            .map(|workspace| find_requires_python(workspace, groups))
+            .transpose()?
+            .flatten();
+
+        let workspace_root = workspace.map(Workspace::install_path).map(PathBuf::as_path);
+
+        // (1) Explicit request from the user
+        let (source, python_request) = if let Some(request) = explicit_request {
+            (PythonRequestSource::UserRequest, Some(request))
+        } else if let Some(file) = PythonVersionFile::discover(
+            // (2) `.python-version` file
+            project_dir,
+            &VersionFileDiscoveryOptions::default()
+                .with_stop_discovery_at(workspace_root)
+                .with_no_config(no_config),
+        )
+        .await?
+        .filter(
+            |file| match (file.version(), script_requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => {
+                    request.intersects_requires_python(requires_python)
+                }
+                _ => true,
+            },
+        )
+        .filter(|file| {
+            if !file.is_global() {
+                return true;
+            }
+            match (file.version(), workspace_requires_python.as_ref()) {
+                (Some(request), Some(requires_python)) => {
+                    request.intersects_requires_python(requires_python)
+                }
+                _ => true,
+            }
+        }) {
+            (
+                PythonRequestSource::DotPythonVersion(file.clone()),
+                file.version().cloned(),
+            )
+        } else if let Some(requires_python) = script_requires_python.as_ref() {
+            // (3) `requires-python` from script metadata
+            (
+                PythonRequestSource::RequiresPython,
+                Some(PythonRequest::Version(VersionRequest::Range(
+                    requires_python.specifiers().clone(),
+                    PythonVariant::Default,
+                ))),
+            )
+        } else {
+            // (4) `requires-python` from workspace `pyproject.toml`
+            (
+                PythonRequestSource::RequiresPython,
+                workspace_requires_python.as_ref().map(|requires_python| {
+                    PythonRequest::Version(VersionRequest::Range(
+                        requires_python.specifiers().clone(),
+                        PythonVariant::Default,
+                    ))
+                }),
+            )
+        };
+
+        if let Some(python_request) = python_request.as_ref() {
+            debug!(
+                "Using Python request `{}` from {source}",
+                python_request.to_canonical_string()
+            );
+        }
+
+        Ok(Self {
+            source,
+            python_request,
+            script_requires_python,
+            workspace_requires_python,
+        })
+    }
+}
+
 impl std::fmt::Display for PythonRequestSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1177,62 +1283,20 @@ impl WorkspacePython {
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace
-            .map(|workspace| find_requires_python(workspace, groups))
-            .transpose()?
-            .flatten();
-
-        let workspace_root = workspace.map(Workspace::install_path);
-
-        let (source, python_request) = if let Some(request) = python_request {
-            // (1) Explicit request from user
-            let source = PythonRequestSource::UserRequest;
-            let request = Some(request);
-            (source, request)
-        } else if let Some(file) = PythonVersionFile::discover(
+        let ResolvedPythonRequest {
+            source,
+            python_request,
+            workspace_requires_python: requires_python,
+            ..
+        } = ResolvedPythonRequest::from_options(
+            python_request,
+            workspace,
+            groups,
             project_dir,
-            &VersionFileDiscoveryOptions::default()
-                .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
-                .with_no_config(no_config),
+            None,
+            no_config,
         )
-        .await?
-        .filter(|file| {
-            // Ignore global version files that are incompatible with requires-python
-            if !file.is_global() {
-                return true;
-            }
-            match (file.version(), requires_python.as_ref()) {
-                (Some(request), Some(requires_python)) => request
-                    .as_pep440_version()
-                    .is_none_or(|version| requires_python.contains(&version)),
-                _ => true,
-            }
-        }) {
-            // (2) Request from `.python-version`
-            let source = PythonRequestSource::DotPythonVersion(file.clone());
-            let request = file.version().cloned();
-            (source, request)
-        } else {
-            // (3) `requires-python` in `pyproject.toml`
-            let request = requires_python
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-            let source = PythonRequestSource::RequiresPython;
-            (source, request)
-        };
-
-        if let Some(python_request) = python_request.as_ref() {
-            debug!(
-                "Using Python request `{}` from {source}",
-                python_request.to_canonical_string()
-            );
-        }
+        .await?;
 
         Ok(Self {
             source,
@@ -1264,76 +1328,22 @@ impl ScriptPython {
         script: Pep723ItemRef<'_>,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let script_requires_python = script
-            .metadata()
-            .requires_python
-            .as_ref()
-            .map(RequiresPython::from_specifiers);
-
-        let workspace_requires_python = workspace
-            .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
-            .transpose()?
-            .flatten();
-
-        let workspace_root = workspace.map(Workspace::install_path);
         let project_dir = script.path().and_then(Path::parent).unwrap_or(&**CWD);
 
-        let (source, python_request) = if let Some(request) = python_request {
-            // (1) Explicit request from user
-            (PythonRequestSource::UserRequest, Some(request))
-        } else if let Some(file) = PythonVersionFile::discover(
+        let ResolvedPythonRequest {
+            source,
+            python_request,
+            script_requires_python,
+            workspace_requires_python,
+        } = ResolvedPythonRequest::from_options(
+            python_request,
+            workspace,
+            &DependencyGroupsWithDefaults::none(),
             project_dir,
-            &VersionFileDiscoveryOptions::default()
-                .with_stop_discovery_at(workspace_root.map(PathBuf::as_ref))
-                .with_no_config(no_config),
+            script.metadata().requires_python.as_ref(),
+            no_config,
         )
-        .await?
-        .filter(|file| {
-            // Ignore version files that are incompatible with the script's `requires-python`
-            match (file.version(), script_requires_python.as_ref()) {
-                (Some(request), Some(requires_python)) => {
-                    request.intersects_requires_python(requires_python)
-                }
-                _ => true,
-            }
-        })
-        .filter(|file| {
-            // Ignore global version files that are incompatible with the workspace `requires-python`
-            if !file.is_global() {
-                return true;
-            }
-            match (file.version(), workspace_requires_python.as_ref()) {
-                (Some(request), Some(requires_python)) => {
-                    request.intersects_requires_python(requires_python)
-                }
-                _ => true,
-            }
-        }) {
-            // (2) Request from `.python-version`
-            (
-                PythonRequestSource::DotPythonVersion(file.clone()),
-                file.version().cloned(),
-            )
-        } else if let Some(specifiers) = script.metadata().requires_python.as_ref() {
-            // (3) `requires-python` from script metadata
-            let request = PythonRequest::Version(VersionRequest::Range(
-                specifiers.clone(),
-                PythonVariant::Default,
-            ));
-            (PythonRequestSource::RequiresPython, Some(request))
-        } else {
-            // (4) `requires-python` from workspace `pyproject.toml`
-            let request = workspace_requires_python
-                .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
-            (PythonRequestSource::RequiresPython, request)
-        };
+        .await?;
 
         let requires_python = if let Some(requires_python) = script_requires_python {
             Some((requires_python, RequiresPythonSource::Script))
@@ -1341,13 +1351,6 @@ impl ScriptPython {
             workspace_requires_python
                 .map(|requires_python| (requires_python, RequiresPythonSource::Project))
         };
-
-        if let Some(python_request) = python_request.as_ref() {
-            debug!(
-                "Using Python request `{}` from {source}",
-                python_request.to_canonical_string()
-            );
-        }
 
         Ok(Self {
             source,
