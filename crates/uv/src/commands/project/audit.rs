@@ -147,7 +147,7 @@ pub(crate) async fn audit(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             &cache,
             &WorkspaceCache::default(),
             printer,
