@@ -28,7 +28,7 @@ uv_build_expected = {
     "uv_build-VERSION.dist-info/WHEEL",
     "uv_build-VERSION.dist-info/licenses/LICENSE-APACHE",
     "uv_build-VERSION.dist-info/licenses/LICENSE-MIT",
-    "uv_build-VERSION.dist-info/sboms/uv_build.cyclonedx.json",
+    "uv_build-VERSION.dist-info/sboms/uv-build.cyclonedx.json",
     "uv_build/__init__.py",
     "uv_build/__main__.py",
     "uv_build/py.typed",
