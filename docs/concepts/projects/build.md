@@ -39,6 +39,23 @@ You can limit `uv build` to building a source distribution with `uv build --sdis
 distribution with `uv build --wheel`, or build both distributions from source with
 `uv build --sdist --wheel`.
 
+## Install and test the created dist wheel
+
+Create a venv
+
+```console
+$ uv venv
+$ uv pip install dist/package.whl
+```
+
+Validate source of module
+
+```console
+$ uv pip show package
+```
+
+uv will now use the wheel version of the package - since the dependency is satisfied
+
 ## Build constraints
 
 `uv build` accepts `--build-constraint`, which can be used to constrain the versions of any build
