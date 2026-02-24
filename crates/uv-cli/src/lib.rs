@@ -3463,8 +3463,6 @@ pub struct RunArgs {
     ///
     /// May be provided more than once.
     ///
-    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
-    ///
     /// This option is only available when running in a project.
     #[arg(
         long,
@@ -3477,8 +3475,6 @@ pub struct RunArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Include all optional dependencies.
-    ///
-    /// Optional dependencies are defined via `project.optional-dependencies` in a `pyproject.toml`.
     ///
     /// This option is only available when running in a project.
     #[arg(long, conflicts_with = "extra", conflicts_with = "only_group")]
