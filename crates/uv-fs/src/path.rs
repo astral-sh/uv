@@ -318,6 +318,20 @@ pub fn relative_to(
     Ok(up.join(stripped))
 }
 
+/// Try to compute a path relative to `base` if `should_relativize` is true, otherwise return
+/// the absolute path. Falls back to absolute if relativization fails.
+pub fn try_relative_to_if(
+    path: impl AsRef<Path>,
+    base: impl AsRef<Path>,
+    should_relativize: bool,
+) -> Result<PathBuf, std::io::Error> {
+    if should_relativize {
+        relative_to(&path, &base).or_else(|_| std::path::absolute(path.as_ref()))
+    } else {
+        std::path::absolute(path.as_ref())
+    }
+}
+
 /// A path that can be serialized and deserialized in a portable way by converting Windows-style
 /// backslashes to forward slashes, and using a `.` for an empty path.
 ///

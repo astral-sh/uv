@@ -7636,7 +7636,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [package.metadata]
         requires-dist = [
             { name = "b", directory = "b" },
-            { name = "c", directory = "c" },
+            { name = "c", directory = "[TEMP_DIR]/c" },
         ]
 
         [[package]]
@@ -7647,7 +7647,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "c"
         version = "0.1.0"
-        source = { directory = "c" }
+        source = { directory = "[TEMP_DIR]/c" }
         "#
         );
     });
@@ -7661,6 +7661,228 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Check relative and absolute path handling in constraint-dependencies.
+///
+/// When a user provides an absolute path in `constraint-dependencies`, it should be preserved
+/// as absolute in the lockfile manifest. Currently, absolute paths are incorrectly converted
+/// to relative paths.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
+#[test]
+fn lock_constraint_dependency_absolute_path() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a constraint package at an absolute path.
+    let constraint_pkg = context.temp_dir.child("constraint_pkg");
+    constraint_pkg
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "constraint-pkg"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    constraint_pkg
+        .child("src")
+        .child("constraint_pkg")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create the main project with a constraint-dependency using an absolute path.
+    let pyproject_toml = context.temp_dir.child("project").child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        constraint-dependencies = ["constraint-pkg @ {}"]
+        "#,
+        constraint_pkg.path().display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("project")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Check the lockfile - the absolute path should stay absolute, but currently it's relative (bug).
+    let lock = fs_err::read_to_string(context.temp_dir.join("project/uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "constraint-pkg", directory = "[TEMP_DIR]/constraint_pkg" }]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Check that absolute index paths in config files are preserved in lockfiles.
+///
+/// When an index is specified with an absolute path in a config file (pyproject.toml),
+/// that absolute path should be preserved in the lockfile. Currently, absolute paths
+/// are incorrectly converted to relative paths.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
+#[test]
+fn lock_index_absolute_path_from_config() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a local flat index with a wheel.
+    let index_dir = context.temp_dir.child("local_index");
+    fs_err::create_dir_all(&index_dir)?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("test/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("tqdm-1000"))
+        {
+            let dest = index_dir.join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    // Create a project directory.
+    let project = context.temp_dir.child("project");
+    fs_err::create_dir_all(&project)?;
+
+    // Configure the index with an ABSOLUTE path in pyproject.toml.
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["tqdm==1000.0.0"]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "{}"
+        format = "flat"
+        "#,
+        index_dir.path().display()
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Check the lockfile - the absolute path should stay absolute, but currently it's relative (bug).
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "tqdm" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "tqdm", specifier = "==1000.0.0" }]
+
+        [[package]]
+        name = "tqdm"
+        version = "1000.0.0"
+        source = { registry = "[TEMP_DIR]/local_index" }
+        wheels = [
+            { path = "[TEMP_DIR]/local_index/tqdm-1000.0.0-py3-none-any.whl" },
+        ]
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -11551,9 +11773,9 @@ fn lock_find_links_local_wheel() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -11902,8 +12124,8 @@ fn lock_find_links_local_sdist() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "999.0.0"
-        source = { registry = "../links" }
-        sdist = { path = "tqdm-999.0.0.tar.gz" }
+        source = { registry = "[TEMP_DIR]/links" }
+        sdist = { path = "[TEMP_DIR]/links/tqdm-999.0.0.tar.gz" }
         "#
         );
     });

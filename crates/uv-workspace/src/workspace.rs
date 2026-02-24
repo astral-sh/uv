@@ -364,9 +364,7 @@ impl Workspace {
     /// Returns the set of all workspace members.
     pub fn members_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.iter().filter_map(|(name, member)| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+            let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
                 extras: Box::new([]),
@@ -474,9 +472,7 @@ impl Workspace {
     /// Returns the set of all workspace member dependency groups.
     pub fn group_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
         self.packages.iter().filter_map(|(name, member)| {
-            let url = VerbatimUrl::from_absolute_path(&member.root)
-                .expect("path is valid URL")
-                .with_given(member.root.to_string_lossy());
+            let url = VerbatimUrl::from_absolute_path(&member.root).expect("path is valid URL");
 
             let groups = {
                 let mut groups = member

@@ -3065,7 +3065,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        dependency = { path = "../dependency" }
+        dependency = { path = "[TEMP_DIR]/dependency" }
         "#
         );
     });
@@ -3088,7 +3088,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { directory = "../dependency" }
+        source = { directory = "[TEMP_DIR]/dependency" }
 
         [[package]]
         name = "project"
@@ -3099,7 +3099,164 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", directory = "../dependency" }]
+        requires-dist = [{ name = "dependency", directory = "[TEMP_DIR]/dependency" }]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Check relative and absolute path handling with `uv add`.
+///
+/// When a user provides an absolute path, it should be preserved as absolute in pyproject.toml
+/// and uv.lock. Currently, absolute paths are incorrectly converted to relative paths.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
+#[test]
+fn add_relative_and_absolute_paths() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create a dependency at a relative path (sibling directory).
+    let relative_dep = context.temp_dir.child("relative_dep");
+    relative_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "relative-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    relative_dep
+        .child("src")
+        .child("relative_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a dependency at an absolute path (using the full temp_dir path).
+    let absolute_dep = context.temp_dir.child("absolute_dep");
+    absolute_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "absolute-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    absolute_dep
+        .child("src")
+        .child("absolute_dep")
+        .child("__init__.py")
+        .touch()?;
+
+    // Add the relative dependency using a relative path.
+    uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + relative-dep==0.1.0 (from file://[TEMP_DIR]/relative_dep)
+    ");
+
+    // Add the absolute dependency using an absolute path.
+    // NOTE: The absolute path should be preserved, but currently it gets converted to relative.
+    uv_snapshot!(context.filters(), context.add().arg(absolute_dep.path()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
+    ");
+
+    // Check pyproject.toml - the relative path should stay relative, and the absolute path
+    // should stay absolute. Currently, both are relative (bug).
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "absolute-dep",
+            "relative-dep",
+        ]
+
+        [tool.uv.sources]
+        relative-dep = { path = "../relative_dep" }
+        absolute-dep = { path = "[TEMP_DIR]/absolute_dep" }
+        "#
+        );
+    });
+
+    // Check uv.lock - same issue, absolute path should stay absolute.
+    let lock = fs_err::read_to_string(project.join("uv.lock"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "absolute-dep"
+        version = "0.1.0"
+        source = { directory = "[TEMP_DIR]/absolute_dep" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "absolute-dep" },
+            { name = "relative-dep" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "absolute-dep", directory = "[TEMP_DIR]/absolute_dep" },
+            { name = "relative-dep", directory = "../relative_dep" },
+        ]
+
+        [[package]]
+        name = "relative-dep"
+        version = "0.1.0"
+        source = { directory = "../relative_dep" }
         "#
         );
     });
