@@ -26,7 +26,7 @@ use crate::{BuildBackendSettings, Error, error_on_venv};
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
-/// No breaking changes were introduced to the uv build backend since those releases, so we can use
+/// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
 const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30"];
 
