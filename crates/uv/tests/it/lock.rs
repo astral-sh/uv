@@ -23672,10 +23672,17 @@ fn lock_dry_run_noop() -> Result<()> {
 
 /// Regression test for <https://github.com/astral-sh/uv/issues/16839>.
 ///
-/// When multi-version (forking) resolution markers go through the
-/// simplify-complexify round-trip during lockfile deserialization, they may
-/// differ structurally from the markers the resolver produces directly. This
-/// caused `--dry-run --upgrade` to report false "Lockfile changes detected"
+/// When a lockfile is deserialized, fork markers go through
+/// `SimplifiedMarkerTree::into_marker(&requires_python)`, which folds
+/// `requires-python` constraints back into the marker tree. For example, with
+/// `requires-python = ">=3.12"`, the resolver produces fork markers like
+/// `sys_platform != 'win32'`, but after the simplify/complexify round-trip
+/// during deserialization the same marker becomes
+/// `python_full_version >= '3.12' and sys_platform != 'win32'`.
+///
+/// Both are semantically equivalent given the project's `requires-python`
+/// bound, but `PartialEq` on the `Lock` struct sees them as different,
+/// causing `--dry-run --upgrade` to falsely report "Lockfile changes detected"
 /// when the lockfile was actually up-to-date.
 #[test]
 fn lock_dry_run_upgrade_multi_version() -> Result<()> {

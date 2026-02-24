@@ -606,12 +606,16 @@ impl Lock {
         }
 
         // Normalize fork markers by round-tripping through simplify/complexify.
-        // This ensures markers produced by the resolver have the same form as
-        // markers read from an existing lockfile, which go through the same
-        // round-trip during deserialization. Without this, the `PartialEq`
-        // comparison between a freshly-resolved lock and one read from disk
-        // can report false differences (e.g., `--dry-run` showing changes
-        // when there are none).
+        //
+        // During lockfile deserialization, `SimplifiedMarkerTree::into_marker`
+        // folds `requires-python` constraints back into the marker tree. For
+        // example, with `requires-python = ">=3.12"`, the resolver produces
+        // `sys_platform != 'win32'` but deserialization yields
+        // `python_full_version >= '3.12' and sys_platform != 'win32'`.
+        //
+        // Without this normalization, the `PartialEq` comparison between a
+        // freshly-resolved lock and one read from disk can report false
+        // differences (e.g., `--dry-run` showing changes when there are none).
         let fork_markers = fork_markers
             .into_iter()
             .map(|marker| {
