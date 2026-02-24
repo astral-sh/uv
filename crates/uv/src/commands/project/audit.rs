@@ -10,11 +10,14 @@ use crate::{
             lock::{LockMode, LockOperation},
             lock_target::LockTarget,
         },
+        reporters::AuditReporter,
     },
     printer::Printer,
     settings::{FrozenSource, LockCheck, ResolverSettings},
 };
 use anyhow::Result;
+use tracing::trace;
+use uv_audit::{service::osv, types::Dependency};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -178,10 +181,37 @@ pub(crate) async fn audit(
     // TODO: validate the sets of requested extras/groups against the lockfile?
 
     // Perform the audit.
-    warn_user!(
-        "Would have audited {n} dependencies.",
+    // TODO: Use `client_builder` to produce an HTTP client through our normal process here.
+    let service = osv::Osv::default();
+    trace!(
+        "Auditing {n} dependencies against OSV",
         n = lock.packages().len()
     );
+
+    let reporter = AuditReporter::from(printer).with_length(lock.packages().len() as u64);
+
+    let mut all_findings = vec![];
+    for package in lock.packages() {
+        let Some(version) = package.version() else {
+            trace!(
+                "Skipping audit for {} because it has no version information",
+                package.name()
+            );
+            reporter.on_audit_progress();
+            continue;
+        };
+
+        reporter.on_audit_package(package.name(), version);
+
+        let dependency = Dependency::new(package.name().clone(), version.clone());
+        all_findings.extend(service.query(&dependency).await?);
+    }
+
+    reporter.on_audit_complete();
+
+    for finding in all_findings {
+        println!("{finding:?}");
+    }
 
     Ok(ExitStatus::Success)
 }
