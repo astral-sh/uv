@@ -15178,7 +15178,7 @@ fn conflict_item_unknown_field() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -15187,10 +15187,10 @@ fn conflict_item_unknown_field() -> Result<()> {
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 17
        |
-    10 |               { name = \"foo\", extra = \"extra1\" },
+    10 |               { name = "foo", extra = "extra1" },
        |                 ^^^^
     unknown field `name`, expected one of `package`, `extra`, `group`
-    ");
+    "#);
 
     Ok(())
 }

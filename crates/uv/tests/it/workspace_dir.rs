@@ -21,7 +21,6 @@ fn workspace_dir_simple() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-
     "
     );
 }
@@ -42,7 +41,6 @@ fn workspace_dir_specific_package() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-
     "
     );
 
@@ -54,7 +52,6 @@ fn workspace_dir_specific_package() {
     [TEMP_DIR]/foo/bar
 
     ----- stderr -----
-
     "
     );
 }
@@ -80,7 +77,6 @@ fn workspace_metadata_from_member() -> Result<()> {
     [TEMP_DIR]/workspace
 
     ----- stderr -----
-
     "
     );
 
@@ -97,7 +93,7 @@ fn workspace_dir_package_doesnt_exist() {
 
     let workspace = context.temp_dir.child("foo");
 
-    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir().arg("--package").arg("bar").current_dir(&workspace), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -113,7 +109,7 @@ fn workspace_dir_package_doesnt_exist() {
 fn workspace_metadata_no_project() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_dir(), @r"
+    uv_snapshot!(context.filters(), context.workspace_dir(), @"
     success: false
     exit_code: 2
     ----- stdout -----

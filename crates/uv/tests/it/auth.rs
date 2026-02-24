@@ -2166,7 +2166,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2183,7 +2183,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2201,7 +2201,7 @@ fn login_pyx_dev_with_custom_api_url() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2221,7 +2221,7 @@ fn logout_pyx_dev_with_custom_api_url() {
     // no credentials exist, but verifies it's recognized as pyx).
     uv_snapshot!(context.auth_logout()
         .arg("pyx.dev")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2242,7 +2242,7 @@ fn token_pyx_dev_with_custom_api_url() {
         .arg("pyx.dev")
         .arg("--username")
         .arg("testuser")
-        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @r"
+        .env(EnvVars::PYX_API_URL, "http://localhost:8000"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2264,7 +2264,7 @@ fn token_pyx_staging_without_env_var() {
     // Without PYX_API_URL set, staging pyx URLs are NOT recognized as pyx domains.
     // They fall through to the normal credential store lookup.
     uv_snapshot!(context.auth_token()
-        .arg("https://astral-sh-staging-api.pyx.dev"), @r"
+        .arg("https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2288,7 +2288,7 @@ fn login_pyx_staging_with_env_var() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2306,7 +2306,7 @@ fn login_pyx_staging_with_env_var() {
         .arg("testuser")
         .arg("--password")
         .arg("testpass")
-        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @r"
+        .env(EnvVars::PYX_API_URL, "https://astral-sh-staging-api.pyx.dev"), @"
     success: false
     exit_code: 2
     ----- stdout -----

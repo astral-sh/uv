@@ -21,7 +21,6 @@ fn workspace_list_simple() {
     foo
 
     ----- stderr -----
-
     "
     );
 
@@ -32,7 +31,6 @@ fn workspace_list_simple() {
     [TEMP_DIR]/foo
 
     ----- stderr -----
-
     "
     );
 }
@@ -59,7 +57,6 @@ fn workspace_list_root_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-
     "
     );
 
@@ -88,7 +85,6 @@ fn workspace_list_virtual_workspace() -> Result<()> {
     seeds
 
     ----- stderr -----
-
     "
     );
 
@@ -119,7 +115,6 @@ fn workspace_list_from_member() -> Result<()> {
     seeds
 
     ----- stderr -----
-
     "
     );
 
@@ -160,7 +155,6 @@ fn workspace_list_multiple_members() {
     pkg-c
 
     ----- stderr -----
-
     "
     );
 
@@ -173,7 +167,6 @@ fn workspace_list_multiple_members() {
     [TEMP_DIR]/pkg-a/pkg-c
 
     ----- stderr -----
-
     "
     );
 }
@@ -194,7 +187,6 @@ fn workspace_list_single_project() {
     my-project
 
     ----- stderr -----
-
     "
     );
 }
@@ -219,7 +211,6 @@ fn workspace_list_with_excluded() -> Result<()> {
     albatross
 
     ----- stderr -----
-
     "
     );
 
@@ -231,7 +222,7 @@ fn workspace_list_with_excluded() -> Result<()> {
 fn workspace_list_no_project() {
     let context = uv_test::test_context!("3.12");
 
-    uv_snapshot!(context.filters(), context.workspace_list(), @r"
+    uv_snapshot!(context.filters(), context.workspace_list(), @"
     success: false
     exit_code: 2
     ----- stdout -----
