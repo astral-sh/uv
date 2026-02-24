@@ -3525,7 +3525,7 @@ fn compile_exclude_newer() -> Result<()> {
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.in")
         .arg("--exclude-newer")
-        .arg("2022-04-04T26:00:00+00"), @r"
+        .arg("2022-04-04T26:00:00+00"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18263,7 +18263,7 @@ fn compile_missing_python_version() -> Result<()> {
     uv_snapshot!(context
         .pip_compile()
         .arg("--python-version").arg("3.13")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18301,7 +18301,7 @@ fn compile_missing_python_version_patch_fallback() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("--python-version").arg("3.13.99")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18337,7 +18337,7 @@ fn compile_missing_python_version_default_fallback() -> Result<()> {
         .pip_compile()
         .env(EnvVars::UV_MANAGED_PYTHON, "1")
         .arg("--python-version").arg("3.99.99")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -18388,7 +18388,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18413,7 +18413,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -18438,7 +18438,7 @@ async fn compile_missing_python_download_error_warning() {
         .env("ALL_PROXY", server.uri())
         .env(EnvVars::UV_HTTP_RETRIES, "0")
         .env(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY, "true")
-        .arg("requirements.in"), @r"
+        .arg("requirements.in"), @"
     success: false
     exit_code: 2
     ----- stdout -----

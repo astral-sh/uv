@@ -3795,7 +3795,7 @@ fn python_install_build_version_pypy() {
 
     uv_snapshot!(context.filters(), context.python_install()
         .arg("pypy3.10")
-        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @r"
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4338,7 +4338,7 @@ fn python_install_compile_bytecode_graalpy() {
         .with_python_download_cache();
 
     // Should work for graalpy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("graalpy-3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4361,7 +4361,7 @@ fn python_install_compile_bytecode_pypy() {
         .with_python_download_cache();
 
     // Should work for pypy
-    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("--compile-bytecode").arg("pypy-3.11"), @"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -519,7 +519,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
 
     // The `.python-version` (3.11) is incompatible with the script's `requires-python` (>=3.12),
     // so uv should ignore it and discover a compatible Python (3.12) instead.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -531,7 +531,7 @@ fn run_pep723_script_requires_python() -> Result<()> {
     // Deleting the `.python-version` file should not change the behavior.
     fs_err::remove_file(&python_version)?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -565,7 +565,7 @@ fn run_pep723_script_requires_python_compatible() -> Result<()> {
 
     // The `.python-version` (3.11) is compatible with the script's `requires-python` (>=3.11),
     // so it should be used.
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -597,7 +597,7 @@ fn run_pep723_script_requires_python_incompatible_range() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     success: true
     exit_code: 0
     ----- stdout -----

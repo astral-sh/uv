@@ -13815,14 +13815,14 @@ fn lock_no_sources_package() -> Result<()> {
     )?;
 
     // Lock with sources disabled only for anyio
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -13922,14 +13922,14 @@ fn lock_no_sources_package_multiple() -> Result<()> {
     )?;
 
     // Lock with sources disabled for two packages
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio typing-extensions"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources-package").arg("anyio typing-extensions"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14039,14 +14039,14 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 
     // Lock with both --no-sources and --no-sources-package
     // --no-sources should take precedence and disable all sources
-    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-sources-package").arg("iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--no-sources").arg("--no-sources-package").arg("iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -14148,14 +14148,14 @@ fn lock_no_sources_package_env_var() -> Result<()> {
     )?;
 
     // Lock with UV_NO_SOURCES_PACKAGE environment variable
-    uv_snapshot!(context.filters(), context.lock().env("UV_NO_SOURCES_PACKAGE", "anyio iniconfig"), @r###"
+    uv_snapshot!(context.filters(), context.lock().env("UV_NO_SOURCES_PACKAGE", "anyio iniconfig"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     let lock = context.read("uv.lock");
 
@@ -19013,7 +19013,7 @@ fn lock_unnamed_explicit_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r#"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -19032,7 +19032,7 @@ fn lock_unnamed_explicit_index() -> Result<()> {
     8 |         [[tool.uv.index]]
       |         ^^^^^^^^^^^^^^^^^
     An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
-    "#);
+    ");
 
     Ok(())
 }
@@ -19508,7 +19508,7 @@ fn lock_multiple_default_indexes() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -19520,7 +19520,7 @@ fn lock_multiple_default_indexes() -> Result<()> {
     8 |         [[tool.uv.index]]
       |         ^^^^^^^^^^^^^^^^^
     found multiple indexes with `default = true`; only one index may be marked as default
-    "###);
+    ");
 
     Ok(())
 }

@@ -36,7 +36,7 @@ fn create_venv() {
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -221,7 +221,7 @@ fn virtual_empty() -> Result<()> {
         wow = "someconfig"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -249,7 +249,7 @@ fn virtual_dependency_group() -> Result<()> {
         dev = ["sniffio"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--clear"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1508,7 +1508,7 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @r"
+    uv_snapshot!(context.filters(), context.venv().arg("--no-managed-python"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1531,7 +1531,7 @@ fn venv_python_preference() {
     Activate with: source .venv/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.venv(), @r"
+    uv_snapshot!(context.filters(), context.venv(), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1653,7 +1653,7 @@ fn create_venv_symlink_recreate_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1717,7 +1717,7 @@ fn create_venv_nested_symlink_preservation() -> Result<()> {
         .arg(symlink_path.as_os_str())
         .arg("--clear")
         .arg("--python")
-        .arg("3.12"), @r"
+        .arg("3.12"), @"
     success: true
     exit_code: 0
     ----- stdout -----
