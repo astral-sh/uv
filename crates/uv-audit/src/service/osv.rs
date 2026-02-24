@@ -229,16 +229,17 @@ impl Osv {
                 // TODO: Warn on a malformed version string rather than silently skipping it.
                 // Alternatively, we could propagate the raw version string in the finding and
                 // leave it to the callsite to process into PEP 440 versions.
-                Event::Fixed(fixed) => match Version::from_str(fixed).ok() {
-                    Some(fixed) => Some(fixed),
-                    None => {
+                Event::Fixed(fixed) => {
+                    if let Some(fixed) = Version::from_str(fixed).ok() {
+                        Some(fixed)
+                    } else {
                         trace!(
                             "Skipping invalid (non-PEP 440) version in OSV record {id}: {fixed}",
                             id = vuln.id,
                         );
                         None
                     }
-                },
+                }
                 _ => None,
             })
             .collect();
