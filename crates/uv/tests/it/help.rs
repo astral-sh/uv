@@ -27,6 +27,8 @@ fn help() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
+                                 dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -108,6 +110,7 @@ fn help_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
+      audit    Audit the project's lockfile for known vulnerabilities and unmaintained dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -187,6 +190,7 @@ fn help_short_flag() {
       export   Export the project's lockfile to an alternate format
       tree     Display the project's dependency tree
       format   Format Python code in the project
+      audit    Audit the project's lockfile for known vulnerabilities and unmaintained dependencies
       tool     Run and install commands provided by Python packages
       python   Manage Python versions and installations
       pip      Manage Python packages with a pip-compatible interface
@@ -890,7 +894,7 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = uv_test::test_context_with_versions!(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -908,6 +912,7 @@ fn help_unknown_subcommand() {
         export
         tree
         format
+        audit
         tool
         python
         pip
@@ -919,7 +924,7 @@ fn help_unknown_subcommand() {
         generate-shell-completion
     ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -937,6 +942,7 @@ fn help_unknown_subcommand() {
         export
         tree
         format
+        audit
         tool
         python
         pip
@@ -995,6 +1001,8 @@ fn help_with_global_option() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
+                                 dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
@@ -1117,6 +1125,8 @@ fn help_with_no_pager() {
       export                     Export the project's lockfile to an alternate format
       tree                       Display the project's dependency tree
       format                     Format Python code in the project
+      audit                      Audit the project's lockfile for known vulnerabilities and unmaintained
+                                 dependencies
       tool                       Run and install commands provided by Python packages
       python                     Manage Python versions and installations
       pip                        Manage Python packages with a pip-compatible interface
