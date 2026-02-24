@@ -1813,6 +1813,10 @@ fn tool_install_uninstallable() {
             (r"bdist\.[^/\\\s]+(-[^/\\\s]+)?", "bdist.linux-x86_64"),
             (r"\\\.", ""),
             (r"#+", "#"),
+            (
+                "Please read the installation instructions at:\n ",
+                "Please read the installation instructions at:\n",
+            ),
         ])
         .collect::<Vec<_>>();
     uv_snapshot!(filters, context.tool_install()
@@ -1841,7 +1845,7 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-     
+
           https://github.com/pyenv/pyenv#installation
           #
 
