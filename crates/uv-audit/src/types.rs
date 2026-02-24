@@ -93,5 +93,7 @@ pub enum Finding {
         dependency: Dependency,
         /// The adverse status of the project.
         status: AdverseStatus,
+        /// An optional (index-supplied) reason for the adverse status.
+        reason: Option<String>,
     },
 }

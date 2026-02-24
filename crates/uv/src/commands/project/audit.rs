@@ -17,7 +17,10 @@ use crate::{
 };
 use anyhow::Result;
 use tracing::trace;
-use uv_audit::{service::osv, types::Dependency};
+use uv_audit::{
+    service::osv,
+    types::{Dependency, Finding},
+};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -214,4 +217,8 @@ pub(crate) async fn audit(
     }
 
     Ok(ExitStatus::Success)
+}
+
+struct AuditDisplay {
+    findings: Vec<Finding>,
 }
