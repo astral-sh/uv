@@ -1004,3 +1004,103 @@ jobs:
 
       - name: "Check cache compatibility"
         run: python scripts/check_cache_compat.py --uv-current ./uv --uv-previous ./uv-aarch64-apple-darwin/uv
+
+  # Verify that executable permissions on package content files (purelib/platlib) are
+  # preserved after cloning on a CoW filesystem (btrfs). Files in .data/scripts/ are
+  # handled separately by install_script (which explicitly sets +x), so they are not
+  # affected — only regular package content like pyspark/bin/spark-submit is at risk.
+  integration-test-clone-permissions:
+    name: "clone permissions on btrfs"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create btrfs filesystem"
+        run: |
+          sudo apt-get install -y btrfs-progs
+          truncate -s 4G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+      - name: "Install pyspark on btrfs with clone link mode"
+        run: |
+          ./uv venv /btrfs/.venv
+          UV_CACHE_DIR=/btrfs/.cache \
+            ./uv pip install pyspark \
+              --link-mode clone \
+              --python /btrfs/.venv/bin/python
+
+      - name: "Verify spark-submit is executable"
+        run: |
+          SITE_PACKAGES=$(/btrfs/.venv/bin/python -c "import site; print(site.getsitepackages()[0])")
+          test -x "$SITE_PACKAGES/pyspark/bin/spark-submit" || {
+            echo "FAIL: spark-submit lost executable permission after clone on btrfs"
+            ls -la "$SITE_PACKAGES/pyspark/bin/spark-submit"
+            exit 1
+          }
+          echo "OK: spark-submit is executable"
+          ls -la "$SITE_PACKAGES/pyspark/bin/spark-submit"
+
+  # Regression test for https://github.com/astral-sh/uv/issues/18181
+  #
+  # On overlayfs (Docker's default storage driver), FICLONE (reflink) succeeds but the
+  # destination file receives default permissions from open() + umask instead of inheriting
+  # the source's mode bits. This causes executable files in package content to lose their
+  # executable permission — e.g. pyspark's bin/spark-submit.
+  integration-test-overlay-clone-permissions:
+    name: "clone permissions on overlayfs"
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create overlayfs on btrfs"
+        run: |
+          # Create a btrfs filesystem so FICLONE is supported
+          sudo apt-get install -y btrfs-progs
+          truncate -s 4G /tmp/btrfs.img
+          mkfs.btrfs /tmp/btrfs.img
+          sudo mkdir /btrfs
+          sudo mount -o loop /tmp/btrfs.img /btrfs
+          sudo chown "$(id -u):$(id -g)" /btrfs
+
+          # Mount overlayfs on top of btrfs — this reproduces Docker overlay2 behavior
+          mkdir -p /btrfs/overlay/{lower,upper,work,merged}
+          sudo mount -t overlay overlay \
+            -o lowerdir=/btrfs/overlay/lower,upperdir=/btrfs/overlay/upper,workdir=/btrfs/overlay/work \
+            /btrfs/overlay/merged
+          sudo chown "$(id -u):$(id -g)" /btrfs/overlay/merged
+
+      - name: "Install pyspark on overlayfs with clone link mode"
+        run: |
+          ./uv venv /btrfs/overlay/merged/.venv
+          UV_CACHE_DIR=/btrfs/overlay/merged/.cache \
+            ./uv pip install pyspark \
+              --link-mode clone \
+              --python /btrfs/overlay/merged/.venv/bin/python
+
+      - name: "Verify spark-submit is executable"
+        run: |
+          SITE_PACKAGES=$(/btrfs/overlay/merged/.venv/bin/python -c "import site; print(site.getsitepackages()[0])")
+          test -x "$SITE_PACKAGES/pyspark/bin/spark-submit" || {
+            echo "FAIL: spark-submit lost executable permission after clone on overlayfs"
+            ls -la "$SITE_PACKAGES/pyspark/bin/spark-submit"
+            exit 1
+          }
+          echo "OK: spark-submit is executable"
+          ls -la "$SITE_PACKAGES/pyspark/bin/spark-submit"
