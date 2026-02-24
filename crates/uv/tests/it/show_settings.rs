@@ -143,7 +143,9 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         ),
                         explicit: false,
                         default: true,
-                        origin: None,
+                        origin: Some(
+                            Project,
+                        ),
                         format: Simple,
                         publish_url: None,
                         authenticate: Auto,
