@@ -557,4 +557,10 @@ mod tests {
         let _guard2 =
             test::with_features(&[PreviewFeature::InitProjectFlag, PreviewFeature::AuthHelper]);
     }
+
+    #[test]
+    #[should_panic(expected = "uv_preview::test::with_features")]
+    fn test_global_preview_panic_uninitialized() {
+        let _preview = get();
+    }
 }
