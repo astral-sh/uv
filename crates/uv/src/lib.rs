@@ -40,7 +40,7 @@ use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::PreviewFeature;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -107,14 +107,36 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
+            // Resolve the preview flags until this becomes stabilized.
+            let preview = Preview::from_args(
+                cli.top_level.global_args.preview,
+                cli.top_level.global_args.no_preview,
+                &cli.top_level.global_args.preview_features,
+            );
             if !project_dir.exists() {
+                if preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project directory `{}` does not exist",
+                        project_path.user_display()
+                    );
+                }
                 warn_user_once!(
-                    "Project directory `{}` does not exist. This will become an error in the future.",
+                    "Project directory `{}` does not exist. Use `--preview-features project-dir-must-exist` to error on this.",
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
-                bail!(
-                    "Project path `{}` is not a directory",
+                // On Unix, this always fails downstream (e.g., "Not a directory" when
+                // trying to read `uv.toml`), so we bail with a clear error message.
+                // On Windows, this is currently non-fatal, so we only error with the
+                // preview flag.
+                if cfg!(unix) || preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
+                    bail!(
+                        "Project path `{}` is not a directory",
+                        project_path.user_display()
+                    );
+                }
+                warn_user_once!(
+                    "Project path `{}` is not a directory. Use `--preview-features project-dir-must-exist` to error on this.",
                     project_path.user_display()
                 );
             }
