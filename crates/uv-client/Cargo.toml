@@ -1,6 +1,6 @@
 [package]
 name = "uv-client"
-version = "0.0.25"
+version = "0.0.26"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -73,8 +73,9 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 insta = { workspace = true }
 rcgen = { workspace = true }
+regex = { workspace = true }
 rustls = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 wiremock = { workspace = true }
-tempfile = { workspace = true }

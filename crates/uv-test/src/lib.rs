@@ -781,7 +781,10 @@ impl TestContext {
         let tmp = tempfile::TempDir::new_in(dir)?;
         self.temp_dir = ChildPath::new(tmp.path()).child("temp");
         fs_err::create_dir_all(&self.temp_dir)?;
-        self.venv = ChildPath::new(tmp.path().canonicalize()?.join(".venv"));
+        // Place the venv inside temp_dir (matching the default TestContext layout)
+        // so that `context.venv()` creates it at the same path that `VIRTUAL_ENV` points to.
+        let canonical_temp_dir = self.temp_dir.canonicalize()?;
+        self.venv = ChildPath::new(canonical_temp_dir.join(".venv"));
         let temp_replacement = format!("[{name}]/[TEMP_DIR]/");
         self.filters.extend(
             Self::path_patterns(&self.temp_dir)

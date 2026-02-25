@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.10.6
+
+Released on 2026-02-24.
+
+### Bug fixes
+
+- Apply lockfile marker normalization for fork markers ([#18116](https://github.com/astral-sh/uv/pull/18116))
+- Fix Python version selection for scripts with a `requires-python` conflicting with `.python-version` ([#18097](https://github.com/astral-sh/uv/pull/18097))
+- Preserve file permissions when using reflinks on Linux ([#18187](https://github.com/astral-sh/uv/pull/18187))
+
+### Documentation
+
+- Remove verbose documentation from optional dependencies help text ([#18180](https://github.com/astral-sh/uv/pull/18180))
+
 ## 0.10.5
 
 Released on 2026-02-23.
