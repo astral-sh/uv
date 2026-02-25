@@ -27,7 +27,6 @@ uv-redacted = { workspace = true }
 uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
-memchr = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 rustc-hash = { workspace = true }

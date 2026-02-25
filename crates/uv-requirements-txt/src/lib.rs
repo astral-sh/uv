@@ -42,7 +42,7 @@ use std::str::FromStr;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::instrument;
-use unscanny::{Pattern, Scanner};
+use unscanny::Scanner;
 use url::Url;
 
 #[cfg(feature = "http")]
@@ -61,10 +61,8 @@ use uv_redacted::DisplaySafeUrlError;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
-use crate::shquote::unquote;
 
 mod requirement;
-mod shquote;
 
 /// A cache of file contents, keyed by path, to avoid re-reading files from disk.
 pub type SourceCache = FxHashMap<PathBuf, String>;
@@ -677,11 +675,7 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let filename = parse_value("--requirement", content, s, |c: char| !is_terminal(c))?;
-        let filename = unquote(filename)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| filename.to_string());
+        let filename = parse_option("--requirement", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
             filename,
@@ -689,11 +683,7 @@ fn parse_entry(
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let filename = parse_value("--constraint", content, s, |c: char| !is_terminal(c))?;
-        let filename = unquote(filename)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| filename.to_string());
+        let filename = parse_option("--constraint", content, s, requirements_txt)?;
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
             filename,
@@ -736,13 +726,8 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
-        let given = unquote(given)
-            .ok()
-            .flatten()
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let given = parse_option("--index-url", content, s, requirements_txt)?;
+        let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -750,7 +735,7 @@ fn parse_entry(
             VerbatimUrl::from_absolute_path(path).map_err(|err| {
                 RequirementsTxtParserError::VerbatimUrl {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -759,7 +744,7 @@ fn parse_entry(
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
                 RequirementsTxtParserError::Url {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -767,13 +752,8 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value("--extra-index-url", content, s, |c: char| !is_terminal(c))?;
-        let given = unquote(given)
-            .ok()
-            .flatten()
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let given = parse_option("--extra-index-url", content, s, requirements_txt)?;
+        let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -781,7 +761,7 @@ fn parse_entry(
             VerbatimUrl::from_absolute_path(path).map_err(|err| {
                 RequirementsTxtParserError::VerbatimUrl {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -790,7 +770,7 @@ fn parse_entry(
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
                 RequirementsTxtParserError::Url {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -800,13 +780,8 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
-        let given = unquote(given)
-            .ok()
-            .flatten()
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(given));
-        let expanded = expand_env_vars(given.as_ref());
+        let given = parse_option("--find-links", content, s, requirements_txt)?;
+        let expanded = expand_env_vars(&given);
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -814,7 +789,7 @@ fn parse_entry(
             VerbatimUrl::from_absolute_path(path).map_err(|err| {
                 RequirementsTxtParserError::VerbatimUrl {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -823,7 +798,7 @@ fn parse_entry(
             VerbatimUrl::parse_url(expanded.as_ref()).map_err(|err| {
                 RequirementsTxtParserError::Url {
                     source: err,
-                    url: given.to_string(),
+                    url: given.clone(),
                     start,
                     end: s.cursor(),
                 }
@@ -831,32 +806,22 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value("--no-binary", content, s, |c: char| !is_terminal(c))?;
-        let given = unquote(given)
-            .ok()
-            .flatten()
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(given));
-        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
+        let given = parse_option("--no-binary", content, s, requirements_txt)?;
+        let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
-                specifier: given.to_string(),
+                specifier: given.clone(),
                 start,
                 end: s.cursor(),
             }
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value("--only-binary", content, s, |c: char| !is_terminal(c))?;
-        let given = unquote(given)
-            .ok()
-            .flatten()
-            .map(Cow::Owned)
-            .unwrap_or(Cow::Borrowed(given));
-        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
+        let given = parse_option("--only-binary", content, s, requirements_txt)?;
+        let specifier = PackageNameSpecifier::from_str(&given).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
-                specifier: given.to_string(),
+                specifier: given.clone(),
                 start,
                 end: s.cursor(),
             }
@@ -1033,33 +998,37 @@ fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, Requireme
             column,
         });
     }
-    let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
-    hashes.push(hash.to_string());
+    let hash = parse_hash_value("--hash", content, s)?;
+    hashes.push(hash);
     loop {
         eat_wrappable_whitespace(s);
         if !s.eat_if("--hash") {
             break;
         }
-        let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
-        hashes.push(hash.to_string());
+        let hash = parse_hash_value("--hash", content, s)?;
+        hashes.push(hash);
     }
     Ok(hashes)
 }
 
-/// In `-<key>=<value>` or `-<key> value`, this parses the part after the key
-fn parse_value<'a, T>(
+/// Parse an option value (for `--index-url`, `--find-links`, etc.).
+///
+/// This function:
+/// - Handles quoting (single/double quotes with POSIX shell escaping).
+/// - Consumes and strips markers (` ; ` or `; ` followed by marker expression).
+/// - Returns the unquoted, unescaped value.
+fn parse_option(
     option: &str,
     content: &str,
-    s: &mut Scanner<'a>,
-    while_pattern: impl Pattern<T>,
-) -> Result<&'a str, RequirementsTxtParserError> {
-    let value = if s.eat_if('=') {
-        // Explicit equals sign.
-        s.eat_while(while_pattern).trim_end()
+    s: &mut Scanner,
+    requirements_txt: &Path,
+) -> Result<String, RequirementsTxtParserError> {
+    // First, consume the separator (= or whitespace)
+    if s.eat_if('=') {
+        // Explicit equals sign
     } else if s.eat_if(char::is_whitespace) {
-        // Key and value are separated by whitespace instead.
+        // Key and value are separated by whitespace
         s.eat_whitespace();
-        s.eat_while(while_pattern).trim_end()
     } else {
         let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
@@ -1067,7 +1036,208 @@ fn parse_value<'a, T>(
             line,
             column,
         });
-    };
+    }
+
+    let start = s.cursor();
+    let mut result = String::with_capacity(option.len());
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escape_next = false;
+    let mut marker_start = None;
+    let mut marker_text = String::new();
+
+    loop {
+        let Some(ch) = s.peek() else {
+            break;
+        };
+
+        // Check for terminal characters (always, even when quoted).
+        if !escape_next && matches!(ch, '\n' | '\r' | '#') {
+            break;
+        }
+
+        // Check for marker syntax: ` ; ` or `; `.
+        if !escape_next && !in_single_quote && !in_double_quote {
+            if ch == ';' {
+                // If the next character is whitespace, this is a marker.
+                if s.after().chars().nth(1).is_some_and(char::is_whitespace) {
+                    marker_start = Some(result.len());
+                    marker_text.push(s.eat().unwrap());
+
+                    // Consume until we find the closing quote or end of line.
+                    while let Some(c) = s.peek() {
+                        if matches!(c, '\n' | '\r' | '#') {
+                            break;
+                        }
+                        let c = s.eat().unwrap();
+                        marker_text.push(c);
+
+                        // Track quote state to avoid unterminated quote errors.
+                        if !escape_next {
+                            if c == '\'' && !in_double_quote {
+                                in_single_quote = !in_single_quote;
+                            } else if c == '"' && !in_single_quote {
+                                in_double_quote = !in_double_quote;
+                            } else if c == '\\' && !in_single_quote {
+                                escape_next = true;
+                            }
+                        } else {
+                            escape_next = false;
+                        }
+                    }
+                    break;
+                }
+            } else if ch == ' ' {
+                // If the next character is a semicolon, this is a marker.
+                if s.after().chars().nth(1) == Some(';') {
+                    marker_start = Some(result.len());
+
+                    // Consume until we find the closing quote or end of line.
+                    while let Some(c) = s.peek() {
+                        if matches!(c, '\n' | '\r' | '#') {
+                            break;
+                        }
+                        let c = s.eat().unwrap();
+                        marker_text.push(c);
+
+                        // Track quote state to avoid unterminated quote errors.
+                        if !escape_next {
+                            if c == '\'' && !in_double_quote {
+                                in_single_quote = !in_single_quote;
+                            } else if c == '"' && !in_single_quote {
+                                in_double_quote = !in_double_quote;
+                            } else if c == '\\' && !in_single_quote {
+                                escape_next = true;
+                            }
+                        } else {
+                            escape_next = false;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Consume the character
+        let ch = s.eat().unwrap();
+
+        if escape_next {
+            escape_next = false;
+            if in_double_quote {
+                match ch {
+                    // Inside double quotes, only specific characters are escaped.
+                    '"' | '\\' | '$' | '`' => result.push(ch),
+                    // Escaped newline is stripped (continuation).
+                    '\n' => {}
+                    // Unknown escape (preserve backslash and character).
+                    _ => {
+                        result.push('\\');
+                        result.push(ch);
+                    }
+                }
+            } else {
+                if ch != '\n' {
+                    // Escaped newline is stripped; everything else is a literal.
+                    result.push(ch);
+                }
+            }
+            continue;
+        }
+
+        match ch {
+            '\\' if !in_single_quote => {
+                // Start an escape sequence.
+                escape_next = true;
+            }
+            '\'' if !in_double_quote => {
+                // Toggle single quotes.
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                // Toggle double quotes.
+                in_double_quote = !in_double_quote;
+            }
+            _ => {
+                // Regular character
+                result.push(ch);
+            }
+        }
+    }
+
+    if in_single_quote {
+        let (line, column) = calculate_row_column(content, start);
+        return Err(RequirementsTxtParserError::Parser {
+            message: "Unterminated single quote".to_string(),
+            line,
+            column,
+        });
+    }
+    if in_double_quote {
+        let (line, column) = calculate_row_column(content, start);
+        return Err(RequirementsTxtParserError::Parser {
+            message: "Unterminated double quote".to_string(),
+            line,
+            column,
+        });
+    }
+
+    // If we found a marker, truncate the result.
+    if let Some(trim_at) = marker_start {
+        result.truncate(trim_at);
+
+        let (line, _) = calculate_row_column(content, start);
+        let marker_display = marker_text.trim();
+        if requirements_txt == Path::new("-") {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in stdin at line {line}: `{marker_display}`"
+            );
+        } else {
+            uv_warnings::warn_user!(
+                "Ignoring environment marker on `{option}` in `{path}` at line {line}: `{marker_display}`",
+                path = requirements_txt.user_display().cyan()
+            );
+        }
+    }
+
+    let result = result.trim().to_string();
+
+    if result.is_empty() {
+        let (line, column) = calculate_row_column(content, s.cursor());
+        return Err(RequirementsTxtParserError::Parser {
+            message: format!("`{option}` must be followed by an argument"),
+            line,
+            column,
+        });
+    }
+
+    Ok(result)
+}
+
+/// Parse a hash value (for --hash).
+///
+/// Hashes are simpler - they stop at whitespace and don't have markers.
+fn parse_hash_value(
+    option: &str,
+    content: &str,
+    s: &mut Scanner,
+) -> Result<String, RequirementsTxtParserError> {
+    // First, consume the separator (= or whitespace)
+    if s.eat_if('=') {
+        // Explicit equals sign
+    } else if s.eat_if(char::is_whitespace) {
+        // Key and value are separated by whitespace
+        s.eat_whitespace();
+    } else {
+        let (line, column) = calculate_row_column(content, s.cursor());
+        return Err(RequirementsTxtParserError::Parser {
+            message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
+            line,
+            column,
+        });
+    }
+
+    // For hashes, just consume until whitespace or terminal
+    let value = s.eat_while(|c: char| !c.is_whitespace() && !matches!(c, '\n' | '\r' | '#'));
 
     if value.is_empty() {
         let (line, column) = calculate_row_column(content, s.cursor());
@@ -1078,7 +1248,7 @@ fn parse_value<'a, T>(
         });
     }
 
-    Ok(value)
+    Ok(value.to_string())
 }
 
 /// Fetch the contents of a URL and return them as a string.
@@ -1571,6 +1741,8 @@ mod test {
     #[test_case(Path::new("for-poetry.txt"))]
     #[test_case(Path::new("include-a.txt"))]
     #[test_case(Path::new("include-b.txt"))]
+    #[test_case(Path::new("option-with-marker.txt"))]
+    #[test_case(Path::new("options-comprehensive.txt"))]
     #[test_case(Path::new("poetry-with-hashes.txt"))]
     #[test_case(Path::new("small.txt"))]
     #[test_case(Path::new("whitespace.txt"))]
