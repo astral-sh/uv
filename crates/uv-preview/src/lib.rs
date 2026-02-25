@@ -60,7 +60,7 @@ pub mod test {
     use std::cell::Cell;
     use std::sync::{Mutex, MutexGuard, RwLock};
 
-    /// The global preview state test mutex. It does not guard data but is
+    /// The global preview state test mutex. It does not guard any data but is
     /// simply used to ensure tests which rely on the global preview state are
     /// ran serially.
     static MUTEX: Mutex<()> = Mutex::new(());
@@ -69,7 +69,7 @@ pub mod test {
         /// Whether the current thread holds the global mutex.
         ///
         /// This is used to catch situations where a test forgets to set the
-        /// global test state but happens to work because of another test
+        /// global test state but happens to work anyway because of another test
         /// setting the state.
         pub(crate) static HELD: Cell<bool> = const { Cell::new(false) };
     }
@@ -92,7 +92,10 @@ pub mod test {
     /// consequence of how `HELD` is used to check for tests which are missing
     /// the guard.
     pub fn with_features(features: &[super::PreviewFeature]) -> FeaturesGuard {
-        assert!(!HELD.get(), "Nested calls to uv_preview::test::with_features are not allowed");
+        assert!(
+            !HELD.get(),
+            "Additional calls to `uv_preview::test::with_features` are not allowed while holding a `FeaturesGuard`"
+        );
 
         let guard = match MUTEX.lock() {
             Ok(guard) => guard,
@@ -111,7 +114,9 @@ pub mod test {
                 *rwlock.write().unwrap() = Some(Preview::new(features));
             }
             PreviewMode::Normal(_) => {
-                panic!("Cannot use `uv_preview::test::with_features` after `uv_preview::init` has been called");
+                panic!(
+                    "Cannot use `uv_preview::test::with_features` after `uv_preview::init` has been called"
+                );
             }
         }
         FeaturesGuard(guard)
@@ -508,7 +513,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Nested calls to uv_preview::test::with_features are not allowed")]
+    #[should_panic(
+        expected = "Additional calls to `uv_preview::test::with_features` are not allowed while holding a `FeaturesGuard`"
+    )]
     fn test_global_preview_panic_nested() {
         let _guard =
             test::with_features(&[PreviewFeature::Pylock, PreviewFeature::WorkspaceMetadata]);
