@@ -1,3 +1,6 @@
+#[cfg(not(feature = "testing"))]
+use std::sync::OnceLock;
+#[cfg(feature = "testing")]
 use std::sync::{OnceLock, RwLock};
 use std::{
     fmt::{Debug, Display, Formatter},
@@ -11,6 +14,7 @@ use uv_warnings::warn_user_once;
 
 /// Indicates how the preview was initialised, to distinguish between normal
 /// code and unit tests.
+#[cfg(feature = "testing")]
 enum PreviewMode {
     /// Initialised by a call to `uv_preview::init`
     Normal(Preview),
@@ -18,14 +22,28 @@ enum PreviewMode {
     Test(RwLock<Option<Preview>>),
 }
 
+#[cfg(feature = "testing")]
 static PREVIEW: OnceLock<PreviewMode> = OnceLock::new();
+
+#[cfg(not(feature = "testing"))]
+static PREVIEW: OnceLock<Preview> = OnceLock::new();
 
 /// Initialize the global preview configuration.
 ///
 /// This should be called once at startup with the resolved preview settings.
+#[cfg(feature = "testing")]
 #[expect(clippy::result_unit_err)]
 pub fn init(preview: Preview) -> Result<(), ()> {
     PREVIEW.set(PreviewMode::Normal(preview)).map_err(|_| ())
+}
+
+/// Initialize the global preview configuration.
+///
+/// This should be called once at startup with the resolved preview settings.
+#[cfg(not(feature = "testing"))]
+#[expect(clippy::result_unit_err)]
+pub fn init(preview: Preview) -> Result<(), ()> {
+    PREVIEW.set(preview).map_err(|_| ())
 }
 
 /// Get the current global preview configuration.
@@ -34,6 +52,7 @@ pub fn init(preview: Preview) -> Result<(), ()> {
 ///
 /// When called before [`init`] or when the current thread does not hold a
 /// [`test::with_features`] guard.
+#[cfg(feature = "testing")]
 pub fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(preview)) => *preview,
@@ -45,6 +64,21 @@ pub fn get() -> Preview {
             // `catch_unwind`. This seems unlikely.
             rwlock.read().unwrap().expect(panic_message)
         }
+        None => panic!(
+            "preview configuration has not been initialized\nHint: use `uv_preview::init` or `uv_preview::test::with_features` to initialize it"
+        ),
+    }
+}
+
+/// Get the current global preview configuration.
+///
+/// # Panics
+///
+/// When called before [`init`].
+#[cfg(not(feature = "testing"))]
+pub fn get() -> Preview {
+    match PREVIEW.get() {
+        Some(preview) => *preview,
         None => panic!("preview configuration has not been initialized"),
     }
 }
@@ -55,6 +89,7 @@ pub fn is_enabled(flag: PreviewFeature) -> bool {
 }
 
 /// Functions for unit tests, do not use from normal code!
+#[cfg(feature = "testing")]
 pub mod test {
     use super::{PREVIEW, Preview, PreviewMode};
     use std::cell::Cell;

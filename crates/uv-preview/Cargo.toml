@@ -23,6 +23,8 @@ itertools = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { path = ".", features = ["testing"] }
 
 [features]
 default = []
+testing = []
