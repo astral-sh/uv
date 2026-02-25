@@ -1036,7 +1036,7 @@ jobs:
         run: ./uv python install ${{ matrix.alt-python }}
 
       - name: "Create venv with alternate-arch Python"
-        run: ./uv venv --python ${{ matrix.alt-python }} test-venv
+        run: ./uv venv -v --python ${{ matrix.alt-python }} test-venv
 
       - name: "Write requirements file"
         run: |
