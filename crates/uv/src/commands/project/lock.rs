@@ -1011,18 +1011,22 @@ async fn do_lock(
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
                 if !build_options.no_build_all() {
-                    let eager_database =
+                    let build_database =
                         DistributionDatabase::new(&client, &build_dispatch, concurrency.downloads);
-                    eagerly_capture_build_resolutions(
+                    resolve_all_possible_builds(
                         &lock,
                         target.install_path(),
                         build_options,
                         &build_dispatch,
-                        &eager_database,
+                        &build_database,
                         &build_hasher,
                     )
                     .await
                     .map_err(ProjectError::from)?;
+                } else {
+                    debug!(
+                        "Skipping lock build dependency resolution because `--no-build` is enabled"
+                    );
                 }
 
                 let build_resolutions = build_dispatch.build_resolutions().snapshot();
@@ -1053,7 +1057,7 @@ fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<Source
             .sdist
             .as_ref()
             .map(|sdist| SourceDist::Registry(sdist.clone())),
-        Dist::Built(BuiltDist::DirectUrl(_)) | Dist::Built(BuiltDist::Path(_)) => None,
+        Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_)) => None,
     }
 }
 
@@ -1078,7 +1082,7 @@ fn graph_for_key<'a>(
     }
 }
 
-async fn eagerly_capture_build_resolutions(
+async fn resolve_all_possible_builds(
     lock: &Lock,
     workspace_root: &Path,
     build_options: &uv_configuration::BuildOptions,
@@ -1101,26 +1105,23 @@ async fn eagerly_capture_build_resolutions(
 
         let mut resolved_from_pyproject = false;
 
-        if let SourceDist::Directory(directory) = &source_dist {
-            let pyproject_path = directory.install_path.join("pyproject.toml");
-            if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-                if let Ok(pyproject) = uv_workspace::pyproject::PyProjectToml::from_string(contents)
-                {
-                    if let Some(build_system) = pyproject.build_system {
-                        let requirements: Vec<Requirement> = build_system
-                            .requires
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect();
-                        if !requirements.is_empty() {
-                            let build_stack = BuildStack::default();
-                            let _ = build_dispatch
-                                .resolve(&requirements, Some(&key), &build_stack)
-                                .await?;
-                            resolved_from_pyproject = true;
-                        }
-                    }
-                }
+        if let SourceDist::Directory(directory) = &source_dist
+            && let Ok(contents) =
+                fs_err::read_to_string(directory.install_path.join("pyproject.toml"))
+            && let Ok(pyproject) = uv_workspace::pyproject::PyProjectToml::from_string(contents)
+            && let Some(build_system) = pyproject.build_system
+        {
+            let requirements: Vec<Requirement> = build_system
+                .requires
+                .into_iter()
+                .map(Requirement::from)
+                .collect();
+            if !requirements.is_empty() {
+                let build_stack = BuildStack::default();
+                let _ = build_dispatch
+                    .resolve(&requirements, Some(&key), &build_stack)
+                    .await?;
+                resolved_from_pyproject = true;
             }
         }
 

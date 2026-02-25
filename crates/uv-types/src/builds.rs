@@ -133,6 +133,10 @@ pub struct BuildResolutionGraph {
 }
 
 /// A source discriminator for a package key used by build dependency locking.
+///
+/// This intentionally stores canonicalized strings so the key can be serialized,
+/// compared, and reconstructed across crates without carrying resolver-specific
+/// source types.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BuildPackageSource {
     Registry(String),
@@ -168,11 +172,18 @@ impl BuildPackageSource {
 }
 
 /// A key identifying a package by name, optional version, and source.
+///
+/// This mirrors `PackageId` semantics for build-locking, while allowing
+/// `version = None` for dynamic local sources whose version is unknown until
+/// metadata is built.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BuildPackageKey {
     /// The package name.
     pub name: PackageName,
     /// The package version, if known.
+    ///
+    /// This is `None` for source trees with dynamic metadata (for example,
+    /// `dynamic = ["version"]`) before metadata is available.
     pub version: Option<Version>,
     /// The package source discriminator.
     pub source: Option<BuildPackageSource>,
