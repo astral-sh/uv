@@ -25,7 +25,7 @@ use uv_static::EnvVars;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 
 use crate::discovery::VersionRequest;
-use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
+use crate::downloads::{Error as DownloadError, ManagedPythonDownload, PlatformRequest};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
@@ -242,12 +242,29 @@ impl ManagedPythonInstallations {
             .sorted_unstable_by_key(|installation| Reverse(installation.key().clone())))
     }
 
-    /// Iterate over Python installations that support the current platform.
-    pub fn find_matching_current_platform(
+    /// Iterate over Python installations that match the given platform request.
+    pub fn find_matching_platform(
         &self,
+        platform_request: PlatformRequest,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
-        let platform = Platform::from_env()?;
+        let iter = Self::from_settings(None)?
+            .find_all()?
+            .filter(move |installation| {
+                if !platform_request.matches(installation.platform()) {
+                    debug!("Skipping managed installation `{installation}`: does not match requested platform `{platform_request}`");
+                    return false;
+                }
+                true
+            });
 
+        Ok(iter)
+    }
+
+    /// Iterate over Python installations that are supported on the given host platform.
+    pub fn find_supported_on_platform(
+        &self,
+        platform: Platform,
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let iter = Self::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
@@ -272,8 +289,9 @@ impl ManagedPythonInstallations {
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         let request = VersionRequest::from(version);
+        let platform = Platform::from_env()?;
         Ok(self
-            .find_matching_current_platform()?
+            .find_supported_on_platform(platform)?
             .filter(move |installation| request.matches_installation_key(installation.key())))
     }
 

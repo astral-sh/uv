@@ -20,6 +20,7 @@ use uv_pep440::{
     LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
     release_specifiers_to_ranges,
 };
+use uv_platform::Platform;
 use uv_preview::Preview;
 use uv_static::EnvVars;
 use uv_warnings::anstream;
@@ -366,7 +367,14 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations.find_matching_current_platform()?;
+                let installations: Box<dyn DoubleEndedIterator<Item = _>> =
+                    if platform.is_any() {
+                        Box::new(installed_installations.find_supported_on_platform(
+                            Platform::from_env().map_err(crate::managed::Error::from)?,
+                        )?)
+                    } else {
+                        Box::new(installed_installations.find_matching_platform(platform)?)
+                    };
 
                 let build_versions = python_build_versions_from_env()?;
 
