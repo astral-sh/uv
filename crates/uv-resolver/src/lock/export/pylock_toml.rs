@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
     Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePathBuf, relative_to};
+use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -410,9 +410,13 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Built(BuiltDist::Path(dist)) => {
-                    let path = relative_to(&dist.install_path, install_path)
-                        .map(Box::<Path>::from)
-                        .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = try_relative_to_if(
+                        &dist.install_path,
+                        install_path,
+                        !dist.url.was_given_absolute(),
+                    )
+                    .map(Box::<Path>::from)
+                    .unwrap_or_else(|_| dist.install_path.clone());
                     package.archive = Some(PylockTomlArchive {
                         url: None,
                         path: Some(PortablePathBuf::from(path)),
@@ -523,9 +527,13 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Source(SourceDist::Directory(dist)) => {
-                    let path = relative_to(&dist.install_path, install_path)
-                        .map(Box::<Path>::from)
-                        .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = try_relative_to_if(
+                        &dist.install_path,
+                        install_path,
+                        !dist.url.was_given_absolute(),
+                    )
+                    .map(Box::<Path>::from)
+                    .unwrap_or_else(|_| dist.install_path.clone());
                     package.directory = Some(PylockTomlDirectory {
                         path: PortablePathBuf::from(path),
                         editable: dist.editable,
@@ -545,9 +553,13 @@ impl<'lock> PylockToml {
                     });
                 }
                 Dist::Source(SourceDist::Path(dist)) => {
-                    let path = relative_to(&dist.install_path, install_path)
-                        .map(Box::<Path>::from)
-                        .unwrap_or_else(|_| dist.install_path.clone());
+                    let path = try_relative_to_if(
+                        &dist.install_path,
+                        install_path,
+                        !dist.url.was_given_absolute(),
+                    )
+                    .map(Box::<Path>::from)
+                    .unwrap_or_else(|_| dist.install_path.clone());
                     package.archive = Some(PylockTomlArchive {
                         url: None,
                         path: Some(PortablePathBuf::from(path)),
@@ -781,8 +793,11 @@ impl<'lock> PylockToml {
             let directory = match &sdist {
                 Some(SourceDist::Directory(sdist)) => Some(PylockTomlDirectory {
                     path: PortablePathBuf::from(
-                        relative_to(&sdist.install_path, target.install_path())
-                            .unwrap_or_else(|_| sdist.install_path.to_path_buf())
+                        sdist
+                            .url
+                            .given()
+                            .map(PathBuf::from)
+                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
                     editable: match editable {
@@ -824,8 +839,11 @@ impl<'lock> PylockToml {
                 Some(SourceDist::Path(sdist)) => Some(PylockTomlArchive {
                     url: None,
                     path: Some(PortablePathBuf::from(
-                        relative_to(&sdist.install_path, target.install_path())
-                            .unwrap_or_else(|_| sdist.install_path.to_path_buf())
+                        sdist
+                            .url
+                            .given()
+                            .map(PathBuf::from)
+                            .unwrap_or_else(|| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     )),
                     size,
@@ -837,11 +855,7 @@ impl<'lock> PylockToml {
                     Source::Registry(..) => None,
                     Source::Path(source) => package.wheels.first().map(|wheel| PylockTomlArchive {
                         url: None,
-                        path: Some(PortablePathBuf::from(
-                            relative_to(source, target.install_path())
-                                .unwrap_or_else(|_| source.to_path_buf())
-                                .into_boxed_path(),
-                        )),
+                        path: Some(PortablePathBuf::from(source.clone())),
                         size: wheel.size,
                         upload_time: None,
                         subdirectory: None,
