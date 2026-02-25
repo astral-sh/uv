@@ -1032,21 +1032,25 @@ async fn do_lock(
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
                 if !build_options.no_build_requirement(None) {
-                    let eager_database = DistributionDatabase::new(
+                    let build_database = DistributionDatabase::new(
                         &client,
                         &build_dispatch,
                         concurrency.downloads_semaphore.clone(),
                     );
-                    eagerly_capture_build_resolutions(
+                    resolve_all_possible_builds(
                         &lock,
                         target.install_path(),
                         build_options,
                         &build_dispatch,
-                        &eager_database,
+                        &build_database,
                         &build_hasher,
                     )
                     .await
                     .map_err(ProjectError::from)?;
+                } else {
+                    debug!(
+                        "Skipping lock build dependency resolution because `--no-build` is enabled"
+                    );
                 }
 
                 let build_resolutions = build_dispatch.build_resolutions().snapshot();
@@ -1102,7 +1106,7 @@ fn graph_for_key<'a>(
     }
 }
 
-async fn eagerly_capture_build_resolutions(
+async fn resolve_all_possible_builds(
     lock: &Lock,
     workspace_root: &Path,
     build_options: &uv_configuration::BuildOptions,
@@ -1127,24 +1131,22 @@ async fn eagerly_capture_build_resolutions(
 
         if let SourceDist::Directory(directory) = &source_dist {
             let pyproject_path = directory.install_path.join("pyproject.toml");
-            if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
-                if let Ok(pyproject) =
+            if let Ok(contents) = fs_err::read_to_string(&pyproject_path)
+                && let Ok(pyproject) =
                     uv_workspace::pyproject::PyProjectToml::from_string(contents, &pyproject_path)
-                {
-                    if let Some(build_system) = pyproject.build_system {
-                        let requirements: Vec<Requirement> = build_system
-                            .requires
-                            .into_iter()
-                            .map(Requirement::from)
-                            .collect();
-                        if !requirements.is_empty() {
-                            let build_stack = BuildStack::default();
-                            let _ = build_dispatch
-                                .resolve(&requirements, Some(&key), &build_stack)
-                                .await?;
-                            resolved_from_pyproject = true;
-                        }
-                    }
+                && let Some(build_system) = pyproject.build_system
+            {
+                let requirements: Vec<Requirement> = build_system
+                    .requires
+                    .into_iter()
+                    .map(Requirement::from)
+                    .collect();
+                if !requirements.is_empty() {
+                    let build_stack = BuildStack::default();
+                    let _ = build_dispatch
+                        .resolve(&requirements, Some(&key), &build_stack)
+                        .await?;
+                    resolved_from_pyproject = true;
                 }
             }
         }

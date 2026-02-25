@@ -213,7 +213,6 @@ impl AsRef<[u8]> for PyProjectToml {
     }
 }
 
-/// PEP 621 project metadata (`project`).
 /// The `[build-system]` table as specified in PEP 518.
 ///
 /// See <https://peps.python.org/pep-0518/>.
@@ -228,6 +227,7 @@ pub struct BuildSystem {
     pub build_backend: Option<String>,
 }
 
+/// PEP 621 project metadata (`project`).
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
