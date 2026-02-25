@@ -1,3 +1,6 @@
+use itertools::Itertools as _;
+use owo_colors::OwoColorize;
+use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::{
@@ -212,13 +215,110 @@ pub(crate) async fn audit(
 
     reporter.on_audit_complete();
 
-    for finding in all_findings {
-        println!("{finding:?}");
-    }
+    let display = AuditResults {
+        printer,
+        npackages: lock.packages().len(),
+        findings: all_findings,
+    };
+    display.render()?;
 
     Ok(ExitStatus::Success)
 }
 
-struct AuditDisplay {
+struct AuditResults {
+    printer: Printer,
+    npackages: usize,
     findings: Vec<Finding>,
+}
+
+impl AuditResults {
+    fn render(&self) -> Result<()> {
+        let (vulns, statuses): (Vec<_>, Vec<_>) =
+            self.findings.iter().partition_map(|finding| match finding {
+                Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
+                Finding::ProjectStatus(status) => itertools::Either::Right(status),
+            });
+
+        let vuln_banner = if vulns.len() >= 1 {
+            let s = if vulns.len() == 1 { "y" } else { "ies" };
+            format!(
+                "{} known vulnerabilit{}",
+                vulns.len().to_string().yellow(),
+                s
+            )
+        } else {
+            "no known vulnerabilities".green().to_string()
+        };
+
+        let status_banner = if statuses.len() >= 1 {
+            let s = if statuses.len() == 1 { "" } else { "es" };
+            format!(
+                "{} adverse project status{}",
+                statuses.len().to_string().yellow(),
+                s
+            )
+        } else {
+            "no adverse project statuses".green().to_string()
+        };
+
+        writeln!(
+            self.printer.stderr(),
+            "Found {vuln_banner} and {status_banner} in {packages}",
+            packages = format!("{npackages} packages", npackages = self.npackages).bold()
+        )?;
+
+        if vulns.len() >= 1 {
+            writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
+
+            // Group vulnerabilities by (dependency name, version).
+            let groups = vulns
+                .into_iter()
+                .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
+
+            for (dependency, vulns) in groups.into_iter() {
+                let vulns: Vec<_> = vulns.collect();
+                let (name, version) = dependency;
+
+                writeln!(
+                    self.printer.stdout_important(),
+                    "{name} {version} has {n} known vulnerabilit{ies}:\n",
+                    n = vulns.len(),
+                    ies = if vulns.len() == 1 { "y" } else { "ies" },
+                )?;
+
+                for vuln in vulns {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "- {id}: {description}",
+                        id = vuln.best_id().as_str().bold(),
+                        description = vuln.summary.as_deref().unwrap_or("No summary provided"),
+                    )?;
+
+                    if vuln.fix_versions.is_empty() {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  No fix versions available"
+                        )?;
+                    } else {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  Fixed in: {}",
+                            vuln.fix_versions.iter().map(|v| v.to_string()).join(", ")
+                        )?;
+                    }
+                }
+
+                writeln!(self.printer.stdout_important())?;
+            }
+        }
+
+        if statuses.len() >= 1 {
+            writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
+
+            // NOTE: Nothing here yet, since we don't actually produce
+            // any adverse project statuses at the moment.
+        }
+
+        Ok(())
+    }
 }

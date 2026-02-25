@@ -67,33 +67,83 @@ pub enum AdverseStatus {
     Deprecated,
 }
 
+/// A vulnerability within a dependency.
+#[derive(Debug)]
+pub struct Vulnerability {
+    /// The dependency that is vulnerable.
+    pub dependency: Dependency,
+    /// The unique identifier for the vulnerability.
+    pub id: VulnerabilityID,
+    /// A short, human-readable summary of the vulnerability, if available.
+    pub summary: Option<String>,
+    /// A full-length description of the vulnerability, if available.
+    pub description: Option<String>,
+    /// Zero or more versions that fix the vulnerability.
+    pub fix_versions: Vec<Version>,
+    /// Zero or more aliases for this vulnerability in other databases.
+    pub aliases: Vec<VulnerabilityID>,
+    /// The timestamp when this vulnerability was published, if available.
+    pub published: Option<Timestamp>,
+    /// The timestamp when this vulnerability was last modified, if available.
+    pub modified: Option<Timestamp>,
+}
+
+impl Vulnerability {
+    pub fn new(
+        dependency: Dependency,
+        id: VulnerabilityID,
+        summary: Option<String>,
+        description: Option<String>,
+        fix_versions: Vec<Version>,
+        aliases: Vec<VulnerabilityID>,
+        published: Option<Timestamp>,
+        modified: Option<Timestamp>,
+    ) -> Self {
+        // Vulnerability summaries often contain excess whitespace, as well as newlines.
+        // We normalize these out.
+        let summary = summary.map(|summary| summary.trim().replace('\n', ""));
+
+        Self {
+            dependency,
+            id,
+            summary,
+            description,
+            fix_versions,
+            aliases,
+            published,
+            modified,
+        }
+    }
+
+    /// Pick the subjectively "best" identifier for this vulnerability.
+    /// For our purposes we prefer PYSEC IDs, then GHSA, then CVE, then whatever
+    /// primary ID the vulnerability came with.
+    pub fn best_id(&self) -> &VulnerabilityID {
+        std::iter::once(&self.id)
+            .chain(self.aliases.iter())
+            .find(|id| {
+                id.as_str().starts_with("PYSEC-")
+                    || id.as_str().starts_with("GHSA-")
+                    || id.as_str().starts_with("CVE-")
+            })
+            .unwrap_or(&self.id)
+    }
+}
+
+/// An adverse project status, such as an archived or deprecated project.
+#[derive(Debug)]
+pub struct ProjectStatus {
+    /// The dependency with the adverse status.
+    pub dependency: Dependency,
+    /// The adverse status of the project.
+    pub status: AdverseStatus,
+    /// An optional (index-supplied) reason for the adverse status.
+    pub reason: Option<String>,
+}
+
 /// Represents a finding on a dependency.
 #[derive(Debug)]
 pub enum Finding {
-    /// A vulnerability within a dependency.
-    Vulnerability {
-        /// The dependency that is vulnerable.
-        dependency: Dependency,
-        /// The unique identifier for the vulnerability.
-        id: VulnerabilityID,
-        /// A short, human-readable description of the vulnerability.
-        description: String,
-        /// Zero or more versions that fix the vulnerability.
-        fix_versions: Vec<Version>,
-        /// Zero or more aliases for this vulnerability in other databases.
-        aliases: Vec<VulnerabilityID>,
-        /// The timestamp when this vulnerability was published, if available.
-        published: Option<Timestamp>,
-        /// The timestamp when this vulnerability was last modified, if available.
-        modified: Option<Timestamp>,
-    },
-    /// An adverse project status, such as an archived or deprecated project.
-    ProjectStatus {
-        /// The dependency with the adverse status.
-        dependency: Dependency,
-        /// The adverse status of the project.
-        status: AdverseStatus,
-        /// An optional (index-supplied) reason for the adverse status.
-        reason: Option<String>,
-    },
+    Vulnerability(Vulnerability),
+    ProjectStatus(ProjectStatus),
 }
