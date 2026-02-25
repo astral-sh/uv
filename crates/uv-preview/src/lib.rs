@@ -57,7 +57,7 @@ pub fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(preview)) => *preview,
         Some(PreviewMode::Test(rwlock)) => {
-            let panic_message = "you must use `uv_preview::test::with_features` to set up the global preview configuration before calling functions which rely on it";
+            let panic_message = "The preview configuration is in test mode but the current thread does not hold a `FeaturesGuard`\nHint: Use `uv_preview::test::with_features` to get a `FeaturesGuard` and hold it when testing functions which rely on the global preview state";
             assert!(test::HELD.get(), "{}", panic_message);
             // The unwrap may panic only if the current thread had panicked
             // while attempting to write the value and then recovered with
@@ -65,7 +65,7 @@ pub fn get() -> Preview {
             rwlock.read().unwrap().expect(panic_message)
         }
         None => panic!(
-            "preview configuration has not been initialized\nHint: use `uv_preview::init` or `uv_preview::test::with_features` to initialize it"
+            "The preview configuration has not been initialized\nHint: Use `uv_preview::init` or `uv_preview::test::with_features` to initialize it"
         ),
     }
 }
@@ -79,7 +79,7 @@ pub fn get() -> Preview {
 pub fn get() -> Preview {
     match PREVIEW.get() {
         Some(preview) => *preview,
-        None => panic!("preview configuration has not been initialized"),
+        None => panic!("The preview configuration has not been initialized"),
     }
 }
 
