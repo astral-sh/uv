@@ -347,7 +347,7 @@ mod tests {
         [project]
         name = "asdf"
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
         assert!(matches!(meta, Err(MetadataError::FieldNotFound("version"))));
 
@@ -356,7 +356,7 @@ mod tests {
         name = "asdf"
         dynamic = ["version"]
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None);
         assert!(matches!(meta, Err(MetadataError::DynamicField("version"))));
 
@@ -365,7 +365,7 @@ mod tests {
         name = "asdf"
         version = "1.0"
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -379,7 +379,7 @@ mod tests {
         version = "1.0"
         requires-python = ">=3.6"
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -394,7 +394,7 @@ mod tests {
         requires-python = ">=3.6"
         dependencies = ["foo"]
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
@@ -412,7 +412,7 @@ mod tests {
         [project.optional-dependencies]
         dotenv = ["bar"]
     "#;
-        let pyproject = PyProjectToml::from_toml(s).unwrap();
+        let pyproject = PyProjectToml::from_toml(s, "pyproject.toml").unwrap();
         let meta = ResolutionMetadata::parse_pyproject_toml(pyproject, None).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));

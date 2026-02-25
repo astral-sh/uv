@@ -7078,6 +7078,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "toml",
+ "tracing",
  "url",
  "uv-configuration",
  "uv-distribution-types",

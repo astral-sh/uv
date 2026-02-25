@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use tracing::info_span;
 
 use uv_configuration::Upgrade;
 use uv_fs::CWD;
@@ -106,7 +107,8 @@ pub async fn read_pylock_toml_requirements(
 
     // Read the `pylock.toml` from disk, and deserialize it from TOML.
     let content = fs_err::tokio::read_to_string(&output_file).await?;
-    let lock = toml::from_str::<PylockToml>(&content)?;
+    let lock = info_span!("toml::from_str upgrade", path = %output_file.display())
+        .in_scope(|| toml::from_str::<PylockToml>(&content))?;
 
     let mut preferences = Vec::new();
     let mut git = Vec::new();
