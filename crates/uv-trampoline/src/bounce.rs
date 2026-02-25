@@ -6,8 +6,9 @@ use std::vec::Vec;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, ERROR_INSUFFICIENT_BUFFER, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
-        SetHandleInformation, TRUE,
+        CloseHandle, ERROR_CALL_NOT_IMPLEMENTED, ERROR_INSUFFICIENT_BUFFER,
+        ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED, ERROR_OLD_WIN_VERSION, ERROR_PROC_NOT_FOUND,
+        HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
     System::Console::{GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle},
@@ -300,17 +301,43 @@ fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
     exit_with_status(1);
 }
 
-fn make_handles_inheritable(si: &STARTUPINFOA) {
+fn make_handles_inheritable(startup_info: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::run_child
-    if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
+    if (startup_info.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
-        unsafe { SetHandleInformation(si.hStdInput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn!("Making stdin inheritable failed"));
-        unsafe { SetHandleInformation(si.hStdOutput, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn!("Making stdout inheritable failed"));
-        unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
-            .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
+        unsafe {
+            SetHandleInformation(
+                startup_info.hStdInput,
+                HANDLE_FLAG_INHERIT.0,
+                HANDLE_FLAG_INHERIT,
+            )
+        }
+        .unwrap_or_else(|_| warn!("Making stdin inheritable failed"));
+        unsafe {
+            SetHandleInformation(
+                startup_info.hStdOutput,
+                HANDLE_FLAG_INHERIT.0,
+                HANDLE_FLAG_INHERIT,
+            )
+        }
+        .unwrap_or_else(|_| warn!("Making stdout inheritable failed"));
+        unsafe {
+            SetHandleInformation(
+                startup_info.hStdError,
+                HANDLE_FLAG_INHERIT.0,
+                HANDLE_FLAG_INHERIT,
+            )
+        }
+        .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
     }
+}
+
+fn is_extended_startup_attributes_unavailable(error: HRESULT) -> bool {
+    error == HRESULT::from_win32(ERROR_CALL_NOT_IMPLEMENTED.0)
+        || error == HRESULT::from_win32(ERROR_INVALID_PARAMETER.0)
+        || error == HRESULT::from_win32(ERROR_NOT_SUPPORTED.0)
+        || error == HRESULT::from_win32(ERROR_OLD_WIN_VERSION.0)
+        || error == HRESULT::from_win32(ERROR_PROC_NOT_FOUND.0)
 }
 
 /// Spawn a child process directly into a job object using `PROC_THREAD_ATTRIBUTE_JOB_LIST`.
@@ -318,16 +345,29 @@ fn make_handles_inheritable(si: &STARTUPINFOA) {
 /// This approach avoids race conditions where the child exits or the parent is killed
 /// before `AssignProcessToJobObject` is called. However, it requires Windows 10+.
 ///
-/// Returns `None` if the attribute list APIs fail (e.g., on older Windows versions).
-fn spawn_child_in_job(si: &STARTUPINFOA, child_cmdline: CString, job: &Job) -> Option<HANDLE> {
+/// Returns `None` when extended startup attributes are unavailable.
+fn spawn_child_in_job(
+    startup_info: &STARTUPINFOA,
+    child_cmdline: CString,
+    job: &Job,
+) -> Option<HANDLE> {
     // Determine the required size for the attribute list (1 attribute: job list).
     // The first call is expected to fail with ERROR_INSUFFICIENT_BUFFER, returning
     // the required size in `attr_list_size`.
     let mut attr_list_size: usize = 0;
-    let error =
-        unsafe { InitializeProcThreadAttributeList(None, 1, None, &mut attr_list_size) }.err()?;
-    if error.code() != HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER.0) {
-        return None;
+    match unsafe { InitializeProcThreadAttributeList(None, 1, None, &mut attr_list_size) } {
+        Err(error) if error.code() == HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER.0) => {}
+        Err(error) if is_extended_startup_attributes_unavailable(error.code()) => return None,
+        Err(_) => {
+            print_last_error_and_exit(
+                "uv trampoline failed to query process thread attribute list size",
+            );
+        }
+        Ok(()) => {
+            error_and_exit(
+                "uv trampoline unexpectedly initialized attribute list with null pointer",
+            );
+        }
     }
 
     // Allocate the attribute list buffer with pointer alignment, since
@@ -337,89 +377,100 @@ fn spawn_child_in_job(si: &STARTUPINFOA, child_cmdline: CString, job: &Job) -> O
             .unwrap_or_else(|_| {
                 error_and_exit("uv trampoline failed to create layout for attribute list");
             });
-    // SAFETY: layout has non-zero size (attr_list_size comes from InitializeProcThreadAttributeList).
+
+    // SAFETY: `attr_list_layout` was constructed above and has non-zero size.
     let attr_list_ptr = unsafe { std::alloc::alloc_zeroed(attr_list_layout) };
     if attr_list_ptr.is_null() {
-        return None;
+        error_and_exit("uv trampoline failed to allocate process thread attribute list");
     }
+
+    let mut attr_list_initialized = false;
+    let result = (|| {
+        let attr_list = LPPROC_THREAD_ATTRIBUTE_LIST(attr_list_ptr.cast());
+
+        // Initialize the attribute list.
+        if let Err(error) = unsafe {
+            InitializeProcThreadAttributeList(Some(attr_list), 1, None, &mut attr_list_size)
+        } {
+            if is_extended_startup_attributes_unavailable(error.code()) {
+                return None;
+            }
+            print_last_error_and_exit(
+                "uv trampoline failed to initialize process thread attribute list",
+            );
+        }
+        attr_list_initialized = true;
+
+        // Set the job object attribute. The job handle must remain valid through `CreateProcessA`.
+        let job_handle = job.as_raw_handle();
+        if let Err(error) = unsafe {
+            UpdateProcThreadAttribute(
+                attr_list,
+                0,
+                PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
+                Some((&raw const job_handle).cast()),
+                size_of::<HANDLE>(),
+                None,
+                None,
+            )
+        } {
+            if is_extended_startup_attributes_unavailable(error.code()) {
+                return None;
+            }
+            print_last_error_and_exit("uv trampoline failed to configure process job attribute");
+        }
+
+        // Build STARTUPINFOEXA with the attribute list.
+        let mut startup_info_ex = STARTUPINFOEXA {
+            StartupInfo: *startup_info,
+            lpAttributeList: attr_list,
+        };
+        // Update cbSize to reflect the extended struct.
+        startup_info_ex.StartupInfo.cb =
+            u32::try_from(size_of::<STARTUPINFOEXA>()).expect("STARTUPINFOEXA size fits in u32");
+
+        let mut child_process_info = PROCESS_INFORMATION::default();
+        if let Err(error) = unsafe {
+            CreateProcessA(
+                None,
+                Some(PSTR::from_raw(child_cmdline.as_ptr() as *mut _)),
+                None,
+                None,
+                true,
+                EXTENDED_STARTUPINFO_PRESENT,
+                None,
+                None,
+                &startup_info_ex.StartupInfo,
+                &mut child_process_info,
+            )
+        } {
+            if is_extended_startup_attributes_unavailable(error.code()) {
+                return None;
+            }
+            print_last_error_and_exit(
+                "uv trampoline failed to spawn Python child process with startup attributes",
+            );
+        }
+
+        unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
+            print_last_error_and_exit(
+                "uv trampoline failed to close Python child process thread handle",
+            );
+        });
+
+        Some(child_process_info.hProcess)
+    })();
+
     let attr_list = LPPROC_THREAD_ATTRIBUTE_LIST(attr_list_ptr.cast());
-
-    let result = spawn_child_in_job_inner(si, child_cmdline, job, attr_list, &mut attr_list_size);
-
-    // SAFETY: attr_list_ptr was allocated with attr_list_layout above and is non-null.
-    unsafe { std::alloc::dealloc(attr_list_ptr, attr_list_layout) };
+    // SAFETY: attr_list_ptr was allocated with attr_list_layout above.
+    unsafe {
+        if attr_list_initialized {
+            DeleteProcThreadAttributeList(attr_list);
+        }
+        std::alloc::dealloc(attr_list_ptr, attr_list_layout);
+    }
 
     result
-}
-
-/// Inner implementation of [`spawn_child_in_job`] that may fail at any point.
-///
-/// The caller is responsible for freeing the `attr_list` buffer.
-fn spawn_child_in_job_inner(
-    si: &STARTUPINFOA,
-    child_cmdline: CString,
-    job: &Job,
-    attr_list: LPPROC_THREAD_ATTRIBUTE_LIST,
-    attr_list_size: &mut usize,
-) -> Option<HANDLE> {
-    // Initialize the attribute list.
-    unsafe { InitializeProcThreadAttributeList(Some(attr_list), 1, None, attr_list_size) }.ok()?;
-
-    // Set the job object attribute. The job handle must remain valid through `CreateProcessA`.
-    let job_handle = job.as_raw_handle();
-    let Ok(()) = (unsafe {
-        UpdateProcThreadAttribute(
-            attr_list,
-            0,
-            PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
-            Some((&raw const job_handle).cast()),
-            size_of::<HANDLE>(),
-            None,
-            None,
-        )
-    }) else {
-        // SAFETY: We successfully initialized the attribute list above.
-        unsafe { DeleteProcThreadAttributeList(attr_list) };
-        return None;
-    };
-
-    // Build STARTUPINFOEXA with the attribute list.
-    let mut si_ex = STARTUPINFOEXA {
-        StartupInfo: *si,
-        lpAttributeList: attr_list,
-    };
-    // Update cbSize to reflect the extended struct.
-    si_ex.StartupInfo.cb =
-        u32::try_from(size_of::<STARTUPINFOEXA>()).expect("STARTUPINFOEXA size fits in u32");
-
-    let mut child_process_info = PROCESS_INFORMATION::default();
-    let create_result = unsafe {
-        CreateProcessA(
-            None,
-            Some(PSTR::from_raw(child_cmdline.as_ptr() as *mut _)),
-            None,
-            None,
-            true,
-            EXTENDED_STARTUPINFO_PRESENT,
-            None,
-            None,
-            &si_ex.StartupInfo,
-            &mut child_process_info,
-        )
-    };
-
-    // SAFETY: We successfully initialized the attribute list above.
-    unsafe { DeleteProcThreadAttributeList(attr_list) };
-
-    // CreateProcessA failed — fall back to the non-attribute-list path.
-    create_result.ok()?;
-
-    unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit(
-            "uv trampoline failed to close Python child process thread handle",
-        );
-    });
-    Some(child_process_info.hProcess)
 }
 
 /// Spawn a child process and assign it to a job object after creation.
@@ -428,7 +479,11 @@ fn spawn_child_in_job_inner(
 /// `PROC_THREAD_ATTRIBUTE_JOB_LIST` (pre-Windows 10). There's a small race window where
 /// the child could exit before `AssignProcessToJobObject` is called, so we tolerate that
 /// error.
-fn spawn_child_and_assign_to_job(si: &STARTUPINFOA, child_cmdline: CString, job: &Job) -> HANDLE {
+fn spawn_child_and_assign_to_job(
+    startup_info: &STARTUPINFOA,
+    child_cmdline: CString,
+    job: &Job,
+) -> HANDLE {
     let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
         CreateProcessA(
@@ -442,7 +497,7 @@ fn spawn_child_and_assign_to_job(si: &STARTUPINFOA, child_cmdline: CString, job:
             PROCESS_CREATION_FLAGS(0),
             None,
             None,
-            si,
+            startup_info,
             &mut child_process_info,
         )
     }
@@ -473,7 +528,7 @@ fn spawn_child_and_assign_to_job(si: &STARTUPINFOA, child_cmdline: CString, job:
 // processes, by using the .lpReserved2 field. We want to close those file descriptors too.
 // The UCRT source code has details on the memory layout (see also initialize_inherited_file_handles_nolock):
 // https://github.com/huangqinjin/ucrt/blob/10.0.19041.0/lowio/ioinit.cpp#L190-L223
-fn close_handles(si: &STARTUPINFOA) {
+fn close_handles(startup_info: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::cleanup_standard_io()
     // Unlike cleanup_standard_io(), we don't close STD_ERROR_HANDLE to retain warn!
     for std_handle in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE] {
@@ -491,11 +546,11 @@ fn close_handles(si: &STARTUPINFOA) {
     }
 
     // See distlib/PC/launcher.c::cleanup_fds()
-    if si.cbReserved2 == 0 || si.lpReserved2.is_null() {
+    if startup_info.cbReserved2 == 0 || startup_info.lpReserved2.is_null() {
         return;
     }
 
-    let crt_magic = si.lpReserved2 as *const u32;
+    let crt_magic = startup_info.lpReserved2 as *const u32;
     let handle_count = unsafe { crt_magic.read_unaligned() } as isize;
     let handle_start =
         unsafe { (crt_magic.offset(1) as *const u8).offset(handle_count) as *const HANDLE };
@@ -576,23 +631,21 @@ fn clear_app_starting_state(child_handle: HANDLE) {
 pub fn bounce(is_gui: bool) -> ! {
     let child_cmdline = make_child_cmdline();
 
-    let mut si = STARTUPINFOA::default();
-    unsafe { GetStartupInfoA(&mut si) }
+    let mut startup_info = STARTUPINFOA::default();
+    unsafe { GetStartupInfoA(&mut startup_info) }
 
-    make_handles_inheritable(&si);
+    make_handles_inheritable(&startup_info);
 
     let job = Job::new().unwrap_or_else(|e| {
         print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
-    // Try the race-free path first: spawn the child directly into the job using
-    // PROC_THREAD_ATTRIBUTE_JOB_LIST (Windows 10+). If that's not available,
-    // fall back to spawning normally and assigning afterward.
-    let child_handle = spawn_child_in_job(&si, child_cmdline.clone(), &job)
-        .unwrap_or_else(|| spawn_child_and_assign_to_job(&si, child_cmdline, &job));
+    let child_handle = spawn_child_in_job(&startup_info, child_cmdline.clone(), &job)
+        // If the Windows 10 API is not available, fallback to the mode that can race.
+        .unwrap_or_else(|| spawn_child_and_assign_to_job(&startup_info, child_cmdline, &job));
 
     // (best effort) Close all the handles that we can
-    close_handles(&si);
+    close_handles(&startup_info);
 
     // (best effort) Switch to some innocuous directory, so we don't hold the original cwd open.
     // See distlib/PC/launcher.c::switch_working_directory
