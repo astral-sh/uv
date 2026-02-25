@@ -8563,10 +8563,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
         ]
 
         [[package]]
@@ -8645,10 +8645,10 @@ fn lock_mixed_hashes() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha512:765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha512:765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17" },
         ]
 
         [[package]]
@@ -9129,7 +9129,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v1" }
+        source = { directory = "[TEMP_DIR]/v1" }
         resolution-markers = [
             "sys_platform == 'darwin'",
         ]
@@ -9143,7 +9143,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.0.1"
-        source = { directory = "v2" }
+        source = { directory = "[TEMP_DIR]/v2" }
         resolution-markers = [
             "sys_platform != 'darwin'",
         ]
@@ -9168,14 +9168,14 @@ fn lock_same_version_multiple_urls() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "dependency", version = "0.0.1", source = { directory = "v1" }, marker = "sys_platform == 'darwin'" },
-            { name = "dependency", version = "0.0.1", source = { directory = "v2" }, marker = "sys_platform != 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v1" }, marker = "sys_platform == 'darwin'" },
+            { name = "dependency", version = "0.0.1", source = { directory = "[TEMP_DIR]/v2" }, marker = "sys_platform != 'darwin'" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "v2" },
-            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "v1" },
+            { name = "dependency", marker = "sys_platform != 'darwin'", directory = "[TEMP_DIR]/v2" },
+            { name = "dependency", marker = "sys_platform == 'darwin'", directory = "[TEMP_DIR]/v1" },
         ]
 
         [[package]]
@@ -12424,9 +12424,9 @@ fn lock_find_links_explicit_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -12526,9 +12526,9 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
         [[package]]
         name = "tqdm"
         version = "1000.0.0"
-        source = { registry = "../links" }
+        source = { registry = "[TEMP_DIR]/links" }
         wheels = [
-            { path = "tqdm-1000.0.0-py3-none-any.whl" },
+            { path = "[TEMP_DIR]/links/tqdm-1000.0.0-py3-none-any.whl" },
         ]
         "#
         );
@@ -12743,10 +12743,10 @@ fn lock_local_index() -> Result<()> {
         [[package]]
         name = "basic-package"
         version = "0.1.0"
-        source = { registry = "simple-html" }
-        sdist = { path = "basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
+        source = { registry = "[TEMP_DIR]/simple-html" }
+        sdist = { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0.tar.gz", hash = "sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4" }
         wheels = [
-            { path = "basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
+            { path = "[TEMP_DIR]/simple-html/basic-package/basic_package-0.1.0-py3-none-any.whl", hash = "sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" },
         ]
 
         [[package]]
@@ -12998,7 +12998,7 @@ fn lock_sources_archive() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", path = "workspace.zip" }]
+        requires-dist = [{ name = "workspace", path = "[TEMP_DIR]/workspace.zip" }]
 
         [[package]]
         name = "sniffio"
@@ -13012,7 +13012,7 @@ fn lock_sources_archive() -> Result<()> {
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { path = "workspace.zip" }
+        source = { path = "[TEMP_DIR]/workspace.zip" }
         dependencies = [
             { name = "anyio" },
         ]
@@ -13132,12 +13132,12 @@ fn lock_sources_source_tree() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "workspace", directory = "workspace" }]
+        requires-dist = [{ name = "workspace", directory = "[TEMP_DIR]/workspace" }]
 
         [[package]]
         name = "workspace"
         version = "0.1.0"
-        source = { directory = "workspace" }
+        source = { directory = "[TEMP_DIR]/workspace" }
         dependencies = [
             { name = "anyio" },
         ]
