@@ -168,19 +168,19 @@ fn hint_build_dependency(
     };
     write!(
         f,
-        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. \
-        If `{}` is a first-party package, consider adding `{}` to its `{}`. \
-        Otherwise, either add it to your `pyproject.toml` under:\n\
-        \n\
-            [tool.uv.extra-build-dependencies]\n\
-            {} = [\"{}\"]\n\
+        "This error likely indicates that `{}` depends on `{}`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:\n\
+        # if {} is first-party\n\
+        [build-system]\n\
+        requires = [\"{}\"]\n\
+        # otherwise\n\
+        [tool.uv.extra-build-dependencies]\n\
+        {} = [\"{}\"]\n\
         \n\
         or `{}` into the environment and re-run with `{}`.",
         display_name.cyan(),
         package.cyan(),
         package_name.cyan(),
         package.cyan(),
-        "build-system.requires".green(),
         table_key.cyan(),
         package.cyan(),
         format!("uv pip install {package}").green(),
@@ -629,8 +629,11 @@ mod test {
 
         error: invalid command 'bdist_wheel'
 
-        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. If `pygraphviz-1.11` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
-
+        hint: This error likely indicates that `pygraphviz-1.11` depends on `wheel`, but doesn't declare it as a build dependency. You likely should tweak your `pyproject.toml`:
+        # if pygraphviz-1.11 is first-party
+        [build-system]
+        requires = ["wheel"]
+        # otherwise
         [tool.uv.extra-build-dependencies]
         "pygraphviz-1.11" = ["wheel"]
 
