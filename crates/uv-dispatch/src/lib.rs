@@ -147,7 +147,7 @@ impl<'a> BuildDispatch<'a> {
             build_options,
             hasher,
             exclude_newer,
-            source_build_context: SourceBuildContext::new(concurrency.builds),
+            source_build_context: SourceBuildContext::new(concurrency.builds_semaphore.clone()),
             build_extra_env_vars: FxHashMap::default(),
             sources,
             workspace_cache,
@@ -264,8 +264,12 @@ impl BuildContext for BuildDispatch<'_> {
             self.hasher,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads)
-                .with_build_stack(build_stack),
+            DistributionDatabase::new(
+                self.client,
+                self,
+                self.concurrency.downloads_semaphore.clone(),
+            )
+            .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
@@ -353,8 +357,12 @@ impl BuildContext for BuildDispatch<'_> {
                 tags,
                 self.hasher,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads)
-                    .with_build_stack(build_stack),
+                DistributionDatabase::new(
+                    self.client,
+                    self,
+                    self.concurrency.downloads_semaphore.clone(),
+                )
+                .with_build_stack(build_stack),
             );
 
             debug!(

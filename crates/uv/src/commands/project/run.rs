@@ -282,7 +282,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     } else {
                         Box::new(SummaryResolveLogger)
                     },
-                    concurrency,
+                    &concurrency,
                     &cache,
                     &workspace_cache,
                     printer,
@@ -330,7 +330,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryInstallLogger)
                 },
                 installer_metadata,
-                concurrency,
+                &concurrency,
                 &cache,
                 workspace_cache.clone(),
                 DryRun::Disabled,
@@ -447,7 +447,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
-                    concurrency,
+                    &concurrency,
                     &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
@@ -784,7 +784,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         } else {
                             Box::new(SummaryResolveLogger)
                         },
-                        concurrency,
+                        &concurrency,
                         &cache,
                         &workspace_cache,
                         printer,
@@ -873,7 +873,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
-                    concurrency,
+                    &concurrency,
                     &cache,
                     workspace_cache.clone(),
                     DryRun::Disabled,
@@ -1028,7 +1028,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Box::new(SummaryInstallLogger)
                 },
                 installer_metadata,
-                concurrency,
+                &concurrency,
                 &cache,
                 printer,
                 preview,

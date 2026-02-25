@@ -123,26 +123,26 @@ impl GlobalSettings {
                 ColorChoice::Auto
             },
             network_settings,
-            concurrency: Concurrency {
-                downloads: environment
+            concurrency: Concurrency::new(
+                environment
                     .concurrency
                     .downloads
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_downloads))
                     .map(NonZeroUsize::get)
                     .unwrap_or(Concurrency::DEFAULT_DOWNLOADS),
-                builds: environment
+                environment
                     .concurrency
                     .builds
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_builds))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-                installs: environment
+                environment
                     .concurrency
                     .installs
                     .combine(workspace.and_then(|workspace| workspace.globals.concurrent_installs))
                     .map(NonZeroUsize::get)
                     .unwrap_or_else(Concurrency::threads),
-            },
+            ),
             show_settings: args.show_settings,
             preview: Preview::from_args(
                 resolve_preview(args, workspace, environment),

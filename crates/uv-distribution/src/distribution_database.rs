@@ -58,12 +58,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,
-        concurrent_downloads: usize,
+        downloads_semaphore: Arc<Semaphore>,
     ) -> Self {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
-            client: ManagedClient::new(client, concurrent_downloads),
+            client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
         }
     }
@@ -1151,15 +1151,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
     pub unmanaged: &'a RegistryClient,
-    control: Semaphore,
+    control: Arc<Semaphore>,
 }
 
 impl<'a> ManagedClient<'a> {
-    /// Create a new `ManagedClient` using the given client and concurrency limit.
-    fn new(client: &'a RegistryClient, concurrency: usize) -> Self {
+    /// Create a new `ManagedClient` using the given client and concurrency semaphore.
+    fn new(client: &'a RegistryClient, control: Arc<Semaphore>) -> Self {
         ManagedClient {
             unmanaged: client,
-            control: Semaphore::new(concurrency),
+            control,
         }
     }
 

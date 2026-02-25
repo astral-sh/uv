@@ -37,6 +37,7 @@ rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+tokio = { workspace = true }
 serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

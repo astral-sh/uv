@@ -119,7 +119,7 @@ impl CachedEnvironment {
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
-        concurrency: Concurrency,
+        concurrency: &Concurrency,
         cache: &Cache,
         printer: Printer,
         preview: Preview,
