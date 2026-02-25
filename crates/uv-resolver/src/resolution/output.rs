@@ -650,7 +650,8 @@ impl ResolverOutput {
             });
         }
 
-        // Collect root edges (direct build requirements).
+        // Collect direct build requirements (edges from the resolution root
+        // to the packages listed in `build-system.requires`).
         if let Some(root_idx) = root_index {
             for edge in self.graph.edges(root_idx) {
                 let ResolutionGraphNode::Dist(dist) = &self.graph[edge.target()] else {
@@ -667,7 +668,10 @@ impl ResolverOutput {
             }
         }
 
-        BuildResolutionGraph { roots, packages }
+        BuildResolutionGraph {
+            direct_dependencies: roots,
+            packages,
+        }
     }
 
     /// Return the number of distinct packages in the graph.
