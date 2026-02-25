@@ -7008,6 +7008,7 @@ dependencies = [
  "same-file",
  "schemars",
  "serde",
+ "serde_json",
  "smallvec",
  "textwrap",
  "thiserror 2.0.18",

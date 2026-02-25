@@ -48,6 +48,7 @@ pub(crate) async fn tree(
     invert: bool,
     outdated: bool,
     show_sizes: bool,
+    json: bool,
     python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
     python: Option<String>,
@@ -287,7 +288,14 @@ pub(crate) async fn tree(
         show_sizes,
     );
 
-    print!("{tree}");
+    if json {
+        // Output JSON
+        let json_output = tree.render_json();
+        println!("{}", serde_json::to_string_pretty(&json_output)?);
+    } else {
+        // Output text
+        print!("{tree}");
+    }
 
     Ok(ExitStatus::Success)
 }

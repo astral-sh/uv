@@ -1,9 +1,9 @@
 use std::collections::{BTreeSet, VecDeque};
-use std::fmt::Write;
 
 use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde_json::json;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
@@ -18,6 +18,406 @@ use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::PackageId;
 use crate::{Lock, PackageMap};
+
+/// Information about a node in the dependency tree.
+#[derive(Debug, Clone)]
+struct NodeInfo<'env> {
+    /// The package identifier.
+    package_id: &'env PackageId,
+    /// The package version, if available.
+    version: Option<&'env Version>,
+    /// The extras associated with this dependency edge.
+    extras: Option<&'env BTreeSet<ExtraName>>,
+    /// The type of dependency edge that led to this node.
+    edge_type: Option<EdgeType<'env>>,
+    /// The compressed wheel size in bytes, if available.
+    size: Option<u64>,
+    /// The latest available version of this package, if known.
+    latest_version: Option<&'env Version>,
+}
+
+/// The type of dependency edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EdgeType<'env> {
+    /// A production dependency.
+    Prod,
+    /// An optional dependency (from an extra).
+    Optional(&'env ExtraName),
+    /// A development dependency (from a dependency group).
+    Dev(&'env GroupName),
+}
+
+/// Information about a node's position in the tree.
+///
+/// This struct provides complete positional information for formatters.
+/// While not all fields may be used by every formatter (e.g., TextFormatter
+/// primarily uses `depth` and `is_last_child`), they are available for
+/// formatters that need more detailed position information.
+#[derive(Debug, Clone, Copy)]
+struct NodePosition {
+    /// The depth of this node in the tree (0 = root).
+    depth: usize,
+    /// Whether this is the first child of its parent.
+    /// Useful for formatters that want to apply special styling to first children.
+    #[allow(dead_code)]
+    is_first_child: bool,
+    /// Whether this is the last child of its parent.
+    /// Used by TextFormatter to determine tree connector characters.
+    is_last_child: bool,
+    /// The index of this child among its siblings (0-based).
+    /// Useful for formatters that want to number or identify children.
+    #[allow(dead_code)]
+    child_index: usize,
+    /// The total number of siblings (including this node).
+    /// Useful for formatters that want to show "X of Y" information.
+    #[allow(dead_code)]
+    total_siblings: usize,
+}
+
+/// A trait for formatting dependency trees in different output formats.
+///
+/// This trait uses the visitor pattern to emit structural events as the tree
+/// is traversed. Implementors can choose how to represent these events in their
+/// output format (e.g., text with tree characters, JSON, HTML, etc.).
+trait TreeFormatter {
+    /// The type of output produced by this formatter.
+    type Output;
+
+    /// Called once at the beginning of tree rendering.
+    fn begin_tree(&mut self);
+
+    /// Called once at the end of tree rendering, returning the final output.
+    fn end_tree(&mut self) -> Self::Output;
+
+    /// Called when entering a node in the tree.
+    ///
+    /// # Arguments
+    /// * `info` - Information about the package and its relationship to the parent
+    /// * `position` - Information about the node's position in the tree structure
+    fn begin_node(&mut self, info: &NodeInfo, position: NodePosition);
+
+    /// Called when leaving a node in the tree.
+    fn end_node(&mut self);
+
+    /// Called to indicate that a node has been visited before (deduplicated).
+    ///
+    /// This is called when a package appears multiple times in the tree but
+    /// deduplication is enabled, so its subtree won't be expanded again.
+    fn mark_visited(&mut self);
+
+    /// Called to indicate that a node creates a dependency cycle.
+    ///
+    /// This is called when a package appears in its own dependency path,
+    /// creating a cycle that cannot be fully displayed.
+    fn mark_cycle(&mut self);
+
+    /// Called before visiting the children of a node.
+    ///
+    /// # Arguments
+    /// * `count` - The number of children that will be visited
+    fn begin_children(&mut self, count: usize);
+
+    /// Called after all children of a node have been visited.
+    fn end_children(&mut self);
+}
+
+/// A text-based tree formatter that produces lines with box-drawing characters.
+///
+/// This formatter produces output like:
+/// ```text
+/// package-name v1.0.0
+/// ├── dependency-1 v2.0.0
+/// │   └── nested-dep v3.0.0
+/// └── dependency-2 v1.5.0 (*)
+/// ```
+#[derive(Debug)]
+struct TextFormatter {
+    /// The accumulated output lines.
+    lines: Vec<String>,
+    /// Stack of indentation strings for the current path in the tree.
+    /// Each element represents the prefix for one level of depth.
+    indent_stack: Vec<&'static str>,
+    /// Whether any deduplicated packages have been encountered.
+    has_deduped: bool,
+    /// Whether any cycles have been encountered.
+    has_cycles: bool,
+    /// Whether deduplication is disabled (for determining the meaning of (*)).
+    no_dedupe: bool,
+}
+
+impl TextFormatter {
+    /// Create a new text formatter.
+    ///
+    /// # Arguments
+    /// * `no_dedupe` - If true, (*) markers indicate cycles; if false, they indicate deduplication.
+    fn new(no_dedupe: bool) -> Self {
+        Self {
+            lines: Vec::new(),
+            indent_stack: Vec::new(),
+            has_deduped: false,
+            has_cycles: false,
+            no_dedupe,
+        }
+    }
+}
+
+impl TreeFormatter for TextFormatter {
+    type Output = Vec<String>;
+
+    fn begin_tree(&mut self) {
+        // Nothing to do for text output
+    }
+
+    fn end_tree(&mut self) -> Self::Output {
+        // Add explanation footer if we saw any markers
+        if self.has_deduped || self.has_cycles {
+            let message = if self.no_dedupe {
+                "(*) Package tree is a cycle and cannot be shown".italic()
+            } else {
+                "(*) Package tree already displayed".italic()
+            };
+            self.lines.push(format!("{message}"));
+        }
+
+        std::mem::take(&mut self.lines)
+    }
+
+    fn begin_node(&mut self, info: &NodeInfo, position: NodePosition) {
+        // Build the line prefix (indentation + tree connector)
+        let prefix = if position.depth == 0 {
+            // Root level - no prefix
+            String::new()
+        } else {
+            // Build indentation from the stack
+            let mut prefix = self.indent_stack.join("");
+
+            // Add the tree connector for this node
+            let connector = if position.is_last_child {
+                "└── "
+            } else {
+                "├── "
+            };
+            prefix.push_str(connector);
+            prefix
+        };
+
+        // Build the line content
+        let mut line = format!("{}{}", prefix, info.package_id.name);
+
+        // Add extras if present
+        if let Some(extras) = info.extras {
+            if !extras.is_empty() {
+                line.push('[');
+                line.push_str(&extras.iter().join(", "));
+                line.push(']');
+            }
+        }
+
+        // Add version if present
+        if let Some(version) = info.version {
+            line.push_str(&format!(" v{version}"));
+        }
+
+        // Add edge type annotation
+        if let Some(edge_type) = info.edge_type {
+            match edge_type {
+                EdgeType::Prod => {}
+                EdgeType::Optional(extra) => {
+                    line.push_str(&format!(" (extra: {extra})"));
+                }
+                EdgeType::Dev(group) => {
+                    line.push_str(&format!(" (group: {group})"));
+                }
+            }
+        }
+
+        // Add size if present
+        if let Some(size) = info.size {
+            let (bytes, unit) = human_readable_bytes(size);
+            line.push(' ');
+            line.push_str(&format!("{}", format!("({bytes:.1}{unit})").dimmed()));
+        }
+
+        // Add latest version if known and outdated
+        if let Some(latest) = info.latest_version {
+            line.push_str(&format!(" {}", format!("(latest: v{latest})").bold().cyan()));
+        }
+
+        self.lines.push(line);
+
+        // Update indent stack for potential children
+        if position.depth > 0 {
+            let indent = if position.is_last_child {
+                "    "
+            } else {
+                "│   "
+            };
+            self.indent_stack.push(indent);
+        }
+    }
+
+    fn end_node(&mut self) {
+        // Pop the indent added by begin_node
+        if !self.indent_stack.is_empty() {
+            self.indent_stack.pop();
+        }
+    }
+
+    fn mark_visited(&mut self) {
+        self.has_deduped = true;
+        // Append marker to the last line
+        if let Some(last) = self.lines.last_mut() {
+            last.push_str(" (*)");
+        }
+    }
+
+    fn mark_cycle(&mut self) {
+        self.has_cycles = true;
+        // Append marker to the last line
+        if let Some(last) = self.lines.last_mut() {
+            last.push_str(" (*)");
+        }
+    }
+
+    fn begin_children(&mut self, _count: usize) {
+        // Nothing to do for text output
+    }
+
+    fn end_children(&mut self) {
+        // Nothing to do for text output
+    }
+}
+
+/// A JSON tree formatter that produces structured JSON output.
+///
+/// This formatter produces output like:
+/// ```json
+/// {
+///   "name": "package-name",
+///   "version": "1.0.0",
+///   "dependencies": [
+///     {
+///       "name": "dependency-1",
+///       "version": "2.0.0",
+///       "dependencies": []
+///     }
+///   ]
+/// }
+/// ```
+#[derive(Debug)]
+struct JsonFormatter {
+    /// Stack of JSON objects being built.
+    /// The top of the stack is the current node being processed.
+    stack: Vec<serde_json::Value>,
+    /// The root nodes (top-level packages).
+    roots: Vec<serde_json::Value>,
+}
+
+impl JsonFormatter {
+    /// Create a new JSON formatter.
+    fn new() -> Self {
+        Self {
+            stack: Vec::new(),
+            roots: Vec::new(),
+        }
+    }
+}
+
+impl TreeFormatter for JsonFormatter {
+    type Output = serde_json::Value;
+
+    fn begin_tree(&mut self) {
+        // Nothing to do for JSON output
+    }
+
+    fn end_tree(&mut self) -> Self::Output {
+        // Return all roots as a JSON array
+        json!(self.roots)
+    }
+
+    fn begin_node(&mut self, info: &NodeInfo, _position: NodePosition) {
+        // Create a JSON object for this node
+        let mut node = json!({
+            "name": info.package_id.name.to_string(),
+        });
+
+        // Add optional fields
+        if let Some(version) = info.version {
+            node["version"] = json!(version.to_string());
+        }
+
+        if let Some(extras) = info.extras {
+            if !extras.is_empty() {
+                node["extras"] = json!(extras.iter().map(|e| e.to_string()).collect::<Vec<_>>());
+            }
+        }
+
+        if let Some(edge_type) = info.edge_type {
+            match edge_type {
+                EdgeType::Optional(extra) => {
+                    node["extra"] = json!(extra.to_string());
+                }
+                EdgeType::Dev(group) => {
+                    node["group"] = json!(group.to_string());
+                }
+                EdgeType::Prod => {}
+            }
+        }
+
+        if let Some(size) = info.size {
+            node["size"] = json!(size);
+        }
+
+        if let Some(latest) = info.latest_version {
+            node["latest"] = json!(latest.to_string());
+        }
+
+        // Initialize empty dependencies array
+        node["dependencies"] = json!([]);
+
+        // Push onto stack
+        self.stack.push(node);
+    }
+
+    fn end_node(&mut self) {
+        // Pop the current node from the stack
+        let node = self.stack.pop().expect("Stack should not be empty");
+
+        if self.stack.is_empty() {
+            // This is a root node - add to roots
+            self.roots.push(node);
+        } else {
+            // This is a child node - add to parent's dependencies
+            let parent = self.stack.last_mut().expect("Parent should exist");
+            parent["dependencies"]
+                .as_array_mut()
+                .expect("Dependencies should be an array")
+                .push(node);
+        }
+    }
+
+    fn mark_visited(&mut self) {
+        // Mark the current node as deduplicated
+        if let Some(node) = self.stack.last_mut() {
+            node["deduplicated"] = json!(true);
+        }
+    }
+
+    fn mark_cycle(&mut self) {
+        // Mark the current node as a cycle
+        if let Some(node) = self.stack.last_mut() {
+            node["cycle"] = json!(true);
+        }
+    }
+
+    fn begin_children(&mut self, _count: usize) {
+        // Nothing to do for JSON output
+    }
+
+    fn end_children(&mut self) {
+        // Nothing to do for JSON output
+    }
+}
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -427,86 +827,82 @@ impl<'env> TreeDisplay<'env> {
         }
     }
 
-    /// Perform a depth-first traversal of the given package and its dependencies.
-    fn visit(
-        &'env self,
-        cursor: Cursor,
-        visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
-        path: &mut Vec<&'env PackageId>,
-    ) -> Vec<String> {
-        // Short-circuit if the current path is longer than the provided depth.
-        if path.len() > self.depth {
-            return Vec::new();
-        }
-
-        let Node::Package(package_id) = self.graph[cursor.node()] else {
-            return Vec::new();
-        };
+    /// Extract node information for the tree formatter.
+    fn extract_node_info(&self, cursor: Cursor, package_id: &'env PackageId) -> NodeInfo<'env> {
         let edge = cursor.edge().map(|edge_id| &self.graph[edge_id]);
 
-        let line = {
-            let mut line = format!("{}", package_id.name);
-
-            if let Some(extras) = edge.and_then(Edge::extras) {
-                if !extras.is_empty() {
-                    line.push('[');
-                    line.push_str(extras.iter().join(", ").as_str());
-                    line.push(']');
-                }
-            }
-
-            if let Some(version) = package_id.version.as_ref() {
-                line.push(' ');
-                line.push('v');
-                let _ = write!(line, "{version}");
-            }
-
-            if let Some(edge) = edge {
-                match edge {
-                    Edge::Prod(_) => {}
-                    Edge::Optional(extra, _) => {
-                        let _ = write!(line, " (extra: {extra})");
-                    }
-                    Edge::Dev(group, _) => {
-                        let _ = write!(line, " (group: {group})");
-                    }
-                }
-            }
-
-            // Append compressed wheel size, if available in the lockfile.
-            // Keep it simple: use the first wheel entry that includes a size.
-            if self.show_sizes {
-                let package = self.lock.find_by_id(package_id);
-                if let Some(size_bytes) = package.wheels.iter().find_map(|wheel| wheel.size) {
-                    let (bytes, unit) = human_readable_bytes(size_bytes);
-                    line.push(' ');
-                    line.push_str(format!("{}", format!("({bytes:.1}{unit})").dimmed()).as_str());
-                }
-            }
-
-            line
+        // Extract edge type and extras
+        let (edge_type, extras) = match edge {
+            Some(Edge::Prod(ex)) => (Some(EdgeType::Prod), *ex),
+            Some(Edge::Optional(extra, ex)) => (Some(EdgeType::Optional(extra)), *ex),
+            Some(Edge::Dev(group, ex)) => (Some(EdgeType::Dev(group)), *ex),
+            None => (None, None),
         };
 
-        // Skip the traversal if:
-        // 1. The package is in the current traversal path (i.e., a dependency cycle).
-        // 2. The package has been visited and de-duplication is enabled (default).
+        // Extract size if enabled
+        let size = if self.show_sizes {
+            let package = self.lock.find_by_id(package_id);
+            package.wheels.iter().find_map(|wheel| wheel.size)
+        } else {
+            None
+        };
+
+        // Extract latest version if known and outdated
+        let latest_version = self.latest.get(package_id);
+
+        NodeInfo {
+            package_id,
+            version: package_id.version.as_ref(),
+            extras,
+            edge_type,
+            size,
+            latest_version,
+        }
+    }
+
+    /// Perform a depth-first traversal using the provided formatter.
+    fn visit_with_formatter<F: TreeFormatter>(
+        &'env self,
+        cursor: Cursor,
+        formatter: &mut F,
+        visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
+        path: &mut Vec<&'env PackageId>,
+        position: NodePosition,
+    ) {
+        // Short-circuit if the current path is longer than the provided depth.
+        if position.depth > self.depth {
+            return;
+        }
+
+        // Extract package information
+        let Node::Package(package_id) = self.graph[cursor.node()] else {
+            return;
+        };
+
+        // Extract node information
+        let info = self.extract_node_info(cursor, package_id);
+
+        // Emit begin_node event
+        formatter.begin_node(&info, position);
+
+        // Check if we've visited this package before
         if let Some(requirements) = visited.get(package_id) {
-            if !self.no_dedupe || path.contains(&package_id) {
-                return if requirements.is_empty() {
-                    vec![line]
-                } else {
-                    vec![format!("{line} (*)")]
-                };
+            // Determine if this is a cycle or just dedupe
+            let is_cycle = path.contains(&package_id);
+
+            if !self.no_dedupe || is_cycle {
+                // Mark as visited/cycle and return early
+                if is_cycle {
+                    formatter.mark_cycle();
+                } else if !requirements.is_empty() {
+                    formatter.mark_visited();
+                }
+                formatter.end_node();
+                return;
             }
         }
 
-        // Incorporate the latest version of the package, if known.
-        let line = if let Some(version) = self.latest.get(package_id) {
-            format!("{line} {}", format!("(latest: v{version})").bold().cyan())
-        } else {
-            line
-        };
-
+        // Get and sort dependencies
         let mut dependencies = self
             .graph
             .edges_directed(cursor.node(), Direction::Outgoing)
@@ -524,9 +920,7 @@ impl<'env> TreeDisplay<'env> {
             (edge, node)
         });
 
-        let mut lines = vec![line];
-
-        // Keep track of the dependency path to avoid cycles.
+        // Track this visit
         visited.insert(
             package_id,
             dependencies
@@ -539,75 +933,177 @@ impl<'env> TreeDisplay<'env> {
         );
         path.push(package_id);
 
+        // Emit begin_children event
+        formatter.begin_children(dependencies.len());
+
+        // Recursively visit children
         for (index, dep) in dependencies.iter().enumerate() {
-            // For sub-visited packages, add the prefix to make the tree display user-friendly.
-            // The key observation here is you can group the tree as follows when you're at the
-            // root of the tree:
-            // root_package
-            // ├── level_1_0          // Group 1
-            // │   ├── level_2_0      ...
-            // │   │   ├── level_3_0  ...
-            // │   │   └── level_3_1  ...
-            // │   └── level_2_1      ...
-            // ├── level_1_1          // Group 2
-            // │   ├── level_2_2      ...
-            // │   └── level_2_3      ...
-            // └── level_1_2          // Group 3
-            //     └── level_2_4      ...
-            //
-            // The lines in Group 1 and 2 have `├── ` at the top and `|   ` at the rest while
-            // those in Group 3 have `└── ` at the top and `    ` at the rest.
-            // This observation is true recursively even when looking at the subtree rooted
-            // at `level_1_0`.
-            let (prefix_top, prefix_rest) = if dependencies.len() - 1 == index {
-                ("└── ", "    ")
-            } else {
-                ("├── ", "│   ")
+            let child_position = NodePosition {
+                depth: position.depth + 1,
+                is_first_child: index == 0,
+                is_last_child: index == dependencies.len() - 1,
+                child_index: index,
+                total_siblings: dependencies.len(),
             };
-            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
-            {
-                let prefix = if visited_index == 0 {
-                    prefix_top
-                } else {
-                    prefix_rest
-                };
-                lines.push(format!("{prefix}{visited_line}"));
-            }
+            self.visit_with_formatter(*dep, formatter, visited, path, child_position);
         }
+
+        // Emit end_children event
+        formatter.end_children();
 
         path.pop();
 
-        lines
+        // Emit end_node event
+        formatter.end_node();
+    }
+
+    /// Perform a depth-first traversal of the given package and its dependencies.
+    ///
+    /// This is a backward-compatible wrapper around `visit_with_formatter` that uses
+    /// the TextFormatter to produce the same output as before the refactoring.
+    ///
+    /// Note: This method is kept for potential external users or future compatibility,
+    /// even though it's not currently used within this module.
+    #[allow(dead_code)]
+    fn visit(
+        &'env self,
+        cursor: Cursor,
+        visited: &mut FxHashMap<&'env PackageId, Vec<&'env PackageId>>,
+        path: &mut Vec<&'env PackageId>,
+    ) -> Vec<String> {
+        // Create a temporary formatter to collect output for this subtree
+        let mut formatter = TextFormatter::new(self.no_dedupe);
+        formatter.begin_tree();
+
+        // Determine the depth based on current path length
+        let depth = path.len();
+
+        // Create position for the root of this subtree
+        let position = NodePosition {
+            depth,
+            is_first_child: false,
+            is_last_child: false,
+            child_index: 0,
+            total_siblings: 1,
+        };
+
+        // Visit using the formatter
+        self.visit_with_formatter(cursor, &mut formatter, visited, path, position);
+
+        // Return the lines (without calling end_tree, as we don't want the footer here)
+        formatter.lines
     }
 
     /// Depth-first traverse the nodes to render the tree.
     fn render(&self) -> Vec<String> {
         let mut path = Vec::new();
-        let mut lines = Vec::with_capacity(self.graph.node_count());
         let mut visited =
             FxHashMap::with_capacity_and_hasher(self.graph.node_count(), FxBuildHasher);
+        let mut formatter = TextFormatter::new(self.no_dedupe);
+
+        formatter.begin_tree();
 
         for node in &self.roots {
             match self.graph[*node] {
                 Node::Root => {
-                    for edge in self.graph.edges_directed(*node, Direction::Outgoing) {
+                    let edges: Vec<_> = self.graph.edges_directed(*node, Direction::Outgoing).collect();
+                    let total_siblings = edges.len();
+                    for (index, edge) in edges.into_iter().enumerate() {
                         let node = edge.target();
                         path.clear();
-                        lines.extend(self.visit(
+                        let position = NodePosition {
+                            depth: 0,
+                            is_first_child: index == 0,
+                            is_last_child: index == total_siblings - 1,
+                            child_index: index,
+                            total_siblings,
+                        };
+                        self.visit_with_formatter(
                             Cursor::new(node, edge.id()),
+                            &mut formatter,
                             &mut visited,
                             &mut path,
-                        ));
+                            position,
+                        );
                     }
                 }
                 Node::Package(_) => {
                     path.clear();
-                    lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
+                    let position = NodePosition {
+                        depth: 0,
+                        is_first_child: true,
+                        is_last_child: true,
+                        child_index: 0,
+                        total_siblings: 1,
+                    };
+                    self.visit_with_formatter(
+                        Cursor::root(*node),
+                        &mut formatter,
+                        &mut visited,
+                        &mut path,
+                        position,
+                    );
                 }
             }
         }
 
-        lines
+        formatter.end_tree()
+    }
+
+    /// Depth-first traverse the nodes to render the tree as JSON.
+    pub fn render_json(&self) -> serde_json::Value {
+        let mut path = Vec::new();
+        let mut visited =
+            FxHashMap::with_capacity_and_hasher(self.graph.node_count(), FxBuildHasher);
+        let mut formatter = JsonFormatter::new();
+
+        formatter.begin_tree();
+
+        for node in &self.roots {
+            match self.graph[*node] {
+                Node::Root => {
+                    let edges: Vec<_> = self.graph.edges_directed(*node, Direction::Outgoing).collect();
+                    let total_siblings = edges.len();
+                    for (index, edge) in edges.into_iter().enumerate() {
+                        let node = edge.target();
+                        path.clear();
+                        let position = NodePosition {
+                            depth: 0,
+                            is_first_child: index == 0,
+                            is_last_child: index == total_siblings - 1,
+                            child_index: index,
+                            total_siblings,
+                        };
+                        self.visit_with_formatter(
+                            Cursor::new(node, edge.id()),
+                            &mut formatter,
+                            &mut visited,
+                            &mut path,
+                            position,
+                        );
+                    }
+                }
+                Node::Package(_) => {
+                    path.clear();
+                    let position = NodePosition {
+                        depth: 0,
+                        is_first_child: true,
+                        is_last_child: true,
+                        child_index: 0,
+                        total_siblings: 1,
+                    };
+                    self.visit_with_formatter(
+                        Cursor::root(*node),
+                        &mut formatter,
+                        &mut visited,
+                        &mut path,
+                        position,
+                    );
+                }
+            }
+        }
+
+        formatter.end_tree()
     }
 }
 
@@ -627,14 +1123,6 @@ enum Edge<'env> {
 }
 
 impl<'env> Edge<'env> {
-    fn extras(&self) -> Option<&'env BTreeSet<ExtraName>> {
-        match self {
-            Self::Prod(extras) => *extras,
-            Self::Optional(_, extras) => *extras,
-            Self::Dev(_, extras) => *extras,
-        }
-    }
-
     fn kind(&self) -> EdgeKind<'env> {
         match self {
             Self::Prod(_) => EdgeKind::Prod,
@@ -679,21 +1167,9 @@ impl Cursor {
 
 impl std::fmt::Display for TreeDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use owo_colors::OwoColorize;
-
-        let mut deduped = false;
+        // Render using the text formatter (which includes the footer)
         for line in self.render() {
-            deduped |= line.contains('*');
             writeln!(f, "{line}")?;
-        }
-
-        if deduped {
-            let message = if self.no_dedupe {
-                "(*) Package tree is a cycle and cannot be shown".italic()
-            } else {
-                "(*) Package tree already displayed".italic()
-            };
-            writeln!(f, "{message}")?;
         }
 
         Ok(())

@@ -2450,6 +2450,7 @@ async fn run_project(
                 args.invert,
                 args.outdated,
                 args.show_sizes,
+                args.json,
                 args.python_version,
                 args.python_platform,
                 args.python,
