@@ -1468,6 +1468,51 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
+        // If the package's Python markers are incompatible with the current environment, we need to
+        // fork. We do not require users to explicitly add Python versions to their
+        // `required-environments`.
+        let dist_python_markers = dist.implied_python_markers();
+        if !env.included_by_marker(dist_python_markers) {
+            // Then we need to fork.
+            let Some((left, right)) = fork_version_by_marker(env, dist_python_markers) else {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    candidate.version().clone(),
+                    UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                        // TODO(zanieb): Consider adding a Python-specific variant
+                        IncompatibleWheel::MissingPlatform(dist_python_markers),
+                    )),
+                )));
+            };
+
+            // TODO(zanieb): Consider a message that's focused on Python versions here
+            debug!(
+                "Forking on required Python `{}` for {}=={} ({})",
+                dist_python_markers
+                    .try_to_string()
+                    .unwrap_or_else(|| "true".to_string()),
+                name,
+                candidate.version(),
+                [&left, &right]
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let forks = vec![
+                VersionFork {
+                    env: left,
+                    id,
+                    version: None,
+                },
+                VersionFork {
+                    env: right,
+                    id,
+                    version: None,
+                },
+            ];
+            return Ok(Some(ResolverVersion::Forked(forks)));
+        }
+
         // If the user explicitly marked a platform as required, ensure it has coverage.
         for marker in self.options.required_environments.iter().copied() {
             // If the platform is part of the current environment...
