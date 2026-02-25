@@ -60,6 +60,28 @@ impl GitSource {
         }
     }
 
+    /// Resolve the OID of a reference or a revision from the Git repository.
+    #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
+    pub fn ls_remote(&self) -> Result<Option<GitOid>> {
+        // Compute the canonical URL for the repository.
+        let canonical = RepositoryUrl::new(self.git.repository());
+
+        // Authenticate the URL, if necessary.
+        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
+            Cow::Owned(credentials.apply(self.git.repository().clone()))
+        } else {
+            Cow::Borrowed(self.git.repository())
+        };
+
+        let git_remote = GitRemote::new(&remote);
+        git_remote.ls(
+            self.git.reference(),
+            self.git.precise(),
+            self.disable_ssl,
+            self.offline,
+        )
+    }
+
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {

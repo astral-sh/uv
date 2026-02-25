@@ -1718,68 +1718,49 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .as_ref()
             .is_some_and(|cache_shard| cache_shard.is_dir())
         {
-            debug!("Skipping GitHub fast path for: {source} (shard exists)");
+            debug!("Skipping GitHub `pyproject.toml` fast path for: {source} (shard exists)");
         } else {
-            debug!("Attempting GitHub fast path for: {source}");
+            debug!("Attempting GitHub `pyproject.toml` fast path: {source}");
 
-            // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-            match self
-                .build_context
-                .git()
-                .github_fast_path(
-                    resource.git,
-                    client
-                        .unmanaged
-                        .uncached_client(resource.git.repository())
-                        .raw_client(),
-                )
-                .await
-            {
-                Ok(Some(precise)) => {
-                    // There's no need to check the cache, since we can't use cached metadata if there are
-                    // sources, and we can't know if there are sources without fetching the
-                    // `pyproject.toml`.
-                    //
-                    // For the same reason, there's no need to write to the cache, since we won't be able to
-                    // use it on subsequent runs.
-                    match self
-                        .github_metadata(precise, source, resource, client)
-                        .await
-                    {
-                        Ok(Some(metadata)) => {
-                            // Validate the metadata, but ignore it if the metadata doesn't match.
-                            match validate_metadata(source, &metadata) {
-                                Ok(()) => {
-                                    debug!(
-                                        "Found static metadata via GitHub fast path for: {source}"
-                                    );
-                                    return Ok(ArchiveMetadata {
-                                        metadata: Metadata::from_metadata23(metadata),
-                                        hashes: HashDigests::empty(),
-                                    });
-                                }
-                                Err(err) => {
-                                    debug!(
-                                        "Ignoring `pyproject.toml` from GitHub for {source}: {err}"
-                                    );
-                                }
+            if let Some(precise) = self.build_context.git().get_precise(resource.git) {
+                // If this is GitHub URL, attempt to fetch the `pyproject.toml` directly.
+                //
+                // There's no need to check the cache, since we can't use cached metadata if there
+                // are sources, and we can't know if there are sources without fetching the
+                // `pyproject.toml`.
+                //
+                // For the same reason, there's no need to write to the cache, since we won't be
+                // able to use it on subsequent runs.
+                //
+                // TODO(charlie): Skip this fetch if the GitHub commit resolution fast path failed
+                // with a 404 or similar.
+                match self
+                    .github_metadata(precise, source, resource, client)
+                    .await
+                {
+                    Ok(Some(metadata)) => {
+                        // Validate the metadata, but ignore it if the metadata doesn't match.
+                        match validate_metadata(source, &metadata) {
+                            Ok(()) => {
+                                debug!("Found static metadata via GitHub fast path for: {source}");
+                                return Ok(ArchiveMetadata {
+                                    metadata: Metadata::from_metadata23(metadata),
+                                    hashes: HashDigests::empty(),
+                                });
+                            }
+                            Err(err) => {
+                                debug!("Ignoring `pyproject.toml` from GitHub for {source}: {err}");
                             }
                         }
-                        Ok(None) => {
-                            // Nothing to do.
-                        }
-                        Err(err) => {
-                            debug!(
-                                "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
-                            );
-                        }
                     }
-                }
-                Ok(None) => {
-                    // Nothing to do.
-                }
-                Err(err) => {
-                    debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
+                    Ok(None) => {
+                        // Nothing to do.
+                    }
+                    Err(err) => {
+                        debug!(
+                            "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                        );
+                    }
                 }
             }
         }
@@ -2044,7 +2025,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             )
             .await?
         {
-            debug!("Resolved to precise commit via GitHub fast path: {source}");
+            debug!("Resolved to a precise commit via GitHub fast path: {source}");
+            return Ok(Some(precise));
+        }
+
+        // Otherwise, attempt to resolve using `git ls-remote`.
+        if let Some(precise) = self
+            .build_context
+            .git()
+            .ls_remote(
+                git,
+                client.unmanaged.disable_ssl(git.repository()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
+                self.build_context.cache().bucket(CacheBucket::Git),
+            )
+            .await?
+        {
+            debug!("Resolved to a precise commit via `git ls-remote`: {source}");
             return Ok(Some(precise));
         }
 

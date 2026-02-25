@@ -337,6 +337,21 @@ impl GitRemote {
             lfs_ready: None,
         })
     }
+
+    /// Resolve the OID of a reference or a revision from this remote.
+    pub(crate) fn ls(
+        &self,
+        reference: &GitReference,
+        locked_rev: Option<GitOid>,
+        disable_ssl: bool,
+        offline: bool,
+    ) -> Result<Option<GitOid>> {
+        let reference = locked_rev
+            .map(ReferenceOrOid::Oid)
+            .unwrap_or(ReferenceOrOid::Reference(reference));
+
+        ls_remote(&self.url, reference, disable_ssl, offline)
+    }
 }
 
 impl GitDatabase {
@@ -526,6 +541,61 @@ impl GitCheckout {
 
         Ok(lfs_validation)
     }
+}
+
+/// Perform a `git ls-remote` operation to resolve a reference or revision to an OID.
+fn ls_remote(
+    remote_url: &Url,
+    reference: ReferenceOrOid<'_>,
+    disable_ssl: bool,
+    offline: bool,
+) -> Result<Option<GitOid>> {
+    debug!("Performing a Git ls-remote for: {remote_url}");
+    let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    cmd.arg("ls-remote");
+    if disable_ssl {
+        debug!("Disabling SSL verification for Git ls-remote via `GIT_SSL_NO_VERIFY`");
+        cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git ls-remote via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
+    }
+    cmd.arg(remote_url.as_str());
+
+    match reference {
+        ReferenceOrOid::Reference(r) => match r {
+            GitReference::Branch(_) => {
+                cmd.arg("--heads");
+                cmd.arg(reference.as_rev());
+            }
+            GitReference::Tag(_) => {
+                cmd.arg("--tags");
+                cmd.arg(reference.as_rev());
+            }
+            _ => {
+                cmd.arg(reference.as_rev());
+            }
+        },
+        ReferenceOrOid::Oid(_) => {
+            cmd.arg(reference.as_rev());
+        }
+    }
+
+    let output = cmd.exec_with_output()?;
+    let stdout = str::from_utf8(&output.stdout)?;
+
+    for line in stdout.lines() {
+        let mut parts = line.split_whitespace();
+        if let (Some(oid_str), Some(ref_str)) = (parts.next(), parts.next()) {
+            if ref_str == reference.as_rev() {
+                let oid: GitOid = oid_str.parse()?;
+                return Ok(Some(oid));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 /// Attempts to fetch the given git `reference` for a Git repository.

@@ -545,6 +545,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         source: &BuildableSource<'_>,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
+        // Resolve the source distribution to a precise revision (i.e., a specific Git commit).
+        self.builder.resolve_revision(source, &self.client).await?;
+
         // If the metadata was provided by the user directly, prefer it.
         if let Some(dist) = source.as_dist() {
             if let Some(metadata) = self
@@ -552,10 +555,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .dependency_metadata()
                 .get(dist.name(), dist.version())
             {
-                // If we skipped the build, we should still resolve any Git dependencies to precise
-                // commits.
-                self.builder.resolve_revision(source, &self.client).await?;
-
                 return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
             }
         }
