@@ -14,22 +14,18 @@ permissions: {}
 
 jobs:
   publish-mirror:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     environment:
       name: release
     env:
       VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
       - name: "Download GitHub Artifacts"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: artifacts-*.{zip,.tar.gz}
+          pattern: artifacts-*
           path: artifacts
           merge-multiple: true
-      - name: "Install aws"
-        run: uv tool install --python 3.13 git+https://github.com/aws/aws-cli@fcb31391754ad00cc632bd900095ded964a3d684 # v2
       - name: "Upload to R2"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_R2_ACCESS_KEY_ID }}
@@ -42,5 +38,6 @@ jobs:
           aws s3 cp --recursive --output table --color on \
             --exclude '*' \
             --include '*.zip' --include '*.tar.gz' \
+            --cache-control "public, max-age=31536000, immutable" \
             artifacts/ \
             s3://${R2_BUCKET}/github/$PROJECT/releases/download/$VERSION/
