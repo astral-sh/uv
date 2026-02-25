@@ -6,7 +6,10 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{ExtraOperator, MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    CanonicalMarkerListPair, ContainerOperator, ExtraOperator, MarkerEnvironment, MarkerExpression,
+    MarkerOperator, MarkerTree,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 use crate::ResolveError;
@@ -591,14 +594,14 @@ fn encode_project(package: &PackageName) -> ExtraName {
 }
 
 #[derive(Debug)]
-enum ParsedRawExtra<'a> {
+pub(crate) enum ParsedRawExtra<'a> {
     Project { package: &'a str },
     Extra { package: &'a str, extra: &'a str },
     Group { package: &'a str, group: &'a str },
 }
 
 impl<'a> ParsedRawExtra<'a> {
-    fn parse(raw_extra: &'a ExtraName) -> Result<Self, ResolveError> {
+    pub(crate) fn parse(raw_extra: &'a ExtraName) -> Result<Self, ResolveError> {
         fn mkerr(raw_extra: &ExtraName, reason: impl Into<String>) -> ResolveError {
             let raw_extra = raw_extra.to_owned();
             let reason = reason.into();
@@ -698,6 +701,73 @@ impl<'a> ParsedRawExtra<'a> {
             Self::Extra { package, .. } => package,
             Self::Group { package, .. } => package,
         }
+    }
+}
+
+/// Converts a single conflict-encoded extra marker expression into its PEP 751 list membership form.
+///
+/// Algorithm:
+///   1. Parse the extra name to determine if it's an encoded conflict marker
+///      (`extra-{len}-{pkg}-{name}`, `group-{len}-{pkg}-{name}`, or `project-{len}-{pkg}`).
+///      If parsing fails, return nothing — the name is not a conflict marker.
+///   2. Map the operator: `==` → `in`, `!=` → `not in`.
+///   3. Match on the parsed kind:
+///      - extra — if the package matches `root_name`, return `'name' in extras` (or `not in`).
+///        Otherwise return nothing (belongs to a different package).
+///      - group — same logic, producing `'name' in dependency_groups`.
+///      - project — always return nothing (project-level markers have no PEP 751 equivalent).
+///
+/// Example — with `root_name = "pkg"`:
+///
+///   Input: `extra == 'extra-3-pkg-cpu'`
+///   - Step 1: parses to extra, package="pkg", name="cpu"
+///   - Step 2: `==` → `in`
+///   - Step 3: package "pkg" matches root → `'cpu' in extras`
+///
+///   Input: `extra != 'group-3-pkg-dev'`
+///   - Step 1: parses to group, package="pkg", name="dev"
+///   - Step 2: `!=` → `not in`
+///   - Step 3: package "pkg" matches root → `'dev' not in dependency_groups`
+///
+///   Input: `extra == 'extra-5-other-gpu'`
+///   - Step 1: parses to extra, package="other", name="gpu"
+///   - Step 3: package "other" ≠ root "pkg" → dropped
+pub(crate) fn conflict_marker_to_pep751(
+    name: &ExtraName,
+    operator: &ExtraOperator,
+    root_name: Option<&PackageName>,
+) -> Option<MarkerExpression> {
+    let parsed = ParsedRawExtra::parse(name).ok()?;
+
+    let container_op = match operator {
+        ExtraOperator::Equal => ContainerOperator::In,
+        ExtraOperator::NotEqual => ContainerOperator::NotIn,
+    };
+
+    match parsed {
+        ParsedRawExtra::Extra { package, extra } => {
+            if root_name.is_some_and(|root| root.as_ref() == package) {
+                let extra = ExtraName::from_str(extra).ok()?;
+                Some(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::Extras(extra),
+                    operator: container_op,
+                })
+            } else {
+                None
+            }
+        }
+        ParsedRawExtra::Group { package, group } => {
+            if root_name.is_some_and(|root| root.as_ref() == package) {
+                let group = GroupName::from_str(group).ok()?;
+                Some(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::DependencyGroup(group),
+                    operator: container_op,
+                })
+            } else {
+                None
+            }
+        }
+        ParsedRawExtra::Project { .. } => None,
     }
 }
 
@@ -1034,5 +1104,135 @@ mod tests {
             .unwrap();
         let cm = resolve_conflicts(cm, &known_conflicts);
         assert!(cm.is_false());
+    }
+
+    #[test]
+    fn encoding_format_uses_byte_length() {
+        let pkg = create_package("myproject");
+        let extra = create_extra("cpu");
+        insta::assert_snapshot!(encode_package_extra(&pkg, &extra), @"extra-9-myproject-cpu");
+
+        let pkg = create_package("a");
+        let extra = create_extra("b");
+        insta::assert_snapshot!(encode_package_extra(&pkg, &extra), @"extra-1-a-b");
+
+        let pkg = create_package("my-pkg");
+        let extra = create_extra("dev-tools");
+        insta::assert_snapshot!(encode_package_extra(&pkg, &extra), @"extra-6-my-pkg-dev-tools");
+    }
+
+    #[test]
+    fn encoding_distinguishes_similar_names() {
+        let pkg1 = create_package("foo-bar");
+        let extra1 = create_extra("baz");
+        let encoded1 = encode_package_extra(&pkg1, &extra1);
+        insta::assert_snapshot!(encoded1, @"extra-7-foo-bar-baz");
+
+        let pkg2 = create_package("foo");
+        let extra2 = create_extra("bar-baz");
+        let encoded2 = encode_package_extra(&pkg2, &extra2);
+        insta::assert_snapshot!(encoded2, @"extra-3-foo-bar-baz");
+
+        assert_ne!(encoded1, encoded2);
+    }
+
+    #[test]
+    fn parsed_raw_extra_decodes_correctly() {
+        let encoded = ExtraName::from_str("extra-9-myproject-cpu").unwrap();
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Extra {
+            package: "myproject",
+            extra: "cpu",
+        }
+        "#);
+
+        let encoded = ExtraName::from_str("extra-7-foo-bar-baz").unwrap();
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Extra {
+            package: "foo-bar",
+            extra: "baz",
+        }
+        "#);
+
+        let encoded = ExtraName::from_str("extra-3-foo-bar-baz").unwrap();
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Extra {
+            package: "foo",
+            extra: "bar-baz",
+        }
+        "#);
+    }
+
+    #[test]
+    fn user_extra_names_with_prefix_like_patterns() {
+        let pkg = create_package("myproject");
+        let extra = create_extra("extra-feature");
+        let encoded = encode_package_extra(&pkg, &extra);
+        insta::assert_snapshot!(encoded, @"extra-9-myproject-extra-feature");
+
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Extra {
+            package: "myproject",
+            extra: "extra-feature",
+        }
+        "#);
+    }
+
+    #[test]
+    fn group_encoding() {
+        let pkg = create_package("myproject");
+        let group = GroupName::from_str("dev").unwrap();
+        insta::assert_snapshot!(encode_package_group(&pkg, &group), @"group-9-myproject-dev");
+
+        let encoded = ExtraName::from_str("group-9-myproject-dev").unwrap();
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Group {
+            package: "myproject",
+            group: "dev",
+        }
+        "#);
+    }
+
+    #[test]
+    fn project_encoding() {
+        let pkg = create_package("myproject");
+        insta::assert_snapshot!(encode_project(&pkg), @"project-9-myproject");
+
+        let encoded = ExtraName::from_str("project-9-myproject").unwrap();
+        insta::assert_debug_snapshot!(ParsedRawExtra::parse(&encoded).unwrap(), @r#"
+        Project {
+            package: "myproject",
+        }
+        "#);
+    }
+
+    #[test]
+    fn resolve_unknown_conflict_becomes_false() {
+        let known_conflicts = FxHashMap::default();
+        let cm = MarkerTree::from_str("extra == 'extra-3-pkg-foo'").unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert!(cm.is_false());
+    }
+
+    #[test]
+    fn resolve_negated_unknown_conflict_becomes_true() {
+        let known_conflicts = FxHashMap::default();
+        let cm = MarkerTree::from_str("extra != 'extra-3-pkg-foo'").unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        assert!(cm.is_true());
+    }
+
+    #[test]
+    fn resolve_preserves_pep508_markers() {
+        let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
+        let cm = MarkerTree::from_str(
+            "python_version >= '3.10' and os_name == 'posix' and extra == 'extra-3-pkg-foo'",
+        )
+        .unwrap();
+        let cm = resolve_conflicts(cm, &known_conflicts);
+        insta::assert_snapshot!(
+            cm.try_to_string().unwrap(),
+            @"python_full_version >= '3.10' and os_name == 'posix' and sys_platform == 'darwin'"
+        );
     }
 }

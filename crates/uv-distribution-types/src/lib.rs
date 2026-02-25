@@ -569,6 +569,34 @@ impl Dist {
         }
     }
 
+    /// Returns the `Requires-Python` specifier from registry metadata.
+    ///
+    /// For registry built distributions, checks the first wheel; falls back to the sdist.
+    /// For registry source distributions, checks the sdist; falls back to the first wheel.
+    /// For all other distribution types, returns `None`.
+    pub fn requires_python(&self) -> Option<RequiresPython> {
+        match self {
+            Self::Built(BuiltDist::Registry(dist)) => dist
+                .wheels
+                .first()
+                .and_then(|wheel| wheel.file.requires_python.as_ref())
+                .or_else(|| {
+                    dist.sdist
+                        .as_ref()
+                        .and_then(|sdist| sdist.file.requires_python.as_ref())
+                }),
+            Self::Source(SourceDist::Registry(dist)) => {
+                dist.file.requires_python.as_ref().or_else(|| {
+                    dist.wheels
+                        .first()
+                        .and_then(|wheel| wheel.file.requires_python.as_ref())
+                })
+            }
+            _ => None,
+        }
+        .map(RequiresPython::from_specifiers)
+    }
+
     /// Convert this distribution into a reference.
     pub fn as_ref(&self) -> DistRef<'_> {
         match self {

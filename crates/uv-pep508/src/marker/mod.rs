@@ -18,13 +18,14 @@ mod tree;
 
 pub use environment::{MarkerEnvironment, MarkerEnvironmentBuilder};
 pub use lowering::{
-    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
+    CanonicalMarkerListPair, CanonicalMarkerValueExtra, CanonicalMarkerValueString,
+    CanonicalMarkerValueVersion,
 };
 pub use tree::{
-    ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerExpression,
-    MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeDebugGraph, MarkerTreeKind,
-    MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString, MarkerValueVersion,
-    MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
+    ContainerOperator, ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree,
+    MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents, MarkerTreeDebugGraph,
+    MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueList, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, StringMarkerTree, StringVersion, VersionMarkerTree,
 };
 
 /// `serde` helpers for [`MarkerTree`].

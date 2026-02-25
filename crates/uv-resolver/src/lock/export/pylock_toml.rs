@@ -32,16 +32,23 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_pep508::{
+    CanonicalMarkerListPair, ContainerOperator, ExtraOperator, MarkerEnvironment, MarkerExpression,
+    MarkerTree, MarkerValueExtra, VerbatimUrl,
+};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
-use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
+use uv_pypi_types::{Conflicts, HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable};
+use crate::lock::export::marker_conversion::to_pep751_marker;
+use crate::lock::{
+    Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable,
+    simplified_universal_markers,
+};
 use crate::resolution::ResolutionGraphNode;
-use crate::{Installable, LockError, ResolverOutput};
+use crate::{Installable, LockError, Package, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
@@ -186,6 +193,8 @@ where
 pub struct PylockToml {
     lock_version: Version,
     created_by: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    environments: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -232,8 +241,19 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-#[expect(clippy::empty_structs_with_brackets)]
-struct PylockTomlDependency {}
+struct PylockTomlDependency {
+    name: PackageName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<Version>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    extras: Vec<ExtraName>,
+    #[serde(
+        skip_serializing_if = "uv_pep508::marker::ser::is_empty",
+        serialize_with = "uv_pep508::marker::ser::serialize",
+        default
+    )]
+    marker: MarkerTree,
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -388,8 +408,8 @@ impl<'lock> PylockToml {
             let mut package = PylockTomlPackage {
                 name: dist.name().clone(),
                 version: version.cloned(),
-                marker: node.marker.pep508(),
-                requires_python: None,
+                marker: to_pep751_marker(node.marker.pep508(), None, None),
+                requires_python: dist.requires_python(),
                 dependencies: vec![],
                 index: None,
                 vcs: None,
@@ -561,6 +581,7 @@ impl<'lock> PylockToml {
         Ok(Self {
             lock_version,
             created_by,
+            environments: vec![],
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -643,6 +664,123 @@ impl<'lock> PylockToml {
         Ok(Some(wheels))
     }
 
+    /// Builds the PEP 751 dependency list for a single package.
+    ///
+    /// Algorithm:
+    ///   1. Add each regular dependency with its marker converted to PEP 751 syntax.
+    ///   2. For each optional dependency (extra), AND an extras guard into the converted marker:
+    ///      - Root package: `'extra_name' in extras` (PEP 751 list membership)
+    ///      - Non-root: `extra == 'extra_name'` (PEP 508 syntax, since non-root extras are resolved at install time)
+    ///   3. For the root package only, add dependency group entries with `'group_name' in dependency_groups` AND'd
+    ///      into each dep's marker.
+    ///   4. Sort by (name, version, extras) and deduplicate identical entries.
+    ///
+    /// Example 1 — root package `pkg` with:
+    ///   - regular dep `requests` (marker: true)
+    ///   - optional dep `click` under extra `cli` (marker: `python_version >= '3.9'`)
+    ///   - group dep `pytest` under group `dev` (marker: true)
+    ///
+    ///   Step 1: `[{ name: requests, marker: true }]`
+    ///   Step 2: `[..., { name: click, marker: 'cli' in extras and python_full_version >= '3.9' }]`
+    ///   Step 3: `[..., { name: pytest, marker: 'dev' in dependency_groups }]`
+    ///   Step 4: sorted by name → `[click, pytest, requests]`
+    ///
+    /// Example 2 — non-root package `lib` with:
+    ///   - regular dep `six` (marker: `python_version < '3'`)
+    ///   - optional dep `colorama` under extra `color` (marker: true)
+    ///
+    ///   Step 1: `[{ name: six, marker: python_full_version < '3' }]`
+    ///   Step 2: `[..., { name: colorama, marker: extra == 'color' }]` (PEP 508 syntax, not list membership)
+    ///   Step 3: skipped (not root)
+    ///   Step 4: sorted by name → `[colorama, six]`
+    fn build_dependencies(
+        package: &Package,
+        is_root: bool,
+        root_name: Option<&PackageName>,
+        conflicts: &Conflicts,
+    ) -> Vec<PylockTomlDependency> {
+        let mut dependencies = Vec::new();
+
+        for dep in &package.dependencies {
+            dependencies.push(PylockTomlDependency {
+                name: dep.package_id.name.clone(),
+                version: dep.package_id.version.clone(),
+                extras: dep.extra.iter().cloned().collect(),
+                marker: to_pep751_marker(
+                    dep.simplified_marker.as_simplified_marker_tree(),
+                    root_name,
+                    Some(conflicts),
+                ),
+            });
+        }
+
+        for (extra_name, extra_deps) in &package.optional_dependencies {
+            let extras_marker = if is_root {
+                MarkerTree::expression(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::Extras(extra_name.clone()),
+                    operator: ContainerOperator::In,
+                })
+            } else {
+                MarkerTree::expression(MarkerExpression::Extra {
+                    operator: ExtraOperator::Equal,
+                    name: MarkerValueExtra::Extra(extra_name.clone()),
+                })
+            };
+            for dep in extra_deps {
+                let mut marker = to_pep751_marker(
+                    dep.simplified_marker.as_simplified_marker_tree(),
+                    root_name,
+                    Some(conflicts),
+                );
+                marker.and(extras_marker);
+                dependencies.push(PylockTomlDependency {
+                    name: dep.package_id.name.clone(),
+                    version: dep.package_id.version.clone(),
+                    extras: dep.extra.iter().cloned().collect(),
+                    marker,
+                });
+            }
+        }
+
+        if is_root {
+            for (group_name, group_deps) in &package.dependency_groups {
+                let groups_marker = MarkerTree::expression(MarkerExpression::List {
+                    pair: CanonicalMarkerListPair::DependencyGroup(group_name.clone()),
+                    operator: ContainerOperator::In,
+                });
+                for dep in group_deps {
+                    let mut marker = to_pep751_marker(
+                        dep.simplified_marker.as_simplified_marker_tree(),
+                        root_name,
+                        Some(conflicts),
+                    );
+                    marker.and(groups_marker);
+                    dependencies.push(PylockTomlDependency {
+                        name: dep.package_id.name.clone(),
+                        version: dep.package_id.version.clone(),
+                        extras: dep.extra.iter().cloned().collect(),
+                        marker,
+                    });
+                }
+            }
+        }
+
+        dependencies.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.extras.cmp(&b.extras))
+        });
+        dependencies.dedup_by(|a, b| {
+            a.name == b.name
+                && a.version == b.version
+                && a.extras == b.extras
+                && a.marker == b.marker
+        });
+
+        dependencies
+    }
+
     /// Construct a [`PylockToml`] from a uv lockfile.
     pub fn from_lock(
         target: &impl Installable<'lock>,
@@ -675,17 +813,8 @@ impl<'lock> PylockToml {
         // Use the `requires-python` from the target lockfile.
         let requires_python = target.lock().requires_python.clone();
 
-        // We don't support locking for multiple extras at time of writing.
-        let extras = vec![];
-
-        // We don't support locking for multiple dependency groups at time of writing.
-        let dependency_groups = vec![];
-
-        // We don't support locking for multiple dependency groups at time of writing.
-        let default_groups = vec![];
-
-        // We don't support attestation identities at time of writing.
-        let attestation_identities = vec![];
+        let root_name = target.project_name();
+        let conflicts = target.lock().conflicts();
 
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(nodes.len());
@@ -696,14 +825,17 @@ impl<'lock> PylockToml {
             //
             // This field only includes wheels from a registry. Wheels included via direct URL or
             // direct path instead map to the `packages.archive` field.
-            let wheels = match &package.id.source {
+            let (wheels, wheel_requires_python) = match &package.id.source {
                 Source::Registry(source) => {
                     let wheels = package
                         .wheels
                         .iter()
                         .map(|wheel| wheel.to_registry_wheel(source, target.install_path()))
                         .collect::<Result<Vec<RegistryBuiltWheel>, LockError>>()?;
-                    Some(
+                    let requires_python = wheels
+                        .first()
+                        .and_then(|wheel| wheel.file.requires_python.clone());
+                    let pylocktoml_wheels = Some(
                         wheels
                             .into_iter()
                             .map(|wheel| {
@@ -734,16 +866,17 @@ impl<'lock> PylockToml {
                                 })
                             })
                             .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
-                    )
+                    );
+                    (pylocktoml_wheels, requires_python)
                 }
-                Source::Path(..) => None,
-                Source::Git(..) => None,
-                Source::Direct(..) => None,
-                Source::Directory(..) => None,
-                Source::Editable(..) => None,
+                Source::Path(..) => (None, None),
+                Source::Git(..) => (None, None),
+                Source::Direct(..) => (None, None),
+                Source::Directory(..) => (None, None),
+                Source::Editable(..) => (None, None),
                 Source::Virtual(..) => {
-                    // Omit virtual packages entirely; they shouldn't be installed.
-                    continue;
+                    // Include virtual packages to document their dependencies with markers in the multi-use lock file.
+                    (None, None)
                 }
             };
 
@@ -849,14 +982,15 @@ impl<'lock> PylockToml {
             };
 
             // Extract the `packages.sdist` field.
-            let sdist = match &sdist {
+            let (sdist, sdist_requires_python) = match &sdist {
                 Some(SourceDist::Registry(sdist)) => {
                     let url = sdist
                         .file
                         .url
                         .to_url()
                         .map_err(PylockTomlErrorKind::ToUrl)?;
-                    Some(PylockTomlSdist {
+                    let requires_python = sdist.file.requires_python.clone();
+                    let pylocktoml_sdist = Some(PylockTomlSdist {
                         // Optional "when the last component of path/ url would be the same value".
                         name: if url
                             .filename()
@@ -875,9 +1009,10 @@ impl<'lock> PylockToml {
                         path: None,
                         size,
                         hashes: hash.cloned().map(Hashes::from).unwrap_or_default(),
-                    })
+                    });
+                    (pylocktoml_sdist, requires_python)
                 }
-                _ => None,
+                _ => (None, None),
             };
 
             // Extract the `packages.index` field.
@@ -897,26 +1032,44 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
-            let package = PylockTomlPackage {
+            let marker = to_pep751_marker(node.marker, root_name, Some(conflicts));
+            let requires_python = wheel_requires_python
+                .or(sdist_requires_python)
+                .as_ref()
+                .map(RequiresPython::from_specifiers);
+            let is_root = root_name.is_some_and(|root| root == &package.id.name);
+            let dependencies = Self::build_dependencies(package, is_root, root_name, conflicts);
+
+            packages.push(PylockTomlPackage {
                 name,
                 version,
-                marker: node.marker,
-                requires_python: None,
-                dependencies: vec![],
                 index,
+                marker,
+                requires_python,
+                dependencies,
                 vcs,
                 directory,
                 archive,
                 sdist,
                 wheels,
-            };
-
-            packages.push(package);
+            });
         }
+
+        let environments =
+            simplified_universal_markers(target.lock().fork_markers(), &requires_python);
+        let extras = target.available_extras();
+        let dependency_groups = target.available_dependency_groups();
+
+        // We don't currently create synthetic groups, so this defaults to empty per the PEP 751 spec.
+        let default_groups = vec![];
+
+        // We don't support attestation identities at time of writing.
+        let attestation_identities = vec![];
 
         Ok(Self {
             lock_version,
             created_by,
+            environments,
             requires_python: Some(requires_python),
             extras,
             dependency_groups,
@@ -934,6 +1087,12 @@ impl<'lock> PylockToml {
 
         doc.insert("lock-version", value(self.lock_version.to_string()));
         doc.insert("created-by", value(self.created_by.as_str()));
+        if !self.environments.is_empty() {
+            doc.insert(
+                "environments",
+                value(each_element_on_its_line_array(self.environments.iter())),
+            );
+        }
         if let Some(ref requires_python) = self.requires_python {
             doc.insert("requires-python", value(requires_python.to_string()));
         }
