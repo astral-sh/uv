@@ -367,7 +367,7 @@ pub(crate) async fn remove(
         installer_metadata,
         &concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

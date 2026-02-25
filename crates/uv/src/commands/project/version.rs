@@ -77,11 +77,18 @@ pub(crate) async fn project_version(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
+    let project = find_target(
+        project_dir,
+        package.as_ref(),
+        explicit_project,
+        workspace_cache,
+    )
+    .await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
@@ -110,6 +117,7 @@ pub(crate) async fn project_version(
                 &concurrency,
                 no_config,
                 cache,
+                workspace_cache,
                 short,
                 output_format,
                 printer,
@@ -371,6 +379,7 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.
@@ -382,7 +391,7 @@ async fn find_target(
                     project: uv_workspace::ProjectDiscovery::Required,
                     ..DiscoveryOptions::default()
                 },
-                &WorkspaceCache::default(),
+                workspace_cache,
             )
             .await
             .map_err(|err| hint_uv_self_version(err, explicit_project))?
@@ -396,7 +405,7 @@ async fn find_target(
                 project: uv_workspace::ProjectDiscovery::Required,
                 ..DiscoveryOptions::default()
             },
-            &WorkspaceCache::default(),
+            workspace_cache,
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
@@ -440,6 +449,7 @@ async fn print_frozen_version(
     concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
@@ -480,7 +490,7 @@ async fn print_frozen_version(
             Box::new(DefaultResolveLogger),
             concurrency,
             cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -681,7 +691,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        workspace_cache,
+        &workspace_cache,
         DryRun::Disabled,
         printer,
         preview,
