@@ -6446,7 +6446,7 @@ fn run_target_workspace_discovery_bare_script() -> Result<()> {
 /// Using `--project` with a non-existent directory should warn.
 #[test]
 fn run_project_not_found() {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
     success: true
@@ -6455,14 +6455,30 @@ fn run_project_not_found() {
     hello
 
     ----- stderr -----
-    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in the future.
+    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. Use `--preview-features project-directory-must-exist` to error on this.
     ");
 }
 
-/// Using `--project` with a file path should error.
+/// Using `--project` with a non-existent directory should error with the preview flag.
 #[test]
+fn run_project_not_found_preview() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project directory `/tmp/does-not-exist-uv-test` does not exist
+    ");
+}
+
+/// Using `--project` with a file path should error on Unix (it fails downstream anyway).
+#[test]
+#[cfg(unix)]
 fn run_project_is_file() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     // Create a file instead of a directory.
     let file_path = context.temp_dir.child("not-a-directory");
@@ -6475,6 +6491,29 @@ fn run_project_is_file() -> Result<()> {
 
     ----- stderr -----
     error: Project path `not-a-directory` is not a directory
+    ");
+
+    Ok(())
+}
+
+/// Using `--project` with a file path should warn on Windows (where it's currently non-fatal).
+#[test]
+#[cfg(windows)]
+fn run_project_is_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a file instead of a directory.
+    let file_path = context.temp_dir.child("not-a-directory");
+    file_path.write_str("")?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--project").arg(file_path.path()).arg("python").arg("-c").arg("print('hello')"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello
+
+    ----- stderr -----
+    warning: Project path `not-a-directory` is not a directory. Use `--preview-features project-directory-must-exist` to error on this.
     ");
 
     Ok(())
