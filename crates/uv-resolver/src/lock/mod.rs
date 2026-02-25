@@ -2792,10 +2792,11 @@ impl Package {
                     return Ok(None);
                 };
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     ext,
                 };
@@ -2803,9 +2804,10 @@ impl Package {
             }
             Source::Directory(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(false),
@@ -2814,9 +2816,10 @@ impl Package {
             }
             Source::Editable(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(true),
                     r#virtual: Some(false),
@@ -2825,9 +2828,10 @@ impl Package {
             }
             Source::Virtual(path) => {
                 let install_path = absolute_path(workspace_root, path)?;
+                let given = path.to_str().expect("lock file paths must be UTF-8");
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
-                    url: verbatim_url(&install_path, &self.id)?,
+                    url: verbatim_url(&install_path, &self.id)?.with_given(given),
                     install_path: install_path.into_boxed_path(),
                     editable: Some(false),
                     r#virtual: Some(true),
