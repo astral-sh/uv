@@ -120,6 +120,7 @@ pub(crate) async fn run(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     printer: Printer,
     env_file: Vec<PathBuf>,
     no_env_file: bool,
@@ -305,6 +306,7 @@ pub(crate) async fn run(
         installer_metadata,
         &concurrency,
         &cache,
+        &workspace_cache,
         printer,
         preview,
     ))
@@ -737,6 +739,7 @@ async fn get_or_create_environment(
     installer_metadata: bool,
     concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
@@ -795,7 +798,6 @@ async fn get_or_create_environment(
 
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     let from = match request {
         ToolRequest::Python {
@@ -836,7 +838,7 @@ async fn get_or_create_environment(
                         &state,
                         concurrency,
                         cache,
-                        &workspace_cache,
+                        workspace_cache,
                         printer,
                         preview,
                         lfs,
@@ -995,7 +997,7 @@ async fn get_or_create_environment(
                 &state,
                 concurrency,
                 cache,
-                &workspace_cache,
+                workspace_cache,
                 printer,
                 preview,
                 lfs,
@@ -1022,7 +1024,7 @@ async fn get_or_create_environment(
         &state,
         concurrency,
         cache,
-        &workspace_cache,
+        workspace_cache,
         printer,
         preview,
         lfs,
@@ -1149,6 +1151,7 @@ async fn get_or_create_environment(
         installer_metadata,
         concurrency,
         cache,
+        workspace_cache,
         printer,
         preview,
     )
@@ -1209,6 +1212,7 @@ async fn get_or_create_environment(
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache,
                     printer,
                     preview,
                 )

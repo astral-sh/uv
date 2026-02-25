@@ -38,14 +38,14 @@ pub(crate) async fn pin(
     install_mirrors: PythonInstallMirrors,
     client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
             .await
         {
             Ok(virtual_project) => Some(virtual_project),

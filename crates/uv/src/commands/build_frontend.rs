@@ -123,6 +123,7 @@ pub(crate) async fn build_frontend(
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -150,6 +151,7 @@ pub(crate) async fn build_frontend(
         python_downloads,
         &concurrency,
         cache,
+        workspace_cache,
         printer,
         preview,
     )
@@ -197,6 +199,7 @@ async fn build_impl(
     python_downloads: PythonDownloads,
     concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<BuildResult> {
@@ -245,11 +248,10 @@ async fn build_impl(
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.
-    let workspace_cache = WorkspaceCache::default();
     let workspace = Workspace::discover(
         src.directory(),
         &DiscoveryOptions::default(),
-        &workspace_cache,
+        workspace_cache,
     )
     .await;
 
@@ -346,6 +348,7 @@ async fn build_impl(
             python_preference,
             python_downloads,
             cache,
+            workspace_cache,
             printer,
             index_locations,
             client_builder.clone(),
@@ -455,6 +458,7 @@ async fn build_package(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     index_locations: &IndexLocations,
     client_builder: BaseClientBuilder<'_>,
@@ -604,7 +608,6 @@ async fn build_package(
 
     // Initialize any shared state.
     let state = SharedState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -631,7 +634,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources.clone(),
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );

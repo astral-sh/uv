@@ -1200,7 +1200,7 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        WorkspaceCache::default(),
+        &WorkspaceCache::default(),
         DryRun::Disabled,
         printer,
         preview,

@@ -11,10 +11,14 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List workspace members
-pub(crate) async fn list(project_dir: &Path, paths: bool, printer: Printer) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
+pub(crate) async fn list(
+    project_dir: &Path,
+    paths: bool,
+    workspace_cache: &WorkspaceCache,
+    printer: Printer,
+) -> Result<ExitStatus> {
     let workspace =
-        Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache).await?;
+        Workspace::discover(project_dir, &DiscoveryOptions::default(), workspace_cache).await?;
 
     for (name, member) in workspace.packages() {
         if paths {

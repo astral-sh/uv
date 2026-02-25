@@ -18,6 +18,7 @@ use uv_distribution_types::{Name, Resolution};
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
+use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
 #[derive(Debug)]
@@ -121,6 +122,7 @@ impl CachedEnvironment {
         installer_metadata: bool,
         concurrency: &Concurrency,
         cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
@@ -139,6 +141,7 @@ impl CachedEnvironment {
                 resolve,
                 concurrency,
                 cache,
+                workspace_cache,
                 printer,
                 preview,
             )

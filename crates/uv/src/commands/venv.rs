@@ -81,15 +81,15 @@ pub(crate) async fn venv(
     no_config: bool,
     no_project: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     relocatable: bool,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
             .await
         {
             Ok(project) => Some(project),
@@ -239,7 +239,6 @@ pub(crate) async fn venv(
 
         // Initialize any shared state.
         let state = SharedState::default();
-        let workspace_cache = WorkspaceCache::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();
@@ -273,7 +272,7 @@ pub(crate) async fn venv(
             &build_hasher,
             exclude_newer,
             sources,
-            workspace_cache,
+            workspace_cache.clone(),
             concurrency,
             preview,
         );

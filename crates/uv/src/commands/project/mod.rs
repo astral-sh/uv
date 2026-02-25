@@ -2004,6 +2004,7 @@ pub(crate) async fn resolve_environment(
     logger: Box<dyn ResolveLogger>,
     concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ResolverOutput, ProjectError> {
@@ -2141,8 +2142,6 @@ pub(crate) async fn resolve_environment(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
-    let workspace_cache = WorkspaceCache::default();
-
     // Lower the extra build dependencies, if any.
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -2169,7 +2168,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
@@ -2377,7 +2376,7 @@ pub(crate) async fn update_environment(
     installer_metadata: bool,
     concurrency: &Concurrency,
     cache: &Cache,
-    workspace_cache: WorkspaceCache,
+    workspace_cache: &WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: Preview,
@@ -2564,7 +2563,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         exclude_newer.clone(),
         sources.clone(),
-        workspace_cache,
+        workspace_cache.clone(),
         concurrency.clone(),
         preview,
     );
