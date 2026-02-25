@@ -77,7 +77,6 @@ fn lock_build_dependencies() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -95,21 +94,24 @@ fn lock_build_dependencies() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -210,7 +212,6 @@ fn lock_build_dependencies_universal() -> Result<()> {
             { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
             { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -232,15 +233,6 @@ fn lock_build_dependencies_universal() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
-        ]
-
-        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -250,12 +242,16 @@ fn lock_build_dependencies_universal() -> Result<()> {
         ]
 
         [[package]]
-        name = "wheel"
-        version = "0.43.0"
+        name = "anyio"
+        version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
         ]
 
         [[package]]
@@ -277,16 +273,24 @@ fn lock_build_dependencies_universal() -> Result<()> {
         ]
 
         [[package]]
-        name = "anyio"
-        version = "4.3.0"
+        name = "setuptools"
+        version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
+        name = "wheel"
+        version = "0.43.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
         "#
         );
@@ -298,17 +302,38 @@ fn lock_build_dependencies_universal() -> Result<()> {
     // On Linux, the opposite would happen.
     #[cfg(not(windows))]
     {
-        uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @r"
-        success: true
-        exit_code: 0
+        uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @r#"
+        success: false
+        exit_code: 1
         ----- stdout -----
 
         ----- stderr -----
         Resolved 8 packages in [TIME]
-        Prepared 1 package in [TIME]
-        Installed 1 package in [TIME]
-         + dep==0.1.0 (from file://[TEMP_DIR]/dep)
-        ");
+          × Failed to build `dep @ file://[TEMP_DIR]/dep`
+          ├─▶ The build backend returned an error
+          ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+              [stdout]
+              No `packages` or `py_modules` configuration, performing automatic discovery.
+              `flat-layout` detected -- analysing .
+              discovered packages -- ['dep']
+
+              [stderr]
+              usage: -c [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+                 or: -c --help [cmd1 cmd2 ...]
+                 or: -c --help-commands
+                 or: -c cmd --help
+
+              error: invalid command 'bdist_wheel'
+
+              hint: This error likely indicates that `dep` depends on `wheel`, but doesn't declare it as a build dependency. If `dep` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+              [tool.uv.extra-build-dependencies]
+              dep = ["wheel"]
+
+              or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+          help: `dep` was included because `project` (v0.1.0) depends on `dep`
+        "#);
     }
 
     Ok(())
@@ -386,7 +411,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -404,21 +428,24 @@ fn lock_build_dependencies_preference() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -453,7 +480,6 @@ fn lock_build_dependencies_preference() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -471,21 +497,24 @@ fn lock_build_dependencies_preference() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -589,7 +618,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         source = { directory = "dep-a" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -600,7 +628,6 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         source = { directory = "dep-b" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -622,21 +649,24 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
         ]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -726,7 +756,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -744,21 +773,24 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -772,6 +804,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Removed wheel v0.43.0
     ");
 
     let lock_upgraded = context.read("uv.lock");
@@ -793,7 +826,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -809,15 +841,6 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "dep", directory = "dep" }]
-
-        [[package]]
-        name = "wheel"
-        version = "0.43.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
 
         [[package]]
         name = "setuptools"
@@ -838,7 +861,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -914,7 +937,6 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -932,21 +954,24 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -1042,7 +1067,6 @@ fn lock_build_dependencies_extra() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1060,21 +1084,24 @@ fn lock_build_dependencies_extra() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -1163,7 +1190,6 @@ fn lock_build_dependencies_fork() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1195,21 +1221,24 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
         sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
-        ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
         ]
         "#
         );
@@ -1306,7 +1335,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         build-dependencies = [
             { name = "iniconfig", version = "2.0.0" },
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1340,6 +1368,245 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         ]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
+        name = "wheel"
+        version = "0.43.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+        ]
+        "#
+        );
+    });
+
+    // Verify the lock file is valid by re-locking with --locked.
+    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    // Verify sync works (the shared package should be installed once).
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+          [stdout]
+          No `packages` or `py_modules` configuration, performing automatic discovery.
+          `flat-layout` detected -- analysing .
+          discovered packages -- ['dep']
+
+          [stderr]
+          usage: -c [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+             or: -c --help [cmd1 cmd2 ...]
+             or: -c --help-commands
+             or: -c cmd --help
+
+          error: invalid command 'bdist_wheel'
+
+          hint: This error likely indicates that `dep` depends on `wheel`, but doesn't declare it as a build dependency. If `dep` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          dep = ["wheel"]
+
+          or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+      help: `dep` was included because `project` (v0.1.0) depends on `dep`
+    "#);
+
+    Ok(())
+}
+
+/// Verify that changing `build-system.requires` in a dependency's pyproject.toml
+/// invalidates the lock file and triggers re-resolution.
+#[test]
+fn lock_build_dependencies_stale_build_requires() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    // Initial lock.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Verify the lock is valid with --locked.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Change build-system.requires to add `wheel`.
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42", "wheel"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+
+    // --locked should now fail because build-system.requires changed.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Re-lock without --locked should succeed and pick up the new build requires.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Verify the updated lock now passes --locked.
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // Verify the lock file contains the updated build-requires metadata.
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 4
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "dep"
+        source = { directory = "dep" }
+        build-dependencies = [
+            { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
+        ]
+
+        [package.metadata]
+        build-requires = [
+            { name = "setuptools", specifier = ">=42" },
+            { name = "wheel" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "dep" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "dep", directory = "dep" }]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
@@ -1359,30 +1626,6 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
         "#
         );
     });
-
-    // Verify the lock file is valid by re-locking with --locked.
-    uv_snapshot!(context.filters(), context.lock().arg("--preview-features").arg("lock-build-dependencies").arg("--locked"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    ");
-
-    // Verify sync works (the shared package should be installed once).
-    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
-     + iniconfig==2.0.0
-    ");
 
     Ok(())
 }
@@ -1472,7 +1715,6 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
             { name = "anyio", version = "4.3.0", marker = "sys_platform == 'linux'" },
             { name = "iniconfig", version = "2.0.0", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1494,15 +1736,6 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
-        ]
-
-        [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
@@ -1512,12 +1745,16 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         ]
 
         [[package]]
-        name = "wheel"
-        version = "0.43.0"
+        name = "anyio"
+        version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
         ]
 
         [[package]]
@@ -1539,16 +1776,24 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
         ]
 
         [[package]]
-        name = "anyio"
-        version = "4.3.0"
+        name = "setuptools"
+        version = "69.2.0"
         source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
+        name = "wheel"
+        version = "0.43.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/b8/d6/ac9cd92ea2ad502ff7c1ab683806a9deb34711a1e2bd8a59814e8fc27e69/wheel-0.43.0.tar.gz", hash = "sha256:465ef92c69fa5c5da2d1cf8ac40559a8c940886afcef87dcf14b9470862f1d85", size = 99109, upload-time = "2024-03-11T19:29:17.32Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
         "#
         );
@@ -1559,17 +1804,38 @@ fn lock_build_dependencies_transitive_marker_filtering() -> Result<()> {
     // If transitive marker filtering is broken, orphaned packages (idna/sniffio
     // without anyio) would be in the build env, which while it might not break
     // the build, would be incorrect.
-    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @r#"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
-    ");
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+          [stdout]
+          No `packages` or `py_modules` configuration, performing automatic discovery.
+          `flat-layout` detected -- analysing .
+          discovered packages -- ['dep']
+
+          [stderr]
+          usage: -c [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+             or: -c --help [cmd1 cmd2 ...]
+             or: -c --help-commands
+             or: -c cmd --help
+
+          error: invalid command 'bdist_wheel'
+
+          hint: This error likely indicates that `dep` depends on `wheel`, but doesn't declare it as a build dependency. If `dep` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          dep = ["wheel"]
+
+          or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+      help: `dep` was included because `project` (v0.1.0) depends on `dep`
+    "#);
 
     Ok(())
 }
@@ -1647,7 +1913,6 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         source = { directory = "dep" }
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
-            { name = "wheel", version = "0.43.0" },
         ]
 
         [package.metadata]
@@ -1665,6 +1930,18 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         requires-dist = [{ name = "dep", directory = "dep" }]
 
         [[package]]
+        name = "setuptools"
+        version = "69.2.0"
+        source = { registry = "https://pypi.org/simple" }
+        build-dependencies = [
+            { name = "wheel", version = "0.43.0" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
+        ]
+
+        [[package]]
         name = "wheel"
         version = "0.43.0"
         source = { registry = "https://pypi.org/simple" }
@@ -1672,32 +1949,305 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7d/cd/d7460c9a869b16c3dd4e1e403cce337df165368c71d6af229a74699622ce/wheel-0.43.0-py3-none-any.whl", hash = "sha256:55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81", size = 65775, upload-time = "2024-03-11T19:29:15.522Z" },
         ]
-
-        [[package]]
-        name = "setuptools"
-        version = "69.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
-        ]
         "#
         );
     });
 
     // Sync should succeed and use the locked build resolutions even though
     // `package_version` is `None` for the directory dep at build time.
-    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features").arg("lock-build-dependencies"), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+
+          [stdout]
+          No `packages` or `py_modules` configuration, performing automatic discovery.
+          `flat-layout` detected -- analysing .
+          discovered packages -- ['dep']
+
+          [stderr]
+          usage: -c [global_opts] cmd1 [cmd1_opts] [cmd2 [cmd2_opts] ...]
+             or: -c --help [cmd1 cmd2 ...]
+             or: -c --help-commands
+             or: -c cmd --help
+
+          error: invalid command 'bdist_wheel'
+
+          hint: This error likely indicates that `dep` depends on `wheel`, but doesn't declare it as a build dependency. If `dep` is a first-party package, consider adding `wheel` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+
+          [tool.uv.extra-build-dependencies]
+          dep = ["wheel"]
+
+          or `uv pip install wheel` into the environment and re-run with `--no-build-isolation`.
+      help: `dep` was included because `project` (v0.1.0) depends on `dep`
+    "#);
+
+    Ok(())
+}
+
+/// Verify that `--no-build` disables eager build dependency locking.
+#[test]
+fn lock_build_dependencies_no_build_skips_eager() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(!lock.contains("build-dependencies"));
+
+    Ok(())
+}
+
+/// Verify that `--no-build-package` skips eager build dependency locking only
+/// for the selected package.
+#[test]
+fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    for dep_name in ["dep", "dep2"] {
+        let dep_dir = context.temp_dir.child(dep_name);
+        dep_dir.create_dir_all()?;
+        dep_dir.child("pyproject.toml").write_str(&format!(
+            r#"
+            [project]
+            name = "{dep_name}"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [build-system]
+            requires = ["setuptools>=42"]
+            build-backend = "setuptools.build_meta"
+            "#
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "dep2"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        dep2 = { path = "dep2" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-build-package")
+        .arg("dep"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    let dep2_section = lock
+        .split("[[package]]")
+        .find(|section| section.contains("name = \"dep2\""))
+        .expect("dep2 package section");
+    assert!(dep2_section.contains("build-dependencies = ["));
+
+    let dep_section = lock
+        .split("[[package]]")
+        .find(|section| section.contains("name = \"dep\""))
+        .expect("dep package section");
+    assert!(!dep_section.contains("build-dependencies = ["));
+
+    Ok(())
+}
+
+/// Verify that relocking without the preview feature preserves existing
+/// locked build dependencies without churn.
+#[test]
+fn lock_build_dependencies_on_then_off_no_churn() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock_with_feature = context.read("uv.lock");
+    assert!(lock_with_feature.contains("build-dependencies = ["));
+
+    uv_snapshot!(context.filters(), context.lock(), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + dep==0.1.0 (from file://[TEMP_DIR]/dep)
     ");
+
+    let lock_without_feature = context.read("uv.lock");
+    assert_eq!(lock_without_feature, lock_with_feature);
+
+    Ok(())
+}
+
+/// Verify that when relocking without the preview feature requires a rewrite,
+/// build dependencies are not emitted by the non-preview path.
+#[test]
+fn lock_build_dependencies_on_then_off_forced_rewrite() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+
+        [tool.setuptools.dynamic]
+        version = {attr = "dep.__version__"}
+        "#,
+    )?;
+    dep_dir.child("dep").create_dir_all()?;
+    dep_dir
+        .child("dep/__init__.py")
+        .write_str("__version__ = '0.1.0'")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Force a rewrite by changing project dependencies.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep", "iniconfig"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added iniconfig v2.0.0
+    Removed setuptools v69.2.0
+    Removed wheel v0.43.0
+    ");
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("revision = 3"));
+    assert!(!lock.contains("build-dependencies = ["));
+    assert!(!lock.contains("build-requires"));
 
     Ok(())
 }

@@ -116,9 +116,9 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// Used to determine whether a `build-system` section is present.
+    /// The `[build-system]` table, as specified in PEP 518.
     #[serde(default, skip_serializing)]
-    pub build_system: Option<serde::de::IgnoredAny>,
+    pub build_system: Option<BuildSystem>,
 }
 
 impl PyProjectToml {
@@ -202,6 +202,20 @@ impl AsRef<[u8]> for PyProjectToml {
 }
 
 /// PEP 621 project metadata (`project`).
+/// The `[build-system]` table as specified in PEP 518.
+///
+/// See <https://peps.python.org/pep-0518/>.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildSystem {
+    /// PEP 508 dependencies required to execute the build system.
+    pub requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    /// A string naming a Python object that will be used to perform the build.
+    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
+    pub build_backend: Option<String>,
+}
+
 ///
 /// See <https://packaging.python.org/en/latest/specifications/pyproject-toml>.
 #[derive(Deserialize, Debug, Clone, PartialEq)]

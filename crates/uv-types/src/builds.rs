@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 
 use uv_configuration::{BuildKind, NoSources};
-use uv_distribution_types::{Resolution, ResolvedDist};
+use uv_distribution_types::{Resolution, ResolvedDist, SourceDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -122,73 +122,192 @@ pub struct BuildDependencyPackage {
 }
 
 /// The build resolution graph for a single package: direct build requirements
-/// (roots) and all packages with their dependency edges.
+/// and all packages with their dependency edges.
 #[derive(Debug, Clone, Default)]
 pub struct BuildResolutionGraph {
-    /// Direct build requirements (edges from the resolution root).
-    pub roots: Vec<ResolvedBuildDependency>,
+    /// Direct build requirements (edges from the resolution root to the
+    /// packages that `build-system.requires` lists).
+    pub direct_dependencies: Vec<ResolvedBuildDependency>,
     /// All packages in the resolution with their direct dependencies.
     pub packages: Vec<BuildDependencyPackage>,
 }
 
-/// A key identifying a package by name and optional version, used to index
-/// build dependency resolutions and preferences.
+/// A source discriminator for a package key used by build dependency locking.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PackageVersionKey {
+pub enum BuildPackageSource {
+    Registry(String),
+    DirectUrl(String),
+    Git(String),
+    Path(String),
+    Directory(String),
+    Editable(String),
+    Virtual(String),
+}
+
+impl BuildPackageSource {
+    /// Construct a source discriminator from a [`SourceDist`].
+    pub fn from_source_dist(source: &SourceDist) -> Self {
+        match source {
+            SourceDist::Registry(dist) => {
+                Self::Registry(dist.index.without_credentials().as_ref().to_string())
+            }
+            SourceDist::DirectUrl(dist) => Self::DirectUrl(dist.url.to_string()),
+            SourceDist::Git(dist) => Self::Git(dist.url.to_string()),
+            SourceDist::Path(dist) => Self::Path(dist.url.to_string()),
+            SourceDist::Directory(dist) => {
+                if dist.editable.unwrap_or(false) {
+                    Self::Editable(dist.url.to_string())
+                } else if dist.r#virtual.unwrap_or(false) {
+                    Self::Virtual(dist.url.to_string())
+                } else {
+                    Self::Directory(dist.url.to_string())
+                }
+            }
+        }
+    }
+}
+
+/// A key identifying a package by name, optional version, and source.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BuildPackageKey {
     /// The package name.
     pub name: PackageName,
     /// The package version, if known.
     pub version: Option<Version>,
+    /// The package source discriminator.
+    pub source: Option<BuildPackageSource>,
 }
 
-impl PackageVersionKey {
-    /// Create a new key from a package name and optional version.
+impl BuildPackageKey {
+    /// Create a new key from package name and version.
     pub fn new(name: PackageName, version: Option<Version>) -> Self {
-        Self { name, version }
+        Self {
+            name,
+            version,
+            source: None,
+        }
+    }
+
+    /// Create a new key from package fields.
+    pub fn with_source(
+        name: PackageName,
+        version: Option<Version>,
+        source: Option<BuildPackageSource>,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            source,
+        }
+    }
+
+    /// Create a new key from package fields and an optional source distribution.
+    pub fn from_source_dist(
+        name: PackageName,
+        version: Option<Version>,
+        source: Option<&SourceDist>,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            source: source.map(BuildPackageSource::from_source_dist),
+        }
     }
 }
 
-/// Map of package version keys to their build resolution graphs.
-type BuildResolutionGraphMap = BTreeMap<PackageVersionKey, BuildResolutionGraph>;
+/// Map of package keys to their build resolution graphs.
+type BuildResolutionGraphMap = BTreeMap<BuildPackageKey, BuildResolutionGraph>;
 
-/// Locked build dependency resolutions, indexed by package version key.
+/// Locked build dependency resolutions, indexed by package key.
 #[derive(Debug, Default, Clone)]
-pub struct LockedBuildResolutions(BTreeMap<PackageVersionKey, Resolution>);
+pub struct LockedBuildResolutions(BTreeMap<BuildPackageKey, Resolution>);
 
 impl LockedBuildResolutions {
-    /// Create locked build resolutions from a map keyed by [`PackageVersionKey`].
-    pub fn new(map: BTreeMap<PackageVersionKey, Resolution>) -> Self {
+    /// Create locked build resolutions from a map keyed by [`BuildPackageKey`].
+    pub fn new(map: BTreeMap<BuildPackageKey, Resolution>) -> Self {
         Self(map)
     }
 
-    /// Get the pre-built resolution for a given package name and version.
-    pub fn get(&self, package: &PackageName, version: Option<&Version>) -> Option<&Resolution> {
-        let key = PackageVersionKey::new(package.clone(), version.cloned());
-        self.0.get(&key)
+    /// Get the pre-built resolution for a package key.
+    pub fn get(&self, package: &BuildPackageKey) -> Option<&Resolution> {
+        if let Some(resolution) = self.0.get(package) {
+            return Some(resolution);
+        }
+
+        let mut version_matches = self
+            .0
+            .iter()
+            .filter(|(key, _)| key.name == package.name && key.version == package.version)
+            .map(|(_, resolution)| resolution);
+
+        if let Some(first) = version_matches.next() {
+            if version_matches.next().is_none() {
+                return Some(first);
+            }
+            return None;
+        }
+
+        if package.version.is_none() {
+            let mut name_matches = self
+                .0
+                .iter()
+                .filter(|(key, _)| key.name == package.name)
+                .map(|(_, resolution)| resolution);
+            let first = name_matches.next()?;
+            if name_matches.next().is_none() {
+                return Some(first);
+            }
+        }
+
+        None
     }
 }
 
 /// A list of `(name, version)` pairs representing preferred build dependency versions.
 type BuildDependencyVersions = Vec<(PackageName, Version)>;
 
-/// Build dependency version preferences, indexed by package version key.
+/// Build dependency version preferences, indexed by package key.
 #[derive(Debug, Default, Clone)]
-pub struct BuildPreferences(BTreeMap<PackageVersionKey, BuildDependencyVersions>);
+pub struct BuildPreferences(BTreeMap<BuildPackageKey, BuildDependencyVersions>);
 
 impl BuildPreferences {
-    /// Create build preferences from a map keyed by [`PackageVersionKey`].
-    pub fn new(map: BTreeMap<PackageVersionKey, BuildDependencyVersions>) -> Self {
+    /// Create build preferences from a map keyed by [`BuildPackageKey`].
+    pub fn new(map: BTreeMap<BuildPackageKey, BuildDependencyVersions>) -> Self {
         Self(map)
     }
 
-    /// Get the build dependency preferences for a given package name and version.
-    pub fn get(
-        &self,
-        package: &PackageName,
-        version: Option<&Version>,
-    ) -> Option<&[(PackageName, Version)]> {
-        let key = PackageVersionKey::new(package.clone(), version.cloned());
-        self.0.get(&key).map(Vec::as_slice)
+    /// Get the build dependency preferences for a package key.
+    pub fn get(&self, package: &BuildPackageKey) -> Option<&[(PackageName, Version)]> {
+        if let Some(preferences) = self.0.get(package) {
+            return Some(preferences.as_slice());
+        }
+
+        let mut version_matches = self
+            .0
+            .iter()
+            .filter(|(key, _)| key.name == package.name && key.version == package.version)
+            .map(|(_, preferences)| preferences.as_slice());
+
+        if let Some(first) = version_matches.next() {
+            if version_matches.next().is_none() {
+                return Some(first);
+            }
+            return None;
+        }
+
+        if package.version.is_none() {
+            let mut name_matches = self
+                .0
+                .iter()
+                .filter(|(key, _)| key.name == package.name)
+                .map(|(_, preferences)| preferences.as_slice());
+            let first = name_matches.next()?;
+            if name_matches.next().is_none() {
+                return Some(first);
+            }
+        }
+
+        None
     }
 }
 
@@ -197,15 +316,9 @@ impl BuildPreferences {
 pub struct BuildResolutions(Arc<Mutex<BuildResolutionGraphMap>>);
 
 impl BuildResolutions {
-    /// Record a build resolution for the given package name and optional version.
-    pub fn insert(
-        &self,
-        package: PackageName,
-        version: Option<Version>,
-        graph: BuildResolutionGraph,
-    ) {
-        let key = PackageVersionKey::new(package, version);
-        self.0.lock().unwrap().insert(key, graph);
+    /// Record a build resolution for the given package key.
+    pub fn insert(&self, package: BuildPackageKey, graph: BuildResolutionGraph) {
+        self.0.lock().unwrap().insert(package, graph);
     }
 
     /// Get a snapshot of the current build resolutions.

@@ -27,8 +27,6 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
-use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
@@ -37,8 +35,9 @@ use uv_resolver::{
     Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPreferences, BuildResolutions,
-    BuildStack, EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildResolutions,
+    AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences,
+    BuildResolutions, BuildStack, EmptyInstalledPackages, HashStrategy, InFlight,
+    LockedBuildResolutions,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -107,7 +106,7 @@ pub struct BuildDispatch<'a> {
     locked_build_resolutions: LockedBuildResolutions,
     build_preferences: BuildPreferences,
     /// Whether to use universal resolution for build dependencies (for lock files).
-    universal_resolution: bool,
+    universal_build_resolution: bool,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -163,7 +162,7 @@ impl<'a> BuildDispatch<'a> {
             build_resolutions: BuildResolutions::default(),
             locked_build_resolutions: LockedBuildResolutions::default(),
             build_preferences: BuildPreferences::default(),
-            universal_resolution: false,
+            universal_build_resolution: false,
         }
     }
 
@@ -208,8 +207,8 @@ impl<'a> BuildDispatch<'a> {
     /// When enabled, build dependencies are resolved for all platforms rather
     /// than just the current one. This is needed for lock files.
     #[must_use]
-    pub fn with_universal_resolution(mut self) -> Self {
-        self.universal_resolution = true;
+    pub fn with_universal_build_resolution(mut self) -> Self {
+        self.universal_build_resolution = true;
         self
     }
 
@@ -286,27 +285,29 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-        package_name: Option<&'data PackageName>,
-        package_version: Option<&'data Version>,
+        package: Option<&'data BuildPackageKey>,
         build_stack: &'data BuildStack,
     ) -> Result<Resolution, BuildDispatchError> {
         // If we have a locked build resolution for this package, return it directly
         // without running the resolver.
-        if let Some(name) = package_name {
-            if let Some(resolution) = self.locked_build_resolutions.get(name, package_version) {
-                debug!("Using locked build resolution for `{name}` (skipping resolver)");
+        if let Some(package) = package {
+            if let Some(resolution) = self.locked_build_resolutions.get(package) {
+                debug!(
+                    "Using locked build resolution for `{}=={:?}` (skipping resolver)",
+                    package.name, package.version
+                );
                 return Ok(resolution.clone());
             }
         }
 
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
-        let resolver_env = if self.universal_resolution {
+        let resolver_env = if self.universal_build_resolution {
             ResolverEnvironment::universal(vec![])
         } else {
             ResolverEnvironment::specific(marker_env)
         };
-        let tags = if self.universal_resolution {
+        let tags = if self.universal_build_resolution {
             None
         } else {
             Some(self.interpreter.tags()?)
@@ -314,8 +315,8 @@ impl BuildContext for BuildDispatch<'_> {
 
         // When the lock file has stored build dependencies for this package, use
         // them as preferences so the resolver prefers the same versions.
-        let preferences = package_name
-            .and_then(|name| self.build_preferences.get(name, package_version))
+        let preferences = package
+            .and_then(|package| self.build_preferences.get(package))
             .map(|deps| {
                 Preferences::from_iter(
                     deps.iter().map(|(name, version)| {
@@ -364,11 +365,10 @@ impl BuildContext for BuildDispatch<'_> {
 
         // If doing universal resolution, capture the build resolution graph
         // (direct requirements + all packages with their dependency edges).
-        if self.universal_resolution {
-            if let Some(name) = package_name {
+        if self.universal_build_resolution {
+            if let Some(package) = package {
                 let graph = resolver_output.build_resolution_graph();
-                self.build_resolutions
-                    .insert(name.clone(), package_version.cloned(), graph);
+                self.build_resolutions.insert(package.clone(), graph);
             }
         }
 
@@ -570,6 +570,7 @@ impl BuildContext for BuildDispatch<'_> {
             source,
             subdirectory,
             install_path,
+            dist,
             dist_name,
             dist_version,
             self.interpreter,
