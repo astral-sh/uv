@@ -6,23 +6,26 @@ use std::vec::Vec;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
+        CloseHandle, ERROR_INSUFFICIENT_BUFFER, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
+        SetHandleInformation, TRUE,
     },
     Storage::FileSystem::{FILE_TYPE_PIPE, GetFileType},
     System::Console::{GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle},
     System::Environment::GetCommandLineA,
     System::LibraryLoader::{FindResourceW, LoadResource, LockResource, SizeofResource},
     System::Threading::{
-        CREATE_SUSPENDED, CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE,
-        PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES,
-        STARTUPINFOA, WaitForInputIdle, WaitForSingleObject,
+        CreateProcessA, DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT,
+        GetExitCodeProcess, GetStartupInfoA, INFINITE, InitializeProcThreadAttributeList,
+        LPPROC_THREAD_ATTRIBUTE_LIST, PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_CREATION_FLAGS,
+        PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, STARTUPINFOEXA,
+        UpdateProcThreadAttribute, WaitForInputIdle, WaitForSingleObject,
     },
     UI::WindowsAndMessaging::{
         CreateWindowExA, DestroyWindow, GetMessageA, HWND_MESSAGE, MSG, PEEK_MESSAGE_REMOVE_TYPE,
         PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
-use windows::core::{PSTR, s};
+use windows::core::{HRESULT, PSTR, s};
 
 use uv_windows::{Job, install_ctrl_handler};
 
@@ -297,16 +300,7 @@ fn print_ctrl_handler_error_and_exit(err: uv_windows::CtrlHandlerError) -> ! {
     exit_with_status(1);
 }
 
-struct SpawnedChild {
-    process: HANDLE,
-    thread: HANDLE,
-}
-
-fn spawn_child(
-    si: &STARTUPINFOA,
-    child_cmdline: CString,
-    creation_flags: PROCESS_CREATION_FLAGS,
-) -> SpawnedChild {
+fn make_handles_inheritable(si: &STARTUPINFOA) {
     // See distlib/PC/launcher.c::run_child
     if (si.dwFlags & STARTF_USESTDHANDLES).0 != 0 {
         // ignore errors, if the handles are not inheritable/valid, then nothing we can do
@@ -317,6 +311,124 @@ fn spawn_child(
         unsafe { SetHandleInformation(si.hStdError, HANDLE_FLAG_INHERIT.0, HANDLE_FLAG_INHERIT) }
             .unwrap_or_else(|_| warn!("Making stderr inheritable failed"));
     }
+}
+
+/// Spawn a child process directly into a job object using `PROC_THREAD_ATTRIBUTE_JOB_LIST`.
+///
+/// This approach avoids race conditions where the child exits or the parent is killed
+/// before `AssignProcessToJobObject` is called. However, it requires Windows 10+.
+///
+/// Returns `None` if the attribute list APIs fail (e.g., on older Windows versions).
+fn spawn_child_in_job(si: &STARTUPINFOA, child_cmdline: CString, job: &Job) -> Option<HANDLE> {
+    // Determine the required size for the attribute list (1 attribute: job list).
+    // The first call is expected to fail with ERROR_INSUFFICIENT_BUFFER, returning
+    // the required size in `attr_list_size`.
+    let mut attr_list_size: usize = 0;
+    let error =
+        unsafe { InitializeProcThreadAttributeList(None, 1, None, &mut attr_list_size) }.err()?;
+    if error.code() != HRESULT::from_win32(ERROR_INSUFFICIENT_BUFFER.0) {
+        return None;
+    }
+
+    // Allocate the attribute list buffer with pointer alignment, since
+    // LPPROC_THREAD_ATTRIBUTE_LIST is an opaque structure.
+    let attr_list_layout =
+        std::alloc::Layout::from_size_align(attr_list_size, align_of::<*mut core::ffi::c_void>())
+            .unwrap_or_else(|_| {
+                error_and_exit("uv trampoline failed to create layout for attribute list");
+            });
+    // SAFETY: layout has non-zero size (attr_list_size comes from InitializeProcThreadAttributeList).
+    let attr_list_ptr = unsafe { std::alloc::alloc_zeroed(attr_list_layout) };
+    if attr_list_ptr.is_null() {
+        return None;
+    }
+    let attr_list = LPPROC_THREAD_ATTRIBUTE_LIST(attr_list_ptr.cast());
+
+    let result = spawn_child_in_job_inner(si, child_cmdline, job, attr_list, &mut attr_list_size);
+
+    // SAFETY: attr_list_ptr was allocated with attr_list_layout above and is non-null.
+    unsafe { std::alloc::dealloc(attr_list_ptr, attr_list_layout) };
+
+    result
+}
+
+/// Inner implementation of [`spawn_child_in_job`] that may fail at any point.
+///
+/// The caller is responsible for freeing the `attr_list` buffer.
+fn spawn_child_in_job_inner(
+    si: &STARTUPINFOA,
+    child_cmdline: CString,
+    job: &Job,
+    attr_list: LPPROC_THREAD_ATTRIBUTE_LIST,
+    attr_list_size: &mut usize,
+) -> Option<HANDLE> {
+    // Initialize the attribute list.
+    unsafe { InitializeProcThreadAttributeList(Some(attr_list), 1, None, attr_list_size) }.ok()?;
+
+    // Set the job object attribute. The job handle must remain valid through `CreateProcessA`.
+    let job_handle = job.as_raw_handle();
+    let Ok(()) = (unsafe {
+        UpdateProcThreadAttribute(
+            attr_list,
+            0,
+            PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
+            Some((&raw const job_handle).cast()),
+            size_of::<HANDLE>(),
+            None,
+            None,
+        )
+    }) else {
+        // SAFETY: We successfully initialized the attribute list above.
+        unsafe { DeleteProcThreadAttributeList(attr_list) };
+        return None;
+    };
+
+    // Build STARTUPINFOEXA with the attribute list.
+    let mut si_ex = STARTUPINFOEXA {
+        StartupInfo: *si,
+        lpAttributeList: attr_list,
+    };
+    // Update cbSize to reflect the extended struct.
+    si_ex.StartupInfo.cb =
+        u32::try_from(size_of::<STARTUPINFOEXA>()).expect("STARTUPINFOEXA size fits in u32");
+
+    let mut child_process_info = PROCESS_INFORMATION::default();
+    let create_result = unsafe {
+        CreateProcessA(
+            None,
+            Some(PSTR::from_raw(child_cmdline.as_ptr() as *mut _)),
+            None,
+            None,
+            true,
+            EXTENDED_STARTUPINFO_PRESENT,
+            None,
+            None,
+            &si_ex.StartupInfo,
+            &mut child_process_info,
+        )
+    };
+
+    // SAFETY: We successfully initialized the attribute list above.
+    unsafe { DeleteProcThreadAttributeList(attr_list) };
+
+    // CreateProcessA failed — fall back to the non-attribute-list path.
+    create_result.ok()?;
+
+    unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
+        print_last_error_and_exit(
+            "uv trampoline failed to close Python child process thread handle",
+        );
+    });
+    Some(child_process_info.hProcess)
+}
+
+/// Spawn a child process and assign it to a job object after creation.
+///
+/// This is a fallback method for [`spawn_child_in_job`] on systems that don't support
+/// `PROC_THREAD_ATTRIBUTE_JOB_LIST` (pre-Windows 10). There's a small race window where
+/// the child could exit before `AssignProcessToJobObject` is called, so we tolerate that
+/// error.
+fn spawn_child_and_assign_to_job(si: &STARTUPINFOA, child_cmdline: CString, job: &Job) -> HANDLE {
     let mut child_process_info = PROCESS_INFORMATION::default();
     unsafe {
         CreateProcessA(
@@ -327,7 +439,7 @@ fn spawn_child(
             None,
             None,
             true,
-            creation_flags,
+            PROCESS_CREATION_FLAGS(0),
             None,
             None,
             si,
@@ -337,10 +449,24 @@ fn spawn_child(
     .unwrap_or_else(|_| {
         print_last_error_and_exit("uv trampoline failed to spawn Python child process");
     });
-    SpawnedChild {
-        process: child_process_info.hProcess,
-        thread: child_process_info.hThread,
+    unsafe { CloseHandle(child_process_info.hThread) }.unwrap_or_else(|_| {
+        print_last_error_and_exit(
+            "uv trampoline failed to close Python child process thread handle",
+        );
+    });
+
+    // SAFETY: child_process_info.hProcess is a valid process handle returned by CreateProcessA.
+    // If the child has already exited, this can fail — that's fine, the job's kill-on-close
+    // behavior simply won't apply to an already-dead process.
+    if let Err(e) = unsafe { job.assign_process(child_process_info.hProcess) } {
+        warn!(
+            "Failed to assign child process to job object (os error {}), \
+             the child may have already exited",
+            e.code()
+        );
     }
+
+    child_process_info.hProcess
 }
 
 // Apparently, the Windows C runtime has a secret way to pass file descriptors into child
@@ -453,31 +579,17 @@ pub fn bounce(is_gui: bool) -> ! {
     let mut si = STARTUPINFOA::default();
     unsafe { GetStartupInfoA(&mut si) }
 
-    // Spawn suspended so we can assign to our job object before the child runs.
-    // This avoids a race where a short-lived child can transition state before
-    // `AssignProcessToJobObject` is called.
-    let child = spawn_child(&si, child_cmdline, CREATE_SUSPENDED);
+    make_handles_inheritable(&si);
+
     let job = Job::new().unwrap_or_else(|e| {
         print_job_error_and_exit("uv trampoline failed to create job object", e);
     });
 
-    // SAFETY: child.process is a valid process handle returned by spawn_child.
-    if let Err(e) = unsafe { job.assign_process(child.process) } {
-        print_job_error_and_exit(
-            "uv trampoline failed to assign child process to job object",
-            e,
-        );
-    }
-
-    // SAFETY: child.thread is a valid thread handle returned by CreateProcessA.
-    if unsafe { ResumeThread(child.thread) } == u32::MAX {
-        print_last_error_and_exit("uv trampoline failed to resume child process thread");
-    }
-    unsafe { CloseHandle(child.thread) }.unwrap_or_else(|_| {
-        print_last_error_and_exit(
-            "uv trampoline failed to close Python child process thread handle",
-        );
-    });
+    // Try the race-free path first: spawn the child directly into the job using
+    // PROC_THREAD_ATTRIBUTE_JOB_LIST (Windows 10+). If that's not available,
+    // fall back to spawning normally and assigning afterward.
+    let child_handle = spawn_child_in_job(&si, child_cmdline.clone(), &job)
+        .unwrap_or_else(|| spawn_child_and_assign_to_job(&si, child_cmdline, &job));
 
     // (best effort) Close all the handles that we can
     close_handles(&si);
@@ -495,12 +607,12 @@ pub fn bounce(is_gui: bool) -> ! {
     }
 
     if is_gui {
-        clear_app_starting_state(child.process);
+        clear_app_starting_state(child_handle);
     }
 
-    let _ = unsafe { WaitForSingleObject(child.process, INFINITE) };
+    let _ = unsafe { WaitForSingleObject(child_handle, INFINITE) };
     let mut exit_code = 0u32;
-    if unsafe { GetExitCodeProcess(child.process, &mut exit_code) }.is_err() {
+    if unsafe { GetExitCodeProcess(child_handle, &mut exit_code) }.is_err() {
         print_last_error_and_exit("uv trampoline failed to get exit code of child process");
     }
     exit_with_status(exit_code);
