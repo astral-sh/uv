@@ -202,7 +202,7 @@ impl Workspace {
 
         let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Check if the project is explicitly marked as unmanaged.
@@ -953,7 +953,7 @@ impl Workspace {
         if let Some(project) = &workspace_pyproject_toml.project {
             let pyproject_path = workspace_root.join("pyproject.toml");
             let contents = fs_err::read_to_string(&pyproject_path)?;
-            let pyproject_toml = PyProjectToml::from_string(contents)
+            let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                 .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
             debug!(
@@ -1069,7 +1069,7 @@ impl Workspace {
                         return Err(err.into());
                     }
                 };
-                let pyproject_toml = PyProjectToml::from_string(contents)
+                let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
                     .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
                 // Check if the current project is explicitly marked as unmanaged.
@@ -1299,7 +1299,7 @@ impl ProjectWorkspace {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // It must have a `[project]` table.
@@ -1324,7 +1324,7 @@ impl ProjectWorkspace {
             // No `pyproject.toml`, but there may still be a `setup.py` or `setup.cfg`.
             return Ok(None);
         };
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         // Extract the `[project]` metadata.
@@ -1517,7 +1517,7 @@ async fn find_workspace(
 
         // Read the `pyproject.toml`.
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         return if let Some(workspace) = pyproject_toml
@@ -1714,7 +1714,7 @@ impl VirtualProject {
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
-        let pyproject_toml = PyProjectToml::from_string(contents)
+        let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
         if let Some(project) = pyproject_toml.project.as_ref() {
@@ -2782,8 +2782,8 @@ foo = ["a", {include-group = "bar"}]
 bar = ["b"]
 "#;
 
-        let result =
-            PyProjectToml::from_string(toml.to_string()).expect("Deserialization should succeed");
+        let result = PyProjectToml::from_string(toml.to_string(), "pyproject.toml")
+            .expect("Deserialization should succeed");
 
         let groups = result
             .dependency_groups

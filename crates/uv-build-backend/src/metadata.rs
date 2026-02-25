@@ -109,17 +109,19 @@ pub fn check_direct_build(
         build_system: BuildSystem,
     }
 
-    let pyproject_toml: PyProjectToml =
-        match fs_err::read_to_string(source_tree.join("pyproject.toml"))
-            .map_err(|err| err.to_string())
-            .and_then(|pyproject_toml| {
-                toml::from_str(&pyproject_toml).map_err(|err| err.to_string())
-            }) {
-            Ok(pyproject_toml) => pyproject_toml,
-            Err(err) => {
-                return Err(DirectBuildIncompatibility::PyprojectToml(err));
-            }
-        };
+    let path = source_tree.join("pyproject.toml");
+    let pyproject_toml: PyProjectToml = match fs_err::read_to_string(&path)
+        .map_err(|err| err.to_string())
+        .and_then(|pyproject_toml| {
+            tracing::info_span!("toml::from_str check direct build", path = %path.display())
+                .in_scope(|| toml::from_str(&pyproject_toml))
+                .map_err(|err| err.to_string())
+        }) {
+        Ok(pyproject_toml) => pyproject_toml,
+        Err(err) => {
+            return Err(DirectBuildIncompatibility::PyprojectToml(err));
+        }
+    };
 
     if pyproject_toml.build_system.build_backend.as_deref() != Some("uv_build") {
         return Err(DirectBuildIncompatibility::WrongBackend(
@@ -229,7 +231,9 @@ impl PyProjectToml {
     pub(crate) fn parse(path: &Path) -> Result<Self, Error> {
         let contents = fs_err::read_to_string(path)?;
         let pyproject_toml =
-            toml::from_str(&contents).map_err(|err| Error::Toml(path.to_path_buf(), err))?;
+            tracing::info_span!("toml::from_str uv build backend", path = %path.display())
+                .in_scope(|| toml::from_str(&contents))
+                .map_err(|err| Error::Toml(path.to_path_buf(), err))?;
         Ok(pyproject_toml)
     }
 

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use tracing::{debug, warn};
+use tracing::{debug, info_span, warn};
 
 use uv_fs::Simplified;
 
@@ -69,19 +69,21 @@ impl CacheInfo {
         let mut env = BTreeMap::new();
 
         // Read the cache keys.
-        let cache_keys =
-            if let Ok(contents) = fs_err::read_to_string(directory.join("pyproject.toml")) {
-                if let Ok(pyproject_toml) = toml::from_str::<PyProjectToml>(&contents) {
-                    pyproject_toml
-                        .tool
-                        .and_then(|tool| tool.uv)
-                        .and_then(|tool_uv| tool_uv.cache_keys)
-                } else {
-                    None
-                }
+        let pyproject_path = directory.join("pyproject.toml");
+        let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
+            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
+            if let Ok(pyproject_toml) = result {
+                pyproject_toml
+                    .tool
+                    .and_then(|tool| tool.uv)
+                    .and_then(|tool_uv| tool_uv.cache_keys)
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         // If no cache keys were defined, use the defaults.
         let cache_keys = cache_keys.unwrap_or_else(|| {

@@ -15,7 +15,7 @@ use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -31,7 +31,7 @@ use uv_distribution_types::{
     RegistrySourceDist, RemoteSource, Requirement, RequirementSource, RequiresPython, ResolvedDist,
     SimplifiedMarkerTree, StaticMetadata, ToUrlError, UrlString,
 };
-use uv_fs::{PortablePath, PortablePathBuf, relative_to};
+use uv_fs::{PortablePath, PortablePathBuf, Simplified, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -1406,6 +1406,7 @@ impl Lock {
     }
 
     /// Check whether the lock matches the project structure, requirements and configuration.
+    #[instrument(skip_all)]
     pub async fn satisfies<Context: BuildContext>(
         &self,
         root: &Path,
@@ -1796,12 +1797,12 @@ impl Lock {
                 let metadata = match fs_err::tokio::read_to_string(&path).await {
                     Ok(contents) => {
                         let pyproject_toml =
-                            PyProjectToml::from_toml(&contents).map_err(|err| {
-                                LockErrorKind::InvalidPyprojectToml {
+                            PyProjectToml::from_toml(&contents, path.user_display()).map_err(
+                                |err| LockErrorKind::InvalidPyprojectToml {
                                     path: path.clone(),
                                     err,
-                                }
-                            })?;
+                                },
+                            )?;
                         database
                             .requires_dist(&parent, &pyproject_toml)
                             .await

@@ -1,8 +1,10 @@
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::de::IntoDeserializer;
+use tracing::instrument;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
@@ -18,7 +20,8 @@ pub struct PyProjectToml {
 }
 
 impl PyProjectToml {
-    pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+    #[instrument(name = "toml::from_str uv pypi types", skip_all, fields(source = % _source))]
+    pub fn from_toml(toml: &str, _source: impl Display) -> Result<Self, MetadataError> {
         let pyproject_toml = toml_edit::Document::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
         let pyproject_toml = Self::deserialize(pyproject_toml.into_deserializer())
