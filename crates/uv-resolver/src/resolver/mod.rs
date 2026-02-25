@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{iter, slice, thread};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
@@ -135,6 +135,8 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     unavailable_packages: DashMap<PackageName, UnavailablePackage>,
     /// Incompatibilities for packages that are unavailable at specific versions.
     incomplete_packages: DashMap<PackageName, DashMap<Version, MetadataUnavailable>>,
+    /// Packages for which we've already logged `exclude_newer` messages.
+    logged_exclude_newer: DashSet<PackageName>,
     /// The options that were used to configure this resolver.
     options: Options,
     /// The reporter to use for this resolver.
@@ -254,6 +256,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             installed_packages,
             unavailable_packages: DashMap::default(),
             incomplete_packages: DashMap::default(),
+            logged_exclude_newer: DashSet::default(),
             options,
             reporter: None,
         };
@@ -1312,6 +1315,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         debug!("Searching for a compatible version of {package} ({range})");
 
+        // Get the exclude_newer timestamp for this package
+        let exclude_newer = self.options.exclude_newer.exclude_newer_package(name);
+
         // Find a version.
         let Some(candidate) = self.selector.select(
             name,
@@ -1323,8 +1329,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            exclude_newer,
         ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
+            // Log exclude_newer message once per package across all forks.
+            if let Some(exclude_newer_ts) = exclude_newer {
+                if self.logged_exclude_newer.insert(name.clone()) {
+                    debug!(
+                        "Excluding candidates for {name} published after {exclude_newer_ts}"
+                    );
+                }
+            }
             return Ok(None);
         };
 
@@ -1530,6 +1545,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.version().clone().without_local(),
         ));
 
+        let exclude_newer = self.options.exclude_newer.exclude_newer_package(name);
         let Some(base_candidate) = self.selector.select(
             name,
             &range,
@@ -1540,6 +1556,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
+            exclude_newer,
         ) else {
             return Ok(None);
         };
@@ -2545,6 +2562,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
+                let exclude_newer = self.options.exclude_newer.exclude_newer_package(&package_name);
                 let Some(candidate) = self.selector.select(
                     &package_name,
                     &range,
@@ -2555,6 +2573,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &env,
                     self.tags.as_ref(),
+                    exclude_newer,
                 ) else {
                     return Ok(None);
                 };

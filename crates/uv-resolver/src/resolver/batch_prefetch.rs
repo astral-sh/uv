@@ -231,7 +231,7 @@ impl BatchPrefetcherRunner {
                     previous,
                 } => {
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
+                        selector.select_no_preference(name, &compatible, version_map, env, None)
                     {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
@@ -266,7 +266,7 @@ impl BatchPrefetcherRunner {
                         };
                     }
                     if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
+                        selector.select_no_preference(name, &range, version_map, env, None)
                     {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
