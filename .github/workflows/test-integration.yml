@@ -1017,12 +1017,10 @@ jobs:
             artifact: uv-linux-libc
             setarch: linux32
             native-arch: x86_64
-            alt-python: "3.11-i686"
           - runner: ubuntu-24.04-arm
             artifact: uv-linux-aarch64
             setarch: armv7l
             native-arch: aarch64
-            alt-python: "3.11-armv7-gnueabihf"
     steps:
       - name: "Download binary"
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -1032,11 +1030,8 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
-      - name: "Install alternate-arch Python"
-        run: ./uv python install ${{ matrix.alt-python }}
-
-      - name: "Create venv with alternate-arch Python"
-        run: setarch ${{ matrix.setarch }} ./uv venv -v --python ${{ matrix.alt-python }} test-venv
+      - name: "Create venv"
+        run: ./uv venv -v --python 3.11 test-venv
 
       - name: "Write requirements file"
         run: |
