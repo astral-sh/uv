@@ -1,7 +1,4 @@
-#[cfg(not(feature = "testing"))]
 use std::sync::OnceLock;
-#[cfg(feature = "testing")]
-use std::sync::{OnceLock, RwLock};
 use std::{
     fmt::{Debug, Display, Formatter},
     ops::BitOr,
@@ -19,7 +16,7 @@ enum PreviewMode {
     /// Initialised by a call to `uv_preview::init`
     Normal(Preview),
     /// Initialised by a call to `uv_preview::test::with_features`
-    Test(RwLock<Option<Preview>>),
+    Test(std::sync::RwLock<Option<Preview>>),
 }
 
 #[cfg(feature = "testing")]
