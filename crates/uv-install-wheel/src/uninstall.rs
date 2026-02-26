@@ -46,9 +46,8 @@ pub fn uninstall_wheel(
     let mut visited = BTreeSet::new();
     for entry in &record {
         let path = site_packages.join(&entry.path);
-        let normalized = normalize_path(&path);
 
-        if !is_path_in_scheme(&entry.path, &normalized, &distribution, layout) {
+        if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
         }
 
@@ -169,10 +168,12 @@ static WARNED_FOR_PACKAGE: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 /// deletion of arbitrary files on uninstall.
 fn is_path_in_scheme(
     path: &str,
-    normalized: &Path,
+    site_packages: &Path,
     distribution: impl Display,
     layout: &Layout,
 ) -> bool {
+    let normalized = normalize_path(&site_packages.join(path));
+
     // `purelib` or `platlib` are site-packages (depending on `Root-Is-Purelib`). As
     // `.data/*` goes into the directories of `scheme`, `.dist-info` goes into site-packages
     // and all other content goes into site-packages, the condition below covers all valid
@@ -257,9 +258,8 @@ pub fn uninstall_egg(
     // Remove everything in `top_level.txt`.
     for entry in top_level {
         let path = dist_location.join(&entry);
-        let normalized = normalize_path(&path);
 
-        if !is_path_in_scheme(&entry, &normalized, &distribution, layout) {
+        if !is_path_in_scheme(&entry, dist_location, &distribution, layout) {
             continue;
         }
 
