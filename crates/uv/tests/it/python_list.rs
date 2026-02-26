@@ -614,6 +614,11 @@ fn python_list_with_mirrors() {
             "$1[FILE-PATH]".to_string(),
         ))
         .with_filter((
+            r"(https://releases\.astral\.sh/github/python-build-standalone/releases/download/).*"
+                .to_string(),
+            "$1[FILE-PATH]".to_string(),
+        ))
+        .with_filter((
             r"(https://downloads\.python\.org/pypy/).*".to_string(),
             "$1[FILE-PATH]".to_string(),
         ))
@@ -667,7 +672,7 @@ fn python_list_with_mirrors() {
     ----- stderr -----
     ");
 
-    // Test without mirrors - verify default URLs are used
+    // Test without mirrors - verify the default Astral mirror URL is used for CPython
     uv_snapshot!(context.filters(), context.python_list()
         .arg("3.10")
         .arg("--show-urls")
@@ -675,7 +680,7 @@ fn python_list_with_mirrors() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.19-[PLATFORM] https://github.com/astral-sh/python-build-standalone/releases/download/[FILE-PATH]
+    cpython-3.10.19-[PLATFORM] https://releases.astral.sh/github/python-build-standalone/releases/download/[FILE-PATH]
     pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 

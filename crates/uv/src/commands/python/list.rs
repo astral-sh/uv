@@ -120,6 +120,7 @@ pub(crate) async fn list(
             .filter(|download| !download.key().variant().is_debug());
 
         for download in downloads {
+            // TODO: display all download URLs including the fallback mirror.
             output.insert((
                 download.key().clone(),
                 Kind::Download,
