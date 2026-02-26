@@ -7709,7 +7709,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
         [tool.uv]
         constraint-dependencies = ["constraint-pkg @ {}"]
         "#,
-        constraint_pkg.path().display()
+        constraint_pkg.portable_display()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(context.temp_dir.join("project")), @"
@@ -7834,7 +7834,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
         url = "{}"
         format = "flat"
         "#,
-        index_dir.path().display()
+        index_dir.portable_display()
     })?;
 
     uv_snapshot!(context.filters(), context.lock().current_dir(&project), @"
