@@ -40,8 +40,8 @@ version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e61320f0a8ca54a235b0e49307b16dcade6eecd441b1f8a8c7ca9204056cb17c"
 dependencies = [
- "astral-reqwest-middleware",
- "reqwest",
+ "astral-reqwest-middleware 0.4.2",
+ "reqwest 0.12.22",
  "secrecy",
  "serde",
  "serde_json",
@@ -263,26 +263,40 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "thiserror 2.0.18",
  "tower-service",
 ]
 
 [[package]]
-name = "astral-reqwest-retry"
-version = "0.8.0"
+name = "astral-reqwest-middleware"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78ab210f6cdf8fd3254d47e5ee27ce60ed34a428ff71b4ae9477b1c84b49498c"
+checksum = "98e1c6be25cfbf1bb4fea1a9da51bc05d3259a9062df4e53f54e5607895e33c9"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "async-trait",
+ "http",
+ "reqwest 0.13.2",
+ "thiserror 2.0.18",
+ "tower-service",
+]
+
+[[package]]
+name = "astral-reqwest-retry"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c76a42c052d7a95249b90b83d44e8f1bbde7c8e08dbed50d49c58321815da3"
+dependencies = [
+ "anyhow",
+ "astral-reqwest-middleware 0.5.1",
  "async-trait",
  "futures",
  "getrandom 0.2.16",
  "http",
  "hyper",
- "reqwest",
+ "reqwest 0.13.2",
  "retry-policies",
  "thiserror 2.0.18",
  "tokio",
@@ -330,13 +344,13 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ddaca0fbbf0d91103cca7c7611790c65f6eff1d456f7fe6bf565d436dc9b8f3"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "bisection",
  "futures",
  "http-content-range",
  "itertools 0.13.0",
  "memmap2",
- "reqwest",
+ "reqwest 0.12.22",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -446,7 +460,7 @@ dependencies = [
  "lazy_static",
  "miette",
  "mime",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -3890,7 +3904,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "reqsign-core",
- "reqwest",
+ "reqwest 0.12.22",
  "rsa",
  "serde",
  "serde_json",
@@ -3910,7 +3924,7 @@ dependencies = [
  "http",
  "http-body-util",
  "reqsign-core",
- "reqwest",
+ "reqwest 0.12.22",
  "wasm-bindgen-futures",
 ]
 
@@ -3958,6 +3972,35 @@ dependencies = [
  "wasm-streams",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+dependencies = [
+ "base64 0.22.1",
+ "bytes",
+ "futures-core",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "percent-encoding",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -5310,9 +5353,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.6.6"
+version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adc82fd73de2a9722ac5da747f12383d2bfdb93591ee6c58486e0097890f05f2"
+checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
  "bitflags 2.11.0",
  "bytes",
@@ -5728,7 +5771,7 @@ dependencies = [
  "petgraph",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rustc-hash",
  "self-replace",
@@ -5817,7 +5860,7 @@ version = "0.0.26"
 dependencies = [
  "anyhow",
  "arcstr",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "async-trait",
  "base64 0.22.1",
  "etcetera",
@@ -5828,7 +5871,7 @@ dependencies = [
  "jiff",
  "percent-encoding",
  "reqsign",
- "reqwest",
+ "reqwest 0.12.22",
  "rust-netrc",
  "rustc-hash",
  "schemars",
@@ -5885,12 +5928,12 @@ dependencies = [
 name = "uv-bin-install"
 version = "0.0.26"
 dependencies = [
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "fs-err",
  "futures",
  "jiff",
- "reqwest",
+ "reqwest 0.12.22",
  "serde",
  "serde_json",
  "tempfile",
@@ -6094,7 +6137,7 @@ name = "uv-client"
 version = "0.0.26"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "astral-tl",
  "astral_async_http_range_reader",
@@ -6115,7 +6158,7 @@ dependencies = [
  "percent-encoding",
  "rcgen",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rkyv",
  "rmp-serde",
  "rustc-hash",
@@ -6163,7 +6206,7 @@ dependencies = [
  "fs-err",
  "insta",
  "rayon",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "same-file",
  "schemars",
@@ -6208,7 +6251,7 @@ dependencies = [
  "owo-colors",
  "poloto",
  "pretty_assertions",
- "reqwest",
+ "reqwest 0.12.22",
  "resvg",
  "schemars",
  "serde",
@@ -6292,7 +6335,7 @@ name = "uv-distribution"
 version = "0.0.26"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "either",
  "fs-err",
  "futures",
@@ -6300,7 +6343,7 @@ dependencies = [
  "insta",
  "nanoid",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "serde",
@@ -6406,7 +6449,7 @@ dependencies = [
  "md-5",
  "rayon",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "sha2",
  "tar",
@@ -6465,12 +6508,12 @@ name = "uv-git"
 version = "0.0.26"
 dependencies = [
  "anyhow",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "cargo-util",
  "dashmap",
  "fs-err",
  "owo-colors",
- "reqwest",
+ "reqwest 0.12.22",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -6772,7 +6815,7 @@ version = "0.0.26"
 dependencies = [
  "ambient-id",
  "anstream 1.0.0",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "astral-tokio-tar",
  "async-compression",
@@ -6783,7 +6826,7 @@ dependencies = [
  "glob",
  "insta",
  "itertools 0.14.0",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "serde",
  "serde_json",
@@ -6847,7 +6890,7 @@ version = "0.0.26"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "astral-reqwest-retry",
  "clap",
  "configparser",
@@ -6862,7 +6905,7 @@ dependencies = [
  "owo-colors",
  "ref-cast",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rmp-serde",
  "rustc-hash",
  "same-file",
@@ -6957,14 +7000,14 @@ version = "0.0.26"
 dependencies = [
  "anyhow",
  "assert_fs",
- "astral-reqwest-middleware",
+ "astral-reqwest-middleware 0.4.2",
  "fs-err",
  "indoc",
  "insta",
  "itertools 0.14.0",
  "memchr",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "rustc-hash",
  "tempfile",
  "test-case",
@@ -7168,7 +7211,7 @@ dependencies = [
  "itertools 0.14.0",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.22",
  "similar",
  "tempfile",
  "tokio",
@@ -7563,9 +7606,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtimer"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8d49b5d6c64e8558d9b1b065014426f35c18de636895d24893dbbd329743446"
+checksum = "1c598d6b99ea013e35844697fc4670d08339d5cda15588f193c6beedd12f644b"
 dependencies = [
  "futures",
  "js-sys",
