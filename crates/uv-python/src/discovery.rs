@@ -822,7 +822,14 @@ fn python_interpreters_from_executables<'a>(
                 );
             })
             .map_err(|err| Error::Query(Box::new(err), path, source))
-            .inspect_err(|err| debug!("{err}")),
+            .inspect_err(|err| {
+                use std::error::Error;
+                let mut msg = format!("{err}");
+                for source in std::iter::successors(err.source(), |&e| e.source()) {
+                    msg.push_str(&format!(": {source}"));
+                }
+                debug!("{msg}");
+            }),
         Err(err) => Err(err),
     })
 }
