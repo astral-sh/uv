@@ -297,12 +297,12 @@ impl AuditResults {
                     if vuln.fix_versions.is_empty() {
                         writeln!(
                             self.printer.stdout_important(),
-                            "\n  No fix versions available"
+                            "\n  No fix versions available\n"
                         )?;
                     } else {
                         writeln!(
                             self.printer.stdout_important(),
-                            "\n  Fixed in: {}",
+                            "\n  Fixed in: {}\n",
                             vuln.fix_versions.iter().map(|v| v.to_string()).join(", ")
                         )?;
                     }
