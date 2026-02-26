@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::Version;
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
-use crate::types::{Dependency, Finding, VulnerabilityID};
+use crate::types;
 
 const API_BASE: &str = "https://api.osv.dev/";
 
@@ -161,7 +161,10 @@ impl Osv {
     }
 
     /// Query OSV for vulnerabilities affecting the given dependency.
-    pub async fn query(&self, dependency: &Dependency) -> Result<Vec<Finding>, Error> {
+    pub async fn query(
+        &self,
+        dependency: &types::Dependency,
+    ) -> Result<Vec<types::Finding>, Error> {
         let mut all_vulnerabilities = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -216,7 +219,10 @@ impl Osv {
     }
 
     /// Convert an OSV Vulnerability record to a Finding.
-    fn vulnerability_to_finding(dependency: &Dependency, vuln: Vulnerability) -> Finding {
+    fn vulnerability_to_finding(
+        dependency: &types::Dependency,
+        vuln: Vulnerability,
+    ) -> types::Finding {
         // Extract fix versions from affected ranges
         let fix_versions = vuln
             .affected
@@ -249,20 +255,19 @@ impl Osv {
             .aliases
             .unwrap_or_default()
             .into_iter()
-            .map(VulnerabilityID::new)
+            .map(types::VulnerabilityID::new)
             .collect();
 
-        let description = vuln.summary.or(vuln.details).unwrap_or(vuln.id.clone());
-
-        Finding::Vulnerability {
-            dependency: dependency.clone(),
-            id: VulnerabilityID::new(vuln.id),
-            description,
+        types::Finding::Vulnerability(types::Vulnerability::new(
+            dependency.clone(),
+            types::VulnerabilityID::new(vuln.id),
+            vuln.summary,
+            vuln.details,
             fix_versions,
             aliases,
-            published: vuln.published,
-            modified: Some(vuln.modified),
-        }
+            vuln.published,
+            Some(vuln.modified),
+        ))
     }
 }
 
@@ -471,8 +476,8 @@ mod tests {
         let finding = findings
             .iter()
             .find(|finding| match finding {
-                Finding::Vulnerability { id, .. } => id.as_str() == "GHSA-r6ph-v2qm-q3c2",
-                Finding::ProjectStatus { .. } => false,
+                Finding::Vulnerability(vuln) => vuln.id.as_str() == "GHSA-r6ph-v2qm-q3c2",
+                Finding::ProjectStatus(_) => false,
             })
             .expect("Expected to find GHSA-r6ph-v2qm-q3c2 vulnerability");
 

@@ -1,3 +1,6 @@
+use itertools::Itertools as _;
+use owo_colors::OwoColorize;
+use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::{
@@ -10,11 +13,17 @@ use crate::{
             lock::{LockMode, LockOperation},
             lock_target::LockTarget,
         },
+        reporters::AuditReporter,
     },
     printer::Printer,
     settings::{FrozenSource, LockCheck, ResolverSettings},
 };
 use anyhow::Result;
+use tracing::trace;
+use uv_audit::{
+    service::osv,
+    types::{Dependency, Finding},
+};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, ExtrasSpecification, TargetTriple};
@@ -178,10 +187,141 @@ pub(crate) async fn audit(
     // TODO: validate the sets of requested extras/groups against the lockfile?
 
     // Perform the audit.
-    warn_user!(
-        "Would have audited {n} dependencies.",
+    // TODO: Use `client_builder` to produce an HTTP client through our normal process here.
+    let service = osv::Osv::default();
+    trace!(
+        "Auditing {n} dependencies against OSV",
         n = lock.packages().len()
     );
 
+    let reporter = AuditReporter::from(printer).with_length(lock.packages().len() as u64);
+
+    let mut all_findings = vec![];
+    for package in lock.packages() {
+        let Some(version) = package.version() else {
+            trace!(
+                "Skipping audit for {} because it has no version information",
+                package.name()
+            );
+            reporter.on_audit_progress();
+            continue;
+        };
+
+        reporter.on_audit_package(package.name(), version);
+
+        let dependency = Dependency::new(package.name().clone(), version.clone());
+        all_findings.extend(service.query(&dependency).await?);
+    }
+
+    reporter.on_audit_complete();
+
+    let display = AuditResults {
+        printer,
+        npackages: lock.packages().len(),
+        findings: all_findings,
+    };
+    display.render()?;
+
     Ok(ExitStatus::Success)
+}
+
+struct AuditResults {
+    printer: Printer,
+    npackages: usize,
+    findings: Vec<Finding>,
+}
+
+impl AuditResults {
+    fn render(&self) -> Result<()> {
+        let (vulns, statuses): (Vec<_>, Vec<_>) =
+            self.findings.iter().partition_map(|finding| match finding {
+                Finding::Vulnerability(vuln) => itertools::Either::Left(vuln),
+                Finding::ProjectStatus(status) => itertools::Either::Right(status),
+            });
+
+        let vuln_banner = if !vulns.is_empty() {
+            let s = if vulns.len() == 1 { "y" } else { "ies" };
+            format!(
+                "{} known vulnerabilit{}",
+                vulns.len().to_string().yellow(),
+                s
+            )
+        } else {
+            "no known vulnerabilities".green().to_string()
+        };
+
+        let status_banner = if !statuses.is_empty() {
+            let s = if statuses.len() == 1 { "" } else { "es" };
+            format!(
+                "{} adverse project status{}",
+                statuses.len().to_string().yellow(),
+                s
+            )
+        } else {
+            "no adverse project statuses".green().to_string()
+        };
+
+        writeln!(
+            self.printer.stderr(),
+            "Found {vuln_banner} and {status_banner} in {packages}",
+            packages = format!("{npackages} packages", npackages = self.npackages).bold()
+        )?;
+
+        if !vulns.is_empty() {
+            writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
+
+            // Group vulnerabilities by (dependency name, version).
+            let groups = vulns
+                .into_iter()
+                .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
+
+            for (dependency, vulns) in &groups {
+                let vulns: Vec<_> = vulns.collect();
+                let (name, version) = dependency;
+
+                writeln!(
+                    self.printer.stdout_important(),
+                    "{name} {version} has {n} known vulnerabilit{ies}:\n",
+                    n = vulns.len(),
+                    ies = if vulns.len() == 1 { "y" } else { "ies" },
+                )?;
+
+                for vuln in vulns {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "- {id}: {description}",
+                        id = vuln.best_id().as_str().bold(),
+                        description = vuln.summary.as_deref().unwrap_or("No summary provided"),
+                    )?;
+
+                    if vuln.fix_versions.is_empty() {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  No fix versions available\n"
+                        )?;
+                    } else {
+                        writeln!(
+                            self.printer.stdout_important(),
+                            "\n  Fixed in: {}\n",
+                            vuln.fix_versions
+                                .iter()
+                                .map(std::string::ToString::to_string)
+                                .join(", ")
+                        )?;
+                    }
+                }
+
+                writeln!(self.printer.stdout_important())?;
+            }
+        }
+
+        if !statuses.is_empty() {
+            writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
+
+            // NOTE: Nothing here yet, since we don't actually produce
+            // any adverse project statuses at the moment.
+        }
+
+        Ok(())
+    }
 }
