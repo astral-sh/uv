@@ -1648,8 +1648,9 @@ pub struct PipCompileArgs {
     /// `IPHONEOS_DEPLOYMENT_TARGET` to specify a different minimum version, e.g., `14.0`.
     ///
     /// When targeting Android, the default minimum Android API level is `24`. Use
-    /// `ANDROID_API_LEVEL` to specify a different minimum version, e.g., `26`.
-    #[arg(long)]
+    /// `ANDROID_API_LEVEL` to specify a di
+    /// fferent minimum version, e.g., `26`.
+    #[arg(long, env=EnvVars::UV_PYTHON_PLATFORM)]
     pub python_platform: Option<TargetTriple>,
 
     /// Perform a universal resolution, attempting to generate a single `requirements.txt` output
