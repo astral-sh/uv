@@ -21,7 +21,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -31,7 +31,9 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError, centralized_environment_root,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
@@ -111,19 +113,13 @@ pub(crate) async fn venv(
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
+    // Centralized mode requires: preview flag, no explicit path, a project, and the
+    // project's venv path must be the default (not overridden by UV_PROJECT_ENVIRONMENT).
+    let centralized = preview.is_enabled(PreviewFeature::CentralizedEnvs)
+        && path.is_none()
+        && project
             .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+            .is_some_and(|p| p.workspace().venv(Some(false)).is_default());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -167,6 +163,24 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
+    // Determine the path
+    let path = if centralized && let Some(project) = project.as_ref() {
+        centralized_environment_root(project.workspace(), cache, &interpreter)
+    } else {
+        path.unwrap_or_else(|| {
+            project
+                .as_ref()
+                .and_then(|project| {
+                    // Only use the project environment path if we're invoked from the root
+                    // This isn't strictly necessary and we may want to change it later, but this
+                    // avoids a breaking change when adding project environment support to `uv venv`.
+                    (project.workspace().install_path() == project_dir)
+                        .then(|| project.workspace().venv(Some(false)).into_path_buf())
+                })
+                .unwrap_or(PathBuf::from(".venv"))
+        })
+    };
+
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
         match validate_project_requires_python(
@@ -183,12 +197,20 @@ pub(crate) async fn venv(
         }
     }
 
-    writeln!(
-        printer.stderr(),
-        "Creating virtual environment {}at: {}",
-        if seed { "with seed packages " } else { "" },
-        path.user_display().cyan()
-    )?;
+    let with_seed = if seed { "with seed packages " } else { "" };
+    if centralized {
+        writeln!(
+            printer.stderr(),
+            "Creating virtual environment {}in centralised location",
+            if seed { "with seed packages " } else { "" },
+        )?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "Creating virtual environment {with_seed}at: {}",
+            path.user_display().cyan()
+        )?;
+    }
 
     let upgradeable = python_request
         .as_ref()
@@ -205,7 +227,8 @@ pub(crate) async fn venv(
         seed,
         upgradeable,
     )
-    .map_err(VenvError::Creation)?;
+    .map_err(VenvError::Creation)?
+    .with_centralized(centralized);
 
     // Install seed packages.
     if seed {
@@ -310,30 +333,45 @@ pub(crate) async fn venv(
         DefaultInstallLogger.on_complete(&changelog, printer, DryRun::Disabled)?;
     }
 
+    // Update the venv link if applicable, and get a scripts path.
+    let scripts_dir = if let Some(project) = &project {
+        let link_path = venv.update_venv_link(project.workspace().install_path(), true)?;
+        if venv.centralized()
+            && let Ok(suffix) = venv.scripts().strip_prefix(&path)
+        {
+            Some(link_path.join(suffix))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .unwrap_or_else(|| venv.scripts().to_path_buf());
+
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
         Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate"))
+            shlex_posix(scripts_dir.join("activate"))
         )),
         Some(Shell::Fish) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.fish"))
+            shlex_posix(scripts_dir.join("activate.fish"))
         )),
         Some(Shell::Nushell) => Some(format!(
             "overlay use {}",
-            shlex_posix(venv.scripts().join("activate.nu"))
+            shlex_posix(scripts_dir.join("activate.nu"))
         )),
         Some(Shell::Csh) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.csh"))
+            shlex_posix(scripts_dir.join("activate.csh"))
         )),
         Some(Shell::Powershell) => Some(shlex_windows(
-            venv.scripts().join("activate"),
+            scripts_dir.join("activate"),
             Shell::Powershell,
         )),
-        Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
+        Some(Shell::Cmd) => Some(shlex_windows(scripts_dir.join("activate"), Shell::Cmd)),
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green())?;

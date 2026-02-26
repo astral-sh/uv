@@ -249,6 +249,7 @@ pub(crate) async fn remove(
                     DryRun::Disabled,
                     printer,
                     preview,
+                    true,
                 )
                 .await?
                 .into_environment()?;

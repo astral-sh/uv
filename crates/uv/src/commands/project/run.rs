@@ -722,6 +722,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     DryRun::Disabled,
                     printer,
                     preview,
+                    false,
                 )
                 .await?
                 .into_environment()?

@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 use uv_preview::Preview;
+use uv_warnings::warn_user_once;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -27,6 +28,7 @@ pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
 struct PythonEnvironmentShared {
     root: PathBuf,
     interpreter: Interpreter,
+    centralized: bool,
 }
 
 /// The result of failed environment discovery.
@@ -223,6 +225,7 @@ impl PythonEnvironment {
         Ok(Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
+            centralized: false,
         })))
     }
 
@@ -236,6 +239,7 @@ impl PythonEnvironment {
         Self(Arc::new(PythonEnvironmentShared {
             root: interpreter.sys_prefix().to_path_buf(),
             interpreter,
+            centralized: false,
         }))
     }
 
@@ -255,6 +259,82 @@ impl PythonEnvironment {
             interpreter: inner.interpreter.with_prefix(prefix)?,
             ..inner
         })))
+    }
+
+    /// Mark this environment as centralized (stored in the uv cache rather than in-project).
+    #[must_use]
+    pub fn with_centralized(self, centralized: bool) -> Self {
+        let mut inner = Arc::unwrap_or_clone(self.0);
+        inner.centralized = centralized;
+        Self(Arc::new(inner))
+    }
+
+    /// Returns `true` if this environment is stored in a centralized location.
+    pub fn centralized(&self) -> bool {
+        self.0.centralized
+    }
+
+    /// If this environment is centralized, create or update a `.venv` link at `install_path /
+    /// .venv` pointing to the environment root.
+    ///
+    /// Returns a path suitable for constructing sub-paths (e.g. the scripts directory):
+    /// - The link path if a symlink/junction was created (traversable as a directory)
+    /// - The real environment root otherwise (not centralized, path-file fallback, or failure),
+    ///   since `.venv` is not traversable in those cases
+    ///
+    /// When `warn` is `true`, emits user-facing warnings for link/file creation failures.
+    pub fn update_venv_link(&self, install_path: &Path, warn: bool) -> std::io::Result<PathBuf> {
+        if !self.0.centralized {
+            return Ok(self.root().to_path_buf());
+        }
+
+        let link_path = install_path.join(".venv");
+        let target = self.root();
+
+        // Best effort removal of whatever is at `.venv`. If we get an error here, we'll get a
+        // similar but more accurately worded error when trying to create the replacement.
+        let _ = uv_fs::remove_symlink(&link_path);
+        let _ = fs_err::remove_file(&link_path);
+        let _ = fs_err::remove_dir(&link_path);
+
+        // Try symlink/junction.
+        let symlink_err = match uv_fs::create_symlink(target, &link_path) {
+            Ok(()) => return Ok(link_path),
+            Err(symlink_err) => symlink_err,
+        };
+        if !warn {
+            warn!(
+                "Error linking `{}` to `{}`: {symlink_err}",
+                link_path.display(),
+                target.display()
+            );
+        }
+
+        // Fall back to writing a file containing the path.
+        // TODO(tk): Make this not lossy. Encode wide?
+        match fs_err::write(&link_path, target.to_string_lossy().as_bytes()) {
+            Ok(()) => {
+                if warn {
+                    warn_user_once!(
+                        "Failed to create symlink for `.venv` at `{}`, wrote a path file instead: {symlink_err}",
+                        link_path.simplified_display(),
+                    );
+                }
+                Ok(target.to_path_buf())
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::IsADirectory => Err(err),
+            Err(file_err) => {
+                if warn {
+                    warn_user_once!(
+                        "Failed to create symlink or path file for `.venv` at `{}`: {symlink_err}",
+                        link_path.simplified_display(),
+                    );
+                } else {
+                    warn!("Error writing `{}`: {file_err}", link_path.display());
+                }
+                Ok(target.to_path_buf())
+            }
+        }
     }
 
     /// Returns the root (i.e., `prefix`) of the Python interpreter.

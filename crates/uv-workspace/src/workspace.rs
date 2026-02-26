@@ -9,12 +9,16 @@ use itertools::Itertools;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::{cache_digest, cache_name};
+
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
+
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -23,6 +27,53 @@ use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDe
 use crate::pyproject::{
     Project, PyProjectToml, PyprojectTomlError, Source, Sources, ToolUvSources, ToolUvWorkspace,
 };
+
+/// The resolved path to a workspace's virtual environment.
+///
+/// Distinguishes between the default `.venv` path and an overridden path
+/// (from `UV_PROJECT_ENVIRONMENT` or `VIRTUAL_ENV` with `--active`).
+#[derive(Debug, Clone)]
+pub enum VenvPath {
+    /// The default `.venv` path in the project directory.
+    Default(PathBuf),
+    /// An overridden path from `UV_PROJECT_ENVIRONMENT` or `VIRTUAL_ENV`.
+    Override(PathBuf),
+}
+
+impl VenvPath {
+    /// Returns the path.
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Default(path) | Self::Override(path) => path,
+        }
+    }
+
+    /// Returns `true` if this is the default `.venv` path.
+    pub fn is_default(&self) -> bool {
+        matches!(self, Self::Default(_))
+    }
+
+    /// Consumes self and returns the inner `PathBuf`.
+    pub fn into_path_buf(self) -> PathBuf {
+        match self {
+            Self::Default(path) | Self::Override(path) => path,
+        }
+    }
+}
+
+impl std::ops::Deref for VenvPath {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        self.path()
+    }
+}
+
+impl AsRef<Path> for VenvPath {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
+}
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
 
@@ -705,9 +756,12 @@ impl Workspace {
     /// If `active` is `true`, the `VIRTUAL_ENV` variable will be preferred. If it is `false`, any
     /// warnings about mismatch between the active environment and the project environment will be
     /// silenced.
-    pub fn venv(&self, active: Option<bool>) -> PathBuf {
+    ///
+    /// > **Note**: For centralized environments use [`centralized_environment_root`] instead of
+    /// > this function.
+    pub fn venv(&self, active: Option<bool>) -> VenvPath {
         /// Resolve the `UV_PROJECT_ENVIRONMENT` value, if any.
-        fn from_project_environment_variable(workspace: &Workspace) -> Option<PathBuf> {
+        fn from_project_environment_variable(workspace: &Workspace) -> Option<VenvPath> {
             let value = std::env::var_os(EnvVars::UV_PROJECT_ENVIRONMENT)?;
 
             if value.is_empty() {
@@ -716,15 +770,15 @@ impl Workspace {
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
-                return Some(path);
+                return Some(VenvPath::Override(path));
             }
 
             // Resolve the path relative to the install path.
-            Some(workspace.install_path.join(path))
+            Some(VenvPath::Override(workspace.install_path.join(path)))
         }
 
         /// Resolve the `VIRTUAL_ENV` variable, if any.
-        fn from_virtual_env_variable() -> Option<PathBuf> {
+        fn from_virtual_env_variable() -> Option<VenvPath> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
 
             if value.is_empty() {
@@ -733,17 +787,17 @@ impl Workspace {
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
-                return Some(path);
+                return Some(VenvPath::Override(path));
             }
 
             // Resolve the path relative to current directory.
             // Note this differs from `UV_PROJECT_ENVIRONMENT`
-            Some(CWD.join(path))
+            Some(VenvPath::Override(CWD.join(path)))
         }
 
-        // Determine the default value
+        // Determine the default value.
         let project_env = from_project_environment_variable(self)
-            .unwrap_or_else(|| self.install_path.join(".venv"));
+            .unwrap_or_else(|| VenvPath::Default(self.install_path.join(".venv")));
 
         // Warn if it conflicts with `VIRTUAL_ENV`
         if let Some(from_virtual_env) = from_virtual_env_variable() {
@@ -1848,6 +1902,54 @@ impl VirtualProject {
     pub fn is_non_project(&self) -> bool {
         matches!(self, Self::NonProject(_))
     }
+}
+
+/// Compute the centralized environment root for a project.
+///
+/// The environment is stored in the [`Environments`][`CacheBucket::Environments`] cache bucket,
+/// keyed by a human-readable project name and a hash of the project's install path, platform, and
+/// Python interpreter (to avoid collisions between projects with the same name, across different
+/// platforms sharing a cache, and across different Python versions).
+///
+/// For example: `~/.cache/uv/environments-v2/my-project-a1b2c3d4/`
+///
+/// The hash includes the interpreter's marker environment (`platform_system`, `platform_machine`,
+/// `implementation_name`, and `python_version`) as well as the current platform's OS,
+/// architecture, and libc.
+pub fn centralized_environment_root(
+    workspace: &Workspace,
+    cache: &Cache,
+    interpreter: &uv_python::Interpreter,
+) -> PathBuf {
+    let digest = cache_digest(&(
+        workspace.install_path(),
+        interpreter.markers().platform_system(),
+        interpreter.markers().platform_machine(),
+        interpreter.markers().implementation_name(),
+        interpreter.python_version(),
+    ));
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .and_then(|p| cache_name(p.name.as_ref(), Some(100)))
+        .or_else(|| {
+            workspace
+                .install_path()
+                .file_name()
+                .and_then(|f| f.to_str())
+                .and_then(|name| cache_name(name, Some(100)))
+        });
+    let entry = if let Some(name) = name {
+        format!("{name}-{digest}")
+    } else {
+        // Can only occur if the project has no name (virtual workspace) and the
+        // directory name doesn't contain any ascii alphanumeric characters.
+        digest
+    };
+    cache
+        .shard(CacheBucket::Environments, entry)
+        .into_path_buf()
 }
 
 #[cfg(test)]

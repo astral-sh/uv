@@ -167,6 +167,7 @@ pub(crate) async fn sync(
                 dry_run,
                 printer,
                 preview,
+                true,
             )
             .await?,
         ),
