@@ -20,8 +20,8 @@ use reqwest::{Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response,
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
-    RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy, default_on_request_error,
-    default_on_request_success,
+    Jitter, RetryPolicy, RetryTransientMiddleware, Retryable, RetryableStrategy,
+    default_on_request_error, default_on_request_success,
 };
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -371,11 +371,7 @@ impl<'a> BaseClientBuilder<'a> {
 
     /// Create a [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries)
     }
 
     pub fn build(&self) -> BaseClient {
@@ -810,11 +806,7 @@ impl BaseClient {
 
     /// The [`RetryPolicy`] for the client.
     pub fn retry_policy(&self) -> ExponentialBackoff {
-        let mut builder = ExponentialBackoff::builder();
-        if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
-            builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
-        }
-        builder.build_with_max_retries(self.retries)
+        retry_policy(self.retries)
     }
 
     pub fn credentials_cache(&self) -> &CredentialsCache {
@@ -1141,6 +1133,20 @@ impl<'a> RequestBuilder<'a> {
     pub fn raw_builder(&self) -> &reqwest_middleware::RequestBuilder {
         &self.builder
     }
+}
+
+/// Create a [`RetryPolicy`] with the given number of retries.
+fn retry_policy(retries: u32) -> ExponentialBackoff {
+    let mut builder = ExponentialBackoff::builder();
+    if env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some() {
+        builder = builder.retry_bounds(Duration::from_millis(0), Duration::from_millis(0));
+    } else {
+        // Configure an effective minimum between attempts of 1s and a real maximum of 30s.
+        builder = builder
+            .jitter(Jitter::Bounded)
+            .retry_bounds(Duration::from_secs(2), Duration::from_secs(30));
+    }
+    builder.build_with_max_retries(retries)
 }
 
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
