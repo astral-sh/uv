@@ -5725,6 +5725,7 @@ dependencies = [
  "nix 0.30.1",
  "open",
  "owo-colors",
+ "pathdiff",
  "petgraph",
  "predicates",
  "regex",

@@ -1,18 +1,23 @@
 use uv_distribution_types::{InstalledDist, InstalledDistKind, InstalledEggInfoFile};
+use uv_install_wheel::Layout;
 
 /// Uninstall a package from the specified Python environment.
 pub async fn uninstall(
     dist: &InstalledDist,
+    layout: &Layout,
 ) -> Result<uv_install_wheel::Uninstall, UninstallError> {
     let uninstall = tokio::task::spawn_blocking({
         let dist = dist.clone();
+        let layout = layout.clone();
         move || match dist.kind {
-            InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => {
-                Ok(uv_install_wheel::uninstall_wheel(dist.install_path())?)
-            }
-            InstalledDistKind::EggInfoDirectory(_) => {
-                Ok(uv_install_wheel::uninstall_egg(dist.install_path())?)
-            }
+            InstalledDistKind::Registry(_) | InstalledDistKind::Url(_) => Ok(
+                uv_install_wheel::uninstall_wheel(dist.install_path(), &dist, &layout)?,
+            ),
+            InstalledDistKind::EggInfoDirectory(_) => Ok(uv_install_wheel::uninstall_egg(
+                dist.install_path(),
+                &dist,
+                &layout,
+            )?),
             InstalledDistKind::LegacyEditable(dist) => {
                 Ok(uv_install_wheel::uninstall_legacy_editable(&dist.egg_link)?)
             }

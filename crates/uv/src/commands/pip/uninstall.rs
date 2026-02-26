@@ -201,8 +201,9 @@ pub(crate) async fn pip_uninstall(
 
     // Uninstall each package.
     if !dry_run.enabled() {
+        let layout = environment.interpreter().layout();
         for distribution in &distributions {
-            let summary = uv_installer::uninstall(distribution).await?;
+            let summary = uv_installer::uninstall(distribution, &layout).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 distribution.name(),

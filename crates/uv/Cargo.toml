@@ -142,6 +142,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
+pathdiff = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }

@@ -509,3 +509,57 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
 
     Ok(())
 }
+
+/// Uninstall must not remove files outside the install scheme.
+///
+/// A malformed or malicious wheel can include path-traversal entries
+/// (e.g. `../../../../../etc/passwd`) in its RECORD file. During uninstall those entries are joined
+/// with the site-packages directory and could cause deletion of files outside the installation
+/// scheme.
+#[test]
+fn uninstall_record_path_traversal() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("evilpkg")
+        .assert()
+        .success();
+    context.pip_install().arg("./evilpkg").assert().success();
+
+    let site_packages = ChildPath::new(context.site_packages());
+
+    // Build the relative traversal path from site-packages to the target file
+    // outside site-packages but inside the test temp dir.
+    let target_file = context.temp_dir.child("traversal_target.txt");
+    target_file.write_str("I should not be deleted")?;
+    let traversal_path = pathdiff::diff_paths(target_file.path(), site_packages.path()).unwrap();
+
+    let record_file = site_packages.child("evilpkg-0.1.0.dist-info/RECORD");
+    let record = fs_err::read_to_string(&record_file)?;
+    let record = format!("{}\n{},,0\n", record.trim(), traversal_path.display());
+    record_file.write_str(&record)?;
+
+    let init_py = site_packages.join("evilpkg/__init__.py");
+    assert!(site_packages.join(traversal_path).exists());
+    assert!(init_py.exists());
+
+    uv_snapshot!(context.filters(), context.pip_uninstall()
+        .arg("evilpkg"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Invalid RECORD entry in evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg) that escapes the Python environment, skipping: ../../../../traversal_target.txt
+    Uninstalled 1 package in [TIME]
+     - evilpkg==0.1.0 (from file://[TEMP_DIR]/evilpkg)
+    ");
+
+    // The regular package files have been removed, while the file outside the scheme still exists.
+    assert!(target_file.exists());
+    assert!(!init_py.exists());
+
+    Ok(())
+}
