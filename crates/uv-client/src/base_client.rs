@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::fmt::Write;
 use std::num::ParseIntError;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, SystemTime};
 use std::{env, io, iter};
 
@@ -69,6 +69,13 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// reqwest does not support something like a read timeout for uploads, so we have to set a (large)
 /// timeout on the entire upload.
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
+
+static WEBPKI_ROOT_CERTIFICATES: LazyLock<Vec<Certificate>> = LazyLock::new(|| {
+    webpki_root_certs::TLS_SERVER_ROOT_CERTS
+        .iter()
+        .filter_map(|cert_der| Certificate::from_der(cert_der).ok())
+        .collect()
+});
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -664,15 +671,9 @@ impl<'a> BaseClientBuilder<'a> {
                 }
             }
             TlsBackend::RustlsWebpki => {
-                // Convert webpki-root-certs to reqwest::Certificate objects
-                let webpki_certs: Vec<Certificate> = webpki_root_certs::TLS_SERVER_ROOT_CERTS
-                    .iter()
-                    .filter_map(|cert_der| Certificate::from_der(cert_der).ok())
-                    .collect();
-
                 let client_builder = client_builder
                     .tls_backend_rustls()
-                    .tls_certs_only(webpki_certs);
+                    .tls_certs_only(WEBPKI_ROOT_CERTIFICATES.iter().cloned());
 
                 // Merge custom certificates on top of webpki-root-certs
                 if !custom_certs.is_empty() {
