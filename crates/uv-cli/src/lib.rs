@@ -238,7 +238,7 @@ pub struct GlobalArgs {
 
     /// Whether to use the native-tls TLS backend instead of rustls [env: UV_NATIVE_TLS=]
     ///
-    /// By default, uv uses the rustls TLS backend with bundled webpki-roots certificates,
+    /// By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
     /// providing consistent and portable TLS verification across all platforms.
     ///
     /// Setting this flag is equivalent to `--tls-backend native-tls`, which uses
@@ -260,7 +260,7 @@ pub struct GlobalArgs {
     /// By default, uv uses `rustls-webpki`, which uses rustls with bundled webpki-root-certs
     /// certificates for consistent, portable TLS verification.
     ///
-    /// - `rustls-webpki`: Use rustls with bundled webpki-roots certificates (default)
+    /// - `rustls-webpki`: Use rustls with bundled webpki-root-certs certificates (default)
     /// - `rustls`: Use rustls with system certificates via rustls-platform-verifier
     /// - `native-tls`: Use system TLS implementation
     #[arg(
