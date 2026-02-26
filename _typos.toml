@@ -26,3 +26,4 @@ CPY_VERSION_RE = "CPY_VERSION_RE" # CPython version regex
 [default.extend-words]
 certifi = "certifi" # Python package name
 Iz = "Iz" # appears in base64-encoded hashes
+vulnerabilit = "vulnerabilit" # appears in pluralization renderings of "vulnerability"/"vulnerabilities"
