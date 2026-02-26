@@ -3164,6 +3164,25 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
+    // Create a dependency that will be added via a file:// URL.
+    let file_url_dep = context.temp_dir.child("file_url_dep");
+    file_url_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "file-url-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+    file_url_dep
+        .child("src")
+        .child("file_url_dep")
+        .child("__init__.py")
+        .touch()?;
+
     // Add the relative dependency using a relative path.
     uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
     success: true
@@ -3193,6 +3212,20 @@ fn add_relative_and_absolute_paths() -> Result<()> {
      + absolute-dep==0.1.0 (from file://[TEMP_DIR]/absolute_dep)
     ");
 
+    // Add a dependency using a file:// URL (also absolute).
+    let file_url = Url::from_file_path(file_url_dep.path()).unwrap();
+    uv_snapshot!(context.filters(), context.add().arg(file_url.as_str()).current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
+    ");
+
     // Check pyproject.toml - the relative path should stay relative, and the absolute path
     // should stay absolute. Currently, both are relative (bug).
     let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
@@ -3208,12 +3241,14 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "absolute-dep",
+            "file-url-dep",
             "relative-dep",
         ]
 
         [tool.uv.sources]
         relative-dep = { path = "../relative_dep" }
         absolute-dep = { path = "[TEMP_DIR]/absolute_dep" }
+        file-url-dep = { path = "[TEMP_DIR]/file_url_dep" }
         "#
         );
     });
@@ -3239,17 +3274,24 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         source = { directory = "[TEMP_DIR]/absolute_dep" }
 
         [[package]]
+        name = "file-url-dep"
+        version = "0.1.0"
+        source = { directory = "[TEMP_DIR]/file_url_dep" }
+
+        [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
             { name = "absolute-dep" },
+            { name = "file-url-dep" },
             { name = "relative-dep" },
         ]
 
         [package.metadata]
         requires-dist = [
             { name = "absolute-dep", directory = "[TEMP_DIR]/absolute_dep" },
+            { name = "file-url-dep", directory = "[TEMP_DIR]/file_url_dep" },
             { name = "relative-dep", directory = "../relative_dep" },
         ]
 
