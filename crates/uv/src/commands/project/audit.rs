@@ -239,7 +239,7 @@ impl AuditResults {
                 Finding::ProjectStatus(status) => itertools::Either::Right(status),
             });
 
-        let vuln_banner = if vulns.len() >= 1 {
+        let vuln_banner = if !vulns.is_empty() {
             let s = if vulns.len() == 1 { "y" } else { "ies" };
             format!(
                 "{} known vulnerabilit{}",
@@ -250,7 +250,7 @@ impl AuditResults {
             "no known vulnerabilities".green().to_string()
         };
 
-        let status_banner = if statuses.len() >= 1 {
+        let status_banner = if !statuses.is_empty() {
             let s = if statuses.len() == 1 { "" } else { "es" };
             format!(
                 "{} adverse project status{}",
@@ -267,7 +267,7 @@ impl AuditResults {
             packages = format!("{npackages} packages", npackages = self.npackages).bold()
         )?;
 
-        if vulns.len() >= 1 {
+        if !vulns.is_empty() {
             writeln!(self.printer.stdout_important(), "\nVulnerabilities:\n")?;
 
             // Group vulnerabilities by (dependency name, version).
@@ -275,7 +275,7 @@ impl AuditResults {
                 .into_iter()
                 .chunk_by(|vuln| (vuln.dependency.name(), vuln.dependency.version()));
 
-            for (dependency, vulns) in groups.into_iter() {
+            for (dependency, vulns) in &groups {
                 let vulns: Vec<_> = vulns.collect();
                 let (name, version) = dependency;
 
@@ -303,7 +303,10 @@ impl AuditResults {
                         writeln!(
                             self.printer.stdout_important(),
                             "\n  Fixed in: {}\n",
-                            vuln.fix_versions.iter().map(|v| v.to_string()).join(", ")
+                            vuln.fix_versions
+                                .iter()
+                                .map(std::string::ToString::to_string)
+                                .join(", ")
                         )?;
                     }
                 }
@@ -312,7 +315,7 @@ impl AuditResults {
             }
         }
 
-        if statuses.len() >= 1 {
+        if !statuses.is_empty() {
             writeln!(self.printer.stdout_important(), "\nAdverse statuses:\n")?;
 
             // NOTE: Nothing here yet, since we don't actually produce
