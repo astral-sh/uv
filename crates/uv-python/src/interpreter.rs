@@ -829,6 +829,10 @@ pub enum Error {
     BrokenSymlink(BrokenSymlink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
+    #[error(
+        "Python interpreter at `{0}` exists but could not be executed (is it the correct architecture?)"
+    )]
+    NotExecutable(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
     SpawnFailed {
         path: PathBuf,
@@ -965,7 +969,14 @@ impl InterpreterInfo {
             .output()
             .map_err(|err| {
                 match err.kind() {
-                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                    io::ErrorKind::NotFound => {
+                        // If the file exists but can't be executed, it's likely an
+                        // architecture mismatch (e.g., the ELF interpreter is missing).
+                        if interpreter.try_exists().unwrap_or(false) {
+                            return Error::NotExecutable(interpreter.to_path_buf());
+                        }
+                        return Error::NotFound(interpreter.to_path_buf());
+                    }
                     io::ErrorKind::PermissionDenied => {
                         return Error::PermissionDenied {
                             path: interpreter.to_path_buf(),

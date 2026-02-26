@@ -1082,6 +1082,12 @@ impl Error {
                         false
                     }
                 }
+                InterpreterError::NotExecutable(_) => {
+                    // If we found a managed installation matching the request but
+                    // can't execute it, that's a definitive error (e.g., architecture
+                    // mismatch with no kernel support).
+                    matches!(source, PythonSource::Managed)
+                }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at {}", path.display());
@@ -1145,13 +1151,15 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Err(
+                        InterpreterError::NotFound(_)
+                        | InterpreterError::BrokenSymlink(_)
+                        | InterpreterError::NotExecutable(_),
+                    ) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -1171,13 +1179,15 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Err(
+                        InterpreterError::NotFound(_)
+                        | InterpreterError::BrokenSymlink(_)
+                        | InterpreterError::NotExecutable(_),
+                    ) => Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                    })),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
