@@ -54,15 +54,23 @@ pub fn get() -> Preview {
     match PREVIEW.get() {
         Some(PreviewMode::Normal(preview)) => *preview,
         Some(PreviewMode::Test(rwlock)) => {
-            let panic_message = "The preview configuration is in test mode but the current thread does not hold a `FeaturesGuard`\nHint: Use `uv_preview::test::with_features` to get a `FeaturesGuard` and hold it when testing functions which rely on the global preview state";
-            assert!(test::HELD.get(), "{}", panic_message);
+            assert!(
+                test::HELD.get(),
+                "The preview configuration is in test mode but the current thread does not hold a `FeaturesGuard`\nHint: Use `{}::test::with_features` to get a `FeaturesGuard` and hold it when testing functions which rely on the global preview state",
+                module_path!()
+            );
             // The unwrap may panic only if the current thread had panicked
             // while attempting to write the value and then recovered with
             // `catch_unwind`. This seems unlikely.
-            rwlock.read().unwrap().expect(panic_message)
+            rwlock
+                .read()
+                .unwrap()
+                .expect("FeaturesGuard is held but preview value is not set")
         }
         None => panic!(
-            "The preview configuration has not been initialized\nHint: Use `uv_preview::init` or `uv_preview::test::with_features` to initialize it"
+            "The preview configuration has not been initialized\nHint: Use `{}::init` or `{}::test::with_features` to initialize it",
+            module_path!(),
+            module_path!()
         ),
     }
 }
@@ -126,7 +134,8 @@ pub mod test {
     pub fn with_features(features: &[super::PreviewFeature]) -> FeaturesGuard {
         assert!(
             !HELD.get(),
-            "Additional calls to `uv_preview::test::with_features` are not allowed while holding a `FeaturesGuard`"
+            "Additional calls to `{}::with_features` are not allowed while holding a `FeaturesGuard`",
+            module_path!()
         );
 
         let guard = match MUTEX.lock() {
@@ -147,7 +156,8 @@ pub mod test {
             }
             PreviewMode::Normal(_) => {
                 panic!(
-                    "Cannot use `uv_preview::test::with_features` after `uv_preview::init` has been called"
+                    "Cannot use `{}::with_features` after `uv_preview::init` has been called",
+                    module_path!()
                 );
             }
         }
