@@ -36,7 +36,9 @@ use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_pep508::{
+    MarkerEnvironment, MarkerTree, Scheme, VerbatimUrl, VerbatimUrlError, split_scheme,
+};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -4155,7 +4157,7 @@ impl<'de> serde::de::Deserialize<'de> for RegistrySourceWire {
             where
                 E: serde::de::Error,
             {
-                if split_scheme(value).is_some() {
+                if split_scheme(value).is_some_and(|(scheme, _)| Scheme::parse(scheme).is_some()) {
                     Ok(
                         serde::Deserialize::deserialize(serde::de::value::StrDeserializer::new(
                             value,
@@ -6677,5 +6679,30 @@ source = { editable = "path/to/dir" }
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         insta::assert_debug_snapshot!(result);
+    }
+
+    /// Windows drive letter paths like `C:/...` should be deserialized as local path registry
+    /// sources, not as URLs. The `C:` prefix must not be misinterpreted as a URL scheme.
+    #[test]
+    fn registry_source_windows_drive_letter() {
+        let data = r#"
+version = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "tqdm"
+version = "1000.0.0"
+source = { registry = "C:/Users/user/links" }
+wheels = [
+    { path = "C:/Users/user/links/tqdm-1000.0.0-py3-none-any.whl" },
+]
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        assert_eq!(
+            lock.packages[0].id.source,
+            Source::Registry(RegistrySource::Path(
+                Path::new("C:/Users/user/links").into()
+            ))
+        );
     }
 }
