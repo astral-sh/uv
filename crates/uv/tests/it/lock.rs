@@ -7668,8 +7668,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
 /// Check relative and absolute path handling in constraint-dependencies.
 ///
 /// When a user provides an absolute path in `constraint-dependencies`, it should be preserved
-/// as absolute in the lockfile manifest. Currently, absolute paths are incorrectly converted
-/// to relative paths.
+/// as absolute in the lockfile manifest.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/17307>
 #[test]
@@ -7722,7 +7721,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
-    // Check the lockfile - the absolute path should stay absolute, but currently it's relative (bug).
+    // Check the lockfile - the absolute path should stay absolute.
     let lock = fs_err::read_to_string(context.temp_dir.join("project/uv.lock"))?;
 
     insta::with_settings!({
@@ -7791,8 +7790,7 @@ fn lock_constraint_dependency_absolute_path() -> Result<()> {
 /// Check that absolute index paths in config files are preserved in lockfiles.
 ///
 /// When an index is specified with an absolute path in a config file (pyproject.toml),
-/// that absolute path should be preserved in the lockfile. Currently, absolute paths
-/// are incorrectly converted to relative paths.
+/// that absolute path should be preserved in the lockfile.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/17307>
 #[test]
@@ -7847,7 +7845,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    // Check the lockfile - the absolute path should stay absolute, but currently it's relative (bug).
+    // Check the lockfile - the absolute path should stay absolute.
     let lock = fs_err::read_to_string(project.join("uv.lock"))?;
 
     insta::with_settings!({

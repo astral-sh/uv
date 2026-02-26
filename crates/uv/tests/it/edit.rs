@@ -3109,8 +3109,8 @@ fn add_path_adjacent_directory() -> Result<()> {
 
 /// Check relative and absolute path handling with `uv add`.
 ///
-/// When a user provides an absolute path, it should be preserved as absolute in pyproject.toml
-/// and uv.lock. Currently, absolute paths are incorrectly converted to relative paths.
+/// When a user provides an absolute path or `file://` URL, it should be preserved as absolute
+/// in pyproject.toml and uv.lock. Relative paths should remain relative.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/17307>
 #[test]
@@ -3199,7 +3199,6 @@ fn add_relative_and_absolute_paths() -> Result<()> {
     ");
 
     // Add the absolute dependency using an absolute path.
-    // NOTE: The absolute path should be preserved, but currently it gets converted to relative.
     uv_snapshot!(context.filters(), context.add().arg(absolute_dep.path()).current_dir(project.path()), @"
     success: true
     exit_code: 0
@@ -3226,8 +3225,8 @@ fn add_relative_and_absolute_paths() -> Result<()> {
      + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
     ");
 
-    // Check pyproject.toml - the relative path should stay relative, and the absolute path
-    // should stay absolute. Currently, both are relative (bug).
+    // Check pyproject.toml - relative paths stay relative, absolute paths and file:// URLs
+    // stay absolute.
     let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -3253,7 +3252,7 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         );
     });
 
-    // Check uv.lock - same issue, absolute path should stay absolute.
+    // Check uv.lock - relative paths stay relative, absolute paths stay absolute.
     let lock = fs_err::read_to_string(project.join("uv.lock"))?;
 
     insta::with_settings!({
