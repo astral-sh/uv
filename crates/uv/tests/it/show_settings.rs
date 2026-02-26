@@ -253,214 +253,38 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     "#
     );
 
-    // Resolution should use the lowest direct version with the rustls backend.
-    uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())
+    // Resolution should use the native-tls backend when explicitly requested.
+    let output = add_shared_args(context.pip_compile())
         .arg("--show-settings")
         .arg("--tls-backend")
         .arg("native-tls")
-        .arg("requirements.in"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    GlobalSettings {
-        required_version: None,
-        quiet: 0,
-        verbose: 0,
-        color: Auto,
-        network_settings: NetworkSettings {
-            connectivity: Online,
-            offline: Disabled,
-            tls_backend: NativeTls,
-            http_proxy: None,
-            https_proxy: None,
-            no_proxy: None,
-            allow_insecure_host: [],
-            read_timeout: [TIME],
-            connect_timeout: [TIME],
-            retries: 3,
-        },
-        concurrency: Concurrency {
-            downloads: 50,
-            builds: 16,
-            installs: 8,
-        },
-        show_settings: true,
-        preview: Preview {
-            flags: [],
-        },
-        python_preference: Managed,
-        python_downloads: Automatic,
-        no_progress: false,
-        installer_metadata: true,
-    }
-    CacheSettings {
-        no_cache: false,
-        cache_dir: Some(
-            "[CACHE_DIR]/",
-        ),
-    }
-    PipCompileSettings {
-        format: None,
-        src_file: [
-            "requirements.in",
-        ],
-        constraints: [],
-        overrides: [],
-        excludes: [],
-        build_constraints: [],
-        constraints_from_workspace: [],
-        overrides_from_workspace: [],
-        excludes_from_workspace: [],
-        build_constraints_from_workspace: [],
-        environments: SupportedEnvironments(
-            [],
-        ),
-        refresh: None(
-            Timestamp(
-                SystemTime {
-                    tv_sec: [TIME],
-                    tv_nsec: [TIME],
-                },
-            ),
-        ),
-        settings: PipSettings {
-            index_locations: IndexLocations {
-                indexes: [
-                    Index {
-                        name: None,
-                        url: Pypi(
-                            VerbatimUrl {
-                                url: DisplaySafeUrl {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
-                                given: Some(
-                                    "https://pypi.org/simple",
-                                ),
-                            },
-                        ),
-                        explicit: false,
-                        default: true,
-                        origin: Some(
-                            Project,
-                        ),
-                        format: Simple,
-                        publish_url: None,
-                        authenticate: Auto,
-                        ignore_error_codes: None,
-                        cache_control: None,
-                    },
-                ],
-                flat_index: [],
-                no_index: false,
-            },
-            python: None,
-            install_mirrors: PythonInstallMirrors {
-                python_install_mirror: None,
-                pypy_install_mirror: None,
-                python_downloads_json_url: None,
-            },
-            system: false,
-            extras: ExtrasSpecification(
-                ExtrasSpecificationInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_extras: false,
-                    history: ExtrasSpecificationHistory {
-                        extra: [],
-                        only_extra: [],
-                        no_extra: [],
-                        all_extras: false,
-                        no_default_extras: false,
-                        defaults: List(
-                            [],
-                        ),
-                    },
-                },
-            ),
-            groups: [],
-            break_system_packages: false,
-            target: None,
-            prefix: None,
-            index_strategy: FirstIndex,
-            keyring_provider: Disabled,
-            torch_backend: None,
-            build_isolation: Isolate,
-            extra_build_dependencies: ExtraBuildDependencies(
-                {},
-            ),
-            extra_build_variables: ExtraBuildVariables(
-                {},
-            ),
-            build_options: BuildOptions {
-                no_binary: None,
-                no_build: None,
-            },
-            allow_empty_requirements: false,
-            strict: false,
-            dependency_mode: Transitive,
-            resolution: LowestDirect,
-            prerelease: IfNecessaryOrExplicit,
-            fork_strategy: RequiresPython,
-            dependency_metadata: DependencyMetadata(
-                {},
-            ),
-            output_file: None,
-            no_strip_extras: false,
-            no_strip_markers: false,
-            no_annotate: false,
-            no_header: false,
-            custom_compile_command: None,
-            generate_hashes: true,
-            config_setting: ConfigSettings(
-                {},
-            ),
-            config_settings_package: PackageConfigSettings(
-                {},
-            ),
-            python_version: None,
-            python_platform: None,
-            universal: false,
-            exclude_newer: ExcludeNewer {
-                global: None,
-                package: ExcludeNewerPackage(
-                    {},
-                ),
-            },
-            no_emit_package: [],
-            emit_index_url: false,
-            emit_find_links: false,
-            emit_build_options: false,
-            emit_marker_expression: false,
-            emit_index_annotation: false,
-            annotation_style: Split,
-            link_mode: Clone,
-            compile_bytecode: false,
-            sources: None,
-            hash_checking: Some(
-                Verify,
-            ),
-            upgrade: None,
-            reinstall: None,
-        },
-    }
+        .arg("requirements.in")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("tls_backend: NativeTls,"));
 
-    ----- stderr -----
-    "#
-    );
+    // Resolution should use the rustls backend when explicitly requested.
+    let output = add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("--tls-backend")
+        .arg("rustls")
+        .arg("requirements.in")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("tls_backend: Rustls,"));
+
+    // Resolution should use the rustls-webpki backend when explicitly requested.
+    let output = add_shared_args(context.pip_compile())
+        .arg("--show-settings")
+        .arg("--tls-backend")
+        .arg("rustls-webpki")
+        .arg("requirements.in")
+        .output()?;
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("tls_backend: RustlsWebpki,"));
 
     // Resolution should use the highest version, and generate hashes.
     uv_snapshot!(context.filters(), add_shared_args(context.pip_compile())

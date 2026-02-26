@@ -368,7 +368,7 @@ fn help_subcommand() {
           --native-tls
               Whether to use the native-tls TLS backend instead of rustls.
               
-              By default, uv uses the rustls TLS backend with bundled webpki-roots certificates,
+              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
               providing consistent and portable TLS verification across all platforms.
               
               Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
@@ -652,7 +652,7 @@ fn help_subsubcommand() {
           --native-tls
               Whether to use the native-tls TLS backend instead of rustls.
               
-              By default, uv uses the rustls TLS backend with bundled webpki-roots certificates,
+              By default, uv uses the rustls TLS backend with bundled webpki-root-certs certificates,
               providing consistent and portable TLS verification across all platforms.
               
               Setting this flag is equivalent to `--tls-backend native-tls`, which uses the platform's
