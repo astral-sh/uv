@@ -1,5 +1,6 @@
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use uv_static::EnvVars;
 
 use crate::Cache;
@@ -44,6 +45,16 @@ impl Cache {
         if no_cache {
             Self::temp()
         } else if let Some(cache_dir) = cache_dir {
+            // this expands `cache_dir` so that tildes and environment variables
+            // are replaced with their values, if possible.
+            let cache_dir = if let Some(expanded) = shellexpand::full(&cache_dir.to_string_lossy())
+                .ok()
+                .and_then(|path| PathBuf::from_str(&path).ok())
+            {
+                expanded
+            } else {
+                cache_dir.clone()
+            };
             Ok(Self::from_path(cache_dir))
         } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
         {

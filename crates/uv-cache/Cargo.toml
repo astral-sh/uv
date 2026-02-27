@@ -33,6 +33,7 @@ rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+shellexpand = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
