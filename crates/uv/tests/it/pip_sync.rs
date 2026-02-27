@@ -219,8 +219,8 @@ fn install_hardlink() -> Result<()> {
 /// This test exhausts the hardlink limit on a cached file, then verifies that
 /// a subsequent install still succeeds by resetting the file's inode.
 ///
-/// Requires `UV_INTERNAL__TEST_ALT_FS` pointing to a filesystem with a
-/// hardlink limit reachable within 66000 links (e.g., ext4 with ~65000).
+/// Requires `UV_INTERNAL__TEST_MAXLINKS_FS` pointing to a filesystem with a
+/// low hardlink limit (e.g., minix with ~250).
 #[test]
 fn install_hardlink_after_emlink() -> anyhow::Result<()> {
     use walkdir::WalkDir;
@@ -230,7 +230,7 @@ fn install_hardlink_after_emlink() -> anyhow::Result<()> {
     };
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+    requirements_txt.write_str("iniconfig==2.0.0")?;
 
     // First install to populate the cache.
     context
@@ -241,28 +241,24 @@ fn install_hardlink_after_emlink() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    // Find a cached file from the package (any .so or .py file will do).
+    // Find a cached .py file from the package.
     let cached_file = WalkDir::new(context.cache_dir.path())
         .into_iter()
         .filter_map(Result::ok)
-        .find(|e| {
-            e.file_type().is_file()
-                && (e
-                    .path()
-                    .extension()
-                    .is_some_and(|ext| ext == "so" || ext == "py"))
-        })
+        .find(|e| e.file_type().is_file() && e.path().extension().is_some_and(|ext| ext == "py"))
         .expect("should find a cached file")
         .into_path();
 
-    // Create a temp directory to hold hardlinks on the same filesystem as the cache entry.
+    // Create a temp directory to hold hardlinks on the same filesystem but outside the
+    // cache tree (so the installer doesn't try to install the link files).
     let hardlink_dir = tempfile::tempdir_in(
-        cached_file
+        context
+            .cache_dir
             .parent()
-            .expect("cached file should have a parent directory"),
+            .expect("cache dir should have a parent"),
     )?;
 
-    // Create hardlinks until we hit EMLINK or reach 66000 (ext4 limit is 65000).
+    // Create hardlinks until we hit EMLINK or reach 66000 (minix limit is 250, ext4 is 65000).
     let mut hit_emlink = false;
     for i in 0..66000 {
         let link_path = hardlink_dir.path().join(format!("link_{i}"));
@@ -283,17 +279,23 @@ fn install_hardlink_after_emlink() -> anyhow::Result<()> {
         "Expected to hit TooManyLinks while creating hardlinks"
     );
 
-    // Now try to install into a new venv - this should succeed because
-    // the installer will reset the cached file's inode when it hits EMLINK.
-    let venv2 = context.temp_dir.child("venv2");
-    context.venv().arg(venv2.path()).assert().success();
+    // Now try to install into a new venv on the same filesystem so the
+    // hardlink stays same-device and actually hits EMLINK (then recovers).
+    let venv2_dir = tempfile::tempdir_in(
+        context
+            .cache_dir
+            .parent()
+            .expect("cache dir should have a parent"),
+    )?;
+    let venv2 = venv2_dir.path().join("venv2");
+    context.venv().arg(&venv2).assert().success();
 
     context
         .pip_sync()
         .arg("requirements.txt")
         .arg("--link-mode")
         .arg("hardlink")
-        .env(EnvVars::VIRTUAL_ENV, venv2.path())
+        .env(EnvVars::VIRTUAL_ENV, &venv2)
         .assert()
         .success();
 
