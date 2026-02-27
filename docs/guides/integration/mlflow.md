@@ -34,17 +34,17 @@ mlflow.pyfunc.log_model(
 )
 ```
 
-MLflow runs `uv export --frozen --no-dev --no-hashes --no-header --no-emit-project` to generate a
-pinned `requirements.txt` that exactly matches your lock file.
+MLflow runs `uv export --frozen --no-dev --no-hashes --no-header --no-emit-project --no-annotate` to
+generate a pinned `requirements.txt` that exactly matches your lock file.
 
 ## Reproducibility artifacts
 
 In addition to exporting dependencies, MLflow logs your uv project files as artifacts for full
 reproducibility:
 
-- `uv.lock` -- The complete lock file with all resolved dependencies
-- `pyproject.toml` -- Your project configuration
-- `.python-version` -- The Python version specification (if present)
+- `uv.lock`: the complete lock file with all resolved dependencies
+- `pyproject.toml`: your project configuration
+- `.python-version`: the Python version specification (if present)
 
 These artifacts enable anyone to recreate your exact environment using `uv sync --frozen`.
 
@@ -52,7 +52,7 @@ These artifacts enable anyone to recreate your exact environment using `uv sync 
 
 When loading a logged model, MLflow automatically detects the uv lock file artifact and restores the
 environment using `uv sync --frozen --no-dev`. This happens transparently when you call
-`mlflow.pyfunc.load_model()` -- no manual intervention is needed.
+`mlflow.pyfunc.load_model()`, no manual intervention is needed.
 
 If uv is not available at load time, MLflow falls back to `pip install -r requirements.txt`.
 
@@ -146,29 +146,6 @@ When deploying models, use `--frozen` to ensure exact reproducibility:
 uv sync --frozen
 ```
 
-### Separate training and inference dependencies
-
-Use dependency groups to keep training-only packages out of your inference environment:
-
-```toml
-# pyproject.toml
-[project]
-dependencies = [
-    "mlflow>=3.10",
-    "scikit-learn>=1.0",
-]
-
-[dependency-groups]
-train = [
-    "jupyter",
-    "matplotlib",
-    "optuna",
-]
-```
-
-By default, MLflow exports the core project dependencies from `[project].dependencies` and does not
-include dev or custom dependency groups.
-
 ## Troubleshooting
 
 ### MLflow not detecting uv project
@@ -181,7 +158,7 @@ to confirm it's a uv project.
 Run `uv lock` to update your lock file, then verify with:
 
 ```bash
-uv export --frozen --no-dev --no-hashes --no-header --no-emit-project
+uv export --frozen --no-dev --no-hashes --no-header --no-emit-project --no-annotate
 ```
 
 This shows exactly what MLflow will capture.
