@@ -202,6 +202,7 @@ impl From<ResolverArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            no_upgrade_package,
             index_strategy,
             keyring_provider,
             resolution,
@@ -223,6 +224,7 @@ impl From<ResolverArgs> for PipOptions {
         Self {
             upgrade: flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package: Some(upgrade_package),
+            no_upgrade_package: Some(no_upgrade_package),
             index_strategy,
             keyring_provider,
             resolution,
@@ -304,6 +306,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             upgrade,
             no_upgrade,
             upgrade_package,
+            no_upgrade_package,
             reinstall,
             no_reinstall,
             reinstall_package,
@@ -330,6 +333,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
         Self {
             upgrade: flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package: Some(upgrade_package),
+            no_upgrade_package: Some(no_upgrade_package),
             reinstall: flag(reinstall, no_reinstall, "reinstall"),
             reinstall_package: Some(reinstall_package),
             index_strategy,
@@ -430,6 +434,7 @@ pub fn resolver_options(
         upgrade,
         no_upgrade,
         upgrade_package,
+        no_upgrade_package,
         index_strategy,
         keyring_provider,
         resolution,
@@ -490,6 +495,7 @@ pub fn resolver_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "no-upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            no_upgrade_package,
         ),
         index_strategy,
         keyring_provider,
@@ -539,6 +545,7 @@ pub fn resolver_installer_options(
         upgrade,
         no_upgrade,
         upgrade_package,
+        no_upgrade_package,
         reinstall,
         no_reinstall,
         reinstall_package,
@@ -606,6 +613,7 @@ pub fn resolver_installer_options(
         upgrade: Upgrade::from_args(
             flag(upgrade, no_upgrade, "upgrade"),
             upgrade_package.into_iter().map(Requirement::from).collect(),
+            no_upgrade_package,
         ),
         reinstall: Reinstall::from_args(
             flag(reinstall, no_reinstall, "reinstall"),
