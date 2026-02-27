@@ -517,14 +517,16 @@ impl Middleware for AuthMiddleware {
             .then_some(self.pyx_token_store.as_ref())
             .flatten()
         {
-            let domain = store
-                .api()
-                .domain()
-                .unwrap_or("pyx.dev")
-                .trim_start_matches("api.");
+            let login_param = match store.api().domain() {
+                None | Some("api.pyx.dev") => "pyx.dev".to_owned(),
+                Some(_) => format!("{}", Realm::from(store.api())),
+            };
+            let env_prefix = std::env::var(EnvVars::PYX_API_URL)
+                .map(|url| format!("PYX_API_URL='{url}' "))
+                .unwrap_or_else(|_| String::new());
             Err(Error::Middleware(format_err!(
                 "Run `{}` to authenticate uv with pyx",
-                format!("uv auth login {domain}").green()
+                format!("{env_prefix}uv auth login {login_param}").green()
             )))
         } else {
             Err(Error::Middleware(format_err!(
