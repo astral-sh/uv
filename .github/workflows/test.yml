@@ -199,6 +199,9 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup show
 
+      - name: "Create NTFS test directory (low hardlink limit)"
+        run: New-Item -Path "C:\maxlinks_test" -ItemType Directory -Force
+
       - name: "Install cargo nextest"
         uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
         with:
@@ -213,6 +216,7 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
+          UV_INTERNAL__TEST_MAXLINKS_FS: "C:\\maxlinks_test"
         shell: bash
         run: |
           cargo nextest run \
