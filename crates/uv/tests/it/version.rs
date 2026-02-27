@@ -817,7 +817,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump post` cannot be used with another `--bump` value, got: major, patch, alpha, minor, dev, minor, post, post
+    error: `--bump post` can only be combined with `--bump dev`, got: major, patch, alpha, minor, dev, minor, post, post
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1802,7 +1802,37 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: `--bump post` cannot be used with another `--bump` value, got: major, post
+    error: `--bump post` can only be combined with `--bump dev`, got: major, post
+    ");
+    Ok(())
+}
+
+// --bump dev --bump post
+#[test]
+fn bump_post_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4.dev5"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("dev")
+        .arg("--bump").arg("post"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 2.3.4.dev5 => 2.3.4.post1.dev1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
     Ok(())
 }
