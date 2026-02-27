@@ -196,8 +196,8 @@ fn is_path_in_scheme(
         if WARNED_FOR_PACKAGE
             .get_or_init(|| Mutex::new(HashSet::new()))
             .lock()
-            .unwrap()
-            .insert(String::from(path))
+            .expect("The mutex is broken, did some other thread panic?")
+            .insert(distribution.to_string())
         {
             warn_user!(
                 "Invalid RECORD entry in {} that escapes the Python environment, skipping: {}",
