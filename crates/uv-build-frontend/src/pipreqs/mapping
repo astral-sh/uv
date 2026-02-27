@@ -777,6 +777,7 @@ marks:pytest_marks
 markupsafe:MarkupSafe
 mavnative:pymavlink
 memcache:python_memcached
+mesonpy:meson-python
 metacomm:AllPairs
 metaphone:Metafone
 metlog:metlog_py
