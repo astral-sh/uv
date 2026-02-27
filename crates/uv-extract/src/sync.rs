@@ -11,7 +11,9 @@ use uv_warnings::warn_user_once;
 use zip::ZipArchive;
 
 /// Unzip a `.zip` archive into the target directory.
-pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
+///
+/// Returns the list of unpacked files and their sizes.
+pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>, Error> {
     let (reader, filename) = reader.into_parts();
 
     // Unzip in parallel.
@@ -47,17 +49,17 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
             // Determine the path of the file within the wheel.
             let Some(enclosed_name) = file.enclosed_name() else {
                 warn!("Skipping unsafe file name: {}", file.name());
-                return Ok(());
+                return Ok(None);
             };
 
             // Create necessary parent directories.
-            let path = target.join(enclosed_name);
+            let path = target.join(&enclosed_name);
             if file.is_dir() {
                 let mut directories = directories.lock().unwrap();
                 if directories.insert(path.clone()) {
                     fs_err::create_dir_all(path).map_err(Error::Io)?;
                 }
-                return Ok(());
+                return Ok(None);
             }
 
             if let Some(parent) = path.parent() {
@@ -102,8 +104,10 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<(), Error> {
                 }
             }
 
-            Ok(())
+            Ok(Some((enclosed_name, size)))
         })
+        // Filter out directories and skipped dangerous paths, we only want to collect the files.
+        .filter_map(Result::transpose)
         .collect::<Result<_, Error>>()
 }
 

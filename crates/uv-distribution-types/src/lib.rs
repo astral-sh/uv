@@ -33,6 +33,7 @@
 //!
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::path;
 use std::path::Path;
 use std::str::FromStr;
@@ -202,6 +203,15 @@ pub enum Dist {
 pub enum DistRef<'a> {
     Built(&'a BuiltDist),
     Source(&'a SourceDist),
+}
+
+impl Display for DistRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Built(built_dist) => Display::fmt(&built_dist, f),
+            Self::Source(source_dist) => Display::fmt(&source_dist, f),
+        }
+    }
 }
 
 /// A wheel, with its three possible origins (index, url, path)

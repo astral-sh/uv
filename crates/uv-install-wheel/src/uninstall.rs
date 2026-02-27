@@ -8,7 +8,7 @@ use tracing::trace;
 use uv_fs::write_atomic_sync;
 use uv_warnings::warn_user;
 
-use crate::wheel::read_record_file;
+use crate::wheel::read_record;
 use crate::{Error, Layout};
 
 /// Uninstall the wheel represented by the given `.dist-info` directory.
@@ -33,7 +33,7 @@ pub fn uninstall_wheel(
             }
             Err(err) => return Err(err.into()),
         };
-        read_record_file(&mut record_file)?
+        read_record(&mut record_file)?
     };
 
     let mut file_count = 0usize;
